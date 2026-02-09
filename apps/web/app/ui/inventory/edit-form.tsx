@@ -1,0 +1,191 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useFormState } from "react-dom";
+import { updateInventory } from "@/app/lib/actions/inventory";
+import { Package, ArrowRight } from "lucide-react";
+
+interface InventoryItem {
+    id: string;
+    branchId: string;
+    drugId: string;
+    price: number;
+    cost: number;
+    minStock: number;
+    maxStock: number;
+    branch: { name: string };
+    drug: { tradeName: string };
+}
+
+interface Branch {
+    id: string;
+    name: string;
+}
+
+interface Drug {
+    id: string;
+    tradeName: string;
+}
+
+export default function EditForm({
+    inventory,
+    branches,
+    drugs
+}: {
+    inventory: InventoryItem;
+    branches: Branch[];
+    drugs: Drug[];
+}) {
+    const initialState: any = { message: "", errors: {} };
+    const updateInventoryWithId = updateInventory.bind(null, inventory.id);
+    const [state, dispatch] = useFormState(updateInventoryWithId, initialState);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) {
+        return <div className="animate-pulse h-96 bg-gray-100 rounded-xl" />;
+    }
+
+    return (
+        <form action={dispatch} className="space-y-6" suppressHydrationWarning>
+            {/* الفرع */}
+            <div>
+                <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-gray-700">
+                    الفرع
+                </label>
+                <select
+                    id="branchId"
+                    name="branchId"
+                    defaultValue={inventory.branchId}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    required
+                >
+                    {branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                            {branch.name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {/* الدواء */}
+            <div>
+                <label htmlFor="drugId" className="mb-2 block text-sm font-bold text-gray-700">
+                    الدواء
+                </label>
+                <select
+                    id="drugId"
+                    name="drugId"
+                    defaultValue={inventory.drugId}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    required
+                >
+                    {drugs.map((drug) => (
+                        <option key={drug.id} value={drug.id}>
+                            {drug.tradeName}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {/* السعر والتكلفة */}
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label htmlFor="price" className="mb-2 block text-sm font-bold text-gray-700">
+                        سعر الجمهور
+                    </label>
+                    <input
+                        id="price"
+                        name="price"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={inventory.price}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        required
+                    />
+                    {state.errors?.price && (
+                        <p className="mt-1 text-sm text-red-500">{state.errors.price}</p>
+                    )}
+                </div>
+                <div>
+                    <label htmlFor="cost" className="mb-2 block text-sm font-bold text-gray-700">
+                        سعر التكلفة
+                    </label>
+                    <input
+                        id="cost"
+                        name="cost"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={inventory.cost}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        required
+                    />
+                    {state.errors?.cost && (
+                        <p className="mt-1 text-sm text-red-500">{state.errors.cost}</p>
+                    )}
+                </div>
+            </div>
+
+            {/* الحد الأدنى والأقصى */}
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label htmlFor="minStock" className="mb-2 block text-sm font-bold text-gray-700">
+                        الحد الأدنى
+                    </label>
+                    <input
+                        id="minStock"
+                        name="minStock"
+                        type="number"
+                        min="0"
+                        defaultValue={inventory.minStock}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="maxStock" className="mb-2 block text-sm font-bold text-gray-700">
+                        الحد الأقصى
+                    </label>
+                    <input
+                        id="maxStock"
+                        name="maxStock"
+                        type="number"
+                        min="1"
+                        defaultValue={inventory.maxStock}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                </div>
+            </div>
+
+            {/* رسالة الخطأ */}
+            {state.message && (
+                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
+                    {state.message}
+                </div>
+            )}
+
+            {/* الأزرار */}
+            <div className="flex gap-4">
+                <button
+                    type="submit"
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
+                >
+                    <Package className="h-5 w-5" />
+                    حفظ التغييرات
+                </button>
+                <Link
+                    href="/dashboard/inventory"
+                    className="flex items-center gap-2 rounded-lg bg-gray-100 px-6 py-3 font-bold text-gray-600 transition-colors hover:bg-gray-200"
+                >
+                    <ArrowRight className="h-5 w-5" />
+                    إلغاء
+                </Link>
+            </div>
+        </form>
+    );
+}

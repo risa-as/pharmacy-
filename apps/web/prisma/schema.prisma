@@ -1,0 +1,272 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branches  Branch[]
+}
+
+model Branch {
+  id             String       @id @default(uuid())
+  name           String
+  organizationId String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  inventories    Inventory[]
+  purchases      Purchase[]
+  sales          Sale[]
+  users          User[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(PHARMACIST)
+  branchId  String?
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+}
+
+model GlobalDrug {
+  id             String   @id @default(uuid())
+  barcode        String   @unique
+  tradeName      String
+  scientificName String
+  origin         String?
+  image          String?
+  isActive       Boolean  @default(true)
+  alternatives   String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tradeName])
+  @@index([barcode])
+}
+
+model Inventory {
+  id        String   @id @default(uuid())
+  branchId  String
+  drugId    String
+  price     Float
+  cost      Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  maxStock  Int      @default(1000)
+  minStock  Int      @default(0)
+  batches   Batch[]
+  branch    Branch   @relation(fields: [branchId], references: [id])
+}
+
+model Batch {
+  id          String    @id @default(uuid())
+  inventoryId String
+  expiryDate  DateTime
+  quantity    Int
+  batchNumber String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+}
+
+model Sale {
+  id        String     @id @default(uuid())
+  branchId  String
+  total     Float
+  createdAt DateTime   @default(now())
+  branch    Branch     @relation(fields: [branchId], references: [id])
+  items     SaleItem[]
+  payment   Payment?
+}
+
+model SaleItem {
+  id       String @id @default(uuid())
+  saleId   String
+  drugId   String
+  quantity Int
+  price    Float
+  sale     Sale   @relation(fields: [saleId], references: [id])
+}
+
+model Supplier {
+  id        String     @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  purchases Purchase[]
+}
+
+model Purchase {
+  id            String         @id @default(uuid())
+  supplierId    String
+  branchId      String
+  total         Float
+  status        String         @default("PENDING")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  invoiceNumber String?
+  signature     String?
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  supplier      Supplier       @relation(fields: [supplierId], references: [id])
+  items         PurchaseItem[]
+}
+
+model PurchaseItem {
+  id          String    @id @default(uuid())
+  purchaseId  String
+  drugId      String
+  quantity    Int
+  cost        Float
+  expiryDate  DateTime?
+  batchNumber String?
+  purchase    Purchase  @relation(fields: [purchaseId], references: [id])
+}
+
+// ==================== الميزات الجديدة ====================
+
+// سجل المرضى
+model Patient {
+  id              String            @id @default(uuid())
+  name            String
+  phone           String            @unique
+  dateOfBirth     DateTime?
+  gender          String?
+  allergies       String[]
+  chronicDiseases String[]
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  prescriptions   Prescription[]
+  insurancePolicies InsurancePolicy[]
+}
+
+// الوصفات الطبية
+model Prescription {
+  id           String              @id @default(uuid())
+  patientId    String
+  doctorName   String?
+  clinicName   String?
+  issueDate    DateTime            @default(now())
+  status       PrescriptionStatus  @default(PENDING)
+  notes        String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  patient      Patient             @relation(fields: [patientId], references: [id])
+  items        PrescriptionItem[]
+}
+
+model PrescriptionItem {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  drugId         String
+  quantity       Int
+  dosage         String?
+  instructions   String?
+  isDispensed    Boolean      @default(false)
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+}
+
+// التأمين الصحي
+model InsuranceCompany {
+  id            String              @id @default(uuid())
+  name          String
+  discountRate  Float               @default(0)
+  contactPhone  String?
+  contactEmail  String?
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  policies      InsurancePolicy[]
+}
+
+model InsurancePolicy {
+  id           String           @id @default(uuid())
+  patientId    String
+  companyId    String
+  policyNumber String
+  expiryDate   DateTime
+  coverageRate Float            @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  patient      Patient          @relation(fields: [patientId], references: [id])
+  company      InsuranceCompany @relation(fields: [companyId], references: [id])
+}
+
+// الدفع الإلكتروني
+model Payment {
+  id              String        @id @default(uuid())
+  saleId          String        @unique
+  amount          Float
+  method          PaymentMethod
+  referenceNumber String?
+  status          PaymentStatus @default(COMPLETED)
+  createdAt       DateTime      @default(now())
+  sale            Sale          @relation(fields: [saleId], references: [id])
+}
+
+// الخصومات والعروض
+model Discount {
+  id          String       @id @default(uuid())
+  name        String
+  code        String?      @unique
+  type        DiscountType
+  value       Float
+  minPurchase Float        @default(0)
+  maxDiscount Float?
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean      @default(true)
+  applyToAll  Boolean      @default(false)
+  drugIds     String[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// ==================== Enums ====================
+
+enum Role {
+  ADMIN
+  PHARMACIST
+  CASHIER
+}
+
+enum PrescriptionStatus {
+  PENDING
+  PARTIALLY_DISPENSED
+  DISPENSED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_WALLET
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}

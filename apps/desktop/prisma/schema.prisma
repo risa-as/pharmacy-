@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/desktop-client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./local.db"
+}
+
+// Local models mirror cloud models but focused on this Branch
+
+model LocalSettings {
+  id String @id @default(uuid())
+  branchId String? // The branch this device is linked to
+  lastSync DateTime?
+}
+
+model User {
+  id       String @id
+  name     String
+  email    String
+  role     String
+  password String // Hashed
+}
+
+model GlobalDrug {
+  id             String   @id
+  barcode        String   @unique
+  tradeName      String
+  scientificName String
+  price          Float    @default(0) // Local override or cached price
+  isActive       Boolean  @default(true)
+  inventory      Inventory[]
+}
+
+model Inventory {
+  id        String     @id @default(uuid())
+  drugId    String
+  drug      GlobalDrug @relation(fields: [drugId], references: [id])
+  quantity  Int
+  batches   Batch[]
+}
+
+model Batch {
+  id          String    @id @default(uuid())
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  batchNumber String
+  expiryDate  DateTime
+  quantity    Int
+}
+
+model Sale {
+  id        String     @id @default(uuid())
+  total     Float
+  createdAt DateTime   @default(now())
+  items     SaleItem[]
+  synced    Boolean    @default(false)
+}
+
+model SaleItem {
+  id       String @id @default(uuid())
+  saleId   String
+  sale     Sale   @relation(fields: [saleId], references: [id])
+  drugId   String
+  quantity Int
+  price    Float
+}

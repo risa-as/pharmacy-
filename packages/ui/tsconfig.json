@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "target": "es2019",
+        "module": "esnext",
+        "lib": [
+            "es2019",
+            "dom",
+            "dom.iterable"
+        ],
+        "declaration": true,
+        "strict": true,
+        "moduleResolution": "bundler",
+        "jsx": "react-jsx",
+        "esModuleInterop": true,
+        "skipLibCheck": true
+    }
+}

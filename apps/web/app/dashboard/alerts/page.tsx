@@ -1,0 +1,114 @@
+import { AlertTriangle, Package, Clock, Bell } from "lucide-react";
+import { getAllAlerts, getAlertStats, AlertItem } from "@/app/lib/alerts";
+
+export default async function AlertsPage() {
+    const alerts = await getAllAlerts();
+    const stats = await getAlertStats();
+
+    const getAlertIcon = (type: AlertItem['type']) => {
+        switch (type) {
+            case 'low_stock': return <Package className="w-5 h-5" />;
+            case 'expired': return <AlertTriangle className="w-5 h-5" />;
+            case 'expiring': return <Clock className="w-5 h-5" />;
+        }
+    };
+
+    const getAlertColor = (alert: AlertItem) => {
+        if (alert.severity === 'danger') {
+            return 'bg-red-50 border-red-200 text-red-700';
+        }
+        return 'bg-yellow-50 border-yellow-200 text-yellow-700';
+    };
+
+    const getAlertMessage = (alert: AlertItem) => {
+        switch (alert.type) {
+            case 'low_stock':
+                return `الكمية: ${alert.quantity} (الحد الأدنى: ${alert.minStock})`;
+            case 'expired':
+                return `منتهي الصلاحية منذ ${Math.abs(alert.daysLeft || 0)} يوم`;
+            case 'expiring':
+                return `ينتهي خلال ${alert.daysLeft} يوم`;
+        }
+    };
+
+    const getAlertTitle = (type: AlertItem['type']) => {
+        switch (type) {
+            case 'low_stock': return 'نقص في المخزون';
+            case 'expired': return 'منتهي الصلاحية';
+            case 'expiring': return 'قارب على الانتهاء';
+        }
+    };
+
+    return (
+        <div className="w-full">
+            {/* Header */}
+            <div className="flex w-full items-center justify-between mb-8">
+                <h1 className="text-2xl font-bold font-cairo text-gray-800 flex items-center gap-3">
+                    <Bell className="w-7 h-7 text-blue-600" />
+                    الإشعارات والتنبيهات
+                </h1>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <div className="text-3xl font-bold text-gray-800">{stats.total}</div>
+                    <div className="text-sm text-gray-500">إجمالي التنبيهات</div>
+                </div>
+                <div className="bg-red-50 rounded-xl border border-red-200 p-4">
+                    <div className="text-3xl font-bold text-red-600">{stats.danger}</div>
+                    <div className="text-sm text-red-600">تنبيهات حرجة</div>
+                </div>
+                <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
+                    <div className="text-3xl font-bold text-yellow-600">{stats.warning}</div>
+                    <div className="text-sm text-yellow-600">تحذيرات</div>
+                </div>
+                <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
+                    <div className="text-3xl font-bold text-orange-600">{stats.expired}</div>
+                    <div className="text-sm text-orange-600">منتهي الصلاحية</div>
+                </div>
+            </div>
+
+            {/* Alerts List */}
+            {alerts.length === 0 ? (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Bell className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-green-800 mb-2">لا توجد تنبيهات</h3>
+                    <p className="text-sm text-green-600">جميع الأدوية بحالة جيدة ولا توجد مشاكل في المخزون</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {alerts.map((alert) => (
+                        <div
+                            key={alert.id}
+                            className={`flex items-center gap-4 p-4 rounded-xl border ${getAlertColor(alert)}`}
+                        >
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${alert.severity === 'danger' ? 'bg-red-100' : 'bg-yellow-100'}`}>
+                                {getAlertIcon(alert.type)}
+                            </div>
+
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${alert.severity === 'danger' ? 'bg-red-200' : 'bg-yellow-200'}`}>
+                                        {getAlertTitle(alert.type)}
+                                    </span>
+                                    <span className="text-sm opacity-70">{alert.branchName}</span>
+                                </div>
+                                <h4 className="font-bold">{alert.drugName}</h4>
+                                <p className="text-sm opacity-80">{getAlertMessage(alert)}</p>
+                            </div>
+
+                            {alert.expiryDate && (
+                                <div className="text-sm opacity-70">
+                                    {new Date(alert.expiryDate).toLocaleDateString('ar-IQ')}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
