@@ -41,8 +41,8 @@ export default async function Page({
             <div className="mt-6 flex border-b border-border">
                 <a
                     href={`/dashboard/inventory/transfers?tab=incoming&query=${query}`}
-                    className={`px-4 py-2 font-medium ${tab === 'incoming'
-                            ? 'border-b-2 border-blue-600 text-primary'
+                    className={`px-4 py-2 font-bold ${tab === 'incoming'
+                            ? 'border-b-2 border-primary text-primary'
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                 >
@@ -50,8 +50,8 @@ export default async function Page({
                 </a>
                 <a
                     href={`/dashboard/inventory/transfers?tab=outgoing&query=${query}`}
-                    className={`px-4 py-2 font-medium ${tab === 'outgoing'
-                            ? 'border-b-2 border-blue-600 text-primary'
+                    className={`px-4 py-2 font-bold ${tab === 'outgoing'
+                            ? 'border-b-2 border-primary text-primary'
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                 >
@@ -71,7 +71,7 @@ export default async function Page({
                             className="peer block w-full rounded-md border border-border py-[9px] px-4 text-sm outline-2 placeholder:text-muted-foreground"
                         />
                     </div>
-                    <button type="submit" className="rounded-md bg-card border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted">
+                    <button type="submit" className="rounded-md bg-card border border-border px-4 py-2 text-sm font-bold text-foreground hover:bg-muted">
                         بحث
                     </button>
                 </form>

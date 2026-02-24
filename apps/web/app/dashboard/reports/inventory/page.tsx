@@ -56,7 +56,7 @@ export default async function InventoryReportPage({
                         تقرير المخزون
                     </h1>
                 </div>
-                <button className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-700">
+                <button className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-bold text-success-foreground transition-colors hover:bg-success/90">
                     <Download className="h-4 w-4" />
                     تصدير Excel
                 </button>
@@ -77,15 +77,15 @@ export default async function InventoryReportPage({
                     <div className="text-3xl font-bold text-success">{healthyStock}</div>
                     <div className="text-sm text-success">مخزون جيد</div>
                 </div>
-                <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
-                    <div className="text-3xl font-bold text-yellow-600">{lowStock}</div>
-                    <div className="text-sm text-yellow-600">مخزون منخفض</div>
+                <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
+                    <div className="text-3xl font-bold text-warning">{lowStock}</div>
+                    <div className="text-sm text-warning">مخزون منخفض</div>
                 </div>
                 <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
                     <div className="text-3xl font-bold text-destructive">{outOfStock}</div>
                     <div className="text-sm text-destructive">نفاد المخزون</div>
                 </div>
-                <div className="bg-primary/10 rounded-xl border border-blue-200 p-4">
+                <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">{totalValue.toLocaleString()}</div>
                     <div className="text-sm text-primary">قيمة المخزون</div>
                 </div>
@@ -95,13 +95,13 @@ export default async function InventoryReportPage({
             {(lowStock > 0 || expiringBatches > 0) && (
                 <div className="grid gap-4 sm:grid-cols-2 mb-8">
                     {lowStock > 0 && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-4">
-                            <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+                        <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 flex items-center gap-4">
+                            <div className="w-12 h-12 bg-warning/20 rounded-xl flex items-center justify-center">
+                                <AlertTriangle className="w-6 h-6 text-warning" />
                             </div>
                             <div>
-                                <div className="font-bold text-yellow-800">{lowStock} صنف بمخزون منخفض</div>
-                                <div className="text-sm text-yellow-600">يحتاج إلى إعادة طلب</div>
+                                <div className="font-bold text-warning">{lowStock} صنف بمخزون منخفض</div>
+                                <div className="text-sm text-warning">يحتاج إلى إعادة طلب</div>
                             </div>
                         </div>
                     )}
@@ -111,7 +111,7 @@ export default async function InventoryReportPage({
                                 <AlertTriangle className="w-6 h-6 text-destructive" />
                             </div>
                             <div>
-                                <div className="font-bold text-red-800">{expiringBatches} دفعة تنتهي صلاحيتها قريباً</div>
+                                <div className="font-bold text-destructive">{expiringBatches} دفعة تنتهي صلاحيتها قريباً</div>
                                 <div className="text-sm text-destructive">خلال 30 يوم</div>
                             </div>
                         </div>
@@ -146,10 +146,10 @@ export default async function InventoryReportPage({
                                 const isOut = item.currentQuantity === 0;
                                 return (
                                     <tr key={item.id} className="hover:bg-muted">
-                                        <td className="px-4 py-3 font-medium text-foreground">{item.drug.tradeName}</td>
+                                        <td className="px-4 py-3 font-bold text-foreground">{item.drug.tradeName}</td>
                                         <td className="px-4 py-3 text-muted-foreground">{item.branch.name}</td>
                                         <td className="px-4 py-3">
-                                            <span className={`font-bold ${isOut ? "text-destructive" : isLow ? "text-yellow-600" : "text-foreground"
+                                            <span className={`font-bold ${isOut ? "text-destructive" : isLow ? "text-warning" : "text-foreground"
                                                 }`}>
                                                 {item.currentQuantity}
                                             </span>
@@ -158,7 +158,7 @@ export default async function InventoryReportPage({
                                         <td className="px-4 py-3 text-muted-foreground">{item.price.toFixed(2)}</td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${isOut ? "bg-destructive/10 text-destructive" :
-                                                isLow ? "bg-yellow-100 text-yellow-700" :
+                                                isLow ? "bg-warning/20 text-warning" :
                                                     "bg-success/10 text-success"
                                                 }`}>
                                                 {isOut ? (

@@ -48,7 +48,7 @@ export default function LoyaltySettingsPage() {
     if (loading) {
         return (
             <div className="w-full flex items-center justify-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600" />
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-info/20 border-t-info" />
             </div>
         );
     }
@@ -57,12 +57,12 @@ export default function LoyaltySettingsPage() {
         <div className="glass-card w-full max-w-3xl mx-auto p-6 space-y-6" dir="rtl">
             <div className="flex items-center justify-between flex-wrap gap-4">
                 <h1 className="text-2xl font-bold font-cairo flex items-center gap-2">
-                    <Settings className="w-7 h-7 text-indigo-600" />
+                    <Settings className="w-7 h-7 text-info" />
                     إعدادات برنامج الولاء
                 </h1>
                 <Link
                     href="/dashboard/loyalty"
-                    className="text-sm text-indigo-600 hover:underline font-bold"
+                    className="text-sm text-info hover:underline font-bold"
                 >
                     ← العودة للوحة الولاء
                 </Link>
@@ -172,14 +172,14 @@ export default function LoyaltySettingsPage() {
             </div>
 
             {/* Preview */}
-            <div className="bg-purple-50 rounded-2xl border border-purple-200 p-6">
-                <h2 className="font-bold text-purple-800 mb-3 flex items-center gap-2">
+            <div className="bg-info/10 rounded-2xl border border-info/20 p-6">
+                <h2 className="font-bold text-info mb-3 flex items-center gap-2">
                     <Gift className="w-5 h-5" />
                     معاينة تجربة الزبون
                 </h2>
                 <div className="bg-card rounded-xl p-4 space-y-2 text-sm">
                     <p>📱 الزبون يشتري بـ <strong>50,000 د.ع</strong></p>
-                    <p>⭐ يكسب <strong className="text-purple-600">{50 * pointsPer1000} نقطة</strong></p>
+                    <p>⭐ يكسب <strong className="text-info">{50 * pointsPer1000} نقطة</strong></p>
                     <p>🏪 بعد <strong>{Math.ceil(settings.loyaltyMinRedemption / (50 * pointsPer1000))} زيارة</strong> مشابهة ← يستطيع استبدال {settings.loyaltyMinRedemption} نقطة</p>
                     <p>🎁 يحصل على خصم <strong className="text-success">{minRedeemValue.toLocaleString()} د.ع</strong></p>
                     <p className="text-muted-foreground text-xs mt-2">الأعضاء الفضيون يكسبون 1.5× والذهبيون 2× النقاط!</p>
@@ -191,10 +191,10 @@ export default function LoyaltySettingsPage() {
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-gradient-to-l from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-gradient-to-l from-info to-primary/80 text-primary-foreground rounded-xl font-bold text-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50"
                 >
                     {saving ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-foreground border-t-transparent" />
                     ) : (
                         <Save className="w-5 h-5" />
                     )}
@@ -203,7 +203,7 @@ export default function LoyaltySettingsPage() {
             </div>
 
             {saved && (
-                <div className="bg-success/10 text-green-800 rounded-xl p-4 text-center font-bold animate-fade-in">
+                <div className="bg-success/10 text-success rounded-xl p-4 text-center font-bold animate-fade-in">
                     ✅ تم حفظ الإعدادات بنجاح!
                 </div>
             )}
@@ -214,7 +214,7 @@ export default function LoyaltySettingsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="bg-warning/10 rounded-xl p-4 border border-orange-200 text-center">
                         <div className="text-3xl mb-2">🥉</div>
-                        <div className="font-bold text-orange-800">برونزي</div>
+                        <div className="font-bold text-warning">برونزي</div>
                         <div className="text-sm text-muted-foreground">عند التسجيل</div>
                         <div className="text-xs text-warning mt-2 font-bold">1× نقاط</div>
                     </div>
@@ -224,11 +224,11 @@ export default function LoyaltySettingsPage() {
                         <div className="text-sm text-muted-foreground">5,000+ نقطة مجموعة</div>
                         <div className="text-xs text-muted-foreground mt-2 font-bold">1.5× نقاط</div>
                     </div>
-                    <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-300 text-center">
+                    <div className="bg-warning/10 rounded-xl p-4 border border-warning/50 text-center">
                         <div className="text-3xl mb-2">🥇</div>
-                        <div className="font-bold text-yellow-800">ذهبي</div>
+                        <div className="font-bold text-warning">ذهبي</div>
                         <div className="text-sm text-muted-foreground">20,000+ نقطة مجموعة</div>
-                        <div className="text-xs text-yellow-700 mt-2 font-bold">2× نقاط</div>
+                        <div className="text-xs text-warning mt-2 font-bold">2× نقاط</div>
                     </div>
                 </div>
             </div>

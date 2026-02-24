@@ -43,15 +43,15 @@ export default async function PurchasesReportPage() {
     return (
         <div className="glass-card w-full p-6 space-y-6" dir="rtl">
             <h1 className="text-2xl font-bold font-cairo flex items-center gap-2">
-                <FileSpreadsheet className="w-8 h-8 text-purple-600" />
+                <FileSpreadsheet className="w-8 h-8 text-info" />
                 تقرير المشتريات (آخر 30 يوم)
             </h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
-                    <div className="text-sm text-purple-700 mb-1">إجمالي مشتريات المواد</div>
-                    <div className="text-3xl font-bold text-purple-800">{totalPurchases.toLocaleString()} د.ع</div>
-                    <div className="text-sm mt-2 text-purple-600">عدد الفواتير: {purchases.length}</div>
+                <div className="bg-info/10 p-6 rounded-xl border border-info/20">
+                    <div className="text-sm text-info mb-1">إجمالي مشتريات المواد</div>
+                    <div className="text-3xl font-bold text-info">{totalPurchases.toLocaleString()} د.ع</div>
+                    <div className="text-sm mt-2 text-info">عدد الفواتير: {purchases.length}</div>
                 </div>
             </div>
 

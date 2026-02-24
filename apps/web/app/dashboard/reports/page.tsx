@@ -87,14 +87,14 @@ export default async function ReportsPage() {
     ];
 
     const colorClasses: Record<string, { bg: string; icon: string; border: string }> = {
-        blue: { bg: "bg-primary/10", icon: "text-primary", border: "border-blue-200 hover:border-blue-400" },
+        blue: { bg: "bg-primary/10", icon: "text-primary", border: "border-primary hover:border-primary" },
         green: { bg: "bg-success/10", icon: "text-success", border: "border-green-200 hover:border-green-400" },
-        purple: { bg: "bg-purple-50", icon: "text-purple-600", border: "border-purple-200 hover:border-purple-400" },
+        purple: { bg: "bg-info/10", icon: "text-info", border: "border-info/20 hover:border-info/50" },
         orange: { bg: "bg-warning/10", icon: "text-warning", border: "border-orange-200 hover:border-orange-400" },
         cyan: { bg: "bg-cyan-50", icon: "text-cyan-600", border: "border-cyan-200 hover:border-cyan-400" },
         emerald: { bg: "bg-success/10", icon: "text-success", border: "border-emerald-200 hover:border-emerald-400" },
         red: { bg: "bg-destructive/10", icon: "text-destructive", border: "border-red-200 hover:border-red-400" },
-        amber: { bg: "bg-warning/10", icon: "text-warning", border: "border-amber-200 hover:border-amber-400" },
+        amber: { bg: "bg-warning/10", icon: "text-warning", border: "border-warning/30 hover:border-amber-400" },
         teal: { bg: "bg-teal-50", icon: "text-teal-600", border: "border-teal-200 hover:border-teal-400" },
     };
 
@@ -137,13 +137,13 @@ export default async function ReportsPage() {
             </div>
 
             {/* خيارات التصدير */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-primary">
                 <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                     <Download className="w-5 h-5 text-primary" />
                     تصدير البيانات
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-3">
-                    <button className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-300 hover:shadow-md transition-all">
+                    <button className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary hover:shadow-md transition-all">
                         <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
                             <FileSpreadsheet className="w-5 h-5 text-success" />
                         </div>
@@ -162,8 +162,8 @@ export default async function ReportsPage() {
                         </div>
                     </button>
                     <button className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-purple-300 hover:shadow-md transition-all">
-                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-purple-600" />
+                        <div className="w-10 h-10 bg-info rounded-lg flex items-center justify-center">
+                            <Calendar className="w-5 h-5 text-info" />
                         </div>
                         <div className="text-right">
                             <div className="font-bold text-foreground">تقرير مخصص</div>

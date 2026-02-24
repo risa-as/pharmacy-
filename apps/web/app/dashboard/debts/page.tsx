@@ -37,7 +37,7 @@ export default async function DebtsPage({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-red-500/10 rounded-xl">
+                        <div className="p-2 bg-destructive/10 rounded-xl">
                             <Banknote className="w-5 h-5 text-destructive" />
                         </div>
                         <span className="text-sm text-destructive font-medium">إجمالي الديون</span>
@@ -47,7 +47,7 @@ export default async function DebtsPage({
 
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-orange-500/10 rounded-xl">
+                        <div className="p-2 bg-warning/10 rounded-xl">
                             <Users className="w-5 h-5 text-warning" />
                         </div>
                         <span className="text-sm text-warning font-medium">عدد المدينين</span>
@@ -57,7 +57,7 @@ export default async function DebtsPage({
 
                 <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-green-500/10 rounded-xl">
+                        <div className="p-2 bg-success/10 rounded-xl">
                             <ArrowDownCircle className="w-5 h-5 text-success" />
                         </div>
                         <span className="text-sm text-success font-medium">تسديدات اليوم</span>

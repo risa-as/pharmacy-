@@ -164,7 +164,7 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
             </div>
 
             {currentBranchId === "ALL" && (
-                <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm border border-yellow-200">
+                <div className="bg-warning/10 text-warning p-3 rounded-lg text-sm border border-warning/30">
                     ملاحظة: أنت تشاهد النواقص في جميع الفروع. لإنشاء طلب شراء، يرجى تحديد فرع معين من القائمة.
                 </div>
             )}

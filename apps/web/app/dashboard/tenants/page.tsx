@@ -6,7 +6,7 @@ import { Plus, Building2, Users, CreditCard, Crown } from 'lucide-react';
 const planLabels: Record<string, { label: string; color: string; icon: string }> = {
     FREE: { label: 'مجاني', color: 'bg-muted text-foreground', icon: '🆓' },
     BASIC: { label: 'أساسي', color: 'bg-primary/10 text-primary', icon: '🔹' },
-    PROFESSIONAL: { label: 'احترافي', color: 'bg-purple-100 text-purple-700', icon: '💎' },
+    PROFESSIONAL: { label: 'احترافي', color: 'bg-info text-info', icon: '💎' },
     ENTERPRISE: { label: 'مؤسسي', color: 'bg-warning/10 text-warning', icon: '🏢' },
 };
 
@@ -47,7 +47,7 @@ export default function TenantsPage() {
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
                 <button onClick={() => setShowForm(!showForm)}
-                    className="flex items-center gap-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90">
+                    className="flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
                     <Plus className="w-4 h-4" /> إضافة مؤسسة
                 </button>
             </div>
@@ -71,7 +71,7 @@ export default function TenantsPage() {
                         </select>
                     </div>
                     <button onClick={handleCreate} disabled={saving || !form.name || !form.ownerEmail}
-                        className="px-4 py-2 bg-success text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
+                        className="px-4 py-2 bg-success text-success-foreground rounded-lg text-sm hover:bg-success/90 disabled:opacity-50">
                         {saving ? 'جاري الإنشاء...' : 'إنشاء'}
                     </button>
                 </div>
@@ -93,21 +93,21 @@ export default function TenantsPage() {
 
             {loading ? (
                 <div className="flex items-center justify-center h-40">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
                 </div>
             ) : tenants.length > 0 ? (
                 <div className="bg-card rounded-xl shadow-sm border overflow-x-auto">
                     <table className="min-w-full text-sm">
                         <thead>
                             <tr className="bg-muted border-b">
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">المؤسسة</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">الخطة</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">المالك</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">الفروع</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">المستخدمين</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">السعر</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">الحالة</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">انتهاء التجربة</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">المؤسسة</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">الخطة</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">المالك</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">الفروع</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">المستخدمين</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">السعر</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">الحالة</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">انتهاء التجربة</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -120,7 +120,7 @@ export default function TenantsPage() {
                                             <div className="text-xs text-muted-foreground">{t.slug}</div>
                                         </td>
                                         <td className="py-3 px-4">
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${plan.color}`}>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${plan.color}`}>
                                                 {plan.icon} {plan.label}
                                             </span>
                                         </td>

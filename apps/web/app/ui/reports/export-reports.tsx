@@ -372,7 +372,7 @@ export default function ExportReports() {
                                 تصدير Excel
                             </Button>
                             <Button
-                                className="flex-1 gap-2 bg-destructive hover:bg-destructive/90 text-white"
+                                className="flex-1 gap-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                                 onClick={() => handleExport("pdf")}
                                 disabled={isExporting}
                             >

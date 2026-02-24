@@ -28,7 +28,7 @@ export default async function ShortagesPage() {
         <div className="glass-card w-full p-6">
             <div className="flex w-full items-center justify-between mb-8">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
-                    <AlertTriangle className="w-7 h-7 text-orange-500" />
+                    <AlertTriangle className="w-7 h-7 text-warning" />
                     النواقص
                 </h1>
             </div>

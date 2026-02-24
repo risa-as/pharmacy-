@@ -33,7 +33,7 @@ export default async function Page({
                 <StartStocktakeButton />
             </div>
             <div className="mt-6 flex flex-col gap-4">
-                <div className="bg-warning/10 p-4 rounded-md border border-amber-200 text-amber-800 text-sm">
+                <div className="bg-warning/10 p-4 rounded-md border border-warning/30 text-warning text-sm">
                     <h4 className="font-bold flex items-center gap-2 mb-1">
                         <span>⚠️</span>
                         تنبيه هام

@@ -299,7 +299,7 @@ export default async function ProfitsReportPage({
                                         <div className="text-lg font-bold text-foreground">{amount.toLocaleString()} د.ع</div>
                                         <div className="mt-2 bg-muted rounded-full h-2">
                                             <div
-                                                className="bg-orange-500 h-2 rounded-full"
+                                                className="bg-warning h-2 rounded-full"
                                                 style={{ width: `${percent}%` }}
                                             />
                                         </div>

@@ -37,7 +37,7 @@ export default function WarehousesPage() {
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-foreground">🏭 المستودعات العراقية</h1>
                 <button onClick={() => setShowForm(!showForm)}
-                    className="flex items-center gap-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90">
+                    className="flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
                     <Plus className="w-4 h-4" /> إضافة مستودع
                 </button>
             </div>
@@ -60,7 +60,7 @@ export default function WarehousesPage() {
                             className="border rounded-lg px-3 py-2 text-sm bg-muted" />
                     </div>
                     <button onClick={handleCreate} disabled={saving || !form.name}
-                        className="px-4 py-2 bg-success text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
+                        className="px-4 py-2 bg-success text-success-foreground rounded-lg text-sm hover:bg-success/90 disabled:opacity-50">
                         {saving ? 'جاري الحفظ...' : 'حفظ'}
                     </button>
                 </div>
@@ -68,7 +68,7 @@ export default function WarehousesPage() {
 
             {loading ? (
                 <div className="flex items-center justify-center h-40">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
                 </div>
             ) : warehouses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

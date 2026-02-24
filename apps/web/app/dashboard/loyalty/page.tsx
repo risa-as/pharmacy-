@@ -35,7 +35,7 @@ export default async function LoyaltyDashboardPage() {
     const tierInfo: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
         BRONZE: { label: "برونزي", emoji: "🥉", color: "text-warning", bg: "bg-warning/10 border-orange-200" },
         SILVER: { label: "فضي", emoji: "🥈", color: "text-muted-foreground", bg: "bg-muted border-border" },
-        GOLD: { label: "ذهبي", emoji: "🥇", color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
+        GOLD: { label: "ذهبي", emoji: "🥇", color: "text-warning", bg: "bg-warning/10 border-warning/30" },
     };
 
     const loyaltyEnabled = (settings as any).loyaltyEnabled ?? false;
@@ -48,12 +48,12 @@ export default async function LoyaltyDashboardPage() {
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-4">
                 <h1 className="text-2xl font-bold font-cairo flex items-center gap-2">
-                    <Gift className="w-8 h-8 text-purple-600" />
+                    <Gift className="w-8 h-8 text-info" />
                     🎁 برنامج الولاء
                 </h1>
                 <Link
                     href="/dashboard/loyalty/settings"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors"
+                    className="px-4 py-2 bg-info text-info-foreground rounded-lg font-bold text-sm hover:bg-info/90 transition-all"
                 >
                     ⚙️ إعدادات البرنامج
                 </Link>
@@ -61,11 +61,11 @@ export default async function LoyaltyDashboardPage() {
 
             {/* Status Banner */}
             {!loyaltyEnabled && (
-                <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-4 flex items-center gap-3">
+                <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 flex items-center gap-3">
                     <span className="text-2xl">⚠️</span>
                     <div>
-                        <p className="font-bold text-yellow-800">برنامج الولاء غير مفعّل حالياً</p>
-                        <p className="text-sm text-yellow-600">
+                        <p className="font-bold text-warning">برنامج الولاء غير مفعّل حالياً</p>
+                        <p className="text-sm text-warning/80">
                             يمكنك تفعيله من{" "}
                             <Link href="/dashboard/loyalty/settings" className="underline font-bold">
                                 صفحة الإعدادات
@@ -76,26 +76,26 @@ export default async function LoyaltyDashboardPage() {
             )}
 
             {/* Current Settings */}
-            <div className="bg-gradient-to-l from-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
+            <div className="bg-gradient-to-l from-info to-primary/80 rounded-2xl p-6 text-primary-foreground shadow-lg">
                 <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
                     <Star className="w-5 h-5" />
                     إعدادات النظام الحالية
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-white/70 text-sm mb-1">معدل الكسب</div>
+                        <div className="text-primary-foreground/70 text-sm mb-1">معدل الكسب</div>
                         <div className="text-xl font-bold">{Math.round(1000 * pointsPerDinar)} نقطة / 1000 د.ع</div>
                     </div>
                     <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-white/70 text-sm mb-1">قيمة النقطة</div>
+                        <div className="text-primary-foreground/70 text-sm mb-1">قيمة النقطة</div>
                         <div className="text-xl font-bold">{redemptionValue} د.ع</div>
                     </div>
                     <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-white/70 text-sm mb-1">الحد الأدنى للاستبدال</div>
+                        <div className="text-primary-foreground/70 text-sm mb-1">الحد الأدنى للاستبدال</div>
                         <div className="text-xl font-bold">{minRedemption} نقطة</div>
                     </div>
                     <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-white/70 text-sm mb-1">الحالة</div>
+                        <div className="text-primary-foreground/70 text-sm mb-1">الحالة</div>
                         <div className="text-xl font-bold">{loyaltyEnabled ? "✅ مفعّل" : "❌ معطّل"}</div>
                     </div>
                 </div>
@@ -115,7 +115,7 @@ export default async function LoyaltyDashboardPage() {
                         <Star className="w-4 h-4" />
                         إجمالي النقاط النشطة
                     </div>
-                    <div className="text-2xl font-bold text-purple-600">{totalPointsOutstanding.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-info">{totalPointsOutstanding.toLocaleString()}</div>
                     <div className="text-xs text-muted-foreground">قيمة تقديرية: {(totalPointsOutstanding * redemptionValue).toLocaleString()} د.ع</div>
                 </div>
                 <div className="bg-card p-5 rounded-xl border shadow-sm">
@@ -142,7 +142,7 @@ export default async function LoyaltyDashboardPage() {
             <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b bg-gradient-to-l from-yellow-50 to-orange-50">
                     <h2 className="font-bold text-lg flex items-center gap-2">
-                        <Crown className="w-5 h-5 text-yellow-600" />
+                        <Crown className="w-5 h-5 text-warning" />
                         🏆 قائمة المتصدرين
                     </h2>
                 </div>
@@ -187,7 +187,7 @@ export default async function LoyaltyDashboardPage() {
                                                 {tier.emoji} {tier.label}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 font-bold text-purple-600">
+                                        <td className="px-4 py-3 font-bold text-info">
                                             {acc.totalPoints.toLocaleString()} <span className="text-xs text-muted-foreground">نقطة</span>
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
@@ -214,7 +214,7 @@ export default async function LoyaltyDashboardPage() {
             </div>
 
             {/* Info */}
-            <div className="bg-primary/10 p-4 rounded-lg text-sm text-blue-800">
+            <div className="bg-primary/10 p-4 rounded-lg text-sm text-primary">
                 <strong>كيف يعمل البرنامج:</strong> عند إتمام عملية بيع مرتبطة بمريض مسجل، يكسب المريض نقاطاً تلقائياً. الأعضاء الذهبيون يكسبون ضعف النقاط! يمكن للمريض استبدال نقاطه بخصم على المشتريات.
             </div>
         </div>

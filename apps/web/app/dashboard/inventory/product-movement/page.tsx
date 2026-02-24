@@ -101,7 +101,7 @@ export default async function ProductMovementPage({
                         <select
                             name="drugId"
                             defaultValue={drugId || ""}
-                            className="w-full rounded-lg border border-border px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full rounded-lg border border-border px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-primary"
                         >
                             <option value="">-- اختر منتج --</option>
                             {drugs.map(d => (
@@ -113,7 +113,7 @@ export default async function ProductMovementPage({
                     </div>
                     <button
                         type="submit"
-                        className="rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primary/90 transition-colors whitespace-nowrap"
+                        className="rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors whitespace-nowrap"
                     >
                         عرض الحركة
                     </button>

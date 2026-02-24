@@ -17,7 +17,7 @@ export default async function AlertsPage() {
         if (alert.severity === 'danger') {
             return 'bg-destructive/10 border-red-200 text-destructive';
         }
-        return 'bg-yellow-50 border-yellow-200 text-yellow-700';
+        return 'bg-warning/10 border-warning/30 text-warning';
     };
 
     const getAlertMessage = (alert: AlertItem) => {
@@ -59,9 +59,9 @@ export default async function AlertsPage() {
                     <div className="text-3xl font-bold text-destructive">{stats.danger}</div>
                     <div className="text-sm text-destructive">تنبيهات حرجة</div>
                 </div>
-                <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
-                    <div className="text-3xl font-bold text-yellow-600">{stats.warning}</div>
-                    <div className="text-sm text-yellow-600">تحذيرات</div>
+                <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
+                    <div className="text-3xl font-bold text-warning">{stats.warning}</div>
+                    <div className="text-sm text-warning">تحذيرات</div>
                 </div>
                 <div className="bg-warning/10 rounded-xl border border-orange-200 p-4">
                     <div className="text-3xl font-bold text-warning">{stats.expired}</div>
@@ -75,7 +75,7 @@ export default async function AlertsPage() {
                     <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Bell className="w-8 h-8 text-success" />
                     </div>
-                    <h3 className="text-lg font-bold text-green-800 mb-2">لا توجد تنبيهات</h3>
+                    <h3 className="text-lg font-bold text-success mb-2">لا توجد تنبيهات</h3>
                     <p className="text-sm text-success">جميع الأدوية بحالة جيدة ولا توجد مشاكل في المخزون</p>
                 </div>
             ) : (
@@ -85,13 +85,13 @@ export default async function AlertsPage() {
                             key={alert.id}
                             className={`flex items-center gap-4 p-4 rounded-xl border ${getAlertColor(alert)}`}
                         >
-                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${alert.severity === 'danger' ? 'bg-destructive/10' : 'bg-yellow-100'}`}>
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${alert.severity === 'danger' ? 'bg-destructive/10' : 'bg-warning/20'}`}>
                                 {getAlertIcon(alert.type)}
                             </div>
 
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${alert.severity === 'danger' ? 'bg-red-200' : 'bg-yellow-200'}`}>
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${alert.severity === 'danger' ? 'bg-destructive/20' : 'bg-warning/30'}`}>
                                         {getAlertTitle(alert.type)}
                                     </span>
                                     <span className="text-sm opacity-70">{alert.branchName}</span>

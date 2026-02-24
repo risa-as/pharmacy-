@@ -82,8 +82,8 @@ export default async function MarginsReportPage({
                             key={opt.value}
                             href={buildSortUrl(opt.value)}
                             className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${sortBy === opt.value
-                                ? "bg-emerald-600 text-white shadow-md"
-                                : "bg-card border border-border text-muted-foreground hover:border-emerald-400"
+                                ? "bg-success text-success-foreground shadow-md"
+                                : "bg-card border border-border text-muted-foreground hover:border-success/50"
                                 }`}
                         >
                             {opt.label}
@@ -99,7 +99,7 @@ export default async function MarginsReportPage({
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-card p-5 rounded-xl border shadow-sm">
                     <div className="text-sm text-muted-foreground mb-1">متوسط هامش الربح</div>
-                    <div className={`text-3xl font-bold ${avgMargin >= 20 ? "text-success" : avgMargin >= 10 ? "text-yellow-600" : "text-destructive"}`}>
+                    <div className={`text-3xl font-bold ${avgMargin >= 20 ? "text-success" : avgMargin >= 10 ? "text-warning" : "text-destructive"}`}>
                         {avgMargin.toFixed(1)}%
                     </div>
                 </div>
@@ -130,7 +130,7 @@ export default async function MarginsReportPage({
                         <TrendingUp className="w-10 h-10 text-success" />
                         <div>
                             <div className="text-sm text-success font-bold">أفضل هامش ربح</div>
-                            <div className="text-lg font-bold text-green-900">{bestItem.name}</div>
+                            <div className="text-lg font-bold text-success">{bestItem.name}</div>
                             <div className="text-sm text-success">{bestItem.marginPercent.toFixed(1)}% — ربح {bestItem.profitPerUnit.toLocaleString()} د.ع/عبوة</div>
                         </div>
                     </div>
@@ -138,7 +138,7 @@ export default async function MarginsReportPage({
                         <TrendingDown className="w-10 h-10 text-destructive" />
                         <div>
                             <div className="text-sm text-destructive font-bold">أقل هامش ربح</div>
-                            <div className="text-lg font-bold text-red-900">{worstItem.name}</div>
+                            <div className="text-lg font-bold text-destructive">{worstItem.name}</div>
                             <div className="text-sm text-destructive">{worstItem.marginPercent.toFixed(1)}% — ربح {worstItem.profitPerUnit.toLocaleString()} د.ع/عبوة</div>
                         </div>
                     </div>
@@ -181,7 +181,7 @@ export default async function MarginsReportPage({
                                             className={`px-2 py-1 rounded-md text-xs font-bold ${item.marginPercent < 10
                                                 ? "bg-destructive/10 text-destructive"
                                                 : item.marginPercent < 20
-                                                    ? "bg-yellow-100 text-yellow-700"
+                                                    ? "bg-warning/20 text-warning"
                                                     : "bg-success/10 text-success"
                                                 }`}
                                         >

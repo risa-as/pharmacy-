@@ -40,7 +40,7 @@ export function StartStocktakeButton() {
         <button
             onClick={startStocktake}
             disabled={loading}
-            className={`flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
             <span className="hidden md:block">{loading ? 'جاري التحضير...' : 'بدء جرد جديد'}</span>
             <PlusIcon className="h-5 w-5 md:ml-4" />

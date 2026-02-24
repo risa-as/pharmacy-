@@ -24,7 +24,7 @@ export default async function InsurancePage() {
                 </h1>
                 <Link
                     href="/dashboard/insurance/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Plus className="h-5 w-5" />
                     إضافة شركة تأمين
@@ -43,7 +43,7 @@ export default async function InsurancePage() {
                     </div>
                     <div className="text-sm text-success">نشطة</div>
                 </div>
-                <div className="bg-primary/10 rounded-xl border border-blue-200 p-4">
+                <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">
                         {companies.reduce((acc, c) => acc + c._count.policies, 0)}
                     </div>

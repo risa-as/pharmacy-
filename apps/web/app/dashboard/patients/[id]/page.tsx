@@ -36,7 +36,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
     }
 
     const statusColors: Record<string, string> = {
-        PENDING: "bg-yellow-100 text-yellow-700",
+        PENDING: "bg-warning/20 text-warning",
         PARTIALLY_DISPENSED: "bg-primary/10 text-primary",
         DISPENSED: "bg-success/10 text-success",
         CANCELLED: "bg-destructive/10 text-destructive",
@@ -124,13 +124,13 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                     {/* الأمراض المزمنة */}
                     {patient.chronicDiseases.length > 0 && (
                         <div className="mt-6">
-                            <div className="flex items-center gap-2 text-yellow-600 mb-2">
+                            <div className="flex items-center gap-2 text-warning mb-2">
                                 <Heart className="w-5 h-5" />
                                 <span className="font-bold">الأمراض المزمنة</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 {patient.chronicDiseases.map((disease, i) => (
-                                    <span key={i} className="px-2 py-1 bg-yellow-50 text-yellow-700 rounded-lg text-sm font-bold">
+                                    <span key={i} className="px-2 py-1 bg-warning/10 text-warning rounded-lg text-sm font-bold">
                                         {disease}
                                     </span>
                                 ))}
@@ -165,7 +165,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                         <div className="space-y-3">
                             {patient.insurancePolicies.map((policy) => (
                                 <div key={policy.id} className="p-3 bg-primary/10 rounded-lg">
-                                    <div className="font-bold text-blue-800">{policy.company.name}</div>
+                                    <div className="font-bold text-primary">{policy.company.name}</div>
                                     <div className="text-sm text-primary">
                                         رقم البوليصة: {policy.policyNumber}
                                     </div>

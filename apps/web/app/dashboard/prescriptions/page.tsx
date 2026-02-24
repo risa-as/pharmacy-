@@ -17,7 +17,7 @@ export default async function PrescriptionsPage() {
     });
 
     const statusColors: Record<string, string> = {
-        PENDING: "bg-yellow-100 text-yellow-700",
+        PENDING: "bg-warning/20 text-warning",
         PARTIALLY_DISPENSED: "bg-primary/10 text-primary",
         DISPENSED: "bg-success/10 text-success",
         CANCELLED: "bg-destructive/10 text-destructive",
@@ -42,7 +42,7 @@ export default async function PrescriptionsPage() {
                 </h1>
                 <Link
                     href="/dashboard/prescriptions/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Plus className="h-5 w-5" />
                     وصفة جديدة
@@ -55,15 +55,15 @@ export default async function PrescriptionsPage() {
                     <div className="text-3xl font-bold text-foreground">{prescriptions.length}</div>
                     <div className="text-sm text-muted-foreground">إجمالي الوصفات</div>
                 </div>
-                <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
-                    <div className="text-3xl font-bold text-yellow-600">{pending}</div>
-                    <div className="text-sm text-yellow-600">معلقة</div>
+                <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
+                    <div className="text-3xl font-bold text-warning">{pending}</div>
+                    <div className="text-sm text-warning">معلقة</div>
                 </div>
                 <div className="bg-success/10 rounded-xl border border-green-200 p-4">
                     <div className="text-3xl font-bold text-success">{dispensed}</div>
                     <div className="text-sm text-success">تم صرفها</div>
                 </div>
-                <div className="bg-primary/10 rounded-xl border border-blue-200 p-4">
+                <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">
                         {prescriptions.reduce((acc, p) => acc + p.items.length, 0)}
                     </div>

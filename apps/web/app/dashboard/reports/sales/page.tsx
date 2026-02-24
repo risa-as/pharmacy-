@@ -72,7 +72,7 @@ export default async function SalesReportPage({
                         تقرير المبيعات
                     </h1>
                 </div>
-                <button className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary/90">
+                <button className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90">
                     <Download className="h-4 w-4" />
                     تصدير PDF
                 </button>
@@ -93,13 +93,13 @@ export default async function SalesReportPage({
                     <div className="text-3xl font-bold text-success">{totalSales.toFixed(2)}</div>
                     <div className="text-sm text-success">إجمالي المبيعات</div>
                 </div>
-                <div className="bg-primary/10 rounded-xl border border-blue-200 p-4">
+                <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">{averageSale.toFixed(2)}</div>
                     <div className="text-sm text-primary">متوسط الفاتورة</div>
                 </div>
-                <div className="bg-purple-50 rounded-xl border border-purple-200 p-4">
-                    <div className="text-3xl font-bold text-purple-600">{topBranches.size}</div>
-                    <div className="text-sm text-purple-600">الفروع النشطة</div>
+                <div className="bg-info/10 rounded-xl border border-info/20 p-4">
+                    <div className="text-3xl font-bold text-info">{topBranches.size}</div>
+                    <div className="text-sm text-info">الفروع النشطة</div>
                 </div>
             </div>
 
@@ -120,7 +120,7 @@ export default async function SalesReportPage({
                             .map(([branch, amount], index) => (
                                 <div key={branch} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                     <div className="flex items-center gap-3">
-                                        <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${index === 0 ? "bg-yellow-100 text-yellow-700" :
+                                        <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${index === 0 ? "bg-warning/20 text-warning" :
                                             index === 1 ? "bg-muted text-foreground" :
                                                 "bg-primary/10 text-primary"
                                             }`}>

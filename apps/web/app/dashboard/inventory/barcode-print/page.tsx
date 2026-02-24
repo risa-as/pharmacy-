@@ -184,7 +184,7 @@ export default function BarcodePrintPage() {
                             </select>
                             <button
                                 onClick={handlePrint}
-                                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
+                                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm"
                             >
                                 <Printer className="w-4 h-4" />
                                 طباعة ({totalLabels})
@@ -206,7 +206,7 @@ export default function BarcodePrintPage() {
                                     <button onClick={() => updateCopies(item.drug.barcode, 1)}
                                         className="p-1 rounded bg-muted hover:bg-border"><Plus className="w-3 h-3" /></button>
                                     <button onClick={() => removeItem(item.drug.barcode)}
-                                        className="p-1 rounded bg-destructive/10 hover:bg-red-200 text-destructive mr-2"><Trash2 className="w-3 h-3" /></button>
+                                        className="p-1 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive mr-2"><Trash2 className="w-3 h-3" /></button>
                                 </div>
                             </div>
                         ))}

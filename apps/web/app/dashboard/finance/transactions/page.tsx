@@ -9,9 +9,9 @@ export default async function TransactionsPage() {
     const transactions = await getBranchTransactions(branchId);
 
     const getIcon = (type: string, ref: string) => {
-        if (ref === 'TRANSFER') return <ArrowRightLeft className="w-5 h-5 text-indigo-500" />;
+        if (ref === 'TRANSFER') return <ArrowRightLeft className="w-5 h-5 text-info" />;
         return type === 'IN'
-            ? <ArrowDownToLine className="w-5 h-5 text-emerald-500" />
+            ? <ArrowDownToLine className="w-5 h-5 text-success" />
             : <ArrowUpFromLine className="w-5 h-5 text-rose-500" />;
     };
 
@@ -36,7 +36,7 @@ export default async function TransactionsPage() {
             <div className="flex justify-between items-center bg-card p-6 rounded-2xl shadow-sm border border-border">
                 <div>
                     <h1 className="text-2xl font-bold font-cairo flex items-center gap-3 text-foreground">
-                        <FileText className="w-8 h-8 text-indigo-600" />
+                        <FileText className="w-8 h-8 text-info" />
                         دفتر حركة الأموال (القيود)
                     </h1>
                     <p className="text-muted-foreground mt-1">سجل بجميع العمليات المالية الصادرة والواردة لكل الصناديق</p>
@@ -90,7 +90,7 @@ export default async function TransactionsPage() {
                                             {tx.type === 'IN' ? '+' : '-'}{tx.amount.toLocaleString()} <span className="text-xs">IQD</span>
                                         </span>
                                     </TableCell>
-                                    <TableCell className="text-indigo-700 font-medium">
+                                    <TableCell className="text-info font-medium">
                                         {/* @ts-ignore */}
                                         {tx.safe?.name || 'صندوق غير معروف'}
                                     </TableCell>

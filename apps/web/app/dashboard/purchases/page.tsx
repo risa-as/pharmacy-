@@ -68,9 +68,9 @@ export default async function PurchasesPage() {
                                         <span className={cn(
                                             "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
                                             {
-                                                "bg-yellow-100 text-yellow-800": purchase.status === 'PENDING',
-                                                "bg-success/10 text-green-800": purchase.status === 'COMPLETED',
-                                                "bg-destructive/10 text-red-800": purchase.status === 'CANCELLED',
+                                                "bg-warning/20 text-warning": purchase.status === 'PENDING',
+                                                "bg-success/10 text-success": purchase.status === 'COMPLETED',
+                                                "bg-destructive/10 text-destructive": purchase.status === 'CANCELLED',
                                             }
                                         )}>
                                             {purchase.status === 'PENDING' ? 'قيد الانتظار' :

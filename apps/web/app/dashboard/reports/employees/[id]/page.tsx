@@ -116,7 +116,7 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
                         <p className="text-muted-foreground text-sm mb-1">متوسط قيمة السلة</p>
                         <h3 className="text-3xl font-bold text-foreground">{averageSale.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
                     </div>
-                    <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-600">
+                    <div className="w-12 h-12 bg-info rounded-full flex items-center justify-center text-info">
                         <TrendingUp className="w-6 h-6" />
                     </div>
                 </div>

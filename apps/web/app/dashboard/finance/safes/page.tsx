@@ -11,7 +11,7 @@ export default async function SafesPage() {
     const getIcon = (type: string) => {
         switch (type) {
             case 'BANK': return <Landmark className="w-8 h-8 text-primary" />;
-            case 'MOBILE_WALLET': return <Smartphone className="w-8 h-8 text-purple-600" />;
+            case 'MOBILE_WALLET': return <Smartphone className="w-8 h-8 text-info" />;
             case 'VAULT': return <Briefcase className="w-8 h-8 text-slate-800" />;
             default: return <Wallet className="w-8 h-8 text-success" />;
         }
@@ -33,14 +33,14 @@ export default async function SafesPage() {
             <div className="flex justify-between items-center bg-card p-6 rounded-2xl shadow-sm border border-border">
                 <div>
                     <h1 className="text-2xl font-bold font-cairo flex items-center gap-3 text-foreground">
-                        <Wallet className="w-8 h-8 text-indigo-600" />
+                        <Wallet className="w-8 h-8 text-info" />
                         صناديق الأموال والمحافظ
                     </h1>
                     <p className="text-muted-foreground mt-1">إدارة الأرصدة النقدية وحركة الأموال بين الحسابات</p>
                 </div>
-                <div className="text-left bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                    <p className="text-sm text-indigo-600 font-bold mb-1">إجمالي السيولة النقدية</p>
-                    <p className="text-3xl font-bold text-indigo-900">{totalBalance.toLocaleString()} <span className="text-lg">د.ع</span></p>
+                <div className="text-left bg-info/10 p-4 rounded-xl border border-info/20">
+                    <p className="text-sm text-info font-bold mb-1">إجمالي السيولة النقدية</p>
+                    <p className="text-3xl font-bold text-info">{totalBalance.toLocaleString()} <span className="text-lg">د.ع</span></p>
                 </div>
             </div>
 

@@ -25,7 +25,7 @@ export default async function Page() {
                 </h1>
                 <Link
                     href="/dashboard/suppliers/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Plus className="h-5 w-5" />
                     إضافة مورد
@@ -99,8 +99,8 @@ export default async function Page() {
                                         <td className="whitespace-nowrap px-6 py-4">
                                             {supplier.balance > 0 ? (
                                                 <div className="flex items-center gap-1">
-                                                    <DollarSign className="w-4 h-4 text-yellow-600" />
-                                                    <span className="font-bold text-yellow-700">
+                                                    <DollarSign className="w-4 h-4 text-warning" />
+                                                    <span className="font-bold text-warning">
                                                         {supplier.balance.toLocaleString('en-US')}
                                                     </span>
                                                     <span className="text-xs text-muted-foreground">د.ع</span>
@@ -118,7 +118,7 @@ export default async function Page() {
                                             <div className="flex justify-end gap-2">
                                                 <Link
                                                     href={`/dashboard/suppliers/${supplier.id}`}
-                                                    className="rounded-lg border border-border p-2 hover:bg-primary/10 hover:border-blue-200 transition-colors"
+                                                    className="rounded-lg border border-border p-2 hover:bg-primary/10 hover:border-primary transition-colors"
                                                     title="كشف حساب"
                                                 >
                                                     <FileText className="w-4 h-4 text-primary" />

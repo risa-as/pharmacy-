@@ -94,7 +94,7 @@ export default async function TopSellersPage({
                             key={p.value}
                             href={buildPeriodUrl(p.value)}
                             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${period === p.value
-                                ? "bg-success text-white shadow-md"
+                                ? "bg-success text-success-foreground shadow-md"
                                 : "bg-card border border-border text-muted-foreground hover:border-green-400"
                                 }`}
                         >
@@ -178,7 +178,7 @@ export default async function TopSellersPage({
                                         <div className="flex items-center gap-2">
                                             <div className="flex-1 bg-muted rounded-full h-2 max-w-[100px]">
                                                 <div
-                                                    className="bg-green-500 h-2 rounded-full"
+                                                    className="bg-success h-2 rounded-full"
                                                     style={{ width: `${Math.min(item.share, 100)}%` }}
                                                 />
                                             </div>

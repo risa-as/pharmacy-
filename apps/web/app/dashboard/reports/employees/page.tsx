@@ -81,7 +81,7 @@ export default async function EmployeesReportPage({
                         <BarChart3 className="w-4 h-4" />
                         إجمالي العمليات
                     </div>
-                    <div className="text-3xl font-bold text-purple-600">
+                    <div className="text-3xl font-bold text-info">
                         {stats.reduce((s, st) => s + st.salesCount, 0)}
                     </div>
                 </div>
@@ -107,7 +107,7 @@ export default async function EmployeesReportPage({
                             <div className="bg-card p-6 rounded-xl shadow-sm border relative overflow-hidden h-full">
                                 {/* Rank Badge */}
                                 {index < 3 && (
-                                    <div className="absolute top-0 left-0 bg-yellow-400 text-white px-3 py-1 rounded-br-xl font-bold flex items-center gap-1 shadow-sm">
+                                    <div className="absolute top-0 left-0 bg-warning text-warning-foreground px-3 py-1 rounded-br-xl font-bold flex items-center gap-1 shadow-sm">
                                         <span className="text-lg">{rankEmojis[index]}</span>
                                         {index === 0 && "الأفضل"}
                                         {index === 1 && "الثاني"}
@@ -116,8 +116,8 @@ export default async function EmployeesReportPage({
                                 )}
 
                                 <div className="flex items-center gap-4 mb-4 mt-1">
-                                    <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-md">
-                                        <span className="text-xl font-bold text-white">{stat.name.charAt(0)}</span>
+                                    <div className="w-14 h-14 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center shadow-md">
+                                        <span className="text-xl font-bold text-primary-foreground">{stat.name.charAt(0)}</span>
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-lg">{stat.name}</h3>
@@ -135,16 +135,16 @@ export default async function EmployeesReportPage({
                                     </div>
 
                                     {/* Revenue Share */}
-                                    <div className="flex justify-between items-center p-2 bg-indigo-50 rounded-lg">
+                                    <div className="flex justify-between items-center p-2 bg-info/10 rounded-lg">
                                         <span className="text-muted-foreground text-sm">نسبة المساهمة</span>
                                         <div className="flex items-center gap-2">
                                             <div className="w-16 bg-muted rounded-full h-2">
                                                 <div
-                                                    className="bg-indigo-500 h-2 rounded-full"
+                                                    className="bg-info h-2 rounded-full"
                                                     style={{ width: `${Math.min(stat.revenueShare, 100)}%` }}
                                                 />
                                             </div>
-                                            <span className="font-bold text-indigo-700 text-sm">{stat.revenueShare.toFixed(1)}%</span>
+                                            <span className="font-bold text-info text-sm">{stat.revenueShare.toFixed(1)}%</span>
                                         </div>
                                     </div>
 
@@ -168,7 +168,7 @@ export default async function EmployeesReportPage({
                                     </div>
 
                                     <div className="mt-4 pt-4 border-t border-border flex justify-end">
-                                        <span className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                                        <span className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
                                             عرض التفاصيل <TrendingUp className="w-4 h-4" />
                                         </span>
                                     </div>

@@ -21,7 +21,7 @@ export default function DashboardError({
     return (
         <div className="flex items-center justify-center min-h-[60vh] p-6" dir="rtl">
             <div className="bg-card border border-border rounded-2xl shadow-lg p-8 max-w-md w-full text-center space-y-5">
-                <div className="mx-auto w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center">
+                <div className="mx-auto w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
                     <AlertTriangle className="w-7 h-7 text-destructive" />
                 </div>
 
@@ -39,14 +39,14 @@ export default function DashboardError({
                 <div className="flex gap-3 justify-center">
                     <button
                         onClick={reset}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary text-white rounded-xl text-sm font-medium transition-colors"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary text-primary-foreground rounded-xl text-sm font-bold transition-colors"
                     >
                         <RotateCcw className="w-4 h-4" />
                         إعادة المحاولة
                     </button>
                     <Link
                         href="/dashboard"
-                        className="flex items-center gap-2 px-5 py-2.5 bg-muted hover:bg-muted/80 text-foreground rounded-xl text-sm font-medium transition-colors"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-muted hover:bg-muted/80 text-foreground rounded-xl text-sm font-bold transition-colors"
                     >
                         <Home className="w-4 h-4" />
                         الرئيسية

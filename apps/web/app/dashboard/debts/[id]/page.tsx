@@ -53,7 +53,7 @@ export default async function DebtDetailPage({
             </div>
 
             {/* Balance Card */}
-            <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-2xl p-6 mb-8 shadow-lg">
+            <div className="bg-gradient-to-br from-destructive to-destructive/80 text-destructive-foreground rounded-2xl p-6 mb-8 shadow-lg">
                 <p className="text-sm opacity-80">الرصيد المستحق</p>
                 <p className="text-3xl font-bold mt-1">{formatIQD(patient.balance)}</p>
                 <p className="text-xs opacity-60 mt-2">

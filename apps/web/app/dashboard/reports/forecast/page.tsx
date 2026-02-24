@@ -84,7 +84,7 @@ export default async function ForecastPage() {
                                 <th className="px-4 py-3 text-right font-bold">المخزون الحالي</th>
                                 <th className="px-4 py-3 text-right font-bold">معدل البيع اليومي</th>
                                 <th className="px-4 py-3 text-right font-bold">يكفي لـ (أيام)</th>
-                                <th className="px-4 py-3 text-right font-bold bg-primary/10 text-blue-800">الكمية المقترحة للطلب</th>
+                                <th className="px-4 py-3 text-right font-bold bg-primary/10 text-primary">الكمية المقترحة للطلب</th>
                                 <th className="px-4 py-3 text-right font-bold">الحالة</th>
                             </tr>
                         </thead>
@@ -96,7 +96,7 @@ export default async function ForecastPage() {
                                     <td className="px-4 py-3 text-muted-foreground">{item.dailyRunRate.toFixed(1)}</td>
                                     <td className="px-4 py-3">
                                         <span className={`px-2 py-1 rounded-md text-sm font-bold ${item.daysOfCoverage < 7 ? "bg-destructive/10 text-destructive" :
-                                            item.daysOfCoverage < 14 ? "bg-yellow-100 text-yellow-700" :
+                                            item.daysOfCoverage < 14 ? "bg-warning/20 text-warning" :
                                                 "bg-success/10 text-success"
                                             }`}>
                                             {item.daysOfCoverage.toFixed(0)} يوم

@@ -58,7 +58,7 @@ export default function MarginWarningsPage() {
                     />
                     <span className="text-sm text-muted-foreground">%</span>
                     <button onClick={updateMinMargin} disabled={saving}
-                        className="px-4 py-1.5 bg-primary text-white rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50">
+                        className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50">
                         {saving ? 'حفظ...' : 'حفظ'}
                     </button>
                 </div>
@@ -66,7 +66,7 @@ export default function MarginWarningsPage() {
 
             {loading ? (
                 <div className="flex items-center justify-center h-40">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
                 </div>
             ) : data ? (
                 <>
@@ -79,13 +79,13 @@ export default function MarginWarningsPage() {
                             </div>
                             <div className="text-3xl font-bold text-destructive">{data.totalBelowMin}</div>
                         </div>
-                        <div className="bg-primary/10 border border-blue-100 rounded-xl p-5">
+                        <div className="bg-primary/10 border border-primary rounded-xl p-5">
                             <div className="text-sm text-primary mb-1 font-medium">إجمالي المخزون</div>
                             <div className="text-3xl font-bold text-primary">{data.totalInventory}</div>
                         </div>
-                        <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-5">
-                            <div className="text-sm text-yellow-600 mb-1 font-medium">الحد الأدنى المعتمد</div>
-                            <div className="text-3xl font-bold text-yellow-700">{data.minMargin}%</div>
+                        <div className="bg-warning/10 border border-warning/20 rounded-xl p-5">
+                            <div className="text-sm text-warning mb-1 font-medium">الحد الأدنى المعتمد</div>
+                            <div className="text-3xl font-bold text-warning">{data.minMargin}%</div>
                         </div>
                     </div>
 
@@ -95,24 +95,24 @@ export default function MarginWarningsPage() {
                             <table className="min-w-full text-sm">
                                 <thead>
                                     <tr className="bg-destructive/10 border-b">
-                                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">#</th>
-                                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">الدواء</th>
-                                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">الباركود</th>
-                                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">التكلفة</th>
-                                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">السعر</th>
-                                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">الربح</th>
-                                        <th className="text-right py-3 px-4 font-medium text-destructive">هامش %</th>
+                                        <th className="text-right py-3 px-4 font-bold text-muted-foreground">#</th>
+                                        <th className="text-right py-3 px-4 font-bold text-muted-foreground">الدواء</th>
+                                        <th className="text-right py-3 px-4 font-bold text-muted-foreground">الباركود</th>
+                                        <th className="text-right py-3 px-4 font-bold text-muted-foreground">التكلفة</th>
+                                        <th className="text-right py-3 px-4 font-bold text-muted-foreground">السعر</th>
+                                        <th className="text-right py-3 px-4 font-bold text-muted-foreground">الربح</th>
+                                        <th className="text-right py-3 px-4 font-bold text-destructive">هامش %</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {data.warnings.map((w: any, i: number) => (
                                         <tr key={w.drugId} className="border-b hover:bg-destructive/10/30">
                                             <td className="py-3 px-4 text-muted-foreground">{i + 1}</td>
-                                            <td className="py-3 px-4 font-medium text-foreground">{w.drugName}</td>
+                                            <td className="py-3 px-4 font-bold text-foreground">{w.drugName}</td>
                                             <td className="py-3 px-4 text-muted-foreground text-xs font-mono">{w.barcode}</td>
                                             <td className="py-3 px-4 text-warning">{fmt(w.cost)}</td>
                                             <td className="py-3 px-4 text-primary">{fmt(w.price)}</td>
-                                            <td className={`py-3 px-4 font-medium ${w.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                            <td className={`py-3 px-4 font-bold ${w.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
                                                 {fmt(w.profit)}
                                             </td>
                                             <td className="py-3 px-4">

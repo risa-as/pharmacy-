@@ -53,7 +53,7 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
                 </div>
                 <div className="flex gap-2 print:hidden">
                     <a href={waLink} target="_blank" rel="noopener noreferrer">
-                        <Button className="bg-success hover:bg-green-700">
+                        <Button className="bg-success hover:bg-success/90">
                             إرسال عبر واتساب
                         </Button>
                     </a>

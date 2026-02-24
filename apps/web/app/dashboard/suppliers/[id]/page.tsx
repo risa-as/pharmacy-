@@ -60,17 +60,17 @@ export default async function SupplierLedgerPage({ params }: { params: { id: str
                     </p>
                 </div>
 
-                <div className={`rounded-xl border p-5 shadow-sm ${balance > 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-success/10 border-green-200'}`}>
+                <div className={`rounded-xl border p-5 shadow-sm ${balance > 0 ? 'bg-warning/10 border-warning/30' : 'bg-success/10 border-green-200'}`}>
                     <div className="flex items-center gap-3 mb-2">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${balance > 0 ? 'bg-yellow-100' : 'bg-success/10'}`}>
-                            <DollarSign className={`w-5 h-5 ${balance > 0 ? 'text-yellow-600' : 'text-success'}`} />
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${balance > 0 ? 'bg-warning/20' : 'bg-success/10'}`}>
+                            <DollarSign className={`w-5 h-5 ${balance > 0 ? 'text-warning' : 'text-success'}`} />
                         </div>
                         <span className="text-sm font-cairo text-muted-foreground">الرصيد المتبقي</span>
                     </div>
-                    <p className={`text-2xl font-bold ${balance > 0 ? 'text-yellow-700' : 'text-success'}`}>
+                    <p className={`text-2xl font-bold ${balance > 0 ? 'text-warning' : 'text-success'}`}>
                         {balance.toLocaleString('en-US')} <span className="text-sm text-muted-foreground">د.ع</span>
                     </p>
-                    {balance > 0 && <p className="text-xs text-yellow-600 mt-1">مبلغ مستحق للمورد</p>}
+                    {balance > 0 && <p className="text-xs text-warning mt-1">مبلغ مستحق للمورد</p>}
                     {balance <= 0 && <p className="text-xs text-success mt-1">لا توجد مبالغ مستحقة</p>}
                 </div>
             </div>

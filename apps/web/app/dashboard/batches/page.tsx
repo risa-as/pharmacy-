@@ -52,14 +52,14 @@ export default async function BatchesPage() {
                     </div>
                     <div className="text-sm text-destructive">منتهية الصلاحية</div>
                 </div>
-                <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
-                    <div className="text-3xl font-bold text-yellow-600">
+                <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
+                    <div className="text-3xl font-bold text-warning">
                         {batches.filter((b) => {
                             const exp = new Date(b.expiryDate);
                             return exp >= now && exp <= thirtyDaysFromNow;
                         }).length}
                     </div>
-                    <div className="text-sm text-yellow-600">ستنتهي خلال 30 يوم</div>
+                    <div className="text-sm text-warning">ستنتهي خلال 30 يوم</div>
                 </div>
             </div>
 
@@ -97,7 +97,7 @@ export default async function BatchesPage() {
                                     statusClass = "bg-destructive/10 text-destructive";
                                     statusText = "منتهي";
                                 } else if (isExpiringSoon) {
-                                    statusClass = "bg-yellow-100 text-yellow-700";
+                                    statusClass = "bg-warning/20 text-warning";
                                     statusText = "قريب الانتهاء";
                                 }
 

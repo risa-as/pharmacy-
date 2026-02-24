@@ -27,7 +27,7 @@ export default async function InsurancePoliciesPage() {
                 </h1>
                 <Link
                     href="/dashboard/insurance/policies/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Plus className="h-5 w-5" />
                     إضافة بوليصة

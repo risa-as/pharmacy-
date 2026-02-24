@@ -59,7 +59,7 @@ export default function TopProducts({ products, title = "أفضل المنتجا
                                         className={`h-full rounded-full transition-all ${index === 0 ? "bg-gradient-to-r from-yellow-400 to-yellow-500" :
                                                 index === 1 ? "bg-gradient-to-r from-gray-400 to-gray-500" :
                                                     index === 2 ? "bg-gradient-to-r from-orange-400 to-orange-500" :
-                                                        "bg-gradient-to-r from-blue-400 to-blue-500"
+                                                        "bg-gradient-to-r from-primary to-primary/80"
                                             }`}
                                         style={{ width: `${widthPercent}%` }}
                                     />

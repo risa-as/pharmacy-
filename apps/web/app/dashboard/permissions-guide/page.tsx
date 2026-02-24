@@ -36,7 +36,7 @@ const categories: Category[] = [
         icon: ShoppingCart,
         color: "text-primary",
         bgColor: "bg-primary/10",
-        borderColor: "border-blue-200",
+        borderColor: "border-primary",
         permissions: [
             {
                 key: "canViewSales",
@@ -74,9 +74,9 @@ const categories: Category[] = [
         id: "returns",
         name: "المرتجعات",
         icon: Undo2,
-        color: "text-purple-700",
-        bgColor: "bg-purple-50",
-        borderColor: "border-purple-200",
+        color: "text-info",
+        bgColor: "bg-info/10",
+        borderColor: "border-info/20",
         permissions: [
             {
                 key: "canViewReturns",
@@ -169,7 +169,7 @@ const categories: Category[] = [
         icon: CreditCard,
         color: "text-warning",
         bgColor: "bg-warning/10",
-        borderColor: "border-amber-200",
+        borderColor: "border-warning/30",
         permissions: [
             {
                 key: "canViewExpenses",
@@ -265,9 +265,9 @@ const categories: Category[] = [
         id: "supply",
         name: "التوريد",
         icon: Truck,
-        color: "text-indigo-700",
-        bgColor: "bg-indigo-50",
-        borderColor: "border-indigo-200",
+        color: "text-info",
+        bgColor: "bg-info/10",
+        borderColor: "border-info/20",
         permissions: [
             {
                 key: "canViewSuppliers",
@@ -420,8 +420,8 @@ export default function PermissionsGuidePage() {
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                        <Shield className="w-6 h-6 text-white" />
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
+                        <<Shield className="w-6 h-6 text-primary-foreground" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-foreground">دليل الصلاحيات</h1>
@@ -445,34 +445,34 @@ export default function PermissionsGuidePage() {
                     <div className="text-xs text-muted-foreground font-bold mt-1">تتحكم بإجراءات</div>
                 </div>
                 <div className="bg-card rounded-xl border border-border p-4 text-center">
-                    <div className="text-3xl font-black text-purple-600">{categories.length}</div>
+                    <div className="text-3xl font-black text-info">{categories.length}</div>
                     <div className="text-xs text-muted-foreground font-bold mt-1">فئات</div>
                 </div>
             </div>
 
             {/* How it works */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6 mb-8">
-                <h2 className="font-bold text-blue-800 mb-3 flex items-center gap-2">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-primary p-6 mb-8">
+                <h2 className="font-bold text-primary mb-3 flex items-center gap-2">
                     <Info className="w-5 h-5" />
                     كيف يعمل نظام الصلاحيات؟
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-card/80 rounded-xl p-4 border border-blue-100">
-                        <div className="w-8 h-8 rounded-full bg-primary text-white text-sm font-black flex items-center justify-center mb-2">1</div>
+                    <div className="bg-card/80 rounded-xl p-4 border border-primary">
+                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-black flex items-center justify-center mb-2">1</div>
                         <div className="font-bold text-foreground text-sm mb-1">الصلاحيات الافتراضية</div>
                         <div className="text-xs text-muted-foreground">
                             كل دور (مدير، صيدلي، كاشير) لديه صلاحيات افتراضية محددة مسبقاً
                         </div>
                     </div>
-                    <div className="bg-card/80 rounded-xl p-4 border border-blue-100">
-                        <div className="w-8 h-8 rounded-full bg-primary text-white text-sm font-black flex items-center justify-center mb-2">2</div>
+                    <div className="bg-card/80 rounded-xl p-4 border border-primary">
+                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-black flex items-center justify-center mb-2">2</div>
                         <div className="font-bold text-foreground text-sm mb-1">التخصيص لكل مستخدم</div>
                         <div className="text-xs text-muted-foreground">
                             يمكن للمدير تعديل صلاحيات أي مستخدم بشكل فردي من صفحة إدارة الصلاحيات
                         </div>
                     </div>
-                    <div className="bg-card/80 rounded-xl p-4 border border-blue-100">
-                        <div className="w-8 h-8 rounded-full bg-primary text-white text-sm font-black flex items-center justify-center mb-2">3</div>
+                    <div className="bg-card/80 rounded-xl p-4 border border-primary">
+                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-black flex items-center justify-center mb-2">3</div>
                         <div className="font-bold text-foreground text-sm mb-1">التطبيق التلقائي</div>
                         <div className="text-xs text-muted-foreground">
                             النظام يمنع الوصول للصفحات ويخفي الروابط والأزرار تلقائياً حسب الصلاحية
@@ -595,7 +595,7 @@ export default function PermissionsGuidePage() {
                                                                 {perm.key}
                                                             </code>
                                                             {perm.actionOnly && (
-                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 font-bold">
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/20 text-warning font-bold">
                                                                     إجراء فقط
                                                                 </span>
                                                             )}

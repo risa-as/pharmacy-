@@ -61,7 +61,7 @@ export default async function Page({ params }: { params: { id: string } }) {
                     <p className="text-sm text-muted-foreground mt-1">الرقم المرجعي: <span className="font-mono text-foreground">{stocktake.id}</span></p>
                 </div>
                 <div className="flex gap-2">
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${stocktake.status === 'PENDING' ? 'bg-warning/10 text-amber-800' : 'bg-success/10 text-green-800'
+                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${stocktake.status === 'PENDING' ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'
                         }`}>
                         {stocktake.status === 'PENDING' ? 'قيد المراجعة والإدخال' : 'مكتمل ومُرحّل'}
                     </span>

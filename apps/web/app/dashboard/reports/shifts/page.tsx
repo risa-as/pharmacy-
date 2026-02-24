@@ -146,7 +146,7 @@ export default async function Page({
                             <option value="all">كل الأوقات</option>
                         </select>
                     </div>
-                    <button type="submit" className="rounded-md bg-primary px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+                    <button type="submit" className="rounded-md bg-primary px-6 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                         تطبيق
                     </button>
                 </form>

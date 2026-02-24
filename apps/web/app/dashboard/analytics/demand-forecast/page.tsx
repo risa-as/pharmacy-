@@ -22,7 +22,7 @@ export default function DemandForecastPage() {
     const urgencyBadge = (urgency: string) => {
         switch (urgency) {
             case 'critical': return 'bg-destructive/10 text-destructive border-red-200';
-            case 'warning': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+            case 'warning': return 'bg-warning/20 text-warning border-warning/30';
             default: return 'bg-success/10 text-success border-green-200';
         }
     };
@@ -67,7 +67,7 @@ export default function DemandForecastPage() {
                         <option value={90}>90 يوم</option>
                     </select>
                     <button onClick={handleExport}
-                        className="flex items-center gap-1 px-3 py-2 bg-success text-white rounded-lg text-sm hover:bg-green-700">
+                        className="flex items-center gap-1 px-3 py-2 bg-success text-success-foreground rounded-lg text-sm hover:bg-success/90">
                         <Download className="w-4 h-4" /> تصدير
                     </button>
                 </div>
@@ -75,7 +75,7 @@ export default function DemandForecastPage() {
 
             {loading ? (
                 <div className="flex items-center justify-center h-40">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
                 </div>
             ) : data?.forecasts?.length > 0 ? (
                 <>
@@ -87,9 +87,9 @@ export default function DemandForecastPage() {
                                 {data.forecasts.filter((f: any) => f.urgency === 'critical').length}
                             </div>
                         </div>
-                        <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4">
-                            <div className="text-sm text-yellow-600 mb-1 font-medium">تحذير (≤14 يوم)</div>
-                            <div className="text-2xl font-bold text-yellow-700">
+                        <div className="bg-warning/10 border border-warning/20 rounded-xl p-4">
+                            <div className="text-sm text-warning mb-1 font-medium">تحذير (≤14 يوم)</div>
+                            <div className="text-2xl font-bold text-warning">
                                 {data.forecasts.filter((f: any) => f.urgency === 'warning').length}
                             </div>
                         </div>
@@ -99,7 +99,7 @@ export default function DemandForecastPage() {
                                 {data.forecasts.filter((f: any) => f.urgency === 'normal').length}
                             </div>
                         </div>
-                        <div className="bg-primary/10 border border-blue-100 rounded-xl p-4">
+                        <div className="bg-primary/10 border border-primary rounded-xl p-4">
                             <div className="text-sm text-primary mb-1 font-medium">إجمالي المتابع</div>
                             <div className="text-2xl font-bold text-primary">{data.forecasts.length}</div>
                         </div>
@@ -110,15 +110,15 @@ export default function DemandForecastPage() {
                         <table className="min-w-full text-sm">
                             <thead>
                                 <tr className="bg-muted border-b">
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الدواء</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">مبيعات 90 يوم</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">معدل يومي</th>
-                                    <th className="text-right py-3 px-4 font-medium text-primary">طلب متوقع</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">المخزون</th>
-                                    <th className="text-right py-3 px-4 font-medium text-destructive">أيام حتى النفاد</th>
-                                    <th className="text-right py-3 px-4 font-medium text-success">طلب مقترح</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الثقة</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الحالة</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">الدواء</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">مبيعات 90 يوم</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">معدل يومي</th>
+                                    <th className="text-right py-3 px-4 font-bold text-primary">طلب متوقع</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">المخزون</th>
+                                    <th className="text-right py-3 px-4 font-bold text-destructive">أيام حتى النفاد</th>
+                                    <th className="text-right py-3 px-4 font-bold text-success">طلب مقترح</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">الثقة</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">الحالة</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -133,7 +133,7 @@ export default function DemandForecastPage() {
                                         <td className="py-3 px-4 text-primary font-bold">{fmt(f.predictedDemand)}</td>
                                         <td className="py-3 px-4 text-foreground">{fmt(f.currentStock)}</td>
                                         <td className="py-3 px-4">
-                                            <span className={`font-bold ${f.daysUntilStockout <= 7 ? 'text-destructive' : f.daysUntilStockout <= 14 ? 'text-yellow-700' : 'text-success'}`}>
+                                            <span className={`font-bold ${f.daysUntilStockout <= 7 ? 'text-destructive' : f.daysUntilStockout <= 14 ? 'text-warning' : 'text-success'}`}>
                                                 {f.daysUntilStockout >= 999 ? '∞' : f.daysUntilStockout}
                                             </span>
                                         </td>
@@ -151,7 +151,7 @@ export default function DemandForecastPage() {
                                             <span className="text-xs text-muted-foreground">{f.confidence}%</span>
                                         </td>
                                         <td className="py-3 px-4">
-                                            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${urgencyBadge(f.urgency)}`}>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full border font-bold ${urgencyBadge(f.urgency)}`}>
                                                 {urgencyLabel(f.urgency)}
                                             </span>
                                         </td>

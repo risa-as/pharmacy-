@@ -27,9 +27,9 @@ export default function RevenueWidget({ data, title = "إيرادات اليوم
     }
 
     const methods = [
-        { label: "نقداً", value: data.cash, icon: Wallet, color: "bg-success", bgLight: "bg-success/10", textColor: "text-success" },
-        { label: "بطاقة", value: data.card, icon: CreditCard, color: "bg-primary", bgLight: "bg-primary/10", textColor: "text-primary" },
-        { label: "محفظة", value: data.mobile, icon: Smartphone, color: "bg-info", bgLight: "bg-info/10", textColor: "text-info" },
+        { label: "نقداً", value: data.cash, icon: Wallet, color: "bg-success", bgLight: "bg-success/10", textColor: "text-success", iconColor: "text-success-foreground" },
+        { label: "بطاقة", value: data.card, icon: CreditCard, color: "bg-primary", bgLight: "bg-primary/10", textColor: "text-primary", iconColor: "text-primary-foreground" },
+        { label: "محفظة", value: data.mobile, icon: Smartphone, color: "bg-info", bgLight: "bg-info/10", textColor: "text-info", iconColor: "text-info-foreground" },
     ];
 
     return (
@@ -59,7 +59,7 @@ export default function RevenueWidget({ data, title = "إيرادات اليوم
                     return (
                         <div key={index} className={`flex items-center gap-3 p-3 rounded-lg ${method.bgLight}`}>
                             <div className={`w-8 h-8 ${method.color} rounded-lg flex items-center justify-center`}>
-                                <Icon className="w-4 h-4 text-white" />
+                                <Icon className={`w-4 h-4 ${method.iconColor}`} />
                             </div>
                             <div className="flex-1">
                                 <div className="flex items-center justify-between">

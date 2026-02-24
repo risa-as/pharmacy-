@@ -123,7 +123,7 @@ export default async function SlowMoversPage({
                             key={p.value}
                             href={buildPeriodUrl(p.value)}
                             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${period === p.value
-                                ? "bg-destructive text-white shadow-md"
+                                ? "bg-destructive text-destructive-foreground shadow-md"
                                 : "bg-card border border-border text-muted-foreground hover:border-red-400"
                                 }`}
                         >
@@ -154,12 +154,12 @@ export default async function SlowMoversPage({
                     </div>
                     <div className="text-3xl font-bold text-warning">{items.length} صنف</div>
                 </div>
-                <div className="bg-yellow-50 p-5 rounded-xl border border-yellow-200">
-                    <div className="flex items-center gap-2 text-yellow-600 text-sm mb-1">
+                <div className="bg-warning/10 p-5 rounded-xl border border-warning/30">
+                    <div className="flex items-center gap-2 text-warning text-sm mb-1">
                         <TrendingDown className="w-4 h-4" />
                         لم تُباع أبداً
                     </div>
-                    <div className="text-3xl font-bold text-yellow-700">{neverSoldCount} صنف</div>
+                    <div className="text-3xl font-bold text-warning">{neverSoldCount} صنف</div>
                 </div>
             </div>
 
@@ -200,7 +200,7 @@ export default async function SlowMoversPage({
                                     </td>
                                     <td className="px-4 py-3 text-sm">
                                         {item.neverSold ? (
-                                            <span className="text-yellow-600 font-bold">لم تُباع مطلقاً</span>
+                                            <span className="text-warning font-bold">لم تُباع مطلقاً</span>
                                         ) : (
                                             new Date(item.lastSaleDate!).toLocaleDateString("ar-IQ")
                                         )}
@@ -211,7 +211,7 @@ export default async function SlowMoversPage({
                                                 ? "bg-destructive/10 text-destructive"
                                                 : item.daysSinceLastSale > 90
                                                     ? "bg-warning/10 text-warning"
-                                                    : "bg-yellow-100 text-yellow-700"
+                                                    : "bg-warning/20 text-warning"
                                                 }`}
                                         >
                                             {item.daysSinceLastSale} يوم
@@ -224,7 +224,7 @@ export default async function SlowMoversPage({
                 )}
             </div>
 
-            <div className="bg-primary/10 p-4 rounded-lg text-sm text-blue-800">
+            <div className="bg-primary/10 p-4 rounded-lg text-sm text-primary">
                 ملاحظة: الأدوية الراكدة هي التي لم يتم بيعها خلال الفترة المحددة ({period} يوم) ولديها مخزون أكبر من صفر. ننصح بعمل عروض أو إرجاعها للمورد.
             </div>
         </div>

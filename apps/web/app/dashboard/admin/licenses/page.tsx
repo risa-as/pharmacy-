@@ -261,15 +261,15 @@ export default function AdminLicensesPage() {
     const totalBound = licenses.filter(l => l.hardwareId).length;
     const totalExpired = licenses.filter(l => isExpired(l.expiresAt)).length;
 
-    const inputClass = "w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 outline-none transition-all";
+    const inputClass = "w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary/50 outline-none transition-all";
 
     return (
         <div className="glass-card space-y-6 p-6" dir="rtl">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                        <KeyRound className="w-5 h-5 text-white" />
+                    <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg">
+                        <KeyRound className="w-5 h-5 text-primary-foreground" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-foreground">إدارة التراخيص</h1>
@@ -278,7 +278,7 @@ export default function AdminLicensesPage() {
                 </div>
                 <button
                     onClick={() => { resetModal(); setShowModal(true); }}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-l from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-blue-900/20"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-l from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20"
                 >
                     <Plus className="w-4 h-4" />
                     تأسيس صيدلية جديدة
@@ -293,7 +293,7 @@ export default function AdminLicensesPage() {
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4">
                     <div className="text-sm text-muted-foreground mb-1">فعّال</div>
-                    <div className="text-2xl font-bold text-emerald-500">{totalActive}</div>
+                    <div className="text-2xl font-bold text-success">{totalActive}</div>
                 </div>
                 <div className="bg-card border border-border rounded-xl p-4">
                     <div className="text-sm text-muted-foreground mb-1">مرتبط بجهاز</div>
@@ -314,8 +314,8 @@ export default function AdminLicensesPage() {
                         {provisionResult ? (
                             <div className="space-y-4">
                                 <div className="text-center">
-                                    <div className="mx-auto mb-3 w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center">
-                                        <Check className="w-6 h-6 text-emerald-500" />
+                                    <div className="mx-auto mb-3 w-12 h-12 bg-success/10 rounded-full flex items-center justify-center">
+                                        <Check className="w-6 h-6 text-success" />
                                     </div>
                                     <h2 className="text-lg font-bold text-foreground">تم التأسيس بنجاح!</h2>
                                     {provisionResult.organizationName && (
@@ -354,7 +354,7 @@ export default function AdminLicensesPage() {
 
                                 <button
                                     onClick={resetModal}
-                                    className="w-full px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm hover:bg-muted/80 transition-all font-medium"
+                                    className="w-full px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm hover:bg-muted/80 transition-all font-bold"
                                 >
                                     إغلاق
                                 </button>
@@ -365,7 +365,7 @@ export default function AdminLicensesPage() {
                                 <div className="flex gap-1 bg-muted/30 rounded-xl p-1 mb-5">
                                     <button
                                         onClick={() => setModalTab('provision')}
-                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all ${modalTab === 'provision'
+                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-bold transition-all ${modalTab === 'provision'
                                                 ? 'bg-background text-foreground shadow-sm'
                                                 : 'text-muted-foreground hover:text-foreground'
                                             }`}
@@ -375,7 +375,7 @@ export default function AdminLicensesPage() {
                                     </button>
                                     <button
                                         onClick={() => setModalTab('existing')}
-                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all ${modalTab === 'existing'
+                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-bold transition-all ${modalTab === 'existing'
                                                 ? 'bg-background text-foreground shadow-sm'
                                                 : 'text-muted-foreground hover:text-foreground'
                                             }`}
@@ -387,7 +387,7 @@ export default function AdminLicensesPage() {
 
                                 {/* Error */}
                                 {modalError && (
-                                    <div className="mb-4 p-3 rounded-xl text-sm flex items-start gap-2 bg-red-500/10 border border-red-500/20 text-red-400">
+                                    <div className="mb-4 p-3 rounded-xl text-sm flex items-start gap-2 bg-destructive/10 border border-destructive/20 text-destructive/70">
                                         <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                                         <span>{modalError}</span>
                                     </div>
@@ -501,7 +501,7 @@ export default function AdminLicensesPage() {
                                             generating ||
                                             (modalTab === 'provision' ? !pharmacyName || !ownerEmail || !ownerPassword : !selectedBranch)
                                         }
-                                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-l from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-sm font-medium disabled:opacity-50 transition-all"
+                                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-l from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground rounded-xl text-sm font-bold disabled:opacity-50 transition-all"
                                     >
                                         {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : modalTab === 'provision' ? <Building2 className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />}
                                         {generating ? 'جاري المعالجة...' : modalTab === 'provision' ? 'تأسيس وتوليد المفتاح' : 'توليد المفتاح'}
@@ -529,13 +529,13 @@ export default function AdminLicensesPage() {
                     <table className="min-w-full text-sm">
                         <thead>
                             <tr className="border-b border-border bg-muted/30">
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">مفتاح الترخيص</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">الفرع / المؤسسة</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">الجهاز</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">الحالة</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">تاريخ الانتهاء</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">آخر اتصال</th>
-                                <th className="text-right py-3 px-4 font-medium text-muted-foreground">إجراءات</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">مفتاح الترخيص</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">الفرع / المؤسسة</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">الجهاز</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">الحالة</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">تاريخ الانتهاء</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">آخر اتصال</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -556,7 +556,7 @@ export default function AdminLicensesPage() {
                                                     title="نسخ"
                                                 >
                                                     {copiedId === license.id
-                                                        ? <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                                        ? <Check className="w-3.5 h-3.5 text-success" />
                                                         : <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                                                     }
                                                 </button>
@@ -583,11 +583,11 @@ export default function AdminLicensesPage() {
                                         </td>
                                         <td className="py-3 px-4">
                                             {expired ? (
-                                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-destructive border border-red-500/20">
+                                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
                                                     <AlertTriangle className="w-3 h-3" /> منتهي
                                                 </span>
                                             ) : license.isActive ? (
-                                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">
                                                     <Shield className="w-3 h-3" /> فعّال
                                                 </span>
                                             ) : (
@@ -611,8 +611,8 @@ export default function AdminLicensesPage() {
                                                         <button
                                                             onClick={() => handleToggle(license)}
                                                             className={`p-1.5 rounded-lg transition-colors text-xs ${license.isActive
-                                                                    ? 'hover:bg-red-500/10 text-red-400 hover:text-destructive'
-                                                                    : 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-500'
+                                                                    ? 'hover:bg-destructive/10 text-destructive/70 hover:text-destructive'
+                                                                    : 'hover:bg-success/10 text-success/70 hover:text-success'
                                                                 }`}
                                                             title={license.isActive ? 'إيقاف' : 'تفعيل'}
                                                         >
@@ -621,7 +621,7 @@ export default function AdminLicensesPage() {
                                                         {license.hardwareId && (
                                                             <button
                                                                 onClick={() => handleUnbind(license)}
-                                                                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 hover:text-amber-500 transition-colors"
+                                                                className="p-1.5 rounded-lg hover:bg-warning/10 text-warning hover:text-warning transition-colors"
                                                                 title="فصل ربط الجهاز"
                                                             >
                                                                 <RotateCcw className="w-4 h-4" />
@@ -629,7 +629,7 @@ export default function AdminLicensesPage() {
                                                         )}
                                                         <button
                                                             onClick={() => handleDelete(license)}
-                                                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 hover:text-destructive transition-colors"
+                                                            className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive/70 hover:text-destructive transition-colors"
                                                             title="حذف"
                                                         >
                                                             <Trash2 className="w-4 h-4" />

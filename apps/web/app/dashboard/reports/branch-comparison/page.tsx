@@ -46,7 +46,7 @@ export default function BranchComparisonPage() {
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-foreground">📊 مقارنة الفروع</h1>
                 <button onClick={handleExport}
-                    className="flex items-center gap-1 px-3 py-2 bg-success text-white rounded-lg text-sm hover:bg-green-700">
+                    className="flex items-center gap-1 px-3 py-2 bg-success text-success-foreground rounded-lg text-sm hover:bg-success/90">
                     <Download className="w-4 h-4" /> تصدير Excel
                 </button>
             </div>
@@ -81,7 +81,7 @@ export default function BranchComparisonPage() {
 
             {loading ? (
                 <div className="flex items-center justify-center h-40">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
                 </div>
             ) : data?.comparison?.length > 0 ? (
                 <>
@@ -102,7 +102,7 @@ export default function BranchComparisonPage() {
                                     <div className="flex justify-between"><span className="text-muted-foreground">المبيعات</span><span className="font-bold text-primary">{fmt(b.revenue)}</span></div>
                                     <div className="flex justify-between"><span className="text-muted-foreground">التكلفة</span><span className="text-warning">{fmt(b.cogs)}</span></div>
                                     <div className="flex justify-between"><span className="text-muted-foreground">المصروفات</span><span className="text-destructive">{fmt(b.expenses)}</span></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">المرتجعات</span><span className="text-yellow-700">{fmt(b.returns)}</span></div>
+                                    <div className="flex justify-between"><span className="text-muted-foreground">المرتجعات</span><span className="text-warning">{fmt(b.returns)}</span></div>
                                     <div className="flex justify-between border-t pt-2 mt-2">
                                         <span className="text-foreground font-medium">صافي الربح</span>
                                         <span className={`font-bold flex items-center gap-1 ${b.netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
@@ -128,24 +128,24 @@ export default function BranchComparisonPage() {
                         <table className="min-w-full text-sm">
                             <thead>
                                 <tr className="bg-muted border-b">
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الفرع</th>
-                                    <th className="text-right py-3 px-4 font-medium text-primary">المبيعات</th>
-                                    <th className="text-right py-3 px-4 font-medium text-warning">التكلفة</th>
-                                    <th className="text-right py-3 px-4 font-medium text-destructive">المصروفات</th>
-                                    <th className="text-right py-3 px-4 font-medium text-success">صافي الربح</th>
-                                    <th className="text-right py-3 px-4 font-medium text-purple-600">هامش %</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الفواتير</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">الفرع</th>
+                                    <th className="text-right py-3 px-4 font-bold text-primary">المبيعات</th>
+                                    <th className="text-right py-3 px-4 font-bold text-warning">التكلفة</th>
+                                    <th className="text-right py-3 px-4 font-bold text-destructive">المصروفات</th>
+                                    <th className="text-right py-3 px-4 font-bold text-success">صافي الربح</th>
+                                    <th className="text-right py-3 px-4 font-bold text-info">هامش %</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">الفواتير</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {data.comparison.map((b: any) => (
                                     <tr key={b.branchId} className="border-b hover:bg-muted/50">
-                                        <td className="py-3 px-4 font-medium">{b.branchName}</td>
+                                        <td className="py-3 px-4 font-bold">{b.branchName}</td>
                                         <td className="py-3 px-4 text-primary">{fmt(b.revenue)}</td>
                                         <td className="py-3 px-4 text-warning">{fmt(b.cogs)}</td>
                                         <td className="py-3 px-4 text-destructive">{fmt(b.expenses)}</td>
                                         <td className={`py-3 px-4 font-bold ${b.netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>{fmt(b.netProfit)}</td>
-                                        <td className="py-3 px-4 text-purple-700">{b.profitMargin}%</td>
+                                        <td className="py-3 px-4 text-info">{b.profitMargin}%</td>
                                         <td className="py-3 px-4 text-muted-foreground">{b.salesCount}</td>
                                     </tr>
                                 ))}

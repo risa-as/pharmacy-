@@ -24,7 +24,7 @@ export default async function DiscountsPage() {
                 </h1>
                 <Link
                     href="/dashboard/discounts/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Plus className="h-5 w-5" />
                     إضافة عرض
@@ -78,10 +78,10 @@ export default async function DiscountsPage() {
                                     <tr key={discount.id} className="hover:bg-muted">
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${discount.type === "PERCENTAGE" ? "bg-purple-100" : "bg-success/10"
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${discount.type === "PERCENTAGE" ? "bg-info" : "bg-success/10"
                                                     }`}>
                                                     {discount.type === "PERCENTAGE" ? (
-                                                        <Percent className="w-4 h-4 text-purple-600" />
+                                                        <Percent className="w-4 h-4 text-info" />
                                                     ) : (
                                                         <Tag className="w-4 h-4 text-success" />
                                                     )}

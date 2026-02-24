@@ -178,7 +178,7 @@ export default function StocktakeForm({ stocktakeId, initialData, isCompleted }:
                     <button
                         onClick={saveDraft}
                         disabled={loading}
-                        className="px-6 py-2 border border-border rounded-lg text-muted-foreground font-medium hover:bg-muted transition-colors"
+                        className="px-6 py-2 border border-border rounded-lg text-muted-foreground font-bold hover:bg-muted transition-colors"
                     >
                         حفظ كمسودة
                     </button>

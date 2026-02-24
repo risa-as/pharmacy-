@@ -21,7 +21,7 @@ export default async function ProfitReportPage({
             <h1 className="text-2xl font-bold text-foreground mb-6">📊 تقرير الأرباح والخسائر</h1>
             <Suspense fallback={
                 <div className="flex items-center justify-center h-64">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
                 </div>
             }>
                 <ProfitReportClient

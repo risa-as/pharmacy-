@@ -141,7 +141,7 @@ export default function StripePaymentButton({
     return (
         <button
             onClick={() => setShowForm(true)}
-            className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 px-4 rounded-lg transition-all"
+            className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground font-bold py-3 px-4 rounded-lg transition-all"
         >
             <CreditCard className="w-5 h-5" />
             الدفع بالبطاقة (Stripe)

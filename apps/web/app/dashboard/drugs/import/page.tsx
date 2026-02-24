@@ -146,7 +146,7 @@ export default function DrugImportPage() {
                 </h1>
                 <button
                     onClick={downloadTemplate}
-                    className="flex items-center gap-2 px-4 py-2 bg-success/10 text-success rounded-xl text-sm font-medium hover:bg-success/10 transition-colors border border-green-200"
+                    className="flex items-center gap-2 px-4 py-2 bg-success/10 text-success rounded-xl text-sm font-bold hover:bg-success/10 transition-colors border border-green-200"
                 >
                     <Download className="w-4 h-4" />
                     تحميل نموذج CSV
@@ -156,7 +156,7 @@ export default function DrugImportPage() {
             {/* Upload Area */}
             <div
                 onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-border rounded-2xl p-12 text-center cursor-pointer hover:border-blue-400 hover:bg-primary/10/30 transition-all group"
+                className="border-2 border-dashed border-border rounded-2xl p-12 text-center cursor-pointer hover:border-primary hover:bg-primary/10/30 transition-all group"
             >
                 <Upload className="w-12 h-12 mx-auto text-muted-foreground group-hover:text-primary transition-colors mb-4" />
                 <p className="text-lg font-medium text-muted-foreground">
@@ -184,7 +184,7 @@ export default function DrugImportPage() {
                         <button
                             onClick={handleImport}
                             disabled={loading}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-xl font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
                         >
                             {loading ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -256,13 +256,13 @@ export default function DrugImportPage() {
                         <div className="bg-card rounded-xl p-3">
                             <p className="text-xs font-bold text-destructive mb-2">أخطاء:</p>
                             {result.errors.map((e, i) => (
-                                <p key={i} className="text-xs text-red-400">{e}</p>
+                                <p key={i} className="text-xs text-destructive/70">{e}</p>
                             ))}
                         </div>
                     )}
                     <button
                         onClick={() => { setResult(null); setRows([]); setFileName(""); }}
-                        className="mt-4 px-4 py-2 bg-card border border-border rounded-xl text-sm font-medium hover:bg-muted transition-colors"
+                        className="mt-4 px-4 py-2 bg-card border border-border rounded-xl text-sm font-bold hover:bg-muted transition-colors"
                     >
                         استيراد ملف آخر
                     </button>

@@ -93,7 +93,7 @@ export default function WhatsAppPage() {
                 )}
 
                 <button onClick={sendMessage} disabled={sending || !phone}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                    className="flex items-center gap-2 px-6 py-2.5 bg-success text-success-foreground rounded-lg text-sm font-bold hover:bg-success/90 disabled:opacity-50">
                     <Send className="w-4 h-4" /> {sending ? 'جاري الإرسال...' : 'إرسال عبر WhatsApp'}
                 </button>
 
@@ -101,14 +101,14 @@ export default function WhatsAppPage() {
             </div>
 
             {/* Setup Guide */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 max-w-xl">
-                <h3 className="font-bold text-yellow-800 mb-2">⚙️ إعداد WhatsApp Cloud API</h3>
-                <ol className="text-sm text-yellow-700 space-y-1 list-decimal mr-5">
+            <div className="bg-warning/10 border border-warning/30 rounded-xl p-5 max-w-xl">
+                <h3 className="font-bold text-warning mb-2">⚙️ إعداد WhatsApp Cloud API</h3>
+                <ol className="text-sm text-warning space-y-1 list-decimal mr-5">
                     <li>أنشئ حساب في <span className="font-medium">Meta for Developers</span></li>
                     <li>فعّل WhatsApp Business API</li>
-                    <li>أضف المتغيرات في ملف <code className="bg-yellow-100 px-1 rounded">.env</code>:</li>
+                    <li>أضف المتغيرات في ملف <code className="bg-warning/20 px-1 rounded">.env</code>:</li>
                 </ol>
-                <pre className="mt-2 text-xs bg-yellow-100 rounded p-2 text-yellow-800" dir="ltr">
+                <pre className="mt-2 text-xs bg-warning/20 rounded p-2 text-warning" dir="ltr">
                     {`WHATSAPP_TOKEN=your_token_here
 WHATSAPP_PHONE_ID=your_phone_id`}
                 </pre>

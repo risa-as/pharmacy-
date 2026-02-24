@@ -29,10 +29,10 @@ const statusLabels: Record<string, string> = {
 };
 
 const statusColors: Record<string, string> = {
-    PENDING: "bg-yellow-100 text-yellow-700",
+    PENDING: "bg-warning/20 text-warning",
     COMPLETED: "bg-success/10 text-success",
     FAILED: "bg-destructive/10 text-destructive",
-    REFUNDED: "bg-purple-100 text-purple-700",
+    REFUNDED: "bg-info text-info",
 };
 
 export default async function PaymentsPage({
@@ -88,13 +88,13 @@ export default async function PaymentsPage({
                     <div className="text-3xl font-bold text-success">{totalToday.toLocaleString()}</div>
                     <div className="text-sm text-success">مجموع اليوم</div>
                 </div>
-                <div className="bg-primary/10 rounded-xl border border-blue-200 p-4">
+                <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">{cashToday.toLocaleString()}</div>
                     <div className="text-sm text-primary">نقداً اليوم</div>
                 </div>
-                <div className="bg-purple-50 rounded-xl border border-purple-200 p-4">
-                    <div className="text-3xl font-bold text-purple-600">{cardToday.toLocaleString()}</div>
-                    <div className="text-sm text-purple-600">بطاقات اليوم</div>
+                <div className="bg-info/10 rounded-xl border border-info/20 p-4">
+                    <div className="text-3xl font-bold text-info">{cardToday.toLocaleString()}</div>
+                    <div className="text-sm text-info">بطاقات اليوم</div>
                 </div>
                 <div className="bg-success/10 rounded-xl border border-emerald-200 p-4">
                     <div className="flex items-center gap-2 mb-1">

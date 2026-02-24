@@ -226,7 +226,7 @@ export default function SideNav({ settings, userPermissions, userRole }: {
                                     href={link.href}
                                     onClick={() => setMobileOpen(false)}
                                     className={cn(
-                                        "flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-semibold transition-all duration-150",
+                                        "flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
                                         {
                                             "bg-primary/10 text-primary shadow-sm": isActive,
                                             "text-muted-foreground hover:bg-muted hover:text-foreground": !isActive,
@@ -245,7 +245,7 @@ export default function SideNav({ settings, userPermissions, userRole }: {
 
             {/* Sign Out */}
             <form action={handleSignOut} className="mt-2 px-0.5">
-                <button className="flex h-9 w-full items-center gap-2.5 rounded-lg bg-destructive/10 px-3 text-[13px] font-semibold text-destructive hover:bg-destructive/20 transition-colors">
+                <button className="flex h-9 w-full items-center gap-2.5 rounded-lg bg-destructive/10 px-3 text-[13px] font-bold text-destructive hover:bg-destructive/20 transition-colors">
                     <LogOut className="w-[18px] h-[18px]" />
                     <span>تسجيل الخروج</span>
                 </button>

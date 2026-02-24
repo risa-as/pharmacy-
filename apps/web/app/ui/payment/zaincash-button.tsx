@@ -44,7 +44,7 @@ export default function ZainCashButton({
         <button
             onClick={handlePayment}
             disabled={loading}
-            className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3 px-4 rounded-lg transition-all disabled:opacity-50"
+            className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-success to-success/80 hover:from-success/90 hover:to-success/70 text-success-foreground font-bold py-3 px-4 rounded-lg transition-all disabled:opacity-50"
         >
             {loading ? (
                 <>

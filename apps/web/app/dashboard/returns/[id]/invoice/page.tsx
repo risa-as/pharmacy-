@@ -40,7 +40,7 @@ export default async function ReturnInvoicePage({
             <div className="flex justify-end mb-4 print:hidden">
                 <button
                     onClick={() => { if (typeof window !== 'undefined') window.print(); }}
-                    className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
                 >
                     🖨️ طباعة
                 </button>

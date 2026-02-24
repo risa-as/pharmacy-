@@ -78,7 +78,7 @@ export function DeleteButton({ action, onConfirm, description, className }: Dele
                         <button
                             disabled={isDeleting}
                             onClick={handleDelete}
-                            className="flex-1 bg-destructive text-destructive-foreground px-4 py-2 rounded-lg font-medium hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                            className="flex-1 bg-destructive text-destructive-foreground px-4 py-2 rounded-lg font-bold hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
                         >
                             {isDeleting ? (
                                 <>
@@ -92,7 +92,7 @@ export function DeleteButton({ action, onConfirm, description, className }: Dele
                         <button
                             disabled={isDeleting}
                             onClick={() => setIsOpen(false)}
-                            className="flex-1 bg-muted text-foreground px-4 py-2 rounded-lg font-medium hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="flex-1 bg-muted text-foreground px-4 py-2 rounded-lg font-bold hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             إلغاء
                         </button>

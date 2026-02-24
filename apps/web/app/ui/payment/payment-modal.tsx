@@ -104,7 +104,7 @@ export default function PaymentModal({
                     <div className="border-2 border-primary/30 rounded-xl p-4 bg-primary/10">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                                <CreditCard className="w-5 h-5 text-white" />
+                                <CreditCard className="w-5 h-5 text-primary-foreground" />
                             </div>
                             <div>
                                 <p className="font-bold text-foreground">البطاقة البنكية</p>
@@ -123,7 +123,7 @@ export default function PaymentModal({
                     <div className="border-2 border-success/30 rounded-xl p-4 bg-success/10">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-10 h-10 bg-success rounded-lg flex items-center justify-center">
-                                <Smartphone className="w-5 h-5 text-white" />
+                                <Smartphone className="w-5 h-5 text-success-foreground" />
                             </div>
                             <div>
                                 <p className="font-bold text-foreground">Zain Cash</p>

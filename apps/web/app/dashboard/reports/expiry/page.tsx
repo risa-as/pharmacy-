@@ -80,10 +80,10 @@ export default async function ExpiryReportPage({
             items: warning,
             count: warning.length,
             color: "yellow",
-            bgColor: "bg-yellow-50",
-            borderColor: "border-yellow-200",
-            iconColor: "text-yellow-600",
-            textColor: "text-yellow-700",
+            bgColor: "bg-warning/10",
+            borderColor: "border-warning/30",
+            iconColor: "text-warning",
+            textColor: "text-warning",
             value: warning.reduce((s, b) => s + b.quantity * b.inventory.cost, 0),
         },
         {
@@ -188,7 +188,7 @@ export default async function ExpiryReportPage({
                                                         ? "bg-destructive/10 text-destructive"
                                                         : days < 30
                                                             ? "bg-warning/10 text-warning"
-                                                            : "bg-yellow-100 text-yellow-700"
+                                                            : "bg-warning/20 text-warning"
                                                         }`}
                                                 >
                                                     {days < 0 ? `منتهي منذ ${Math.abs(days)} يوم` : `${days} يوم`}
@@ -210,7 +210,7 @@ export default async function ExpiryReportPage({
                 </div>
             )}
 
-            <div className="bg-primary/10 p-4 rounded-lg text-sm text-blue-800">
+            <div className="bg-primary/10 p-4 rounded-lg text-sm text-primary">
                 ملاحظة: يعرض هذا التقرير الدفعات التي تحتوي على كمية أكبر من صفر فقط. الأدوية المنتهية يجب سحبها من الرفوف فوراً.
             </div>
         </div>

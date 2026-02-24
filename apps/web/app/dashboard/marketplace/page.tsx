@@ -47,7 +47,7 @@ export default function MarketplacePage() {
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-foreground">🏪 Faramace Store - سوق B2B</h1>
                 <button onClick={() => setShowSellForm(!showSellForm)}
-                    className="flex items-center gap-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+                    className="flex items-center gap-1 px-4 py-2 bg-info text-info-foreground rounded-lg text-sm hover:bg-info/90">
                     <Plus className="w-4 h-4" /> عرض للبيع
                 </button>
             </div>
@@ -90,9 +90,9 @@ export default function MarketplacePage() {
                                 {listing.batchNumber && <div className="text-xs text-muted-foreground">دفعة: {listing.batchNumber}</div>}
                             </div>
                             <div className="flex items-center justify-between border-t pt-3">
-                                <div className="text-lg font-bold text-purple-700">{fmt(listing.unitPrice)}</div>
+                                <div className="text-lg font-bold text-info">{fmt(listing.unitPrice)}</div>
                                 <button onClick={() => buyItem(listing.id, listing.minOrderQty || 1)}
-                                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs hover:bg-purple-700">
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-info text-info-foreground rounded-lg text-xs hover:bg-info/90">
                                     <ShoppingCart className="w-3 h-3" /> شراء ({listing.minOrderQty || 1}+)
                                 </button>
                             </div>

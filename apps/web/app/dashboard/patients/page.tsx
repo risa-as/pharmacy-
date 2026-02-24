@@ -33,7 +33,7 @@ export default async function PatientsPage({
                 </h1>
                 <Link
                     href="/dashboard/patients/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Plus className="h-5 w-5" />
                     إضافة مريض
@@ -51,17 +51,17 @@ export default async function PatientsPage({
                     <div className="text-3xl font-bold text-foreground">{patients.length}</div>
                     <div className="text-sm text-muted-foreground">إجمالي المرضى</div>
                 </div>
-                <div className="bg-primary/10 rounded-xl border border-blue-200 p-4">
+                <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">
                         {patients.filter(p => p.allergies.length > 0).length}
                     </div>
                     <div className="text-sm text-primary">لديهم حساسية</div>
                 </div>
-                <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
-                    <div className="text-3xl font-bold text-yellow-600">
+                <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
+                    <div className="text-3xl font-bold text-warning">
                         {patients.filter(p => p.chronicDiseases.length > 0).length}
                     </div>
-                    <div className="text-sm text-yellow-600">أمراض مزمنة</div>
+                    <div className="text-sm text-warning">أمراض مزمنة</div>
                 </div>
             </div>
 
@@ -114,7 +114,7 @@ export default async function PatientsPage({
                                     </td>
                                     <td className="px-4 py-3">
                                         {patient.chronicDiseases.length > 0 ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-warning/20 text-warning">
                                                 {patient.chronicDiseases.length} مرض
                                             </span>
                                         ) : (
