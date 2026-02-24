@@ -1,4 +1,4 @@
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import { PrismaClient } from "@prisma/client";
 import { UpdateDrug, DeleteDrug } from "@/app/ui/drugs/buttons";
@@ -49,10 +49,20 @@ export default async function Page({
         <div className="glass-card w-full p-6" suppressHydrationWarning>
             <div className="flex w-full items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold font-cairo text-foreground">قاعدة الأدوية</h1>
-                <Link href="/dashboard/drugs/create" className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">
-                    <PlusIcon className="h-4 w-4" />
-                    <span className="hidden md:block">إضافة دواء جديد</span>
-                </Link>
+                <div className="flex items-center gap-2">
+                    {/* Moved from sidebar per MVP navigation audit */}
+                    <Link
+                        href="/dashboard/drugs/import"
+                        className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold border border-border/60 bg-card hover:bg-muted text-foreground transition-colors"
+                    >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        <span className="hidden md:block">استيراد أدوية</span>
+                    </Link>
+                    <Link href="/dashboard/drugs/create" className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">
+                        <PlusIcon className="h-4 w-4" />
+                        <span className="hidden md:block">إضافة دواء جديد</span>
+                    </Link>
+                </div>
             </div>
 
             <div className="flex w-full max-w-md mb-8">
