@@ -41,7 +41,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="name"
                     type="text"
                     defaultValue={supplier.name}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 />
                 {state.errors?.name && (
@@ -59,7 +59,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="email"
                     type="email"
                     defaultValue={supplier.email || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="example@email.com"
                     dir="ltr"
                 />
@@ -75,7 +75,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="phone"
                     type="text"
                     defaultValue={supplier.phone || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="07xxxxxxxxx"
                     dir="ltr"
                 />
@@ -91,7 +91,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="address"
                     type="text"
                     defaultValue={supplier.address || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="أدخل العنوان"
                 />
             </div>

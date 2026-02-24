@@ -31,7 +31,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                 <select
                     id="branchId"
                     name="branchId"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
                     <option value="">اختر الفرع</option>
@@ -54,7 +54,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                 <select
                     id="drugId"
                     name="drugId"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
                     <option value="">اختر الدواء</option>
@@ -81,7 +81,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="price"
                         step="0.01"
                         min="0"
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                 </div>
@@ -95,7 +95,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="cost"
                         step="0.01"
                         min="0"
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                 </div>
@@ -113,7 +113,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="minStock"
                         min="0"
                         defaultValue={0}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                 </div>
                 <div>
@@ -126,7 +126,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="maxStock"
                         min="1"
                         defaultValue={1000}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                 </div>
             </div>

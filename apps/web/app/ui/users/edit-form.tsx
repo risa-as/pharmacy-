@@ -30,7 +30,7 @@ export default function EditUserForm({ user, branches }: EditUserFormProps) {
                         name="name"
                         required
                         defaultValue={user.name || ""}
-                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                         placeholder="أدخل اسم المستخدم"
                     />
                     {state.errors?.name && (
@@ -48,7 +48,7 @@ export default function EditUserForm({ user, branches }: EditUserFormProps) {
                         name="email"
                         required
                         defaultValue={user.email}
-                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                         placeholder="example@email.com"
                         dir="ltr"
                     />
@@ -66,7 +66,7 @@ export default function EditUserForm({ user, branches }: EditUserFormProps) {
                         id="password"
                         name="password"
                         minLength={6}
-                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                         placeholder="أدخل كلمة المرور الجديدة"
                         dir="ltr"
                     />
@@ -84,7 +84,7 @@ export default function EditUserForm({ user, branches }: EditUserFormProps) {
                         name="role"
                         required
                         defaultValue={user.role}
-                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
                     >
                         <option value="PHARMACIST">صيدلي</option>
                         <option value="CASHIER">كاشير</option>
@@ -103,7 +103,7 @@ export default function EditUserForm({ user, branches }: EditUserFormProps) {
                         id="branchId"
                         name="branchId"
                         defaultValue={user.branchId || ""}
-                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
                     >
                         <option value="">-- بدون فرع --</option>
                         {branches.map((branch) => (

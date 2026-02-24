@@ -62,7 +62,7 @@ export default function EditForm({
                     id="branchId"
                     name="branchId"
                     defaultValue={inventory.branchId}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
                     {branches.map((branch) => (
@@ -82,7 +82,7 @@ export default function EditForm({
                     id="drugId"
                     name="drugId"
                     defaultValue={inventory.drugId}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
                     {drugs.map((drug) => (
@@ -106,7 +106,7 @@ export default function EditForm({
                         step="0.01"
                         min="0"
                         defaultValue={inventory.price}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                     {state.errors?.price && (
@@ -124,7 +124,7 @@ export default function EditForm({
                         step="0.01"
                         min="0"
                         defaultValue={inventory.cost}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                     {state.errors?.cost && (
@@ -145,7 +145,7 @@ export default function EditForm({
                         type="number"
                         min="0"
                         defaultValue={inventory.minStock}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                 </div>
                 <div>
@@ -158,7 +158,7 @@ export default function EditForm({
                         type="number"
                         min="1"
                         defaultValue={inventory.maxStock}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                 </div>
             </div>

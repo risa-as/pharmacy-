@@ -21,7 +21,7 @@ export default function CreatePatientForm() {
                     name="name"
                     type="text"
                     placeholder="أدخل اسم المريض"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 />
                 {state.errors?.name && (
@@ -39,7 +39,7 @@ export default function CreatePatientForm() {
                     name="phone"
                     type="text"
                     placeholder="07xxxxxxxxx"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                     required
                 />
@@ -58,7 +58,7 @@ export default function CreatePatientForm() {
                         id="dateOfBirth"
                         name="dateOfBirth"
                         type="date"
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                 </div>
                 <div>
@@ -68,7 +68,7 @@ export default function CreatePatientForm() {
                     <select
                         id="gender"
                         name="gender"
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     >
                         <option value="">اختر...</option>
                         <option value="male">ذكر</option>
@@ -87,7 +87,7 @@ export default function CreatePatientForm() {
                     name="allergies"
                     type="text"
                     placeholder="مثال: بنسلين, أسبرين"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                 />
             </div>
 
@@ -101,7 +101,7 @@ export default function CreatePatientForm() {
                     name="chronicDiseases"
                     type="text"
                     placeholder="مثال: سكري, ضغط"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                 />
             </div>
 
@@ -115,7 +115,7 @@ export default function CreatePatientForm() {
                     name="notes"
                     rows={3}
                     placeholder="أي ملاحظات إضافية..."
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                 />
             </div>
 

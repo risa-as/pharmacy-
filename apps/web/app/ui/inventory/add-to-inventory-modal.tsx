@@ -86,7 +86,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                 name="branchId"
                                 required
                                 defaultValue=""
-                                className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             >
                                 <option value="" disabled>
                                     اختر الفرع...
@@ -107,7 +107,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                 required
                                 min="0"
                                 step="any"
-                                className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             />
                         </div>
 
@@ -119,7 +119,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                 required
                                 min="0"
                                 step="any"
-                                className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             />
                         </div>
 
@@ -130,7 +130,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                 name="minStock"
                                 defaultValue="0"
                                 min="0"
-                                className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             />
                         </div>
                         <div>
@@ -140,7 +140,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                 name="maxStock"
                                 defaultValue="100"
                                 min="0"
-                                className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             />
                         </div>
 
@@ -155,7 +155,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                         defaultValue="0"
                                         min="0"
                                         required
-                                        className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                        className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                                     />
                                 </div>
                                 <div>
@@ -163,7 +163,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                     <input
                                         type="date"
                                         name="expiryDate"
-                                        className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                        className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                                     />
                                 </div>
                             </div>

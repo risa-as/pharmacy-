@@ -37,7 +37,7 @@ export default function EditForm({
                     <select
                         id="organizationId"
                         name="organizationId"
-                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
                         defaultValue={branch.organizationId}
                         aria-describedby="organization-error"
                     >
@@ -70,7 +70,7 @@ export default function EditForm({
                         type="text"
                         defaultValue={branch.name}
                         placeholder="أدخل اسم الفرع"
-                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                         aria-describedby="name-error"
                     />
                     <div id="name-error" aria-live="polite" aria-atomic="true">

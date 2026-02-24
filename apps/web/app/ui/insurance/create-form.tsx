@@ -21,7 +21,7 @@ export default function CreateInsuranceForm() {
                     name="name"
                     type="text"
                     placeholder="أدخل اسم الشركة"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 />
                 {state.errors?.name && (
@@ -42,7 +42,7 @@ export default function CreateInsuranceForm() {
                     max="100"
                     step="0.1"
                     defaultValue="0"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                 />
             </div>
 
@@ -56,7 +56,7 @@ export default function CreateInsuranceForm() {
                     name="contactPhone"
                     type="text"
                     placeholder="07xxxxxxxxx"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                 />
             </div>
@@ -71,7 +71,7 @@ export default function CreateInsuranceForm() {
                     name="contactEmail"
                     type="email"
                     placeholder="info@company.com"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                 />
             </div>

@@ -33,7 +33,7 @@ export default function EditForm({ drug }: { drug: Drug }) {
                             type="text"
                             defaultValue={drug.barcode}
                             placeholder="أدخل الباركود"
-                            className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                             dir="ltr"
                             required
                         />
@@ -57,7 +57,7 @@ export default function EditForm({ drug }: { drug: Drug }) {
                             type="text"
                             defaultValue={drug.tradeName}
                             placeholder="مثال: بنادول"
-                            className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                             required
                         />
                         <div id="tradeName-error" aria-live="polite" aria-atomic="true">
@@ -80,7 +80,7 @@ export default function EditForm({ drug }: { drug: Drug }) {
                             type="text"
                             defaultValue={drug.scientificName}
                             placeholder="مثال: Paracetamol"
-                            className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                             required
                         />
                     </div>
@@ -95,7 +95,7 @@ export default function EditForm({ drug }: { drug: Drug }) {
                             type="text"
                             defaultValue={drug.origin || ""}
                             placeholder="مثال: GSK"
-                            className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                         />
                     </div>
 

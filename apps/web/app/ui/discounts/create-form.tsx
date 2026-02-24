@@ -35,7 +35,7 @@ export default function CreateDiscountForm() {
                     id="name"
                     name="name"
                     type="text"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="مثال: خصم الصيف"
                     required
                 />
@@ -53,7 +53,7 @@ export default function CreateDiscountForm() {
                     id="code"
                     name="code"
                     type="text"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100 font-mono"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 font-mono"
                     placeholder="SUMMER2024"
                     dir="ltr"
                 />
@@ -127,7 +127,7 @@ export default function CreateDiscountForm() {
                         step="0.01"
                         min="0"
                         max={discountType === "PERCENTAGE" ? "100" : undefined}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         placeholder={discountType === "PERCENTAGE" ? "10" : "5.00"}
                         required
                     />
@@ -146,7 +146,7 @@ export default function CreateDiscountForm() {
                         step="0.01"
                         min="0"
                         defaultValue="0"
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                 </div>
             </div>
@@ -162,7 +162,7 @@ export default function CreateDiscountForm() {
                         name="startDate"
                         type="date"
                         defaultValue={today}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                 </div>
@@ -175,7 +175,7 @@ export default function CreateDiscountForm() {
                         name="endDate"
                         type="date"
                         defaultValue={thirtyDaysLater}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                 </div>

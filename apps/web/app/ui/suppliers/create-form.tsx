@@ -21,7 +21,7 @@ export default function Form() {
                     name="name"
                     type="text"
                     placeholder="أدخل اسم المورد"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 />
                 {state.errors?.name && (
@@ -39,7 +39,7 @@ export default function Form() {
                     name="email"
                     type="email"
                     placeholder="example@mail.com"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                 />
                 {state.errors?.email && (
@@ -57,7 +57,7 @@ export default function Form() {
                     name="phone"
                     type="text"
                     placeholder="07xxxxxxxxx"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                 />
             </div>
@@ -72,7 +72,7 @@ export default function Form() {
                     name="address"
                     type="text"
                     placeholder="أدخل عنوان المورد"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                 />
             </div>
 

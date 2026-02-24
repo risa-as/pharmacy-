@@ -42,7 +42,7 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     name="name"
                     type="text"
                     defaultValue={company.name}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 />
                 {state.errors?.name && (
@@ -63,7 +63,7 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     max="100"
                     step="0.1"
                     defaultValue={company.discountRate}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 />
             </div>
@@ -78,7 +78,7 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     name="contactPhone"
                     type="text"
                     defaultValue={company.contactPhone || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                 />
             </div>
@@ -93,7 +93,7 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     name="contactEmail"
                     type="email"
                     defaultValue={company.contactEmail || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                 />
             </div>

@@ -91,7 +91,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                         <select
                             id="supplierId"
                             name="supplierId"
-                            className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                             defaultValue=""
                             required
                         >
@@ -106,7 +106,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                         <select
                             id="branchId"
                             name="branchId"
-                            className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                             defaultValue=""
                             required
                         >
@@ -122,7 +122,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             id="invoiceNumber"
                             name="invoiceNumber"
                             type="text"
-                            className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                             placeholder="INV-2024-001"
                             dir="ltr"
                         />
@@ -139,7 +139,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                         <select
                             value={selectedDrug}
                             onChange={e => setSelectedDrug(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
                         >
                             <option value="">اختر الدواء...</option>
                             {drugs.map(d => <option key={d.id} value={d.id}>{d.tradeName} ({d.barcode})</option>)}
@@ -151,7 +151,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             type="text"
                             value={batchNumber}
                             onChange={e => setBatchNumber(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
                             placeholder="LOT123"
                             dir="ltr"
                         />
@@ -162,7 +162,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             type="date"
                             value={expiryDate}
                             onChange={e => setExpiryDate(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
                         />
                     </div>
                     <div>
@@ -171,7 +171,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             type="number"
                             value={quantity}
                             onChange={e => setQuantity(Number(e.target.value))}
-                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
                             min="1"
                         />
                     </div>
@@ -181,7 +181,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             type="number"
                             value={cost}
                             onChange={e => setCost(Number(e.target.value))}
-                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
                             min="0"
                             step="0.01"
                         />
@@ -192,7 +192,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             type="number"
                             value={sellingPrice}
                             onChange={e => setSellingPrice(Number(e.target.value))}
-                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
                             min="0"
                             step="0.01"
                         />

@@ -67,7 +67,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                             type="text"
                             name="batchNumber"
                             required
-                            className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             placeholder="مثال: LOT-2024-001"
                         />
                     </div>
@@ -79,7 +79,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                             name="quantity"
                             required
                             min="1"
-                            className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             placeholder="0"
                         />
                     </div>
@@ -92,7 +92,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                             required
                             min="0"
                             step="250"
-                            className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10 font-mono text-left"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20 font-mono text-left"
                             placeholder="0"
                             dir="ltr"
                         />
@@ -104,7 +104,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                             type="date"
                             name="expiryDate"
                             required
-                            className="w-full rounded-lg border border-border px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                         />
                     </div>
 

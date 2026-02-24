@@ -54,7 +54,7 @@ export default function CreatePolicyForm({
                 <select
                     id="patientId"
                     name="patientId"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
                     <option value="">اختر المريض...</option>
@@ -77,7 +77,7 @@ export default function CreatePolicyForm({
                 <select
                     id="companyId"
                     name="companyId"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
                     <option value="">اختر شركة التأمين...</option>
@@ -101,7 +101,7 @@ export default function CreatePolicyForm({
                     id="policyNumber"
                     name="policyNumber"
                     type="text"
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="مثال: INS-2024-001"
                     required
                 />
@@ -120,7 +120,7 @@ export default function CreatePolicyForm({
                         id="expiryDate"
                         name="expiryDate"
                         type="date"
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                     {state.errors?.expiryDate && (
@@ -138,7 +138,7 @@ export default function CreatePolicyForm({
                         min="0"
                         max="100"
                         defaultValue={80}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                         required
                     />
                 </div>

@@ -53,7 +53,7 @@ export default function EditForm({
                     id="patientId"
                     name="patientId"
                     defaultValue={prescription.patientId}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
                     {patients.map((patient) => (
@@ -77,7 +77,7 @@ export default function EditForm({
                     name="doctorName"
                     type="text"
                     defaultValue={prescription.doctorName || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="د. أحمد..."
                 />
             </div>
@@ -92,7 +92,7 @@ export default function EditForm({
                     name="clinicName"
                     type="text"
                     defaultValue={prescription.clinicName || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="عيادة..."
                 />
             </div>
@@ -107,7 +107,7 @@ export default function EditForm({
                     name="notes"
                     rows={3}
                     defaultValue={prescription.notes || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="أي ملاحظات إضافية..."
                 />
             </div>

@@ -108,7 +108,7 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
                         onChange={(e) => setBarcode(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="امسح الباركود هنا (أو اضغط Enter)..."
-                        className="w-full text-lg p-3 pl-12 border-2 border-border rounded-lg focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-mono"
+                        className="w-full text-lg p-3 pl-12 border-2 border-border rounded-lg focus:border-primary focus:ring-4 focus:ring-ring/20 transition-all font-mono"
                         disabled={isChecking}
                     />
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">

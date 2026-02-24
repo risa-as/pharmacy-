@@ -44,7 +44,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="name"
                     type="text"
                     defaultValue={patient.name}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 />
                 {state.errors?.name && (
@@ -62,7 +62,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="phone"
                     type="text"
                     defaultValue={patient.phone}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     dir="ltr"
                     required
                 />
@@ -82,7 +82,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
                         name="dateOfBirth"
                         type="date"
                         defaultValue={patient.dateOfBirth ? new Date(patient.dateOfBirth).toISOString().split('T')[0] : ""}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                 </div>
                 <div>
@@ -93,7 +93,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
                         id="gender"
                         name="gender"
                         defaultValue={patient.gender || ""}
-                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     >
                         <option value="">اختر...</option>
                         <option value="male">ذكر</option>
@@ -112,7 +112,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="allergies"
                     type="text"
                     defaultValue={patient.allergies.join(", ")}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="مثال: بنسلين, أسبرين"
                 />
             </div>
@@ -127,7 +127,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="chronicDiseases"
                     type="text"
                     defaultValue={patient.chronicDiseases.join(", ")}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="مثال: سكري, ضغط"
                 />
             </div>
@@ -142,7 +142,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="notes"
                     rows={3}
                     defaultValue={patient.notes || ""}
-                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     placeholder="أي ملاحظات إضافية..."
                 />
             </div>

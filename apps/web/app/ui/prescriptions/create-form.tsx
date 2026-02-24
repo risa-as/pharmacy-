@@ -85,7 +85,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                         <select
                             id="patientId"
                             name="patientId"
-                            className="w-full rounded-lg border border-border px-4 py-3 focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 focus:border-ring focus:ring-2 focus:ring-ring/20"
                             required
                         >
                             <option value="">اختر المريض</option>
@@ -105,7 +105,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                             name="doctorName"
                             type="text"
                             placeholder="اختياري"
-                            className="w-full rounded-lg border border-border px-4 py-3 focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 focus:border-ring focus:ring-2 focus:ring-ring/20"
                         />
                     </div>
                     <div className="md:col-span-2">
@@ -117,7 +117,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                             name="clinicName"
                             type="text"
                             placeholder="اختياري"
-                            className="w-full rounded-lg border border-border px-4 py-3 focus:border-ring focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 focus:border-ring focus:ring-2 focus:ring-ring/20"
                         />
                     </div>
                 </div>
@@ -236,7 +236,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                     name="notes"
                     rows={2}
                     placeholder="أي ملاحظات إضافية..."
-                    className="w-full rounded-lg border border-border px-4 py-3 focus:border-ring focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 focus:border-ring focus:ring-2 focus:ring-ring/20"
                 />
             </div>
 

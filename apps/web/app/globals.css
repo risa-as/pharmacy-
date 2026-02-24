@@ -53,6 +53,8 @@
     }
 
     .dark {
+        color-scheme: dark; /* Forces browser-native controls (select dropdown, date picker) to dark */
+
         /* Backgrounds — warm darks reduce blue-light for night-shift pharmacists */
         --background:          20 15% 9%;
         --foreground:          40 15% 95%;
@@ -120,6 +122,26 @@
     }
     ::-webkit-scrollbar-thumb:hover {
         background: hsl(var(--muted-foreground) / 0.35);
+    }
+
+    /* ── Form Control Base Reset ──────────────────────────────────────────
+     * The browser renders <input>, <textarea>, <select> with a white OS
+     * background unless explicitly overridden. Setting these here means
+     * every raw form element in every form file inherits dark-mode-safe
+     * colors from the single source of truth without needing per-element
+     * Tailwind classes.
+     * ------------------------------------------------------------------ */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    textarea,
+    select {
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
+    }
+
+    /* Native <option> elements inside <select> */
+    option {
+        background-color: hsl(var(--popover));
+        color: hsl(var(--popover-foreground));
     }
 
     /* Focus Ring */
