@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFormState } from "react-dom";
 import { updatePatient } from "@/app/lib/actions/patient";
 import { Users, ArrowRight } from "lucide-react";
+import { SubmitButton } from "@/app/ui/submit-button";
 
 interface Patient {
     id: string;
@@ -28,14 +29,14 @@ export default function EditForm({ patient }: { patient: Patient }) {
     }, []);
 
     if (!mounted) {
-        return <div className="animate-pulse h-96 bg-gray-100 rounded-xl" />;
+        return <div className="animate-pulse h-96 bg-muted rounded-xl" />;
     }
 
     return (
         <form action={dispatch} className="space-y-6" suppressHydrationWarning>
             {/* الاسم */}
             <div>
-                <label htmlFor="name" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="name" className="mb-2 block text-sm font-bold text-foreground">
                     اسم المريض
                 </label>
                 <input
@@ -43,17 +44,17 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="name"
                     type="text"
                     defaultValue={patient.name}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 />
                 {state.errors?.name && (
-                    <p className="mt-1 text-sm text-red-500">{state.errors.name}</p>
+                    <p className="mt-1 text-sm text-destructive">{state.errors.name}</p>
                 )}
             </div>
 
             {/* الهاتف */}
             <div>
-                <label htmlFor="phone" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="phone" className="mb-2 block text-sm font-bold text-foreground">
                     رقم الهاتف
                 </label>
                 <input
@@ -61,19 +62,19 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="phone"
                     type="text"
                     defaultValue={patient.phone}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     dir="ltr"
                     required
                 />
                 {state.errors?.phone && (
-                    <p className="mt-1 text-sm text-red-500">{state.errors.phone}</p>
+                    <p className="mt-1 text-sm text-destructive">{state.errors.phone}</p>
                 )}
             </div>
 
             {/* تاريخ الميلاد والجنس */}
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label htmlFor="dateOfBirth" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="dateOfBirth" className="mb-2 block text-sm font-bold text-foreground">
                         تاريخ الميلاد
                     </label>
                     <input
@@ -81,18 +82,18 @@ export default function EditForm({ patient }: { patient: Patient }) {
                         name="dateOfBirth"
                         type="date"
                         defaultValue={patient.dateOfBirth ? new Date(patient.dateOfBirth).toISOString().split('T')[0] : ""}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     />
                 </div>
                 <div>
-                    <label htmlFor="gender" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="gender" className="mb-2 block text-sm font-bold text-foreground">
                         الجنس
                     </label>
                     <select
                         id="gender"
                         name="gender"
                         defaultValue={patient.gender || ""}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     >
                         <option value="">اختر...</option>
                         <option value="male">ذكر</option>
@@ -103,7 +104,7 @@ export default function EditForm({ patient }: { patient: Patient }) {
 
             {/* الحساسية */}
             <div>
-                <label htmlFor="allergies" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="allergies" className="mb-2 block text-sm font-bold text-foreground">
                     الحساسية (افصل بين الأنواع بفاصلة)
                 </label>
                 <input
@@ -111,14 +112,14 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="allergies"
                     type="text"
                     defaultValue={patient.allergies.join(", ")}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     placeholder="مثال: بنسلين, أسبرين"
                 />
             </div>
 
             {/* الأمراض المزمنة */}
             <div>
-                <label htmlFor="chronicDiseases" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="chronicDiseases" className="mb-2 block text-sm font-bold text-foreground">
                     الأمراض المزمنة (افصل بين الأمراض بفاصلة)
                 </label>
                 <input
@@ -126,14 +127,14 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="chronicDiseases"
                     type="text"
                     defaultValue={patient.chronicDiseases.join(", ")}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     placeholder="مثال: سكري, ضغط"
                 />
             </div>
 
             {/* ملاحظات */}
             <div>
-                <label htmlFor="notes" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="notes" className="mb-2 block text-sm font-bold text-foreground">
                     ملاحظات
                 </label>
                 <textarea
@@ -141,30 +142,24 @@ export default function EditForm({ patient }: { patient: Patient }) {
                     name="notes"
                     rows={3}
                     defaultValue={patient.notes || ""}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     placeholder="أي ملاحظات إضافية..."
                 />
             </div>
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
+                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
 
             {/* الأزرار */}
             <div className="flex gap-4">
-                <button
-                    type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
-                >
-                    <Users className="h-5 w-5" />
-                    حفظ التغييرات
-                </button>
+                <SubmitButton text="حفظ التغييرات" icon={Users} />
                 <Link
                     href="/dashboard/patients"
-                    className="flex items-center gap-2 rounded-lg bg-gray-100 px-6 py-3 font-bold text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-colors hover:bg-muted"
                 >
                     <ArrowRight className="h-5 w-5" />
                     إلغاء

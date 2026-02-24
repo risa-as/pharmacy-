@@ -17,16 +17,16 @@ export default async function CreateInventoryPage() {
     return (
         <main className="mx-auto max-w-2xl">
             <div className="mb-8 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
-                    <Package className="h-6 w-6 text-blue-600" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                    <Package className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800">إضافة للمخزون</h1>
-                    <p className="text-sm text-gray-500">أضف دواء جديد لمخزون الفرع</p>
+                    <h1 className="text-2xl font-bold text-foreground">إضافة للمخزون</h1>
+                    <p className="text-sm text-muted-foreground">أضف دواء جديد لمخزون الفرع</p>
                 </div>
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
                 <CreateInventoryForm branches={branches} drugs={drugs} />
             </div>
         </main>

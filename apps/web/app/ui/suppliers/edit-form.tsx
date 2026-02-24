@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFormState } from "react-dom";
 import { updateSupplier } from "@/app/lib/actions/supplier";
 import { Users, ArrowRight } from "lucide-react";
+import { SubmitButton } from "@/app/ui/submit-button";
 
 interface Supplier {
     id: string;
@@ -25,14 +26,14 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
     }, []);
 
     if (!mounted) {
-        return <div className="animate-pulse h-96 bg-gray-100 rounded-xl" />;
+        return <div className="animate-pulse h-96 bg-muted rounded-xl" />;
     }
 
     return (
         <form action={dispatch} className="space-y-6" suppressHydrationWarning>
             {/* اسم المورد */}
             <div>
-                <label htmlFor="name" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="name" className="mb-2 block text-sm font-bold text-foreground">
                     اسم المورد
                 </label>
                 <input
@@ -40,17 +41,17 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="name"
                     type="text"
                     defaultValue={supplier.name}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 />
                 {state.errors?.name && (
-                    <p className="mt-1 text-sm text-red-500">{state.errors.name}</p>
+                    <p className="mt-1 text-sm text-destructive">{state.errors.name}</p>
                 )}
             </div>
 
             {/* البريد الإلكتروني */}
             <div>
-                <label htmlFor="email" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="email" className="mb-2 block text-sm font-bold text-foreground">
                     البريد الإلكتروني
                 </label>
                 <input
@@ -58,7 +59,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="email"
                     type="email"
                     defaultValue={supplier.email || ""}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     placeholder="example@email.com"
                     dir="ltr"
                 />
@@ -66,7 +67,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
 
             {/* الهاتف */}
             <div>
-                <label htmlFor="phone" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="phone" className="mb-2 block text-sm font-bold text-foreground">
                     رقم الهاتف
                 </label>
                 <input
@@ -74,7 +75,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="phone"
                     type="text"
                     defaultValue={supplier.phone || ""}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     placeholder="07xxxxxxxxx"
                     dir="ltr"
                 />
@@ -82,7 +83,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
 
             {/* العنوان */}
             <div>
-                <label htmlFor="address" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="address" className="mb-2 block text-sm font-bold text-foreground">
                     العنوان
                 </label>
                 <input
@@ -90,30 +91,24 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
                     name="address"
                     type="text"
                     defaultValue={supplier.address || ""}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     placeholder="أدخل العنوان"
                 />
             </div>
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
+                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
 
             {/* الأزرار */}
             <div className="flex gap-4">
-                <button
-                    type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
-                >
-                    <Users className="h-5 w-5" />
-                    حفظ التغييرات
-                </button>
+                <SubmitButton text="حفظ التغييرات" icon={Users} />
                 <Link
                     href="/dashboard/suppliers"
-                    className="flex items-center gap-2 rounded-lg bg-gray-100 px-6 py-3 font-bold text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-colors hover:bg-muted"
                 >
                     <ArrowRight className="h-5 w-5" />
                     إلغاء

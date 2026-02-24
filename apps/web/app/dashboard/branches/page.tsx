@@ -20,22 +20,20 @@ export default async function Page() {
   const branches = await getBranches();
 
   return (
-    <div className="w-full" suppressHydrationWarning>
+    <div className="glass-card w-full p-6" suppressHydrationWarning>
       <div className="flex w-full items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold font-cairo text-gray-800">الفروع</h1>
-        <Button asChild className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white">
-          <Link href="/dashboard/branches/create">
-            <PlusIcon className="h-4 w-4" />
-            <span className="hidden md:block font-bold">إضافة فرع</span>
-          </Link>
-        </Button>
+        <h1 className="text-2xl font-bold font-cairo text-foreground">الفروع</h1>
+        <Link href="/dashboard/branches/create" className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-white transition-colors">
+          <PlusIcon className="h-4 w-4" />
+          <span className="hidden md:block">إضافة فرع</span>
+        </Link>
       </div>
 
       <div className="mt-4 flow-root">
         <div className="inline-block min-w-full align-middle">
-          <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-            <table className="min-w-full text-gray-900">
-              <thead className="bg-gray-50 text-right text-sm font-semibold text-gray-900 border-b border-gray-200">
+          <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
+            <table className="min-w-full text-foreground">
+              <thead className="bg-muted text-right text-sm font-semibold text-foreground border-b border-border">
                 <tr>
                   <th scope="col" className="px-6 py-4 font-cairo text-right">
                     الاسم
@@ -48,18 +46,18 @@ export default async function Page() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-gray-200 bg-card">
                 {branches.map((branch) => (
                   <tr
                     key={branch.id}
-                    className="hover:bg-gray-50 transition-colors"
+                    className="hover:bg-muted transition-colors"
                   >
                     <td className="whitespace-nowrap px-6 py-4 text-right">
                       <div className="flex items-center gap-3">
-                        <div className="font-medium text-gray-900">{branch.name}</div>
+                        <div className="font-medium text-foreground">{branch.name}</div>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-gray-500 text-right">
+                    <td className="whitespace-nowrap px-6 py-4 text-muted-foreground text-right">
                       {branch.organization.name}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right">
@@ -72,7 +70,7 @@ export default async function Page() {
                 ))}
                 {branches.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-6 py-10 text-center text-gray-500">
+                    <td colSpan={3} className="px-6 py-10 text-center text-muted-foreground">
                       لا توجد فروع حتى الآن.
                     </td>
                   </tr>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@faramace/ui";
+import { SubmitButton } from "@/app/ui/submit-button";
 import { useFormState } from "react-dom";
 import { updateOrganization } from "@/app/lib/actions/organization";
 import type { Organization } from "@prisma/client";
@@ -13,9 +13,9 @@ export default function EditForm({ organization }: { organization: Organization 
 
     return (
         <form action={dispatch} className="font-cairo">
-            <div className="rounded-xl bg-gray-50 p-4 md:p-6 border border-gray-100">
+            <div className="rounded-xl bg-muted p-4 md:p-6 border border-border">
                 <div className="mb-4">
-                    <label htmlFor="name" className="mb-2 block text-sm font-medium text-gray-700">
+                    <label htmlFor="name" className="mb-2 block text-sm font-medium text-foreground">
                         اسم المنظمة
                     </label>
                     <div className="relative mt-2 rounded-md shadow-sm">
@@ -25,14 +25,14 @@ export default function EditForm({ organization }: { organization: Organization 
                             type="text"
                             defaultValue={organization.name}
                             placeholder="أدخل اسم المنظمة"
-                            className="peer block w-full rounded-md border border-gray-200 py-2 pr-10 pl-2 text-sm outline-2 placeholder:text-gray-400 focus:border-blue-500 focus:ring-blue-500"
+                            className="peer block w-full rounded-md border border-border py-2 pr-10 pl-2 text-sm outline-2 placeholder:text-muted-foreground focus:border-ring focus:ring-ring"
                             aria-describedby="name-error"
                         />
                     </div>
                     <div id="name-error" aria-live="polite" aria-atomic="true">
                         {state.errors?.name &&
                             state.errors.name.map((error: string) => (
-                                <p key={error} className="mt-2 text-sm text-red-500">
+                                <p key={error} className="mt-2 text-sm text-destructive">
                                     {error}
                                 </p>
                             ))}
@@ -42,11 +42,11 @@ export default function EditForm({ organization }: { organization: Organization 
             <div className="mt-6 flex justify-end gap-4">
                 <Link
                     href="/dashboard/organizations"
-                    className="flex h-10 items-center rounded-lg bg-gray-100 px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex h-10 items-center rounded-lg bg-muted px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted"
                 >
                     إلغاء
                 </Link>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">حفظ التغييرات</Button>
+                <SubmitButton text="حفظ التغييرات" />
             </div>
         </form>
     );

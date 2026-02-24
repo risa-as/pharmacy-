@@ -4,6 +4,7 @@ import { useFormState } from "react-dom";
 import { createInventory } from "@/app/lib/actions/inventory";
 import Link from "next/link";
 import { Package, ArrowRight } from "lucide-react";
+import { SubmitButton } from "@/app/ui/submit-button";
 
 interface Branch {
     id: string;
@@ -24,13 +25,13 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
         <form action={dispatch} className="space-y-6">
             {/* الفرع */}
             <div>
-                <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-foreground">
                     الفرع
                 </label>
                 <select
                     id="branchId"
                     name="branchId"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 >
                     <option value="">اختر الفرع</option>
@@ -41,19 +42,19 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                     ))}
                 </select>
                 {state.errors?.branchId && (
-                    <p className="mt-1 text-sm text-red-500">{state.errors.branchId}</p>
+                    <p className="mt-1 text-sm text-destructive">{state.errors.branchId}</p>
                 )}
             </div>
 
             {/* الدواء */}
             <div>
-                <label htmlFor="drugId" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="drugId" className="mb-2 block text-sm font-bold text-foreground">
                     الدواء
                 </label>
                 <select
                     id="drugId"
                     name="drugId"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 >
                     <option value="">اختر الدواء</option>
@@ -64,14 +65,14 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                     ))}
                 </select>
                 {state.errors?.drugId && (
-                    <p className="mt-1 text-sm text-red-500">{state.errors.drugId}</p>
+                    <p className="mt-1 text-sm text-destructive">{state.errors.drugId}</p>
                 )}
             </div>
 
             {/* السعر والتكلفة */}
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label htmlFor="price" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="price" className="mb-2 block text-sm font-bold text-foreground">
                         سعر البيع
                     </label>
                     <input
@@ -80,12 +81,12 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="price"
                         step="0.01"
                         min="0"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                         required
                     />
                 </div>
                 <div>
-                    <label htmlFor="cost" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="cost" className="mb-2 block text-sm font-bold text-foreground">
                         سعر الشراء
                     </label>
                     <input
@@ -94,7 +95,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="cost"
                         step="0.01"
                         min="0"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                         required
                     />
                 </div>
@@ -103,7 +104,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
             {/* الحد الأدنى والأقصى */}
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label htmlFor="minStock" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="minStock" className="mb-2 block text-sm font-bold text-foreground">
                         الحد الأدنى للمخزون
                     </label>
                     <input
@@ -112,11 +113,11 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="minStock"
                         min="0"
                         defaultValue={0}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     />
                 </div>
                 <div>
-                    <label htmlFor="maxStock" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="maxStock" className="mb-2 block text-sm font-bold text-foreground">
                         الحد الأقصى للمخزون
                     </label>
                     <input
@@ -125,30 +126,29 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                         name="maxStock"
                         min="1"
                         defaultValue={1000}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     />
                 </div>
             </div>
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
+                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
 
             {/* الأزرار */}
             <div className="flex gap-4">
-                <button
-                    type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
-                >
-                    <Package className="h-5 w-5" />
-                    إضافة للمخزون
-                </button>
+                <SubmitButton
+                    text="إضافة للمخزون"
+                    loadingText="جاري الإضافة..."
+                    icon={Package}
+                    className="bg-primary hover:bg-primary/90 text-white w-auto px-6 py-3 h-auto"
+                />
                 <Link
                     href="/dashboard/inventory"
-                    className="flex items-center gap-2 rounded-lg bg-gray-100 px-6 py-3 font-bold text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-colors hover:bg-muted"
                 >
                     <ArrowRight className="h-5 w-5" />
                     إلغاء

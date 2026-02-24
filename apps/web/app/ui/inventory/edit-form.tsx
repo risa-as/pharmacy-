@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFormState } from "react-dom";
 import { updateInventory } from "@/app/lib/actions/inventory";
 import { Package, ArrowRight } from "lucide-react";
+import { SubmitButton } from "@/app/ui/submit-button";
 
 interface InventoryItem {
     id: string;
@@ -47,21 +48,21 @@ export default function EditForm({
     }, []);
 
     if (!mounted) {
-        return <div className="animate-pulse h-96 bg-gray-100 rounded-xl" />;
+        return <div className="animate-pulse h-96 bg-muted rounded-xl" />;
     }
 
     return (
         <form action={dispatch} className="space-y-6" suppressHydrationWarning>
             {/* الفرع */}
             <div>
-                <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-foreground">
                     الفرع
                 </label>
                 <select
                     id="branchId"
                     name="branchId"
                     defaultValue={inventory.branchId}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 >
                     {branches.map((branch) => (
@@ -74,14 +75,14 @@ export default function EditForm({
 
             {/* الدواء */}
             <div>
-                <label htmlFor="drugId" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="drugId" className="mb-2 block text-sm font-bold text-foreground">
                     الدواء
                 </label>
                 <select
                     id="drugId"
                     name="drugId"
                     defaultValue={inventory.drugId}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 >
                     {drugs.map((drug) => (
@@ -95,7 +96,7 @@ export default function EditForm({
             {/* السعر والتكلفة */}
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label htmlFor="price" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="price" className="mb-2 block text-sm font-bold text-foreground">
                         سعر الجمهور
                     </label>
                     <input
@@ -105,15 +106,15 @@ export default function EditForm({
                         step="0.01"
                         min="0"
                         defaultValue={inventory.price}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                         required
                     />
                     {state.errors?.price && (
-                        <p className="mt-1 text-sm text-red-500">{state.errors.price}</p>
+                        <p className="mt-1 text-sm text-destructive">{state.errors.price}</p>
                     )}
                 </div>
                 <div>
-                    <label htmlFor="cost" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="cost" className="mb-2 block text-sm font-bold text-foreground">
                         سعر التكلفة
                     </label>
                     <input
@@ -123,11 +124,11 @@ export default function EditForm({
                         step="0.01"
                         min="0"
                         defaultValue={inventory.cost}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                         required
                     />
                     {state.errors?.cost && (
-                        <p className="mt-1 text-sm text-red-500">{state.errors.cost}</p>
+                        <p className="mt-1 text-sm text-destructive">{state.errors.cost}</p>
                     )}
                 </div>
             </div>
@@ -135,7 +136,7 @@ export default function EditForm({
             {/* الحد الأدنى والأقصى */}
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label htmlFor="minStock" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="minStock" className="mb-2 block text-sm font-bold text-foreground">
                         الحد الأدنى
                     </label>
                     <input
@@ -144,11 +145,11 @@ export default function EditForm({
                         type="number"
                         min="0"
                         defaultValue={inventory.minStock}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     />
                 </div>
                 <div>
-                    <label htmlFor="maxStock" className="mb-2 block text-sm font-bold text-gray-700">
+                    <label htmlFor="maxStock" className="mb-2 block text-sm font-bold text-foreground">
                         الحد الأقصى
                     </label>
                     <input
@@ -157,30 +158,24 @@ export default function EditForm({
                         type="number"
                         min="1"
                         defaultValue={inventory.maxStock}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     />
                 </div>
             </div>
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
+                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
 
             {/* الأزرار */}
             <div className="flex gap-4">
-                <button
-                    type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
-                >
-                    <Package className="h-5 w-5" />
-                    حفظ التغييرات
-                </button>
+                <SubmitButton text="حفظ التغييرات" icon={Package} />
                 <Link
                     href="/dashboard/inventory"
-                    className="flex items-center gap-2 rounded-lg bg-gray-100 px-6 py-3 font-bold text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-colors hover:bg-muted"
                 >
                     <ArrowRight className="h-5 w-5" />
                     إلغاء

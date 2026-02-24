@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFormState } from "react-dom";
 import { updateInsuranceCompany } from "@/app/lib/actions/insurance";
 import { Building2, ArrowRight } from "lucide-react";
+import { SubmitButton } from "@/app/ui/submit-button";
 
 interface InsuranceCompany {
     id: string;
@@ -26,14 +27,14 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
     }, []);
 
     if (!mounted) {
-        return <div className="animate-pulse h-96 bg-gray-100 rounded-xl" />;
+        return <div className="animate-pulse h-96 bg-muted rounded-xl" />;
     }
 
     return (
         <form action={dispatch} className="space-y-6" suppressHydrationWarning>
             {/* اسم الشركة */}
             <div>
-                <label htmlFor="name" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="name" className="mb-2 block text-sm font-bold text-foreground">
                     اسم الشركة
                 </label>
                 <input
@@ -41,17 +42,17 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     name="name"
                     type="text"
                     defaultValue={company.name}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 />
                 {state.errors?.name && (
-                    <p className="mt-1 text-sm text-red-500">{state.errors.name}</p>
+                    <p className="mt-1 text-sm text-destructive">{state.errors.name}</p>
                 )}
             </div>
 
             {/* نسبة الخصم */}
             <div>
-                <label htmlFor="discountRate" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="discountRate" className="mb-2 block text-sm font-bold text-foreground">
                     نسبة الخصم (%)
                 </label>
                 <input
@@ -62,14 +63,14 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     max="100"
                     step="0.1"
                     defaultValue={company.discountRate}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     required
                 />
             </div>
 
             {/* الهاتف */}
             <div>
-                <label htmlFor="contactPhone" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="contactPhone" className="mb-2 block text-sm font-bold text-foreground">
                     رقم الهاتف
                 </label>
                 <input
@@ -77,14 +78,14 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     name="contactPhone"
                     type="text"
                     defaultValue={company.contactPhone || ""}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     dir="ltr"
                 />
             </div>
 
             {/* البريد الإلكتروني */}
             <div>
-                <label htmlFor="contactEmail" className="mb-2 block text-sm font-bold text-gray-700">
+                <label htmlFor="contactEmail" className="mb-2 block text-sm font-bold text-foreground">
                     البريد الإلكتروني
                 </label>
                 <input
@@ -92,30 +93,24 @@ export default function EditForm({ company }: { company: InsuranceCompany }) {
                     name="contactEmail"
                     type="email"
                     defaultValue={company.contactEmail || ""}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                     dir="ltr"
                 />
             </div>
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
+                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
 
             {/* الأزرار */}
             <div className="flex gap-4">
-                <button
-                    type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
-                >
-                    <Building2 className="h-5 w-5" />
-                    حفظ التغييرات
-                </button>
+                <SubmitButton text="حفظ التغييرات" icon={Building2} />
                 <Link
                     href="/dashboard/insurance"
-                    className="flex items-center gap-2 rounded-lg bg-gray-100 px-6 py-3 font-bold text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-colors hover:bg-muted"
                 >
                     <ArrowRight className="h-5 w-5" />
                     إلغاء

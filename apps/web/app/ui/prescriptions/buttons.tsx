@@ -1,36 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { Pencil, Trash2, XCircle } from "lucide-react";
+import { Pencil, XCircle } from "lucide-react";
 import { deletePrescription, cancelPrescription } from "@/app/lib/actions/prescription";
 
 export function UpdatePrescription({ id }: { id: string }) {
     return (
         <Link
             href={`/dashboard/prescriptions/${id}/edit`}
-            className="rounded-lg border border-gray-200 p-2 hover:bg-gray-100 transition-colors"
+            className="rounded-lg border border-border p-2 hover:bg-muted transition-colors"
             title="تعديل"
         >
-            <Pencil className="w-4 h-4 text-gray-600" />
+            <Pencil className="w-4 h-4 text-muted-foreground" />
         </Link>
     );
 }
 
+import { DeleteButton } from "@/app/ui/delete-button";
+
 export function DeletePrescription({ id }: { id: string }) {
-    const handleDelete = async () => {
-        if (confirm("هل أنت متأكد من حذف هذه الوصفة؟")) {
-            await deletePrescription(id);
-        }
+    const deletePrescriptionWithId = async (formData: FormData) => {
+        await deletePrescription(id);
     };
 
     return (
-        <button
-            onClick={handleDelete}
-            className="rounded-lg border border-gray-200 p-2 hover:bg-red-50 hover:border-red-200 transition-colors"
-            title="حذف"
-        >
-            <Trash2 className="w-4 h-4 text-red-500" />
-        </button>
+        <DeleteButton
+            action={deletePrescriptionWithId}
+            description="الوصفة"
+            className="rounded-lg border border-border hover:border-border"
+        />
     );
 }
 
@@ -44,7 +42,7 @@ export function CancelPrescription({ id }: { id: string }) {
     return (
         <button
             onClick={handleCancel}
-            className="rounded-lg border border-gray-200 p-2 hover:bg-yellow-50 hover:border-yellow-200 transition-colors"
+            className="rounded-lg border border-border p-2 hover:bg-yellow-50 hover:border-yellow-200 transition-colors"
             title="إلغاء"
         >
             <XCircle className="w-4 h-4 text-yellow-600" />

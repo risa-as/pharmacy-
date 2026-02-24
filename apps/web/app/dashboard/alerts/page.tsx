@@ -15,7 +15,7 @@ export default async function AlertsPage() {
 
     const getAlertColor = (alert: AlertItem) => {
         if (alert.severity === 'danger') {
-            return 'bg-red-50 border-red-200 text-red-700';
+            return 'bg-destructive/10 border-red-200 text-destructive';
         }
         return 'bg-yellow-50 border-yellow-200 text-yellow-700';
     };
@@ -40,43 +40,43 @@ export default async function AlertsPage() {
     };
 
     return (
-        <div className="w-full">
+        <div className="glass-card w-full p-6">
             {/* Header */}
             <div className="flex w-full items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold font-cairo text-gray-800 flex items-center gap-3">
-                    <Bell className="w-7 h-7 text-blue-600" />
+                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
+                    <Bell className="w-7 h-7 text-primary" />
                     الإشعارات والتنبيهات
                 </h1>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="text-3xl font-bold text-gray-800">{stats.total}</div>
-                    <div className="text-sm text-gray-500">إجمالي التنبيهات</div>
+                <div className="bg-card rounded-xl border border-border p-4">
+                    <div className="text-3xl font-bold text-foreground">{stats.total}</div>
+                    <div className="text-sm text-muted-foreground">إجمالي التنبيهات</div>
                 </div>
-                <div className="bg-red-50 rounded-xl border border-red-200 p-4">
-                    <div className="text-3xl font-bold text-red-600">{stats.danger}</div>
-                    <div className="text-sm text-red-600">تنبيهات حرجة</div>
+                <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
+                    <div className="text-3xl font-bold text-destructive">{stats.danger}</div>
+                    <div className="text-sm text-destructive">تنبيهات حرجة</div>
                 </div>
                 <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
                     <div className="text-3xl font-bold text-yellow-600">{stats.warning}</div>
                     <div className="text-sm text-yellow-600">تحذيرات</div>
                 </div>
-                <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
-                    <div className="text-3xl font-bold text-orange-600">{stats.expired}</div>
-                    <div className="text-sm text-orange-600">منتهي الصلاحية</div>
+                <div className="bg-warning/10 rounded-xl border border-orange-200 p-4">
+                    <div className="text-3xl font-bold text-warning">{stats.expired}</div>
+                    <div className="text-sm text-warning">منتهي الصلاحية</div>
                 </div>
             </div>
 
             {/* Alerts List */}
             {alerts.length === 0 ? (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Bell className="w-8 h-8 text-green-600" />
+                <div className="bg-success/10 border border-green-200 rounded-xl p-8 text-center">
+                    <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Bell className="w-8 h-8 text-success" />
                     </div>
                     <h3 className="text-lg font-bold text-green-800 mb-2">لا توجد تنبيهات</h3>
-                    <p className="text-sm text-green-600">جميع الأدوية بحالة جيدة ولا توجد مشاكل في المخزون</p>
+                    <p className="text-sm text-success">جميع الأدوية بحالة جيدة ولا توجد مشاكل في المخزون</p>
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -85,7 +85,7 @@ export default async function AlertsPage() {
                             key={alert.id}
                             className={`flex items-center gap-4 p-4 rounded-xl border ${getAlertColor(alert)}`}
                         >
-                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${alert.severity === 'danger' ? 'bg-red-100' : 'bg-yellow-100'}`}>
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${alert.severity === 'danger' ? 'bg-destructive/10' : 'bg-yellow-100'}`}>
                                 {getAlertIcon(alert.type)}
                             </div>
 

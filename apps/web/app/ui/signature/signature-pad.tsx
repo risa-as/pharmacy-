@@ -94,12 +94,12 @@ export default function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 shadow-xl max-w-md w-full mx-4">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
+            <div className="bg-card rounded-xl p-6 shadow-xl max-w-md w-full mx-4">
+                <h3 className="text-lg font-bold text-foreground mb-4 text-center">
                     التوقيع الإلكتروني
                 </h3>
 
-                <div className="border-2 border-dashed border-gray-300 rounded-lg overflow-hidden">
+                <div className="border-2 border-dashed border-border rounded-lg overflow-hidden">
                     <canvas
                         ref={canvasRef}
                         width={400}
@@ -115,7 +115,7 @@ export default function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                     />
                 </div>
 
-                <p className="text-xs text-gray-400 text-center mt-2">
+                <p className="text-xs text-muted-foreground text-center mt-2">
                     ارسم توقيعك باستخدام الماوس أو اللمس
                 </p>
 
@@ -123,7 +123,7 @@ export default function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                     <button
                         type="button"
                         onClick={clearCanvas}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted"
                     >
                         <Eraser className="w-4 h-4" />
                         مسح
@@ -131,7 +131,7 @@ export default function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-red-200"
                     >
                         <X className="w-4 h-4" />
                         إلغاء
@@ -139,7 +139,7 @@ export default function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                     <button
                         type="button"
                         onClick={saveSignature}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90"
                     >
                         <Check className="w-4 h-4" />
                         حفظ التوقيع
