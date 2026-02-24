@@ -14,7 +14,7 @@ export function PaymentFormWrapper({ supplierId, supplierName, branches }: { sup
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className="flex items-center gap-2 rounded-lg bg-success px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-700 shadow-sm"
+                className="flex items-center gap-2 rounded-lg bg-success px-4 py-2.5 text-sm font-bold text-success-foreground transition-all hover:bg-success/90 shadow-sm"
             >
                 <CreditCard className="h-4 w-4" />
                 تسجيل دفعة
@@ -115,7 +115,7 @@ function PaymentModal({
                             required
                             value={form.amount}
                             onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                            className="w-full rounded-lg border border-border px-4 py-2.5 text-lg font-bold text-foreground focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            className="w-full rounded-lg border border-border px-4 py-2.5 text-lg font-bold text-foreground focus:ring-2 focus:ring-success/50 focus:border-success"
                             placeholder="0.00"
                             dir="ltr"
                             autoFocus
@@ -131,7 +131,7 @@ function PaymentModal({
                             <select
                                 value={form.branchId}
                                 onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-                                className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-green-500"
+                                className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
                             >
                                 {branches.map(b => (
                                     <option key={b.id} value={b.id}>{b.name}</option>
@@ -148,7 +148,7 @@ function PaymentModal({
                         <select
                             value={form.method}
                             onChange={(e) => setForm({ ...form, method: e.target.value })}
-                            className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-green-500"
+                            className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
                         >
                             <option value="CASH">نقدي</option>
                             <option value="CHECK">شيك</option>
@@ -166,7 +166,7 @@ function PaymentModal({
                                 type="text"
                                 value={form.reference}
                                 onChange={(e) => setForm({ ...form, reference: e.target.value })}
-                                className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-green-500"
+                                className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
                                 placeholder={form.method === 'CHECK' ? 'أدخل رقم الشيك' : 'أدخل رقم الحوالة'}
                             />
                         </div>
@@ -181,7 +181,7 @@ function PaymentModal({
                             type="date"
                             value={form.date}
                             onChange={(e) => setForm({ ...form, date: e.target.value })}
-                            className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-green-500"
+                            className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
                             dir="ltr"
                         />
                     </div>
@@ -194,7 +194,7 @@ function PaymentModal({
                         <textarea
                             value={form.notes}
                             onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                            className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-green-500"
+                            className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
                             rows={2}
                             placeholder="ملاحظات اختيارية"
                         />
@@ -202,7 +202,7 @@ function PaymentModal({
 
                     {/* Error */}
                     {error && (
-                        <div className="p-3 bg-destructive/10 border border-red-200 rounded-lg text-sm text-destructive">
+                        <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
                             {error}
                         </div>
                     )}
@@ -211,7 +211,7 @@ function PaymentModal({
                     <button
                         type="submit"
                         disabled={isPending}
-                        className="w-full flex items-center justify-center gap-2 bg-success hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground font-bold py-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isPending ? (
                             <>

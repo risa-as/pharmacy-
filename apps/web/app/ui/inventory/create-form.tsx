@@ -133,7 +133,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
@@ -144,7 +144,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                     text="إضافة للمخزون"
                     loadingText="جاري الإضافة..."
                     icon={Package}
-                    className="bg-primary hover:bg-primary/90 text-white w-auto px-6 py-3 h-auto"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground w-auto px-6 py-3 h-auto"
                 />
                 <Link
                     href="/dashboard/inventory"

@@ -98,7 +98,7 @@ export default function EditForm({ supplier }: { supplier: Supplier }) {
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}

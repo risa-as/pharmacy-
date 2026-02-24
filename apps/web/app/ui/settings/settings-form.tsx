@@ -206,7 +206,7 @@ export default function SettingsForm({ initialSettings }: SettingsFormProps) {
                                                 toast.error(`خطأ في الرفع: ${error.message}`);
                                             }}
                                             appearance={{
-                                                button: "bg-primary text-white hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium ut-uploading:cursor-not-allowed",
+                                                button: "bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium ut-uploading:cursor-not-allowed",
                                                 allowedContent: "text-muted-foreground text-xs mt-1"
                                             }}
                                             content={{
@@ -270,7 +270,7 @@ export default function SettingsForm({ initialSettings }: SettingsFormProps) {
                         onClick={handleBackup}
                         disabled={isBackingUp || isRestoring}
                         variant="outline"
-                        className="gap-2 border-green-200 hover:bg-success/10 text-success"
+                        className="gap-2 border-success/30 hover:bg-success/10 text-success"
                     >
                         {isBackingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                         تحميل نسخة احتياطية
@@ -288,7 +288,7 @@ export default function SettingsForm({ initialSettings }: SettingsFormProps) {
                         onClick={handleRestoreClick}
                         disabled={isBackingUp || isRestoring}
                         variant="default"
-                        className="gap-2 bg-primary hover:bg-primary/90 text-white"
+                        className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
                     >
                         {isRestoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                         استعادة نسخة (JSON)
@@ -299,7 +299,7 @@ export default function SettingsForm({ initialSettings }: SettingsFormProps) {
             {/* Onboarding Tour Section */}
             <div className="rounded-xl bg-card border border-border shadow-sm p-6">
                 <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-purple-600 rounded-full"></span>
+                    <span className="w-1 h-6 bg-info rounded-full"></span>
                     الجولة التعريفية
                 </h2>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -312,7 +312,7 @@ export default function SettingsForm({ initialSettings }: SettingsFormProps) {
                         setTimeout(() => window.location.href = "/dashboard", 1000);
                     }}
                     variant="outline"
-                    className="gap-2 border-purple-200 hover:bg-purple-50 text-purple-700"
+                    className="gap-2 border-info/30 hover:bg-info/10 text-info"
                 >
                     <Sparkles className="w-4 h-4" />
                     إعادة الجولة التعريفية

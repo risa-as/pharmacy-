@@ -108,7 +108,7 @@
         -moz-osx-font-smoothing: grayscale;
     }
 
-    /* Custom Scrollbar */
+    /* Custom Scrollbar — theme-aware, teal accent on hover */
     ::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -117,11 +117,12 @@
         background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-        background: hsl(var(--muted-foreground) / 0.2);
+        background: hsl(var(--border));
         border-radius: 9999px;
+        transition: background 0.2s ease;
     }
     ::-webkit-scrollbar-thumb:hover {
-        background: hsl(var(--muted-foreground) / 0.35);
+        background: hsl(var(--primary) / 0.55);
     }
 
     /* ── Form Control Base Reset ──────────────────────────────────────────

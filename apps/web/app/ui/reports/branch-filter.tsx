@@ -38,8 +38,8 @@ export async function BranchFilter({ currentBranch, baseUrl, extraParams }: Bran
             <Link
                 href={buildUrl()}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${!currentBranch
-                    ? "bg-primary text-white shadow-md"
-                    : "bg-card border border-border text-muted-foreground hover:border-blue-400"
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "bg-card border border-border text-muted-foreground hover:border-primary/50"
                     }`}
             >
                 كل الفروع
@@ -49,8 +49,8 @@ export async function BranchFilter({ currentBranch, baseUrl, extraParams }: Bran
                     key={b.id}
                     href={buildUrl(b.id)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${currentBranch === b.id
-                        ? "bg-primary text-white shadow-md"
-                        : "bg-card border border-border text-muted-foreground hover:border-blue-400"
+                        ? "bg-primary text-primary-foreground shadow-md"
+                        : "bg-card border border-border text-muted-foreground hover:border-primary/50"
                         }`}
                 >
                     {b.name}

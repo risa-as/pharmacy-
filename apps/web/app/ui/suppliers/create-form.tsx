@@ -78,7 +78,7 @@ export default function Form() {
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
@@ -87,7 +87,7 @@ export default function Form() {
             <div className="flex gap-4">
                 <button
                     type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Users className="h-5 w-5" />
                     إضافة المورد

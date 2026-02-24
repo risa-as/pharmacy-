@@ -42,10 +42,10 @@ export function CancelPrescription({ id }: { id: string }) {
     return (
         <button
             onClick={handleCancel}
-            className="rounded-lg border border-border p-2 hover:bg-yellow-50 hover:border-yellow-200 transition-colors"
+            className="rounded-lg border border-border p-2 hover:bg-warning/10 hover:border-warning/30 transition-colors"
             title="إلغاء"
         >
-            <XCircle className="w-4 h-4 text-yellow-600" />
+            <XCircle className="w-4 h-4 text-warning" />
         </button>
     );
 }

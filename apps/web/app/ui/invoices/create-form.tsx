@@ -201,7 +201,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                         <button
                             type="button"
                             onClick={addItem}
-                            className="w-full flex items-center justify-center gap-2 bg-success hover:bg-green-700 text-white py-2.5 rounded-lg font-bold transition-colors"
+                            className="w-full flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground py-2.5 rounded-lg font-bold transition-all"
                         >
                             <Plus className="w-5 h-5" />
                             إضافة للفاتورة
@@ -253,7 +253,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                     </tbody>
                     {items.length > 0 && (
                         <tfoot>
-                            <tr className="bg-primary/10 font-bold text-blue-800">
+                            <tr className="bg-primary/10 font-bold text-foreground">
                                 <td colSpan={5} className="px-4 py-3 text-left">إجمالي الفاتورة:</td>
                                 <td colSpan={2} className="px-4 py-3">{totalAmount.toLocaleString()} د.ع</td>
                             </tr>
@@ -266,7 +266,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
@@ -275,7 +275,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
             <div className="flex gap-4">
                 <button
                     type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <FileText className="h-5 w-5" />
                     حفظ الفاتورة

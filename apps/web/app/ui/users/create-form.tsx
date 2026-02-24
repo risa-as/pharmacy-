@@ -117,7 +117,7 @@ export default function CreateUserForm({ branches }: { branches: Branch[] }) {
 
             {/* رسالة الخطأ العامة */}
             {state.message && (
-                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
@@ -129,7 +129,7 @@ export default function CreateUserForm({ branches }: { branches: Branch[] }) {
                 <SubmitButton
                     text="إنشاء المستخدم"
                     loadingText="جاري الإنشاء..."
-                    className="bg-primary hover:bg-primary/90 text-white"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 />
             </div>
         </form>

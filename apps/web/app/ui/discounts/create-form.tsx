@@ -69,7 +69,7 @@ export default function CreateDiscountForm() {
                 </label>
                 <div className="grid grid-cols-2 gap-4">
                     <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${discountType === "PERCENTAGE"
-                            ? "border-blue-500 bg-primary/10"
+                            ? "border-primary bg-primary/10"
                             : "border-border hover:border-border"
                         }`}>
                         <input
@@ -80,7 +80,7 @@ export default function CreateDiscountForm() {
                             onChange={() => setDiscountType("PERCENTAGE")}
                             className="sr-only"
                         />
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${discountType === "PERCENTAGE" ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${discountType === "PERCENTAGE" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                             }`}>
                             <Percent className="w-5 h-5" />
                         </div>
@@ -91,7 +91,7 @@ export default function CreateDiscountForm() {
                     </label>
 
                     <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${discountType === "FIXED"
-                            ? "border-blue-500 bg-primary/10"
+                            ? "border-primary bg-primary/10"
                             : "border-border hover:border-border"
                         }`}>
                         <input
@@ -102,7 +102,7 @@ export default function CreateDiscountForm() {
                             onChange={() => setDiscountType("FIXED")}
                             className="sr-only"
                         />
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${discountType === "FIXED" ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${discountType === "FIXED" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                             }`}>
                             <Tag className="w-5 h-5" />
                         </div>
@@ -204,7 +204,7 @@ export default function CreateDiscountForm() {
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
@@ -213,7 +213,7 @@ export default function CreateDiscountForm() {
             <div className="flex gap-4">
                 <button
                     type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-white transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Tag className="h-5 w-5" />
                     إنشاء العرض

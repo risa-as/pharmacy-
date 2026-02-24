@@ -140,7 +140,7 @@ export function TransferModal({ safes }: { safes: any[] }) {
 
     return (
         <>
-            <Button onClick={() => setIsOpen(true)} className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+            <Button onClick={() => setIsOpen(true)} className="gap-2 bg-info hover:bg-info/90">
                 <ArrowRightLeft className="w-4 h-4" />
                 تحويل داخلي
             </Button>
@@ -188,7 +188,7 @@ export function TransferModal({ safes }: { safes: any[] }) {
                             </div>
 
                             <div className="flex gap-2 mt-6">
-                                <Button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
+                                <Button type="submit" className="flex-1 bg-info hover:bg-info/90" disabled={loading}>
                                     {loading ? 'جاري التحويل...' : 'تأكيد التحويل'}
                                 </Button>
                             </div>
@@ -238,7 +238,7 @@ export function VoucherModal({ safes, type }: { safes: any[], type: 'IN' | 'OUT'
 
     return (
         <>
-            <Button onClick={() => setIsOpen(true)} className={`gap-2 ${isReciept ? 'bg-success hover:bg-green-700' : 'bg-destructive hover:bg-destructive/90'}`}>
+            <Button onClick={() => setIsOpen(true)} className={`gap-2 ${isReciept ? 'bg-success hover:bg-success/90' : 'bg-destructive hover:bg-destructive/90'}`}>
                 {isReciept ? <ArrowDownToLine className="w-4 h-4" /> : <ArrowUpFromLine className="w-4 h-4" />}
                 {isReciept ? 'سند قبض' : 'سند صرف'}
             </Button>
@@ -277,7 +277,7 @@ export function VoucherModal({ safes, type }: { safes: any[], type: 'IN' | 'OUT'
                             </div>
 
                             <div className="flex gap-2 mt-6">
-                                <Button type="submit" className={`flex-1 ${isReciept ? 'bg-success hover:bg-green-700' : 'bg-destructive hover:bg-destructive/90'}`} disabled={loading}>
+                                <Button type="submit" className={`flex-1 ${isReciept ? 'bg-success hover:bg-success/90' : 'bg-destructive hover:bg-destructive/90'}`} disabled={loading}>
                                     {loading ? 'جاري الحفظ...' : 'تأكيد السند'}
                                 </Button>
                             </div>

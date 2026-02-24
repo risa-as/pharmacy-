@@ -210,7 +210,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-green-700 text-white py-2.5 rounded-lg font-bold disabled:opacity-50"
+                            className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground py-2.5 rounded-lg font-bold transition-all disabled:opacity-50"
                         >
                             <Plus className="w-4 h-4" />
                             {loading ? "جاري الحفظ..." : "حفظ الدواء"}

@@ -173,7 +173,7 @@ export default function CreateTransferForm({
                                             <p className="font-bold text-sm text-foreground">{item.tradeName}</p>
                                             <p className="text-xs text-muted-foreground">باركود: {item.barcode} | دفعة: {item.batchNumber}</p>
                                         </div>
-                                        <div className="bg-success/10 text-green-800 text-xs px-2 py-1 rounded font-bold">
+                                        <div className="bg-success/10 text-success text-xs px-2 py-1 rounded font-bold">
                                             متاح: {item.availableQuantity}
                                         </div>
                                     </button>
@@ -249,7 +249,7 @@ export default function CreateTransferForm({
                 <button
                     type="submit"
                     disabled={isSubmitting || selectedItems.length === 0}
-                    className="flex items-center rounded-lg bg-primary px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center rounded-lg bg-primary px-6 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isSubmitting ? 'جاري إرسال التحويل...' : 'تأكيد إرسال الأدوية للفرع'}
                 </button>

@@ -109,7 +109,7 @@ export default function StripePaymentButton({
                     <button
                         onClick={handlePayment}
                         disabled={loading}
-                        className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
                     >
                         {loading ? (
                             <>

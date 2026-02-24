@@ -106,7 +106,7 @@ export default function PermissionsEditor({ users }: { users: User[] }) {
                             key={user.id}
                             onClick={() => selectUser(user)}
                             className={`w-full text-right p-3 rounded-lg border transition-colors ${selectedUser?.id === user.id
-                                ? 'bg-primary/10 border-blue-300'
+                                ? 'bg-primary/10 border-primary/50'
                                 : 'bg-muted border-border hover:bg-muted'
                                 }`}
                         >
@@ -141,7 +141,7 @@ export default function PermissionsEditor({ users }: { users: User[] }) {
                                     إعادة للافتراضي
                                 </button>
                                 <button onClick={savePermissions} disabled={saving}
-                                    className="flex items-center gap-1 px-4 py-1.5 bg-primary text-white rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50">
+                                    className="flex items-center gap-1 px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50">
                                     <Save className="w-3 h-3" /> {saving ? 'جاري الحفظ...' : 'حفظ'}
                                 </button>
                             </div>

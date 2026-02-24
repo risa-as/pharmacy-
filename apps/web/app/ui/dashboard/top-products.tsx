@@ -38,7 +38,7 @@ export default function TopProducts({ products, title = "أفضل المنتجا
                             <div key={index} className="relative">
                                 <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-2">
-                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${index === 0 ? "bg-yellow-100 text-yellow-700" :
+                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${index === 0 ? "bg-warning/10 text-warning" :
                                                 index === 1 ? "bg-muted text-foreground" :
                                                     index === 2 ? "bg-warning/10 text-warning" :
                                                         "bg-primary/10 text-primary"

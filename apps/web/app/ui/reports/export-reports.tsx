@@ -312,7 +312,7 @@ export default function ExportReports() {
             </Button>
 
             <Button
-                className="gap-2 bg-primary hover:bg-primary/90 text-white"
+                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={() => setShowCustomModal(true)}
             >
                 <CalendarIcon className="w-4 h-4" />

@@ -27,9 +27,9 @@ export default function RevenueWidget({ data, title = "إيرادات اليوم
     }
 
     const methods = [
-        { label: "نقداً", value: data.cash, icon: Wallet, color: "bg-green-500", bgLight: "bg-success/10", textColor: "text-success" },
+        { label: "نقداً", value: data.cash, icon: Wallet, color: "bg-success", bgLight: "bg-success/10", textColor: "text-success" },
         { label: "بطاقة", value: data.card, icon: CreditCard, color: "bg-primary", bgLight: "bg-primary/10", textColor: "text-primary" },
-        { label: "محفظة", value: data.mobile, icon: Smartphone, color: "bg-purple-500", bgLight: "bg-purple-50", textColor: "text-purple-600" },
+        { label: "محفظة", value: data.mobile, icon: Smartphone, color: "bg-info", bgLight: "bg-info/10", textColor: "text-info" },
     ];
 
     return (
@@ -46,7 +46,7 @@ export default function RevenueWidget({ data, title = "إيرادات اليوم
             </div>
 
             {/* Total */}
-            <div className="text-center mb-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
+            <div className="text-center mb-6 py-4 bg-gradient-to-r from-primary/5 to-info/5 rounded-xl">
                 <div className="text-sm text-muted-foreground mb-1">إجمالي الإيرادات</div>
                 <div className="text-3xl font-bold text-foreground">{data.total.toFixed(2)}</div>
             </div>

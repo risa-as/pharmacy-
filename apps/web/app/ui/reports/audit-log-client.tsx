@@ -7,10 +7,10 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
     CREATE: { label: 'إنشاء', color: 'bg-success/10 text-success' },
     UPDATE: { label: 'تعديل', color: 'bg-primary/10 text-primary' },
     DELETE: { label: 'حذف', color: 'bg-destructive/10 text-destructive' },
-    RETURN: { label: 'مرتجع', color: 'bg-yellow-100 text-yellow-700' },
-    LOGIN: { label: 'تسجيل دخول', color: 'bg-purple-100 text-purple-700' },
+    RETURN: { label: 'مرتجع', color: 'bg-warning/10 text-warning' },
+    LOGIN: { label: 'تسجيل دخول', color: 'bg-info/10 text-info' },
     PRICE_CHANGE: { label: 'تغيير سعر', color: 'bg-warning/10 text-warning' },
-    TRANSFER: { label: 'تحويل', color: 'bg-indigo-100 text-indigo-700' },
+    TRANSFER: { label: 'تحويل', color: 'bg-info/10 text-info' },
 };
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -153,7 +153,7 @@ export default function AuditLogClient({ users, branches }: AuditLogClientProps)
             <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
                 {loading ? (
                     <div className="flex items-center justify-center h-40">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
                 ) : logs.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">لا توجد سجلات</div>

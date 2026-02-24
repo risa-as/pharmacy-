@@ -178,7 +178,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                         <button
                             type="button"
                             onClick={addItem}
-                            className="w-full flex items-center justify-center gap-2 bg-success hover:bg-green-700 text-white py-2 rounded-lg font-bold"
+                            className="w-full flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground py-2 rounded-lg font-bold transition-all"
                         >
                             <Plus className="w-4 h-4" />
                             إضافة
@@ -243,7 +243,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
             <input type="hidden" name="itemsData" value={JSON.stringify(items)} />
 
             {state.message && (
-                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
@@ -251,7 +251,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
             <div className="flex gap-4">
                 <button
                     type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-white hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground hover:bg-primary/90"
                 >
                     <FileText className="h-5 w-5" />
                     حفظ الوصفة

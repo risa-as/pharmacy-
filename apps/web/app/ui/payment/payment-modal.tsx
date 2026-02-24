@@ -62,7 +62,7 @@ export default function PaymentModal({
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-card rounded-2xl max-w-lg w-full mx-4 overflow-hidden">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
+                <div className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground p-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold">اختر طريقة الدفع</h2>
                         <button
@@ -73,7 +73,7 @@ export default function PaymentModal({
                         </button>
                     </div>
                     <div className="mt-4 text-center">
-                        <p className="text-blue-100 text-sm">المبلغ المطلوب</p>
+                        <p className="text-primary-foreground/70 text-sm">المبلغ المطلوب</p>
                         <p className="text-4xl font-bold">{amount.toFixed(2)}</p>
                     </div>
                 </div>
@@ -81,7 +81,7 @@ export default function PaymentModal({
                 {/* Content */}
                 <div className="p-6 space-y-4">
                     {error && (
-                        <div className="bg-destructive/10 border border-red-200 text-destructive px-4 py-3 rounded-lg text-sm">
+                        <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg text-sm">
                             {error}
                         </div>
                     )}
@@ -101,7 +101,7 @@ export default function PaymentModal({
                     </button>
 
                     {/* Stripe Payment */}
-                    <div className="border-2 border-blue-200 rounded-xl p-4 bg-primary/10">
+                    <div className="border-2 border-primary/30 rounded-xl p-4 bg-primary/10">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
                                 <CreditCard className="w-5 h-5 text-white" />
@@ -120,7 +120,7 @@ export default function PaymentModal({
                     </div>
 
                     {/* Zain Cash Payment */}
-                    <div className="border-2 border-green-200 rounded-xl p-4 bg-success/10">
+                    <div className="border-2 border-success/30 rounded-xl p-4 bg-success/10">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-10 h-10 bg-success rounded-lg flex items-center justify-center">
                                 <Smartphone className="w-5 h-5 text-white" />

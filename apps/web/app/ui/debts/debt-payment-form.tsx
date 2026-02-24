@@ -57,7 +57,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
     };
 
     return (
-        <form onSubmit={handleSubmit} className="bg-success/10 border border-green-200 rounded-xl p-4 mt-3 space-y-3">
+        <form onSubmit={handleSubmit} className="bg-success/10 border border-success/30 rounded-xl p-4 mt-3 space-y-3">
             <h4 className="text-sm font-bold text-success">تسديد دفعة</h4>
 
             <div className="grid grid-cols-2 gap-3">
@@ -69,7 +69,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                         onChange={(e) => setAmount(Number(e.target.value))}
                         max={remaining}
                         min={1}
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-300 focus:border-green-400 outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     />
                     <p className="text-xs text-muted-foreground mt-1">المتبقي: {formatIQD(remaining)}</p>
                 </div>
@@ -78,7 +78,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                     <select
                         value={method}
                         onChange={(e) => setMethod(e.target.value)}
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-300 focus:border-green-400 outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     >
                         <option value="CASH">نقدي</option>
                         <option value="CARD">بطاقة</option>
@@ -95,7 +95,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                         value={safeId}
                         onChange={(e) => setSafeId(e.target.value)}
                         required
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-300 focus:border-green-400 outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     >
                         {safes.map((safe) => (
                             <option key={safe.id} value={safe.id}>
@@ -111,7 +111,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         placeholder="مثال: دفعة جزئية..."
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-300 focus:border-green-400 outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     />
                 </div>
             </div>
@@ -122,14 +122,14 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                 <button
                     type="submit"
                     disabled={loading || amount <= 0}
-                    className="flex-1 bg-success text-white rounded-lg py-2 text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-success text-success-foreground rounded-lg py-2 text-sm font-bold hover:bg-success/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {loading ? "جاري التسديد..." : `تسديد ${formatIQD(amount)}`}
                 </button>
                 <button
                     type="button"
                     onClick={() => setAmount(remaining)}
-                    className="px-3 py-2 bg-success/10 text-success rounded-lg text-xs font-medium hover:bg-green-200 transition-colors"
+                    className="px-3 py-2 bg-success/10 text-success rounded-lg text-xs font-medium hover:bg-success/20 transition-all"
                 >
                     الكل
                 </button>

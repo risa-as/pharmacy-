@@ -131,7 +131,7 @@ export default function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-red-200"
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20"
                     >
                         <X className="w-4 h-4" />
                         إلغاء
@@ -139,7 +139,7 @@ export default function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                     <button
                         type="button"
                         onClick={saveSignature}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90"
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                         <Check className="w-4 h-4" />
                         حفظ التوقيع

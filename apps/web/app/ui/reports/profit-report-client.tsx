@@ -47,7 +47,7 @@ export default function ProfitReportClient({ branches, defaultBranchId, defaultP
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             </div>
         );
     }
@@ -137,7 +137,7 @@ export default function ProfitReportClient({ branches, defaultBranchId, defaultP
                                 { header: 'المرتجعات', key: 'returns', width: 14 },
                                 { header: 'صافي الربح', key: 'netProfit', width: 14 },
                             ], 'تقرير_الأرباح', 'الأرباح')}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-success text-white rounded-lg text-xs font-medium hover:bg-green-700"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-success text-success-foreground rounded-lg text-xs font-medium hover:bg-success/90 transition-all"
                         >
                             <Download className="w-3 h-3" /> تصدير Excel
                         </button>
@@ -150,7 +150,7 @@ export default function ProfitReportClient({ branches, defaultBranchId, defaultP
                                     <th className="text-right py-2 px-3 font-medium text-primary">المبيعات</th>
                                     <th className="text-right py-2 px-3 font-medium text-warning">التكلفة</th>
                                     <th className="text-right py-2 px-3 font-medium text-destructive">المصروفات</th>
-                                    <th className="text-right py-2 px-3 font-medium text-yellow-600">المرتجعات</th>
+                                    <th className="text-right py-2 px-3 font-medium text-warning">المرتجعات</th>
                                     <th className="text-right py-2 px-3 font-medium text-success">صافي الربح</th>
                                 </tr>
                             </thead>
@@ -161,7 +161,7 @@ export default function ProfitReportClient({ branches, defaultBranchId, defaultP
                                         <td className="py-2 px-3 text-primary font-medium">{formatCurrency(day.revenue)}</td>
                                         <td className="py-2 px-3 text-warning">{formatCurrency(day.cogs)}</td>
                                         <td className="py-2 px-3 text-destructive">{formatCurrency(day.expenses)}</td>
-                                        <td className="py-2 px-3 text-yellow-700">{formatCurrency(day.returns)}</td>
+                                        <td className="py-2 px-3 text-warning">{formatCurrency(day.returns)}</td>
                                         <td className={`py-2 px-3 font-bold ${day.netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
                                             {formatCurrency(day.netProfit)}
                                         </td>
@@ -197,28 +197,28 @@ function SummaryCard({
     icon: React.ReactNode; label: string; value: string; color: string; sub?: string; highlight?: boolean
 }) {
     const bgMap: Record<string, string> = {
-        blue: 'bg-primary/10 border-blue-100',
-        orange: 'bg-warning/10 border-orange-100',
-        red: 'bg-destructive/10 border-red-100',
-        yellow: 'bg-yellow-50 border-yellow-100',
-        green: 'bg-success/10 border-green-100',
-        emerald: 'bg-success/10 border-emerald-100',
-        purple: 'bg-purple-50 border-purple-100',
-        indigo: 'bg-indigo-50 border-indigo-100',
+        blue: 'bg-primary/10 border-primary/20',
+        orange: 'bg-warning/10 border-warning/20',
+        red: 'bg-destructive/10 border-destructive/20',
+        yellow: 'bg-warning/10 border-warning/20',
+        green: 'bg-success/10 border-success/20',
+        emerald: 'bg-success/10 border-success/20',
+        purple: 'bg-info/10 border-info/20',
+        indigo: 'bg-info/10 border-info/20',
     };
     const textMap: Record<string, string> = {
         blue: 'text-primary',
         orange: 'text-warning',
         red: 'text-destructive',
-        yellow: 'text-yellow-600',
+        yellow: 'text-warning',
         green: 'text-success',
         emerald: 'text-success',
-        purple: 'text-purple-600',
-        indigo: 'text-indigo-600',
+        purple: 'text-info',
+        indigo: 'text-info',
     };
 
     return (
-        <div className={`rounded-xl border p-4 ${bgMap[color] || bgMap.blue} ${highlight ? 'ring-2 ring-offset-1 ring-green-400' : ''}`}>
+        <div className={`rounded-xl border p-4 ${bgMap[color] || bgMap.blue} ${highlight ? 'ring-2 ring-offset-1 ring-success/50' : ''}`}>
             <div className={`flex items-center gap-2 mb-1 ${textMap[color] || textMap.blue}`}>
                 {icon}
                 <span className="text-xs font-medium">{label}</span>

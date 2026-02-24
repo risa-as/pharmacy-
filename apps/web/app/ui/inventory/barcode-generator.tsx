@@ -156,7 +156,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                                 key={num}
                                 onClick={() => setQuantity(num)}
                                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${quantity === num
-                                        ? "bg-purple-100 text-purple-700 border border-purple-300"
+                                        ? "bg-primary/10 text-primary border border-primary/30"
                                         : "bg-muted text-muted-foreground hover:bg-muted"
                                     }`}
                             >
@@ -170,7 +170,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                 <div className="bg-muted px-6 py-4 flex gap-3">
                     <button
                         onClick={handlePrint}
-                        className="flex-1 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+                        className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 px-4 rounded-lg transition-all"
                     >
                         <Printer className="w-5 h-5" />
                         طباعة {quantity} ملصق
