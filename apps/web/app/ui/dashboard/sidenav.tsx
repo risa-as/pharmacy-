@@ -52,6 +52,11 @@ interface NavSection {
     links: { name: string; href: string; icon: any }[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MVP SIDEBAR — 11 core items (reduced from 43).
+// All other pages remain fully accessible via tabs, buttons, and row-clicks
+// inside their parent pages. See the Final Page Disposition Report for details.
+// ─────────────────────────────────────────────────────────────────────────────
 const sections: NavSection[] = [
     {
         label: "",
@@ -63,79 +68,78 @@ const sections: NavSection[] = [
         label: "الصيدلة",
         links: [
             { name: "قاعدة الأدوية", href: "/dashboard/drugs", icon: Pill },
-            { name: "استيراد أدوية", href: "/dashboard/drugs/import", icon: FileSpreadsheet },
+            // Drug Import → accessible via "استيراد" button inside Drugs page
             { name: "الوصفات", href: "/dashboard/prescriptions", icon: ClipboardList },
         ],
     },
     {
-        label: "المخزون",
+        label: "المخزون والمبيعات",
         links: [
-            { name: "جرد المخزون", href: "/dashboard/inventory/stocktakes", icon: CheckSquare },
-            { name: "تعديل الأسعار بالجملة", href: "/dashboard/inventory/bulk-pricing", icon: DollarSign },
-            { name: "التحويلات بين الأفرع", href: "/dashboard/inventory/transfers", icon: ArrowRightLeft },
-            { name: "طباعة الباركود", href: "/dashboard/inventory/barcode-print", icon: Tag },
-            { name: "تحذيرات الهامش", href: "/dashboard/inventory/margin-warnings", icon: AlertTriangle },
-            { name: "النواقص", href: "/dashboard/inventory/shortages", icon: AlertTriangle },
-            { name: "حركة منتج", href: "/dashboard/inventory/product-movement", icon: Activity },
-            { name: "التوالف والمنتهية الصلاحية", href: "/dashboard/inventory/expired-damaged", icon: PackageMinus },
-        ],
-    },
-    {
-        label: "المبيعات والمالية",
-        links: [
+            // RESTORED: /dashboard/inventory was previously missing from the sidebar
+            { name: "المخزون", href: "/dashboard/inventory", icon: Package },
+            // Inventory sub-tools (Stocktakes, Barcode, Bulk Pricing, Transfers,
+            // Shortages, Expired, Margin Warnings, Product Movement, Batches)
+            // → accessible as tabs/buttons inside the Inventory page
             { name: "المبيعات", href: "/dashboard/sales", icon: ShoppingCart },
-            { name: "الفواتير", href: "/dashboard/invoices", icon: FileText },
+            // Invoices, Returns, Payments → tabs inside Sales page
             { name: "دفتر الديون", href: "/dashboard/debts", icon: BookOpen },
-            { name: "مدير التسعير", href: "/dashboard/inventory/bulk-pricing", icon: ArrowRightLeft },
-            { name: "المرتجعات", href: "/dashboard/returns", icon: Undo2 },
-            { name: "الصناديق", href: "/dashboard/finance/safes", icon: Wallet },
-            { name: "دفتر القيود", href: "/dashboard/finance/transactions", icon: ArrowRightLeft },
-            { name: "المصروفات", href: "/dashboard/expenses", icon: CreditCard },
-            { name: "المدفوعات", href: "/dashboard/payments", icon: Smartphone },
         ],
     },
     {
-        label: "التوريد",
-        links: [
-            { name: "الموردين", href: "/dashboard/suppliers", icon: Users },
-            { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order", icon: Truck },
-            { name: "سجل المشتريات", href: "/dashboard/purchases", icon: ShoppingCart },
-        ],
-    },
-    {
-        label: "العملاء",
+        label: "العملاء والتوريد",
         links: [
             { name: "المرضى", href: "/dashboard/patients", icon: UserCircle },
-            { name: "برنامج الولاء", href: "/dashboard/loyalty", icon: Gift },
+            // Insurance, Loyalty → tabs inside Patients page
+            { name: "الموردون", href: "/dashboard/suppliers", icon: Truck },
+            { name: "المشتريات", href: "/dashboard/purchases", icon: ShoppingCart },
+            // CTO Override: Smart Orders stays in main nav (other supply sub-pages via row-clicks)
+            { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order", icon: Brain },
         ],
     },
     {
         label: "الإدارة",
         links: [
-            { name: "الفروع", href: "/dashboard/branches", icon: Store },
-            { name: "المستخدمين", href: "/dashboard/users", icon: Users },
             { name: "التقارير", href: "/dashboard/reports", icon: BarChart3 },
-            { name: "تقرير الأرباح", href: "/dashboard/reports/profit", icon: TrendingUp },
-            { name: "مقارنة الفروع", href: "/dashboard/reports/branch-comparison", icon: Store },
-            { name: "تقارير الموظفين", href: "/dashboard/reports/employees", icon: Users },
-            { name: "سجل النشاطات", href: "/dashboard/reports/audit-log", icon: ScrollText },
-            { name: "سجل الورديات", href: "/dashboard/reports/shifts", icon: Clock },
-            { name: "إدارة الصلاحيات", href: "/dashboard/users/permissions", icon: Shield },
-            { name: "التنبيهات Push", href: "/dashboard/notifications", icon: Bell },
-            { name: "التنبيهات", href: "/dashboard/alerts", icon: Bell },
-            { name: "الإعدادات", href: "/dashboard/settings", icon: SettingsIcon },
+            // All 14 sub-reports (Sales, Profits, Inventory, Expiry, Margins,
+            // Top Sellers, Slow Movers, Purchases, Employees, Shifts,
+            // Audit Log, Branch Comparison, Forecast, Analytics)
+            // → accessible as tabs inside the Reports hub page
         ],
     },
-    {
-        label: "التوسع والابتكار",
-        links: [
-            { name: "المستودعات العراقية", href: "/dashboard/warehouses", icon: Building2 },
-            { name: "سوق B2B", href: "/dashboard/marketplace", icon: ShoppingBag },
-            { name: "تنبؤ الطلب AI", href: "/dashboard/analytics/demand-forecast", icon: Brain },
-            { name: "WhatsApp", href: "/dashboard/notifications/whatsapp", icon: MessageSquare },
-            { name: "إدارة المؤسسات", href: "/dashboard/tenants", icon: Crown },
-        ],
-    },
+
+    // ─── FUTURE: Bucket 3 — Advanced & B2B ──────────────────────────────────
+    // These sections are commented out for Day-1 MVP. Routes and code remain
+    // intact. Uncomment individual items when the prerequisite conditions are met.
+    //
+    // {
+    //     label: "التوسع والابتكار",
+    //     links: [
+    //         // FUTURE: Iraqi Warehouses — requires Kimadia/national warehouse API
+    //         // integration. Zero value without supplier-side onboarding.
+    //         // { name: "المستودعات العراقية", href: "/dashboard/warehouses", icon: Building2 },
+    //
+    //         // FUTURE: B2B Marketplace — cold-start problem. Page is empty until
+    //         // ≥3 verified wholesale suppliers are onboarded to the platform.
+    //         // { name: "سوق B2B", href: "/dashboard/marketplace", icon: ShoppingBag },
+    //
+    //         // FUTURE: AI Demand Forecast — ML model requires ≥60 days of real
+    //         // sales history. Output is meaningless (or misleading) before that.
+    //         // { name: "تنبؤ الطلب AI", href: "/dashboard/analytics/demand-forecast", icon: Brain },
+    //
+    //         // FUTURE: WhatsApp — requires Meta Business account verification,
+    //         // approved message templates, and monthly API cost sign-off.
+    //         // { name: "WhatsApp", href: "/dashboard/notifications/whatsapp", icon: MessageSquare },
+    //
+    //         // FUTURE: Tenant Admin — SaaS platform operator page only.
+    //         // NEVER expose to pharmacy customers. Move to internal admin panel.
+    //         // { name: "إدارة المؤسسات", href: "/dashboard/tenants", icon: Crown },
+    //
+    //         // FUTURE: Permissions Guide — developer/implementer reference doc.
+    //         // Surface inside Settings → Permissions tab for ADMIN role only.
+    //         // { name: "دليل الصلاحيات", href: "/dashboard/permissions-guide", icon: Shield },
+    //     ],
+    // },
+    // ────────────────────────────────────────────────────────────────────────
 ];
 
 export default function SideNav({ settings, userPermissions, userRole }: {
@@ -242,6 +246,31 @@ export default function SideNav({ settings, userPermissions, userRole }: {
                 ))}
                 <div className="flex-1" />
             </nav>
+
+            {/* ─── Settings Gear — Admin/SuperAdmin only ─── */}
+            {(userRole === "ADMIN" || userRole === "SUPER_ADMIN") && (
+                <div className="px-0.5 mt-1">
+                    <Link
+                        href="/dashboard/settings"
+                        onClick={() => setMobileOpen(false)}
+                        className={cn(
+                            "flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
+                            pathname.startsWith("/dashboard/settings") ||
+                            pathname.startsWith("/dashboard/users") ||
+                            pathname.startsWith("/dashboard/branches") ||
+                            pathname.startsWith("/dashboard/finance") ||
+                            pathname.startsWith("/dashboard/expenses") ||
+                            pathname.startsWith("/dashboard/organizations") ||
+                            pathname.startsWith("/dashboard/notifications")
+                                ? "bg-primary/10 text-primary shadow-sm"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                    >
+                        <SettingsIcon className="w-[18px] h-[18px] shrink-0" />
+                        <span>الإعدادات</span>
+                    </Link>
+                </div>
+            )}
 
             {/* Sign Out */}
             <form action={handleSignOut} className="mt-2 px-0.5">
