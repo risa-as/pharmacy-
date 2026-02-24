@@ -7,6 +7,7 @@ import { createZainCashTransaction } from "@/app/lib/actions/zaincash";
 interface ZainCashButtonProps {
     amount: number;
     saleId: string;
+    description?: string;
     onSuccess?: () => void;
     onError?: (error: string) => void;
 }
@@ -14,6 +15,7 @@ interface ZainCashButtonProps {
 export default function ZainCashButton({
     amount,
     saleId,
+    description,
     onSuccess,
     onError,
 }: ZainCashButtonProps) {
@@ -22,7 +24,7 @@ export default function ZainCashButton({
     const handlePayment = async () => {
         setLoading(true);
         try {
-            const result = await createZainCashTransaction(amount, saleId);
+            const result = await createZainCashTransaction(amount, saleId, description || "pharmacy_payment");
 
             if ("error" in result) {
                 onError?.(result.error);

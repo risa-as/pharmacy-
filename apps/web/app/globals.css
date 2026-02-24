@@ -1,68 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
     :root {
-        --background: 0 0% 100%;
-        --foreground: 222.2 84% 4.9%;
+        /* Backgrounds — warm off-white, reduces glare vs pure white */
+        --background:          40 20% 98%;
+        --foreground:          20 15% 9%;
 
-        --card: 0 0% 100%;
-        --card-foreground: 222.2 84% 4.9%;
+        --card:                0 0% 100%;
+        --card-foreground:     20 15% 9%;
 
-        --popover: 0 0% 100%;
-        --popover-foreground: 222.2 84% 4.9%;
+        --popover:             0 0% 100%;
+        --popover-foreground:  20 15% 9%;
 
-        --primary: 221.2 83.2% 53.3%;
-        --primary-foreground: 210 40% 98%;
+        /* Brand — medical teal */
+        --primary:             177 90% 30%;
+        --primary-foreground:  0 0% 100%;
 
-        --secondary: 210 40% 96.1%;
-        --secondary-foreground: 222.2 47.4% 11.2%;
+        --secondary:           177 20% 93%;
+        --secondary-foreground: 177 90% 20%;
 
-        --muted: 210 40% 96.1%;
-        --muted-foreground: 215.4 16.3% 46.9%;
+        --muted:               40 10% 93%;
+        --muted-foreground:    20 8% 46%;
 
-        --accent: 210 40% 96.1%;
-        --accent-foreground: 222.2 47.4% 11.2%;
+        --accent:              177 20% 93%;
+        --accent-foreground:   177 80% 20%;
 
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 210 40% 98%;
+        /* Semantic — Light Mode */
+        --destructive:         0 72% 45%;
+        --destructive-foreground: 0 0% 100%;
+        --success:             142 50% 35%;
+        --success-foreground:  0 0% 100%;
+        --warning:             32 85% 40%;
+        --warning-foreground:  0 0% 100%;
+        --info:                205 60% 40%;
+        --info-foreground:     0 0% 100%;
 
-        --border: 214.3 31.8% 91.4%;
-        --input: 214.3 31.8% 91.4%;
-        --ring: 221.2 83.2% 53.3%;
+        /* Structure */
+        --border:              40 12% 88%;
+        --input:               40 12% 88%;
+        --ring:                177 90% 30%;
 
-        --radius: 0.5rem;
+        --radius:              0.5rem;
+
+        /* Auth gradient — login page and landing page */
+        --gradient-auth-from:  #0f0c29;
+        --gradient-auth-via:   #302b63;
+        --gradient-auth-to:    #24243e;
     }
 
     .dark {
-        --background: 222.2 84% 4.9%;
-        --foreground: 210 40% 98%;
+        /* Backgrounds — warm darks reduce blue-light for night-shift pharmacists */
+        --background:          20 15% 9%;
+        --foreground:          40 15% 95%;
 
-        --card: 222.2 84% 4.9%;
-        --card-foreground: 210 40% 98%;
+        --card:                20 12% 13%;
+        --card-foreground:     40 15% 95%;
 
-        --popover: 222.2 84% 4.9%;
-        --popover-foreground: 210 40% 98%;
+        --popover:             20 10% 11%;
+        --popover-foreground:  40 15% 95%;
 
-        --primary: 217.2 91.2% 59.8%;
-        --primary-foreground: 222.2 47.4% 11.2%;
+        /* Brand — brighter teal is readable in dark context */
+        --primary:             177 65% 45%;
+        --primary-foreground:  20 15% 9%;
 
-        --secondary: 217.2 32.6% 17.5%;
-        --secondary-foreground: 210 40% 98%;
+        --secondary:           177 10% 18%;
+        --secondary-foreground: 177 40% 80%;
 
-        --muted: 217.2 32.6% 17.5%;
-        --muted-foreground: 215 20.2% 65.1%;
+        --muted:               20 8% 16%;
+        --muted-foreground:    30 8% 63%;
 
-        --accent: 217.2 32.6% 17.5%;
-        --accent-foreground: 210 40% 98%;
+        --accent:              177 10% 22%;
+        --accent-foreground:   177 60% 85%;
 
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 210 40% 98%;
+        /* Semantic — warmer, less harsh for extended night use */
+        --destructive:         0 60% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --success:             142 45% 52%;
+        --success-foreground:  0 0% 100%;
+        --warning:             32 75% 58%;
+        --warning-foreground:  20 15% 9%;
+        --info:                205 50% 58%;
+        --info-foreground:     0 0% 100%;
 
-        --border: 217.2 32.6% 17.5%;
-        --input: 217.2 32.6% 17.5%;
-        --ring: 224.3 76.3% 48%;
+        /* Structure */
+        --border:              20 8% 20%;
+        --input:               20 8% 20%;
+        --ring:                177 65% 45%;
     }
 }
 
@@ -74,5 +101,117 @@
     body {
         background-color: hsl(var(--background));
         color: hsl(var(--foreground));
+        font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: hsl(var(--muted-foreground) / 0.2);
+        border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: hsl(var(--muted-foreground) / 0.35);
+    }
+
+    /* Focus Ring */
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2);
+        border-color: hsl(var(--primary));
+    }
+}
+
+/* Utility Animations */
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-down {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+}
+.animate-slide-up {
+    animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-slide-down {
+    animation: slide-down 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ═══ Glassmorphism Utility ═══ */
+@layer components {
+    .glass-card {
+        background-color: hsl(var(--card) / 0.8);
+        border: 1px solid hsl(var(--border) / 0.4);
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+    }
+
+    @supports (backdrop-filter: blur(0)) {
+        .glass-card {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            background-color: hsl(var(--card) / 0.15);
+            border-color: hsl(var(--border) / 0.2);
+        }
+    }
+
+    .dark .glass-card {
+        background-color: hsl(var(--card) / 0.25);
+        border-color: hsl(var(--border) / 0.3);
+    }
+
+    @supports (backdrop-filter: blur(0)) {
+        .dark .glass-card {
+            background-color: hsl(var(--card) / 0.18);
+        }
+    }
+}
+
+/* ═══ Responsive Table Utilities ═══ */
+@layer components {
+    /* Make all table containers scrollable on mobile */
+    .flow-root > .inline-block,
+    .overflow-hidden:has(> table),
+    div:has(> table.w-full),
+    div:has(> table.min-w-full) {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Ensure tables have a minimum width for readability */
+    @media (max-width: 767px) {
+        table.min-w-full,
+        table.w-full {
+            min-width: 640px;
+        }
+
+        /* Smaller text on mobile tables */
+        table.min-w-full td,
+        table.min-w-full th,
+        table.w-full td,
+        table.w-full th {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+            font-size: 0.8125rem;
+        }
     }
 }

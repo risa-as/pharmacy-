@@ -1,60 +1,71 @@
-import { Button } from "@faramace/ui";
 import Link from "next/link";
-import { Building2, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { Pill, ArrowLeft, Shield, Zap, BarChart3, Globe } from "lucide-react";
+import { auth } from "@/auth";
 
-export default function Home() {
+export default async function Home() {
+  const session = await auth();
+  const isLoggedIn = !!session?.user;
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
-      <div className="max-w-3xl space-y-8">
+    <main className="relative min-h-screen overflow-hidden" dir="rtl">
+      {/* Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[var(--gradient-auth-from)] via-[var(--gradient-auth-via)] to-[var(--gradient-auth-to)]">
+        <div className="absolute top-[10%] right-[15%] w-96 h-96 rounded-full bg-blue-500/8 blur-3xl animate-pulse" />
+        <div className="absolute bottom-[15%] left-[10%] w-[500px] h-[500px] rounded-full bg-indigo-500/6 blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
+        <div className="absolute top-[50%] left-[50%] w-72 h-72 rounded-full bg-violet-500/8 blur-3xl animate-pulse" style={{ animationDelay: "4s" }} />
+        <div className="absolute inset-0" style={{
+          backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)",
+          backgroundSize: "40px 40px",
+        }} />
+      </div>
 
-        {/* الشعار / العنوان */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="rounded-2xl bg-blue-600 p-4 text-white shadow-xl">
-            <Building2 className="h-12 w-12" />
-          </div>
-          <h1 className="text-5xl font-extrabold tracking-tight text-gray-900 sm:text-6xl">
-            فاراماس <span className="text-blue-600">السحابي</span>
-          </h1>
-          <p className="max-w-xl text-lg text-gray-600">
-            نظام إدارة الصيدليات المتقدم
-          </p>
+      {/* Content */}
+      <div className="relative flex flex-col items-center justify-center min-h-screen px-6 py-16">
+        {/* Logo */}
+        <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 mb-8 shadow-2xl">
+          <Pill className="w-10 h-10 text-white" />
         </div>
 
-        {/* بطاقات الإجراءات */}
-        <div className="grid w-full gap-6 sm:grid-cols-2">
+        {/* Title */}
+        <h1 className="text-6xl md:text-7xl font-black text-white tracking-tight mb-3 text-center" style={{ textShadow: "0 0 80px rgba(129,140,248,0.3)" }}>
+          فاراماس
+        </h1>
+        <div className="h-0.5 w-20 rounded-full bg-gradient-to-r from-transparent via-indigo-400 to-transparent mb-4" />
+        <p className="text-xl text-white/40 font-medium mb-12 text-center">
+          نظام إدارة الصيدليات السحابي المتكامل
+        </p>
 
-          <div className="flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:shadow-md">
-            <ShieldCheck className="mb-4 h-10 w-10 text-green-600" />
-            <h3 className="mb-2 text-xl font-semibold text-gray-900">لوحة التحكم</h3>
-            <p className="mb-6 text-sm text-gray-500">
-              إدارة المنظمات والفروع والإعدادات العامة
-            </p>
-            <Button asChild className="w-full" variant="default">
-              <Link href="/dashboard">
-                الذهاب للوحة التحكم
-              </Link>
-            </Button>
-          </div>
-
-          <div className="flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:shadow-md">
-            <LayoutDashboard className="mb-4 h-10 w-10 text-purple-600" />
-            <h3 className="mb-2 text-xl font-semibold text-gray-900">حالة النظام</h3>
-            <p className="mb-6 text-sm text-gray-500">
-              عرض عقد المزامنة النشطة وصحة الخادم
-            </p>
-            <Button asChild className="w-full" variant="outline">
-              <Link href="/login">
-                تسجيل الدخول
-              </Link>
-            </Button>
-          </div>
-
+        {/* Feature Pills */}
+        <div className="flex flex-wrap justify-center gap-3 mb-12 max-w-xl">
+          {[
+            { icon: Shield, text: "آمن ومشفّر" },
+            { icon: Zap, text: "سريع وخفيف" },
+            { icon: BarChart3, text: "تقارير متقدمة" },
+            { icon: Globe, text: "يعمل من أي مكان" },
+          ].map((item, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/50 text-sm font-medium"
+            >
+              <item.icon className="w-4 h-4 text-indigo-300" />
+              {item.text}
+            </div>
+          ))}
         </div>
 
-        <div className="text-xs text-gray-400">
-          مدعوم من بنية فاراماس المتكاملة
-        </div>
+        {/* Single Smart CTA */}
+        <Link
+          href={isLoggedIn ? "/dashboard" : "/login"}
+          className="flex items-center justify-center gap-2 px-10 py-4 bg-gradient-to-l from-primary to-primary/80 text-primary-foreground font-bold text-lg rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+        >
+          {isLoggedIn ? "الذهاب للوحة التحكم" : "تسجيل الدخول"}
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
 
+        {/* Footer */}
+        <p className="absolute bottom-6 text-[11px] text-white/20 font-medium">
+          Faramace Cloud System v1.0
+        </p>
       </div>
     </main>
   );

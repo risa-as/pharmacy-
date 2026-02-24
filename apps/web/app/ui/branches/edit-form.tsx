@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@faramace/ui";
+import { SubmitButton } from "@/app/ui/submit-button";
 import { useFormState } from "react-dom";
 import { updateBranch } from "@/app/lib/actions/branch";
 
@@ -29,15 +29,15 @@ export default function EditForm({
 
     return (
         <form action={dispatch}>
-            <div className="rounded-xl bg-white border border-gray-200 shadow-sm p-6">
+            <div className="rounded-xl bg-card border border-border shadow-sm p-6">
                 <div className="mb-6">
-                    <label htmlFor="organizationId" className="mb-2 block text-sm font-medium text-gray-700">
+                    <label htmlFor="organizationId" className="mb-2 block text-sm font-medium text-foreground">
                         المنظمة
                     </label>
                     <select
                         id="organizationId"
                         name="organizationId"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all bg-white"
+                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
                         defaultValue={branch.organizationId}
                         aria-describedby="organization-error"
                     >
@@ -53,7 +53,7 @@ export default function EditForm({
                     <div id="organization-error" aria-live="polite" aria-atomic="true">
                         {state.errors?.organizationId &&
                             state.errors.organizationId.map((error: string) => (
-                                <p key={error} className="mt-2 text-sm text-red-500">
+                                <p key={error} className="mt-2 text-sm text-destructive">
                                     {error}
                                 </p>
                             ))}
@@ -61,7 +61,7 @@ export default function EditForm({
                 </div>
 
                 <div className="mb-6">
-                    <label htmlFor="name" className="mb-2 block text-sm font-medium text-gray-700">
+                    <label htmlFor="name" className="mb-2 block text-sm font-medium text-foreground">
                         اسم الفرع
                     </label>
                     <input
@@ -70,13 +70,13 @@ export default function EditForm({
                         type="text"
                         defaultValue={branch.name}
                         placeholder="أدخل اسم الفرع"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                        className="w-full rounded-lg border border-border px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all"
                         aria-describedby="name-error"
                     />
                     <div id="name-error" aria-live="polite" aria-atomic="true">
                         {state.errors?.name &&
                             state.errors.name.map((error: string) => (
-                                <p key={error} className="mt-2 text-sm text-red-500">
+                                <p key={error} className="mt-2 text-sm text-destructive">
                                     {error}
                                 </p>
                             ))}
@@ -84,19 +84,17 @@ export default function EditForm({
                 </div>
 
                 {state.message && (
-                    <p className="mt-2 text-sm text-red-500">{state.message}</p>
+                    <p className="mt-2 text-sm text-destructive">{state.message}</p>
                 )}
             </div>
             <div className="mt-6 flex justify-end gap-4">
                 <Link
                     href="/dashboard/branches"
-                    className="flex h-10 items-center rounded-lg bg-gray-100 px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex h-10 items-center rounded-lg bg-muted px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted"
                 >
                     إلغاء
                 </Link>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white">
-                    حفظ التعديلات
-                </Button>
+                <SubmitButton text="حفظ التعديلات" />
             </div>
         </form>
     );

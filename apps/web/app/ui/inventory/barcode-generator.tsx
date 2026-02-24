@@ -88,7 +88,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="bg-card rounded-2xl max-w-md w-full mx-4 overflow-hidden">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6">
                     <div className="flex items-center justify-between">
@@ -98,7 +98,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                         </h2>
                         <button
                             onClick={onClose}
-                            className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+                            className="p-1 hover:bg-card/20 rounded-lg transition-colors"
                         >
                             <X className="w-6 h-6" />
                         </button>
@@ -107,8 +107,8 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
 
                 {/* معاينة الباركود */}
                 <div className="p-6">
-                    <div className="bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-200 text-center">
-                        <div className="font-bold text-gray-800 mb-3">{drugName}</div>
+                    <div className="bg-muted rounded-xl p-6 border-2 border-dashed border-border text-center">
+                        <div className="font-bold text-foreground mb-3">{drugName}</div>
                         <div className="flex justify-center gap-px mb-2">
                             {pattern.map((bar, index) => (
                                 <div
@@ -117,19 +117,19 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                                 />
                             ))}
                         </div>
-                        <div className="font-mono text-sm text-gray-600 mb-2">{barcode}</div>
-                        <div className="text-xl font-bold text-green-600">{price.toFixed(2)}</div>
+                        <div className="font-mono text-sm text-muted-foreground mb-2">{barcode}</div>
+                        <div className="text-xl font-bold text-success">{price.toFixed(2)}</div>
                     </div>
 
                     {/* عدد النسخ */}
                     <div className="mt-6">
-                        <label className="block text-sm font-bold text-gray-700 mb-2">
+                        <label className="block text-sm font-bold text-foreground mb-2">
                             عدد الملصقات
                         </label>
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                                className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-gray-700"
+                                className="w-10 h-10 rounded-lg bg-muted hover:bg-muted flex items-center justify-center font-bold text-foreground"
                             >
                                 -
                             </button>
@@ -138,11 +138,11 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                                 min="1"
                                 value={quantity}
                                 onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                className="w-20 text-center rounded-lg border border-gray-300 px-4 py-2 font-bold"
+                                className="w-20 text-center rounded-lg border border-border px-4 py-2 font-bold"
                             />
                             <button
                                 onClick={() => setQuantity(quantity + 1)}
-                                className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-gray-700"
+                                className="w-10 h-10 rounded-lg bg-muted hover:bg-muted flex items-center justify-center font-bold text-foreground"
                             >
                                 +
                             </button>
@@ -157,7 +157,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                                 onClick={() => setQuantity(num)}
                                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${quantity === num
                                         ? "bg-purple-100 text-purple-700 border border-purple-300"
-                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        : "bg-muted text-muted-foreground hover:bg-muted"
                                     }`}
                             >
                                 {num}
@@ -167,7 +167,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                 </div>
 
                 {/* Footer */}
-                <div className="bg-gray-50 px-6 py-4 flex gap-3">
+                <div className="bg-muted px-6 py-4 flex gap-3">
                     <button
                         onClick={handlePrint}
                         className="flex-1 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-colors"
@@ -177,7 +177,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                     </button>
                     <button
                         onClick={onClose}
-                        className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition-colors"
+                        className="px-4 py-3 bg-muted hover:bg-muted text-foreground font-bold rounded-lg transition-colors"
                     >
                         إلغاء
                     </button>

@@ -54,15 +54,15 @@ export default function StripePaymentButton({
 
     if (showForm) {
         return (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-blue-600" />
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+                <h3 className="font-bold text-foreground flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-primary" />
                     الدفع بالبطاقة
                 </h3>
 
                 <div className="space-y-3">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-foreground mb-1">
                             رقم البطاقة
                         </label>
                         <input
@@ -70,14 +70,14 @@ export default function StripePaymentButton({
                             placeholder="4242 4242 4242 4242"
                             value={cardNumber}
                             onChange={(e) => setCardNumber(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
                             dir="ltr"
                         />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-foreground mb-1">
                                 تاريخ الانتهاء
                             </label>
                             <input
@@ -85,12 +85,12 @@ export default function StripePaymentButton({
                                 placeholder="MM/YY"
                                 value={expiry}
                                 onChange={(e) => setExpiry(e.target.value)}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
                                 dir="ltr"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-foreground mb-1">
                                 CVC
                             </label>
                             <input
@@ -98,7 +98,7 @@ export default function StripePaymentButton({
                                 placeholder="123"
                                 value={cvc}
                                 onChange={(e) => setCvc(e.target.value)}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
                                 dir="ltr"
                             />
                         </div>
@@ -109,7 +109,7 @@ export default function StripePaymentButton({
                     <button
                         onClick={handlePayment}
                         disabled={loading}
-                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
                     >
                         {loading ? (
                             <>
@@ -125,13 +125,13 @@ export default function StripePaymentButton({
                     </button>
                     <button
                         onClick={() => setShowForm(false)}
-                        className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition-colors"
+                        className="px-4 py-3 bg-muted hover:bg-muted text-foreground font-bold rounded-lg transition-colors"
                     >
                         إلغاء
                     </button>
                 </div>
 
-                <p className="text-xs text-gray-500 text-center">
+                <p className="text-xs text-muted-foreground text-center">
                     🔒 مدفوعات آمنة عبر Stripe
                 </p>
             </div>

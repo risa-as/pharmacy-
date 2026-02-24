@@ -1,0 +1,64 @@
+import { PrismaClient } from "@prisma/client";
+import { FileSpreadsheet, TrendingUp } from "lucide-react";
+import SalesChart from "@/app/ui/dashboard/sales-chart";
+
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+export default async function PurchasesReportPage() {
+    // Last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const purchases = await prisma.purchase.findMany({
+        where: {
+            createdAt: { gte: thirtyDaysAgo },
+            status: 'COMPLETED' // Only completed purchases count as actual spending? Or all? Let's say Completed.
+        },
+        include: { supplier: true },
+        orderBy: { createdAt: 'asc' }
+    });
+
+    const totalPurchases = purchases.reduce((sum, p) => sum + p.total, 0);
+
+    // Chart Data
+    const spendingByDay = new Map<string, number>();
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        spendingByDay.set(d.toLocaleDateString('en-GB'), 0);
+    }
+
+    purchases.forEach(p => {
+        const key = new Date(p.createdAt).toLocaleDateString('en-GB');
+        spendingByDay.set(key, (spendingByDay.get(key) || 0) + p.total);
+    });
+
+    const chartData = Array.from(spendingByDay.entries()).map(([day, amount]) => ({
+        day: day.slice(0, 5),
+        amount
+    }));
+
+    return (
+        <div className="glass-card w-full p-6 space-y-6" dir="rtl">
+            <h1 className="text-2xl font-bold font-cairo flex items-center gap-2">
+                <FileSpreadsheet className="w-8 h-8 text-purple-600" />
+                تقرير المشتريات (آخر 30 يوم)
+            </h1>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
+                    <div className="text-sm text-purple-700 mb-1">إجمالي مشتريات المواد</div>
+                    <div className="text-3xl font-bold text-purple-800">{totalPurchases.toLocaleString()} د.ع</div>
+                    <div className="text-sm mt-2 text-purple-600">عدد الفواتير: {purchases.length}</div>
+                </div>
+            </div>
+
+            <div className="bg-card p-6 rounded-xl border shadow-sm">
+                <h3 className="font-bold mb-4">اتجاه المشتريات اليومي</h3>
+                <SalesChart data={chartData} title="المشتريات اليومية" />
+            </div>
+        </div>
+    );
+}

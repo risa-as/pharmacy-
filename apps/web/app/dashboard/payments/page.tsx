@@ -1,15 +1,15 @@
-import { PrismaClient } from "@prisma/client";
-import { CreditCard, DollarSign, Smartphone, Building2 } from "lucide-react";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { prisma } from "@/app/lib/prisma";
+import { CreditCard, DollarSign, Smartphone, Building2, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
 const methodLabels: Record<string, string> = {
     CASH: "نقداً",
     CARD: "بطاقة",
     MOBILE_WALLET: "محفظة إلكترونية",
     BANK_TRANSFER: "تحويل بنكي",
+    ZAIN_CASH: "زين كاش",
+    STRIPE: "Stripe",
 };
 
 const methodIcons: Record<string, any> = {
@@ -17,6 +17,8 @@ const methodIcons: Record<string, any> = {
     CARD: CreditCard,
     MOBILE_WALLET: Smartphone,
     BANK_TRANSFER: Building2,
+    ZAIN_CASH: Smartphone,
+    STRIPE: CreditCard,
 };
 
 const statusLabels: Record<string, string> = {
@@ -28,13 +30,20 @@ const statusLabels: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
     PENDING: "bg-yellow-100 text-yellow-700",
-    COMPLETED: "bg-green-100 text-green-700",
-    FAILED: "bg-red-100 text-red-700",
+    COMPLETED: "bg-success/10 text-success",
+    FAILED: "bg-destructive/10 text-destructive",
     REFUNDED: "bg-purple-100 text-purple-700",
 };
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+    searchParams,
+}: {
+    searchParams: { [key: string]: string | string[] | undefined };
+}) {
+    const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
+
     const payments = await prisma.payment.findMany({
+        where: branchId ? { sale: { branchId } } : {},
         orderBy: { createdAt: "desc" },
         include: {
             sale: {
@@ -53,46 +62,59 @@ export default async function PaymentsPage() {
     const totalToday = todayPayments.reduce((acc, p) => acc + p.amount, 0);
     const cashToday = todayPayments.filter(p => p.method === "CASH").reduce((acc, p) => acc + p.amount, 0);
     const cardToday = todayPayments.filter(p => p.method === "CARD").reduce((acc, p) => acc + p.amount, 0);
+    const zainCashToday = todayPayments.filter(p => p.method === "ZAIN_CASH").reduce((acc, p) => acc + p.amount, 0);
 
     return (
-        <div className="w-full" suppressHydrationWarning>
-            <div className="flex w-full items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold font-cairo text-gray-800 flex items-center gap-3">
-                    <CreditCard className="w-7 h-7 text-blue-600" />
+        <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>
+            <div className="flex w-full items-center justify-between mb-6">
+                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
+                    <CreditCard className="w-7 h-7 text-primary" />
                     سجل المدفوعات
                 </h1>
             </div>
 
+            {/* Branch Filter */}
+            <div className="mb-6">
+                <BranchFilter currentBranch={branchId} baseUrl="/dashboard/payments" />
+            </div>
+
             {/* إحصائيات */}
-            <div className="grid grid-cols-4 gap-4 mb-8">
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="text-3xl font-bold text-gray-800">{payments.length}</div>
-                    <div className="text-sm text-gray-500">إجمالي العمليات</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+                <div className="bg-card rounded-xl border border-border p-4">
+                    <div className="text-3xl font-bold text-foreground">{payments.length}</div>
+                    <div className="text-sm text-muted-foreground">إجمالي العمليات</div>
                 </div>
-                <div className="bg-green-50 rounded-xl border border-green-200 p-4">
-                    <div className="text-3xl font-bold text-green-600">{totalToday.toFixed(2)}</div>
-                    <div className="text-sm text-green-600">مجموع اليوم</div>
+                <div className="bg-success/10 rounded-xl border border-green-200 p-4">
+                    <div className="text-3xl font-bold text-success">{totalToday.toLocaleString()}</div>
+                    <div className="text-sm text-success">مجموع اليوم</div>
                 </div>
-                <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
-                    <div className="text-3xl font-bold text-blue-600">{cashToday.toFixed(2)}</div>
-                    <div className="text-sm text-blue-600">نقداً اليوم</div>
+                <div className="bg-primary/10 rounded-xl border border-blue-200 p-4">
+                    <div className="text-3xl font-bold text-primary">{cashToday.toLocaleString()}</div>
+                    <div className="text-sm text-primary">نقداً اليوم</div>
                 </div>
                 <div className="bg-purple-50 rounded-xl border border-purple-200 p-4">
-                    <div className="text-3xl font-bold text-purple-600">{cardToday.toFixed(2)}</div>
+                    <div className="text-3xl font-bold text-purple-600">{cardToday.toLocaleString()}</div>
                     <div className="text-sm text-purple-600">بطاقات اليوم</div>
+                </div>
+                <div className="bg-success/10 rounded-xl border border-emerald-200 p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                        <Smartphone className="w-4 h-4 text-success" />
+                    </div>
+                    <div className="text-3xl font-bold text-success">{zainCashToday.toLocaleString()}</div>
+                    <div className="text-sm text-success">زين كاش اليوم</div>
                 </div>
             </div>
 
             {/* الجدول */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
                 {payments.length === 0 ? (
-                    <div className="p-12 text-center text-gray-400">
+                    <div className="p-12 text-center text-muted-foreground">
                         <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-40" />
                         <p>لا توجد مدفوعات مسجلة</p>
                     </div>
                 ) : (
                     <table className="w-full">
-                        <thead className="bg-gray-50 text-gray-600 text-sm border-b border-gray-200">
+                        <thead className="bg-muted text-muted-foreground text-sm border-b border-border">
                             <tr>
                                 <th className="px-4 py-3 text-right font-bold">الفرع</th>
                                 <th className="px-4 py-3 text-right font-bold">طريقة الدفع</th>
@@ -106,20 +128,20 @@ export default async function PaymentsPage() {
                             {payments.map((payment) => {
                                 const Icon = methodIcons[payment.method] || CreditCard;
                                 return (
-                                    <tr key={payment.id} className="hover:bg-gray-50">
-                                        <td className="px-4 py-3 text-gray-600">
+                                    <tr key={payment.id} className="hover:bg-muted">
+                                        <td className="px-4 py-3 text-muted-foreground">
                                             {payment.sale.branch.name}
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
-                                                <Icon className="w-4 h-4 text-gray-500" />
-                                                <span>{methodLabels[payment.method]}</span>
+                                                <Icon className="w-4 h-4 text-muted-foreground" />
+                                                <span>{methodLabels[payment.method] || payment.method}</span>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 font-bold text-green-600">
-                                            {payment.amount.toFixed(2)}
+                                        <td className="px-4 py-3 font-bold text-success">
+                                            {payment.amount.toLocaleString()} د.ع
                                         </td>
-                                        <td className="px-4 py-3 font-mono text-sm text-gray-500">
+                                        <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
                                             {payment.referenceNumber || "-"}
                                         </td>
                                         <td className="px-4 py-3">
@@ -127,7 +149,7 @@ export default async function PaymentsPage() {
                                                 {statusLabels[payment.status]}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-gray-600 text-sm" suppressHydrationWarning>
+                                        <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
                                             {new Date(payment.createdAt).toLocaleDateString("ar-IQ")}
                                         </td>
                                     </tr>

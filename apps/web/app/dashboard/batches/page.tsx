@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { Box, AlertTriangle, Calendar, Plus } from "lucide-react";
 import Link from "next/link";
+import { formatCurrency } from "@/app/lib/utils/currency";
 
 const prisma = new PrismaClient();
 
@@ -30,26 +31,26 @@ export default async function BatchesPage() {
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
     return (
-        <div className="w-full">
+        <div className="glass-card w-full p-6">
             {/* Header */}
             <div className="flex w-full items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold font-cairo text-gray-800 flex items-center gap-3">
-                    <Box className="w-7 h-7 text-blue-600" />
+                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
+                    <Box className="w-7 h-7 text-primary" />
                     إدارة الدفعات
                 </h1>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="text-3xl font-bold text-gray-800">{batches.length}</div>
-                    <div className="text-sm text-gray-500">إجمالي الدفعات</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <div className="bg-card rounded-xl border border-border p-4">
+                    <div className="text-3xl font-bold text-foreground">{batches.length}</div>
+                    <div className="text-sm text-muted-foreground">إجمالي الدفعات</div>
                 </div>
-                <div className="bg-red-50 rounded-xl border border-red-200 p-4">
-                    <div className="text-3xl font-bold text-red-600">
+                <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
+                    <div className="text-3xl font-bold text-destructive">
                         {batches.filter((b) => new Date(b.expiryDate) < now).length}
                     </div>
-                    <div className="text-sm text-red-600">منتهية الصلاحية</div>
+                    <div className="text-sm text-destructive">منتهية الصلاحية</div>
                 </div>
                 <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4">
                     <div className="text-3xl font-bold text-yellow-600">
@@ -63,19 +64,20 @@ export default async function BatchesPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
                 {batches.length === 0 ? (
-                    <div className="p-12 text-center text-gray-400">
+                    <div className="p-12 text-center text-muted-foreground">
                         <Box className="w-12 h-12 mx-auto mb-3 opacity-40" />
                         <p>لا توجد دفعات مسجلة</p>
                     </div>
                 ) : (
                     <table className="w-full">
-                        <thead className="bg-gray-50 text-gray-600 text-sm border-b border-gray-200">
+                        <thead className="bg-muted text-muted-foreground text-sm border-b border-border">
                             <tr>
                                 <th className="px-4 py-3 text-right font-bold">الدواء</th>
                                 <th className="px-4 py-3 text-right font-bold">الفرع</th>
                                 <th className="px-4 py-3 text-right font-bold">رقم الدفعة</th>
+                                <th className="px-4 py-3 text-right font-bold">سعر الشراء (للوحدة)</th>
                                 <th className="px-4 py-3 text-right font-bold">الكمية</th>
                                 <th className="px-4 py-3 text-right font-bold">تاريخ الانتهاء</th>
                                 <th className="px-4 py-3 text-right font-bold">الحالة</th>
@@ -88,11 +90,11 @@ export default async function BatchesPage() {
                                 const isExpired = expiryDate < now;
                                 const isExpiringSoon = expiryDate >= now && expiryDate <= thirtyDaysFromNow;
 
-                                let statusClass = "bg-green-100 text-green-700";
+                                let statusClass = "bg-success/10 text-success";
                                 let statusText = "صالح";
 
                                 if (isExpired) {
-                                    statusClass = "bg-red-100 text-red-700";
+                                    statusClass = "bg-destructive/10 text-destructive";
                                     statusText = "منتهي";
                                 } else if (isExpiringSoon) {
                                     statusClass = "bg-yellow-100 text-yellow-700";
@@ -100,20 +102,23 @@ export default async function BatchesPage() {
                                 }
 
                                 return (
-                                    <tr key={batch.id} className="hover:bg-gray-50">
-                                        <td className="px-4 py-3 font-medium text-gray-800">
+                                    <tr key={batch.id} className="hover:bg-muted">
+                                        <td className="px-4 py-3 font-medium text-foreground">
                                             {drug?.tradeName || "غير معروف"}
                                         </td>
-                                        <td className="px-4 py-3 text-gray-600">
+                                        <td className="px-4 py-3 text-muted-foreground">
                                             {batch.inventory.branch?.name || "غير محدد"}
                                         </td>
-                                        <td className="px-4 py-3 font-mono text-sm text-gray-600">
+                                        <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
                                             {batch.batchNumber}
                                         </td>
-                                        <td className="px-4 py-3 font-bold text-gray-800">
+                                        <td className="px-4 py-3 font-bold text-foreground" dir="ltr">
+                                            {formatCurrency(batch.costPrice)}
+                                        </td>
+                                        <td className="px-4 py-3 font-bold text-foreground">
                                             {batch.quantity}
                                         </td>
-                                        <td className="px-4 py-3 text-gray-600">
+                                        <td className="px-4 py-3 text-muted-foreground">
                                             {expiryDate.toLocaleDateString("ar-IQ")}
                                         </td>
                                         <td className="px-4 py-3">

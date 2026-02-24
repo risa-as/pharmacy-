@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@faramace/ui";
 import { useFormState } from "react-dom";
 import { createBranch } from "@/app/lib/actions/branch";
+import { SubmitButton } from "@/app/ui/submit-button";
 
 interface Organization {
   id: string;
@@ -16,37 +17,12 @@ export default function Form({ organizations }: { organizations: Organization[] 
 
   return (
     <form action={dispatch}>
-      <div className="rounded-md bg-gray-50 p-4 md:p-6">
+      <div className="rounded-md bg-muted p-4 md:p-6">
         <div className="mb-4">
-          <label htmlFor="organizationId" className="mb-2 block text-sm font-medium">
-            المنظمة
-          </label>
-          <div className="relative mt-2 rounded-md">
-            <select
-              id="organizationId"
-              name="organizationId"
-              className="peer block w-full rounded-md border border-gray-200 py-2 px-3 text-sm outline-2 placeholder:text-gray-500"
-              defaultValue=""
-              aria-describedby="organization-error"
-            >
-              <option value="" disabled>
-                اختر منظمة
-              </option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div id="organization-error" aria-live="polite" aria-atomic="true">
-            {state.errors?.organizationId &&
-              state.errors.organizationId.map((error: string) => (
-                <p key={error} className="mt-2 text-sm text-red-500">
-                  {error}
-                </p>
-              ))}
-          </div>
+          {/* Auto-select first organization and hide the selector */}
+          {organizations.length > 0 && (
+            <input type="hidden" name="organizationId" value={organizations[0].id} />
+          )}
         </div>
 
         <div className="mb-4">
@@ -59,14 +35,14 @@ export default function Form({ organizations }: { organizations: Organization[] 
               name="name"
               type="text"
               placeholder="أدخل اسم الفرع"
-              className="peer block w-full rounded-md border border-gray-200 py-2 px-3 text-sm outline-2 placeholder:text-gray-500"
+              className="peer block w-full rounded-md border border-border py-2 px-3 text-sm outline-2 placeholder:text-muted-foreground"
               aria-describedby="name-error"
             />
           </div>
           <div id="name-error" aria-live="polite" aria-atomic="true">
             {state.errors?.name &&
               state.errors.name.map((error: string) => (
-                <p key={error} className="mt-2 text-sm text-red-500">
+                <p key={error} className="mt-2 text-sm text-destructive">
                   {error}
                 </p>
               ))}
@@ -76,11 +52,11 @@ export default function Form({ organizations }: { organizations: Organization[] 
       <div className="mt-6 flex justify-end gap-4">
         <Link
           href="/dashboard/branches"
-          className="flex h-10 items-center rounded-lg bg-gray-100 px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200"
+          className="flex h-10 items-center rounded-lg bg-muted px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted"
         >
           إلغاء
         </Link>
-        <Button type="submit">إنشاء الفرع</Button>
+        <SubmitButton text="إنشاء الفرع" loadingText="جاري الإنشاء..." />
       </div>
     </form>
   );

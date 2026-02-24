@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { deleteUser } from "@/app/lib/actions/user";
 
 export function UpdateUser({ id }: { id: string }) {
     return (
         <Link
             href={`/dashboard/users/${id}/edit`}
-            className="rounded-md border p-2 hover:bg-gray-100 transition-colors hover:text-blue-600"
+            className="rounded-md border p-2 hover:bg-muted transition-colors hover:text-primary"
             title="تعديل"
         >
             <Pencil className="w-4 h-4" />
@@ -14,17 +14,14 @@ export function UpdateUser({ id }: { id: string }) {
     );
 }
 
+import { DeleteButton } from "@/app/ui/delete-button";
+
 export function DeleteUser({ id }: { id: string }) {
     const deleteUserWithId = deleteUser.bind(null, id);
 
     return (
         <form action={deleteUserWithId}>
-            <button
-                className="rounded-md border p-2 hover:bg-red-50 transition-colors hover:text-red-600"
-                title="حذف"
-            >
-                <Trash2 className="w-4 h-4" />
-            </button>
+            <DeleteButton action={deleteUserWithId} description="المستخدم" />
         </form>
     );
 }

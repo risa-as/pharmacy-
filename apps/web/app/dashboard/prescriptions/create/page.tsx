@@ -28,12 +28,12 @@ export default async function CreatePrescriptionPage() {
     return (
         <main className="mx-auto max-w-3xl" suppressHydrationWarning>
             <div className="mb-8 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
-                    <FileText className="h-6 w-6 text-blue-600" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                    <FileText className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800">وصفة طبية جديدة</h1>
-                    <p className="text-sm text-gray-500">أضف وصفة طبية للمريض</p>
+                    <h1 className="text-2xl font-bold text-foreground">وصفة طبية جديدة</h1>
+                    <p className="text-sm text-muted-foreground">أضف وصفة طبية للمريض</p>
                 </div>
             </div>
 

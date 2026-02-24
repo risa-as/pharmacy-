@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createPurchase } from "@/app/lib/actions/invoice";
 import { useFormState } from "react-dom";
-import { Plus, Trash2, FileText, ArrowRight } from "lucide-react";
+import { Plus, FileText, ArrowRight } from "lucide-react";
+import { DeleteButton } from "../delete-button";
 
 interface FormProps {
     suppliers: { id: string; name: string }[];
@@ -71,8 +72,8 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
     if (!mounted) {
         return (
             <div className="space-y-6" suppressHydrationWarning>
-                <div className="rounded-xl bg-white border border-gray-200 p-6 shadow-sm h-48 animate-pulse" />
-                <div className="rounded-xl bg-white border border-gray-200 p-6 shadow-sm h-64 animate-pulse" />
+                <div className="rounded-xl bg-card border border-border p-6 shadow-sm h-48 animate-pulse" />
+                <div className="rounded-xl bg-card border border-border p-6 shadow-sm h-64 animate-pulse" />
             </div>
         );
     }
@@ -80,17 +81,17 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
     return (
         <form action={dispatch} className="space-y-6" suppressHydrationWarning>
             {/* معلومات الفاتورة */}
-            <div className="rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">معلومات الفاتورة</h3>
+            <div className="rounded-xl bg-card border border-border p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-foreground mb-4">معلومات الفاتورة</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label htmlFor="supplierId" className="mb-2 block text-sm font-bold text-gray-700">
+                        <label htmlFor="supplierId" className="mb-2 block text-sm font-bold text-foreground">
                             المورد
                         </label>
                         <select
                             id="supplierId"
                             name="supplierId"
-                            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                             defaultValue=""
                             required
                         >
@@ -99,13 +100,13 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-gray-700">
+                        <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-foreground">
                             الفرع
                         </label>
                         <select
                             id="branchId"
                             name="branchId"
-                            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                             defaultValue=""
                             required
                         >
@@ -114,14 +115,14 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="invoiceNumber" className="mb-2 block text-sm font-bold text-gray-700">
+                        <label htmlFor="invoiceNumber" className="mb-2 block text-sm font-bold text-foreground">
                             رقم الفاتورة (اختياري)
                         </label>
                         <input
                             id="invoiceNumber"
                             name="invoiceNumber"
                             type="text"
-                            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-lg border border-border px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-blue-100"
                             placeholder="INV-2024-001"
                             dir="ltr"
                         />
@@ -130,68 +131,68 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
             </div>
 
             {/* إضافة عناصر */}
-            <div className="rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">إضافة أصناف</h3>
+            <div className="rounded-xl bg-card border border-border p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-foreground mb-4">إضافة أصناف</h3>
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     <div className="col-span-2">
-                        <label className="text-xs font-bold text-gray-600">الدواء</label>
+                        <label className="text-xs font-bold text-muted-foreground">الدواء</label>
                         <select
                             value={selectedDrug}
                             onChange={e => setSelectedDrug(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
                         >
                             <option value="">اختر الدواء...</option>
                             {drugs.map(d => <option key={d.id} value={d.id}>{d.tradeName} ({d.barcode})</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-gray-600">رقم الدفعة</label>
+                        <label className="text-xs font-bold text-muted-foreground">رقم الدفعة</label>
                         <input
                             type="text"
                             value={batchNumber}
                             onChange={e => setBatchNumber(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
                             placeholder="LOT123"
                             dir="ltr"
                         />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-gray-600">تاريخ الانتهاء</label>
+                        <label className="text-xs font-bold text-muted-foreground">تاريخ الانتهاء</label>
                         <input
                             type="date"
                             value={expiryDate}
                             onChange={e => setExpiryDate(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
                         />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-gray-600">الكمية</label>
+                        <label className="text-xs font-bold text-muted-foreground">الكمية</label>
                         <input
                             type="number"
                             value={quantity}
                             onChange={e => setQuantity(Number(e.target.value))}
-                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
                             min="1"
                         />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-gray-600">سعر الشراء</label>
+                        <label className="text-xs font-bold text-muted-foreground">سعر الشراء</label>
                         <input
                             type="number"
                             value={cost}
                             onChange={e => setCost(Number(e.target.value))}
-                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
                             min="0"
                             step="0.01"
                         />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-gray-600">سعر البيع</label>
+                        <label className="text-xs font-bold text-muted-foreground">سعر البيع</label>
                         <input
                             type="number"
                             value={sellingPrice}
                             onChange={e => setSellingPrice(Number(e.target.value))}
-                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-blue-100"
                             min="0"
                             step="0.01"
                         />
@@ -200,7 +201,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                         <button
                             type="button"
                             onClick={addItem}
-                            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg font-bold transition-colors"
+                            className="w-full flex items-center justify-center gap-2 bg-success hover:bg-green-700 text-white py-2.5 rounded-lg font-bold transition-colors"
                         >
                             <Plus className="w-5 h-5" />
                             إضافة للفاتورة
@@ -210,22 +211,22 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
             </div>
 
             {/* جدول العناصر */}
-            <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+            <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
                 <table className="min-w-full text-sm">
                     <thead>
-                        <tr className="border-b bg-gray-50 text-right">
-                            <th className="px-4 py-3 font-bold text-gray-700">الدواء</th>
-                            <th className="px-4 py-3 font-bold text-gray-700">الدفعة</th>
-                            <th className="px-4 py-3 font-bold text-gray-700">الانتهاء</th>
-                            <th className="px-4 py-3 font-bold text-gray-700">الكمية</th>
-                            <th className="px-4 py-3 font-bold text-gray-700">السعر</th>
-                            <th className="px-4 py-3 font-bold text-gray-700">الإجمالي</th>
-                            <th className="px-4 py-3 font-bold text-gray-700">حذف</th>
+                        <tr className="border-b bg-muted text-right">
+                            <th className="px-4 py-3 font-bold text-foreground">الدواء</th>
+                            <th className="px-4 py-3 font-bold text-foreground">الدفعة</th>
+                            <th className="px-4 py-3 font-bold text-foreground">الانتهاء</th>
+                            <th className="px-4 py-3 font-bold text-foreground">الكمية</th>
+                            <th className="px-4 py-3 font-bold text-foreground">السعر</th>
+                            <th className="px-4 py-3 font-bold text-foreground">الإجمالي</th>
+                            <th className="px-4 py-3 font-bold text-foreground">حذف</th>
                         </tr>
                     </thead>
                     <tbody>
                         {items.map((item, idx) => (
-                            <tr key={idx} className="border-b hover:bg-gray-50">
+                            <tr key={idx} className="border-b hover:bg-muted">
                                 <td className="px-4 py-3 font-medium">{item.drugName}</td>
                                 <td className="px-4 py-3 font-mono text-xs">{item.batchNumber}</td>
                                 <td className="px-4 py-3">{item.expiryDate}</td>
@@ -233,19 +234,17 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                                 <td className="px-4 py-3">{item.cost.toLocaleString()}</td>
                                 <td className="px-4 py-3 font-bold">{(item.quantity * item.cost).toLocaleString()}</td>
                                 <td className="px-4 py-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => removeItem(idx)}
-                                        className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    <DeleteButton
+                                        onConfirm={() => removeItem(idx)}
+                                        description="الصنف من الفاتورة"
+                                        className="text-destructive hover:text-destructive border-none p-1 hover:bg-destructive/10 rounded w-auto h-auto"
+                                    />
                                 </td>
                             </tr>
                         ))}
                         {items.length === 0 && (
                             <tr>
-                                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                                     <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
                                     لم يتم إضافة أصناف بعد
                                 </td>
@@ -254,7 +253,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                     </tbody>
                     {items.length > 0 && (
                         <tfoot>
-                            <tr className="bg-blue-50 font-bold text-blue-800">
+                            <tr className="bg-primary/10 font-bold text-blue-800">
                                 <td colSpan={5} className="px-4 py-3 text-left">إجمالي الفاتورة:</td>
                                 <td colSpan={2} className="px-4 py-3">{totalAmount.toLocaleString()} د.ع</td>
                             </tr>
@@ -267,7 +266,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
 
             {/* رسالة الخطأ */}
             {state.message && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
+                <div className="rounded-lg bg-destructive/10 border border-red-200 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
             )}
@@ -276,14 +275,14 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
             <div className="flex gap-4">
                 <button
                     type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-white transition-colors hover:bg-primary/90"
                 >
                     <FileText className="h-5 w-5" />
                     حفظ الفاتورة
                 </button>
                 <Link
                     href="/dashboard/invoices"
-                    className="flex items-center gap-2 rounded-lg bg-gray-100 px-6 py-3 font-bold text-gray-600 transition-colors hover:bg-gray-200"
+                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-colors hover:bg-muted"
                 >
                     <ArrowRight className="h-5 w-5" />
                     إلغاء

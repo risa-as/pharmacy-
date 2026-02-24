@@ -1,22 +1,20 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+
 import { deletePurchase } from "@/app/lib/actions/invoice";
 
+import { DeleteButton } from "@/app/ui/delete-button";
+
 export function DeleteInvoice({ id }: { id: string }) {
-    const handleDelete = async () => {
-        if (confirm("هل أنت متأكد من حذف هذه الفاتورة؟ سيتم حذف جميع العناصر المرتبطة بها.")) {
-            await deletePurchase(id);
-        }
+    const deleteInvoiceWithId = async (formData: FormData) => {
+        await deletePurchase(id);
     };
 
     return (
-        <button
-            onClick={handleDelete}
-            className="rounded-lg border border-gray-200 p-2 hover:bg-red-50 hover:border-red-200 transition-colors"
-            title="حذف"
-        >
-            <Trash2 className="w-4 h-4 text-red-500" />
-        </button>
+        <DeleteButton
+            action={deleteInvoiceWithId}
+            description="الفاتورة"
+            className="rounded-lg border border-border hover:border-border"
+        />
     );
 }

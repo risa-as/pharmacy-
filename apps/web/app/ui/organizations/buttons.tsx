@@ -1,26 +1,30 @@
 import Link from "next/link";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { deleteOrganization } from "@/app/lib/actions/organization";
 
 export function UpdateOrganization({ id }: { id: string }) {
     return (
         <Link
             href={`/dashboard/organizations/${id}/edit`}
-            className="rounded-md border p-2 hover:bg-gray-100 transition-colors hover:text-blue-600"
+            className="flex h-9 w-9 items-center justify-center rounded-md border p-0 transition-colors hover:bg-muted hover:text-primary"
         >
-            <Pencil className="w-5" />
+            <Pencil className="w-4 h-4" />
         </Link>
     );
 }
+
+import { DeleteButton } from "@/app/ui/delete-button";
 
 export function DeleteOrganization({ id }: { id: string }) {
     const deleteOrganizationWithId = deleteOrganization.bind(null, id);
 
     return (
         <form action={deleteOrganizationWithId}>
-            <button className="rounded-md border p-2 hover:bg-red-50 transition-colors hover:text-red-600">
-                <Trash2 className="w-5" />
-            </button>
+            <DeleteButton
+                action={deleteOrganizationWithId}
+                description="المنظمة"
+                className="flex h-9 w-9 items-center justify-center rounded-md border p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            />
         </form>
     );
 }
