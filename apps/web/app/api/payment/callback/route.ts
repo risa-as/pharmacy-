@@ -12,14 +12,14 @@ export async function GET(request: NextRequest) {
         if ("success" in result && result.success) {
             // Redirect to success page
             return NextResponse.redirect(
-                new URL("/dashboard/payments?message=تم الدفع بنجاح", request.url)
+                new URL("/dashboard/payments?message=تمت عملية الدفع بنجاح", request.url)
             );
         }
     }
 
     // Redirect to failure page
     return NextResponse.redirect(
-        new URL("/dashboard/payments?error=فشل الدفع", request.url)
+        new URL("/dashboard/payments?error=فشلت عملية الدفع", request.url)
     );
 }
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         const result = await verifyZainCashPayment(token);
 
         if ("success" in result && result.success) {
-            return NextResponse.json({ success: true, ...result });
+            return NextResponse.json(result);
         }
 
         return NextResponse.json({ error: result.error }, { status: 400 });

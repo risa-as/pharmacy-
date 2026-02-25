@@ -107,8 +107,40 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
 // حذف مريض
 export async function deletePatient(id: string) {
     try {
-        await prisma.patient.delete({ where: { id } });
+        // التحقق من وجود ارتباطات
+        const patient = await prisma.patient.findUnique({
+            where: { id },
+            include: {
+                _count: { select: { sales: true } },
+                loyaltyAccount: true,
+            },
+        });
+
+        if (!patient) {
+            return { message: "المريض غير موجود" };
+        }
+
+        const reasons: string[] = [];
+        if (patient._count.sales > 0) reasons.push(`${patient._count.sales} فاتورة مبيعات`);
+        if (patient.loyaltyAccount) reasons.push("حساب ولاء");
+
+        if (reasons.length > 0) {
+            return { message: `لا يمكن حذف المريض لوجود ارتباطات: ${reasons.join("، ")}` };
+        }
+
+        // حذف آمن — لا توجد ارتباطات حرجة
+        await prisma.$transaction(async (tx) => {
+            // حذف الوصفات إن وُجدت
+            const prescriptions = await tx.prescription.findMany({ where: { patientId: id }, select: { id: true } });
+            if (prescriptions.length > 0) {
+                await tx.prescriptionItem.deleteMany({ where: { prescriptionId: { in: prescriptions.map(p => p.id) } } });
+                await tx.prescription.deleteMany({ where: { patientId: id } });
+            }
+            await tx.insurancePolicy.deleteMany({ where: { patientId: id } });
+            await tx.patient.delete({ where: { id } });
+        });
     } catch (error) {
+        console.error("Delete patient error:", error);
         return { message: "حدث خطأ أثناء حذف المريض" };
     }
 

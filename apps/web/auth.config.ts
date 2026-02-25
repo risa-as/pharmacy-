@@ -1,4 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
+import { getUserPermissions } from "@/app/lib/permissions";
+import { canAccessPath } from "@/app/lib/route-permissions";
 
 export const authConfig = {
   pages: {
@@ -10,8 +12,21 @@ export const authConfig = {
       const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
 
       if (isOnDashboard) {
-        if (isLoggedIn) return true;
-        return false; // Redirect unauthenticated users to login page
+        if (!isLoggedIn) return false; // Redirect to login
+
+        // Admin has full access
+        const role = auth?.user?.role;
+        if (role === "ADMIN") return true;
+
+        // Check granular permissions for non-admin users
+        const user = { role: role || "CASHIER", permissions: (auth?.user as any)?.permissions };
+        const perms = getUserPermissions(user);
+
+        if (!canAccessPath(nextUrl.pathname, perms)) {
+          return Response.redirect(new URL("/dashboard?denied=1", nextUrl));
+        }
+
+        return true;
       } else if (isLoggedIn) {
         // Redirect logged-in users away from login page to dashboard
         if (nextUrl.pathname === "/login") {
@@ -19,6 +34,24 @@ export const authConfig = {
         }
       }
       return true;
+    },
+    async jwt({ token, user }) {
+      if (user) {
+        token.role = user.role;
+        token.id = user.id as string;
+        token.branchId = user.branchId;
+        token.permissions = (user as any).permissions || null;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.role = token.role as string;
+        session.user.id = token.id as string;
+        session.user.branchId = token.branchId as string;
+        (session.user as any).permissions = token.permissions || null;
+      }
+      return session;
     },
   },
   providers: [], // Add providers with an empty array for now

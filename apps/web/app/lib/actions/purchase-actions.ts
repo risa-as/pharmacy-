@@ -1,0 +1,223 @@
+'use server';
+
+import { prisma } from '@/app/lib/prisma';
+import { revalidatePath } from 'next/cache';
+
+export async function getLowStockInventory(branchId?: string) {
+    // 1. Fetch inventory based on branchId (if provided)
+    const whereClause = branchId ? { branchId } : {};
+
+    const inventories = await prisma.inventory.findMany({
+        where: whereClause,
+        include: {
+            batches: true,
+            branch: true,
+        }
+    });
+
+    // 2. Fetch all Global Drugs to map names
+    const drugIds = inventories.map(i => i.drugId);
+    const drugs = await prisma.globalDrug.findMany({
+        where: { id: { in: drugIds } }
+    });
+    const drugMap = new Map(drugs.map(d => [d.id, d]));
+
+    // 3. Filter for Low Stock
+    const lowStockItems = inventories.map(inv => {
+        const currentStock = inv.batches.reduce((sum, b) => sum + b.quantity, 0);
+        const drug = drugMap.get(inv.drugId);
+
+        return {
+            inventoryId: inv.id,
+            drugId: inv.drugId,
+            drugName: drug?.tradeName || 'Unknown',
+            barcode: drug?.barcode,
+            currentStock,
+            minStock: inv.minStock,
+            maxStock: inv.maxStock,
+            cost: inv.cost,
+            suggestedQty: Math.max(0, inv.maxStock - currentStock),
+            branchId: inv.branchId,
+            branchName: inv.branch.name
+        };
+    }).filter(item => item.currentStock <= item.minStock);
+
+    // 4. Exclude items already in PENDING purchases
+    const pendingPurchases = await prisma.purchase.findMany({
+        where: {
+            status: 'PENDING',
+            branchId: branchId // Filter by branch if provided
+        },
+        include: { items: true }
+    });
+
+    const pendingDrugIds = new Set<string>();
+    pendingPurchases.forEach(p => {
+        p.items.forEach(i => pendingDrugIds.add(i.drugId));
+    });
+
+    return lowStockItems.filter(item => !pendingDrugIds.has(item.drugId));
+}
+
+export async function createSmartPurchase(branchId: string, supplierId: string, items: any[]) {
+    try {
+        const total = items.reduce((sum, item) => sum + (item.quantity * item.cost), 0);
+
+        const purchase = await prisma.purchase.create({
+            data: {
+                branchId,
+                supplierId,
+                total,
+                status: 'PENDING',
+                items: {
+                    create: items.map((item: any) => ({
+                        drugId: item.drugId,
+                        quantity: item.quantity,
+                        cost: item.cost
+                    }))
+                }
+            }
+        });
+
+        revalidatePath('/dashboard/purchases');
+        return { success: true, purchaseId: purchase.id };
+    } catch (error) {
+        console.error('Smart Purchase Error:', error);
+        return { success: false, error: 'فشل في إنشاء طلب الشراء. يرجى المحاولة مرة أخرى.' };
+    }
+}
+
+export async function getSuppliers() {
+    return await prisma.supplier.findMany({
+        orderBy: { name: 'asc' }
+    });
+}
+
+export async function getPurchases(branchId?: string) {
+    const whereClause = branchId ? { branchId } : {};
+    return await prisma.purchase.findMany({
+        where: whereClause,
+        include: {
+            supplier: true,
+            branch: true,
+            _count: { select: { items: true } }
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+}
+
+export async function getPurchaseDetails(id: string) {
+    const purchase = await prisma.purchase.findUnique({
+        where: { id },
+        include: {
+            supplier: true,
+            items: true
+        }
+    });
+
+    if (!purchase) return null;
+
+    // Fetch drug names efficiently
+    const drugIds = purchase.items.map(i => i.drugId);
+    const drugs = await prisma.globalDrug.findMany({
+        where: { id: { in: drugIds } },
+        select: { id: true, tradeName: true }
+    });
+    const drugMap = new Map(drugs.map(d => [d.id, d.tradeName]));
+
+    return {
+        ...purchase,
+        items: purchase.items.map(item => ({
+            ...item,
+            drugName: drugMap.get(item.drugId) || 'Unknown Drug'
+        }))
+    };
+}
+
+export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
+    // 1. Get Purchase to verify
+    const purchase = await prisma.purchase.findUnique({
+        where: { id: purchaseId },
+        include: { items: true, supplier: true }
+    });
+
+    if (!purchase) throw new Error("لم يتم العثور على طلب الشراء");
+    if (purchase.status !== 'PENDING') throw new Error("تمت معالجة هذا الطلب مسبقاً");
+
+    return await prisma.$transaction(async (tx) => {
+        // 2. Process each item
+        for (const receivedItem of items) {
+            const purchaseItem = purchase.items.find(i => i.id === receivedItem.itemId);
+            if (!purchaseItem) continue;
+
+            // Find Inventory for this branch & drug
+            const inventory = await tx.inventory.findFirst({
+                where: {
+                    branchId: purchase.branchId,
+                    drugId: purchaseItem.drugId
+                }
+            });
+
+            if (!inventory) {
+                // Should not happen if Smart Order created it, but maybe manual order for new drug?
+                // If not found, create Inventory?
+                // Let's assume it exists for now or throw.
+                throw new Error(`لم يتم العثور على المخزون للدواء ${purchaseItem.drugId}`);
+            }
+
+            // Create Batch
+            await tx.batch.create({
+                data: {
+                    inventoryId: inventory.id,
+                    quantity: receivedItem.quantity,
+                    expiryDate: receivedItem.expiryDate,
+                    batchNumber: receivedItem.batchNumber,
+                    costPrice: purchaseItem.cost
+                }
+            });
+
+            // Update Inventory Cost (Last Cost Strategy)
+            await tx.inventory.update({
+                where: { id: inventory.id },
+                data: {
+                    cost: purchaseItem.cost,
+                    updatedAt: new Date()
+                }
+            });
+        }
+
+        // 3. Handle payment tracking
+        const paidAmount = isPaid ? purchase.total : 0;
+
+        if (isPaid) {
+            await tx.expense.create({
+                data: {
+                    branchId: purchase.branchId,
+                    amount: purchase.total,
+                    category: 'مشتريات بضاعة',
+                    description: `فاتورة شراء #${purchase.invoiceNumber || purchase.id.slice(0, 8)} من: ${purchase.supplier.name}`,
+                    date: new Date()
+                }
+            });
+        }
+
+        // 4. Update supplier balance (unpaid portion)
+        const unpaidAmount = purchase.total - paidAmount;
+        if (unpaidAmount > 0) {
+            await tx.supplier.update({
+                where: { id: purchase.supplierId },
+                data: { balance: { increment: unpaidAmount } }
+            });
+        }
+
+        // 5. Update Purchase Status
+        return await tx.purchase.update({
+            where: { id: purchaseId },
+            data: {
+                status: 'COMPLETED',
+                paidAmount,
+                updatedAt: new Date()
+            }
+        });
+    });
+}

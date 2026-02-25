@@ -5,6 +5,7 @@ import { Button } from "@faramace/ui";
 import { useFormState } from "react-dom";
 import { createBranch } from "@/app/lib/actions/branch";
 import { SubmitButton } from "@/app/ui/submit-button";
+import UpgradePrompt from "@/app/ui/upgrade-prompt";
 
 interface Organization {
   id: string;
@@ -49,6 +50,15 @@ export default function Form({ organizations }: { organizations: Organization[] 
           </div>
         </div>
       </div>
+      {/* Upgrade prompt shown when plan limit is reached */}
+      {(state as any).limitReached && (
+        <UpgradePrompt
+          message={(state as any).message}
+          current={(state as any).current}
+          max={(state as any).max}
+        />
+      )}
+
       <div className="mt-6 flex justify-end gap-4">
         <Link
           href="/dashboard/branches"
@@ -56,7 +66,9 @@ export default function Form({ organizations }: { organizations: Organization[] 
         >
           إلغاء
         </Link>
-        <SubmitButton text="إنشاء الفرع" loadingText="جاري الإنشاء..." />
+        {!(state as any).limitReached && (
+          <SubmitButton text="إنشاء الفرع" loadingText="جاري الإنشاء..." />
+        )}
       </div>
     </form>
   );

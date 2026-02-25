@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Patients Hub Layout
  *

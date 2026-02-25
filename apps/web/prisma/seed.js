@@ -292,6 +292,90 @@ async function main() {
     });
     console.log("   ✓ تم إنشاء وصفة طبية للمريض الأول");
 
+    // 11. إنشاء إعدادات الشركة (مهم جداً)
+    console.log("\n⚙️ إنشاء إعدادات الشركة...");
+    await prisma.companySettings.create({
+        data: {
+            name: "صيدلية فاراماس النموذجية",
+            phone: "07700000000",
+            address: "بغداد - الكرادة - شارع 62",
+            currency: "IQD",
+            email: "contact@faramace-demo.com",
+            website: "www.faramace.com",
+        }
+    });
+    console.log("   ✓ تم إنشاء الإعدادات الافتراضية");
+
+    // 12. إنشاء مبيعات ومصروفات (للتقارير)
+    console.log("\n💰 إنشاء بيانات مالية للتقارير (آخر 30 يوم)...");
+
+    const today = new Date();
+    const salesData = [];
+    const expensesData = [];
+
+    // دالة مساعدة لإنشاء تاريخ عشوائي في آخر 30 يوم
+    const getRandomDate = (start, end) => {
+        return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+    };
+
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(today.getDate() - 30);
+
+    // إنشاء 50 عملية بيع عشوائية
+    for (let i = 0; i < 50; i++) {
+        const saleDate = getRandomDate(oneMonthAgo, today);
+        const randomUser = users[Math.floor(Math.random() * users.length)]; // Random user (Admin/Pharmacist/Cashier)
+        const randomTotal = Math.floor(Math.random() * 50000) + 5000; // 5k to 55k
+
+        salesData.push({
+            branchId: branches[0].id,
+            userId: randomUser.id, // Link to user for performance reports
+            patientId: Math.random() > 0.7 ? patients[0].id : null, // 30% chance of linking to patient
+            total: randomTotal,
+            createdAt: saleDate,
+            items: {
+                create: [
+                    {
+                        drugId: drugs[0].id,
+                        quantity: Math.floor(Math.random() * 3) + 1,
+                        price: 1000
+                    }
+                ]
+            },
+            payment: {
+                create: {
+                    amount: randomTotal,
+                    method: ["CASH", "CARD", "ZAIN_CASH"][Math.floor(Math.random() * 3)],
+                    status: "COMPLETED"
+                }
+            }
+        });
+    }
+
+    // إنشاء 10 مصروفات عشوائية
+    for (let i = 0; i < 10; i++) {
+        const expenseDate = getRandomDate(oneMonthAgo, today);
+        expensesData.push({
+            branchId: branches[0].id,
+            category: ["إيجار", "كهرباء", "رواتب", "نثرية"][Math.floor(Math.random() * 4)],
+            amount: Math.floor(Math.random() * 100000) + 25000,
+            description: "مصروف تجريبي",
+            date: expenseDate,
+        });
+    }
+
+    // حفظ المبيعات
+    for (const sale of salesData) {
+        await prisma.sale.create({ data: sale });
+    }
+
+    // حفظ المصروفات
+    for (const expense of expensesData) {
+        await prisma.expense.create({ data: expense });
+    }
+
+    console.log(`   ✓ تم إنشاء ${salesData.length} عملية بيع و ${expensesData.length} مصروف`);
+
     console.log("\n✅ تم إنشاء جميع البيانات التجريبية بنجاح!");
     console.log("\n📋 ملخص:");
     console.log(`   • المنظمات: 1`);
@@ -302,6 +386,8 @@ async function main() {
     console.log(`   • المخزون: ${inventoryItems.length}`);
     console.log(`   • المرضى: ${patients.length}`);
     console.log(`   • شركات التأمين: ${insuranceCompanies.length}`);
+    console.log(`   • المبيعات: ${salesData.length}`);
+    console.log(`   • المصروفات: ${expensesData.length}`);
     console.log("\n🔐 بيانات تسجيل الدخول:");
     console.log("   البريد: admin@faramace.com");
     console.log("   كلمة المرور: 123456");

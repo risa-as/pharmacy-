@@ -4,6 +4,7 @@ import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { checkPlanLimit } from "@/app/lib/saas-guards";
 
 const prisma = new PrismaClient();
 
@@ -30,6 +31,18 @@ export async function createBranch(prevState: any, formData: FormData) {
   }
 
   const { name, organizationId } = validatedFields.data;
+
+  // Iron Wall: enforce per-plan branch limit
+  const limitCheck = await checkPlanLimit(organizationId, "branches");
+  if (!limitCheck.allowed) {
+    return {
+      limitReached: true,
+      current: limitCheck.current,
+      max: limitCheck.max,
+      upgradeRequired: true,
+      message: `لقد وصلت إلى الحد الأقصى من الفروع في خطتك (${limitCheck.current}/${limitCheck.max}). يرجى الترقية للاستمرار.`,
+    };
+  }
 
   try {
     await prisma.branch.create({

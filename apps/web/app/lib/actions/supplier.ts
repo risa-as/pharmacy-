@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 
 const SupplierSchema = z.object({
     id: z.string(),
-    name: z.string().min(1, "Supplier name is required"),
+    name: z.string().min(1, "اسم المورد مطلوب"),
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().optional(),
     address: z.string().optional(),
@@ -29,7 +29,7 @@ export async function createSupplier(prevState: any, formData: FormData) {
     if (!validatedFields.success) {
         return {
             errors: validatedFields.error.flatten().fieldErrors,
-            message: "Missing Fields. Failed to Create Supplier.",
+            message: "يرجى ملء جميع الحقول المطلوبة.",
         };
     }
 
@@ -46,7 +46,7 @@ export async function createSupplier(prevState: any, formData: FormData) {
         });
     } catch (error) {
         return {
-            message: "Database Error: Failed to Create Supplier.",
+            message: "حدث خطأ أثناء إضافة المورد. يرجى المحاولة مرة أخرى.",
         };
     }
 
@@ -56,12 +56,24 @@ export async function createSupplier(prevState: any, formData: FormData) {
 
 export async function deleteSupplier(id: string) {
     try {
+        // Check for existing purchases
+        const purchaseCount = await prisma.purchase.count({
+            where: { supplierId: id },
+        });
+
+        if (purchaseCount > 0) {
+            return {
+                message: "لا يمكن حذف المورد لوجود فواتير شراء مرتبطة به.",
+            };
+        }
+
         await prisma.supplier.delete({
             where: { id },
         });
         revalidatePath("/dashboard/suppliers");
     } catch (error) {
-        return { message: "Database Error: Failed to Delete Supplier." };
+        console.error("Delete Supplier Error:", error);
+        return { message: "خطأ في قاعدة البيانات: فشل حذف المورد." };
     }
 }
 
@@ -87,7 +99,7 @@ export async function updateSupplier(id: string, prevState: any, formData: FormD
     if (!validatedFields.success) {
         return {
             errors: validatedFields.error.flatten().fieldErrors,
-            message: "Missing Fields. Failed to Update Supplier.",
+            message: "يرجى ملء جميع الحقول المطلوبة.",
         };
     }
 
@@ -105,7 +117,7 @@ export async function updateSupplier(id: string, prevState: any, formData: FormD
         });
     } catch (error) {
         return {
-            message: "Database Error: Failed to Update Supplier.",
+            message: "حدث خطأ أثناء تحديث بيانات المورد. يرجى المحاولة مرة أخرى.",
         };
     }
 

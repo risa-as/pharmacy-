@@ -1,9 +1,8 @@
 "use server";
 
-import { PrismaClient, PaymentMethod, PaymentStatus } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
+import { PaymentMethod } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-
-const prisma = new PrismaClient();
 
 // إنشاء دفعة جديدة
 export async function createPayment(
@@ -24,6 +23,7 @@ export async function createPayment(
         });
 
         revalidatePath("/dashboard/sales");
+        revalidatePath("/dashboard/payments");
         return { success: true, payment };
     } catch (error) {
         console.error(error);
@@ -40,6 +40,7 @@ export async function refundPayment(paymentId: string) {
         });
 
         revalidatePath("/dashboard/sales");
+        revalidatePath("/dashboard/payments");
         return { success: true };
     } catch (error) {
         return { message: "حدث خطأ أثناء استرجاع الدفعة" };
@@ -58,7 +59,7 @@ export async function getPaymentStats() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [totalCash, totalCard, totalMobile, totalTransfer] = await Promise.all([
+    const [totalCash, totalCard, totalMobile, totalTransfer, totalZainCash] = await Promise.all([
         prisma.payment.aggregate({
             where: { method: "CASH", status: "COMPLETED", createdAt: { gte: today } },
             _sum: { amount: true },
@@ -75,6 +76,10 @@ export async function getPaymentStats() {
             where: { method: "BANK_TRANSFER", status: "COMPLETED", createdAt: { gte: today } },
             _sum: { amount: true },
         }),
+        prisma.payment.aggregate({
+            where: { method: "ZAIN_CASH", status: "COMPLETED", createdAt: { gte: today } },
+            _sum: { amount: true },
+        }),
     ]);
 
     return {
@@ -82,5 +87,6 @@ export async function getPaymentStats() {
         card: totalCard._sum.amount || 0,
         mobile: totalMobile._sum.amount || 0,
         transfer: totalTransfer._sum.amount || 0,
+        zainCash: totalZainCash._sum.amount || 0,
     };
 }

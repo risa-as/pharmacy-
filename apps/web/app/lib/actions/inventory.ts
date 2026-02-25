@@ -127,6 +127,7 @@ export async function addBatch(prevState: any, formData: FormData) {
     const inventoryId = formData.get("inventoryId") as string;
     const batchNumber = formData.get("batchNumber") as string;
     const quantity = parseInt(formData.get("quantity") as string);
+    const costPrice = parseFloat(formData.get("costPrice") as string) || 0;
     const expiryDate = new Date(formData.get("expiryDate") as string);
 
     if (!inventoryId || !batchNumber || !quantity || !expiryDate) {
@@ -139,6 +140,7 @@ export async function addBatch(prevState: any, formData: FormData) {
                 inventoryId,
                 batchNumber,
                 quantity,
+                costPrice,
                 expiryDate,
             },
         });

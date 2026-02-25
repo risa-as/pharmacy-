@@ -1,0 +1,194 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/app/lib/prisma";
+
+type AckStatus = "processed" | "duplicate" | "noop";
+
+function readIdempotencyKey(req: Request, body: any): string {
+    const fromHeader = String(req.headers.get("x-idempotency-key") || "").trim();
+    const fromBody = String(body?.clientActionId || "").trim();
+    return (fromHeader || fromBody).slice(0, 120);
+}
+
+function sanitizeBatchKey(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+}
+
+function makeAck(status: AckStatus, idempotencyKey: string) {
+    return {
+        status,
+        idempotencyKey: idempotencyKey || null,
+        serverTime: new Date().toISOString(),
+    };
+}
+
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const idempotencyKey = readIdempotencyKey(req, body);
+
+        if (idempotencyKey) {
+            const existingLog = await prisma.syncActionLog.findUnique({
+                where: { idempotencyKey }
+            });
+            if (existingLog) {
+                console.log(`[Create-Quick API] Duplicate request detected. Key: ${idempotencyKey}`);
+                return NextResponse.json({
+                    success: true,
+                    message: 'Duplicate creation ignored safely',
+                    ack: makeAck("duplicate", idempotencyKey)
+                });
+            }
+        }
+
+        const {
+            id,
+            barcode,
+            tradeName,
+            scientificName,
+            origin,
+            branchId,
+            price,
+            cost,
+            minStock,
+            maxStock,
+            quantity,
+            expiryDate,
+            inventoryId,
+        } = body;
+
+        if (!barcode || !tradeName || !branchId) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    message: "Missing required fields (Barcode, Name, Branch)",
+                    ack: makeAck("noop", idempotencyKey),
+                },
+                { status: 400 }
+            );
+        }
+
+        const parsedQuantity = Number.parseInt(String(quantity ?? 0), 10) || 0;
+        const parsedPrice = Number.parseFloat(String(price ?? 0)) || 0;
+        const parsedCost = Number.parseFloat(String(cost ?? 0)) || 0;
+        const parsedMin = Number.parseInt(String(minStock ?? 0), 10) || 0;
+        const parsedMax = Number.parseInt(String(maxStock ?? 100), 10) || 100;
+
+        const result = await prisma.$transaction(async (tx) => {
+            let drug = await tx.globalDrug.findFirst({
+                where: id ? { id } : { barcode }
+            });
+
+            if (drug) {
+                drug = await tx.globalDrug.update({
+                    where: { id: drug.id },
+                    data: {
+                        tradeName,
+                        scientificName: scientificName || tradeName,
+                        origin: origin || drug.origin || "unknown",
+                    }
+                });
+            } else {
+                drug = await tx.globalDrug.create({
+                    data: {
+                        id: id || undefined,
+                        barcode,
+                        tradeName,
+                        scientificName: scientificName || tradeName,
+                        origin: origin || "unknown",
+                    }
+                });
+            }
+
+            const branch = await tx.branch.findUnique({ where: { id: branchId } });
+            if (!branch) throw new Error("Branch not found");
+
+            let inventory = inventoryId
+                ? await tx.inventory.findUnique({ where: { id: inventoryId } })
+                : null;
+
+            if (!inventory) {
+                inventory = await tx.inventory.findFirst({
+                    where: {
+                        drugId: drug.id,
+                        branchId: branch.id
+                    }
+                });
+            }
+
+            if (inventory) {
+                inventory = await tx.inventory.update({
+                    where: { id: inventory.id },
+                    data: {
+                        price: parsedPrice,
+                        cost: parsedCost,
+                        minStock: parsedMin,
+                        maxStock: parsedMax,
+                    }
+                });
+            } else {
+                inventory = await tx.inventory.create({
+                    data: {
+                        id: inventoryId || undefined,
+                        branchId: branch.id,
+                        drugId: drug.id,
+                        price: parsedPrice,
+                        cost: parsedCost,
+                        minStock: parsedMin,
+                        maxStock: parsedMax,
+                    }
+                });
+            }
+
+            let ackStatus: AckStatus = parsedQuantity > 0 ? "processed" : "noop";
+            if (parsedQuantity > 0) {
+                const batchNumber = idempotencyKey
+                    ? `SYNC-${sanitizeBatchKey(idempotencyKey)}`
+                    : "INITIAL-" + new Date().getFullYear();
+
+                await tx.batch.create({
+                    data: {
+                        inventoryId: inventory.id,
+                        quantity: parsedQuantity,
+                        expiryDate: expiryDate
+                            ? new Date(expiryDate)
+                            : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+                        batchNumber,
+                        costPrice: parsedCost,
+                    }
+                });
+            }
+
+            if (idempotencyKey) {
+                await tx.syncActionLog.create({
+                    data: {
+                        idempotencyKey,
+                        actionType: 'CREATE_DRUG',
+                        branchId,
+                        status: 'PROCESSED'
+                    }
+                });
+            }
+
+            return { drug, inventory, ackStatus };
+        });
+
+        return NextResponse.json({
+            success: true,
+            data: {
+                drug: result.drug,
+                inventory: result.inventory,
+            },
+            ack: makeAck(result.ackStatus, idempotencyKey),
+        });
+    } catch (error: any) {
+        console.error("Quick create failed:", error);
+        return NextResponse.json(
+            {
+                success: false,
+                message: "Creation failed: " + error.message,
+                ack: makeAck("noop", ""),
+            },
+            { status: 500 }
+        );
+    }
+}

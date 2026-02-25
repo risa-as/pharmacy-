@@ -3,7 +3,7 @@
 /**
  * HubTabNav — Shared sticky glassmorphism tab bar for all hub pages.
  *
- * Used by: Inventory, Sales, Patients, Reports layout.tsx files.
+ * Used by: Inventory, Sales, Patients, Reports, Users layout.tsx files.
  * Each layout defines its own tabs + optional action buttons and passes
  * them in as props. The component handles active-state detection
  * automatically via usePathname().

@@ -14,7 +14,7 @@ const PurchaseItemSchema = z.object({
     cost: z.coerce.number().gt(0), // Cost Price
     sellingPrice: z.coerce.number().gt(0), // Public Price (updates inventory)
     expiryDate: z.string(), // YYYY-MM-DD
-    batchNumber: z.string().min(1, "Batch Number is required"),
+    batchNumber: z.string().min(1, "رقم الدفعة مطلوب"),
 });
 
 const PurchaseSchema = z.object({
@@ -31,14 +31,14 @@ export async function createPurchase(prevState: any, formData: FormData) {
     const invoiceNumber = formData.get("invoiceNumber");
 
     if (!rawItems || !supplierId || !branchId) {
-        return { message: "Missing required fields (Supplier, Branch, or Items)." };
+        return { message: "يرجى اختيار المورد والفرع وإضافة الأصناف." };
     }
 
     let items;
     try {
         items = JSON.parse(rawItems as string);
     } catch (e) {
-        return { message: "Invalid items data format." };
+        return { message: "صيغة بيانات الأصناف غير صحيحة." };
     }
 
     // Validate structure
@@ -47,7 +47,7 @@ export async function createPurchase(prevState: any, formData: FormData) {
 
     if (!itemsValidation.success) {
         console.error(itemsValidation.error);
-        return { message: "Invalid items data. Check Quantity, Prices, or Dates." };
+        return { message: "بيانات الأصناف غير صحيحة. يرجى مراجعة الكميات والأسعار والتواريخ." };
     }
 
     const validItems = itemsValidation.data;
@@ -113,7 +113,8 @@ export async function createPurchase(prevState: any, formData: FormData) {
                         inventoryId: inventoryId!,
                         batchNumber: item.batchNumber,
                         expiryDate: new Date(item.expiryDate),
-                        quantity: item.quantity
+                        quantity: item.quantity,
+                        costPrice: item.cost
                     }
                 });
             }
@@ -121,7 +122,7 @@ export async function createPurchase(prevState: any, formData: FormData) {
 
     } catch (error) {
         console.error("Transaction Error:", error);
-        return { message: "Failed to process invoice. Database Transaction Error." };
+        return { message: "فشل في معالجة الفاتورة. يرجى المحاولة مرة أخرى." };
     }
 
     revalidatePath("/dashboard/invoices");

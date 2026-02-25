@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@faramace/ui";
 import { createUser } from "@/app/lib/actions/create-user-safe";
 import { SubmitButton } from "@/app/ui/submit-button";
+import UpgradePrompt from "@/app/ui/upgrade-prompt";
 
 interface Branch {
     id: string;
@@ -115,8 +116,17 @@ export default function CreateUserForm({ branches }: { branches: Branch[] }) {
                 </div>
             </div>
 
-            {/* رسالة الخطأ العامة */}
-            {state.message && (
+            {/* Upgrade prompt when plan limit reached */}
+            {(state as any).limitReached && (
+                <UpgradePrompt
+                    message={(state as any).message}
+                    current={(state as any).current}
+                    max={(state as any).max}
+                />
+            )}
+
+            {/* Generic error message */}
+            {state.message && !(state as any).limitReached && (
                 <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
                     {state.message}
                 </div>
@@ -126,11 +136,13 @@ export default function CreateUserForm({ branches }: { branches: Branch[] }) {
                 <Button asChild variant="outline">
                     <Link href="/dashboard/users">إلغاء</Link>
                 </Button>
-                <SubmitButton
-                    text="إنشاء المستخدم"
-                    loadingText="جاري الإنشاء..."
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                />
+                {!(state as any).limitReached && (
+                    <SubmitButton
+                        text="إنشاء المستخدم"
+                        loadingText="جاري الإنشاء..."
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    />
+                )}
             </div>
         </form>
     );

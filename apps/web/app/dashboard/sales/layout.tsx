@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Sales Hub Layout
  *

@@ -42,15 +42,46 @@ import {
     Crown,
     MessageSquare,
     ShoppingBag,
+    ChevronDown,
 } from "lucide-react";
 import { handleSignOut } from "@/app/lib/actions/auth-actions";
 import { type UserPermissions } from "@/app/lib/permissions";
 import { getLinkPermission } from "@/app/lib/route-permissions";
 
+interface NavLink {
+    name: string;
+    href: string;
+    icon: any;
+    subLinks?: { name: string; href: string }[];
+}
+
 interface NavSection {
     label: string;
-    links: { name: string; href: string; icon: any }[];
+    links: NavLink[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPER_ADMIN Control Tower — platform operator nav (tenant management only).
+// Shown exclusively when userRole === 'SUPER_ADMIN'.
+// ─────────────────────────────────────────────────────────────────────────────
+const controlTowerSections: NavSection[] = [
+    {
+        label: "",
+        links: [{ name: "نظرة عامة", href: "/dashboard", icon: BarChart3 }],
+    },
+    {
+        label: "",
+        links: [{ name: "المؤسسات", href: "/dashboard/tenants", icon: Building2 }],
+    },
+    {
+        label: "",
+        links: [{ name: "التراخيص", href: "/dashboard/admin/licenses", icon: Crown }],
+    },
+    {
+        label: "",
+        links: [{ name: "الإعدادات", href: "/dashboard/settings", icon: SettingsIcon }],
+    },
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MVP SIDEBAR — 11 core items (reduced from 43).
@@ -65,45 +96,69 @@ const sections: NavSection[] = [
         ],
     },
     {
-        label: "الصيدلة",
+        label: "",
         links: [
-            { name: "قاعدة الأدوية", href: "/dashboard/drugs", icon: Pill },
-            // Drug Import → accessible via "استيراد" button inside Drugs page
-            { name: "الوصفات", href: "/dashboard/prescriptions", icon: ClipboardList },
+            {
+                name: "الصيدلة",
+                href: "#",
+                icon: Pill,
+                subLinks: [
+                    { name: "قاعدة الأدوية", href: "/dashboard/drugs" },
+                    // Drug Import → accessible via "استيراد" button inside Drugs page
+                    { name: "الوصفات", href: "/dashboard/prescriptions" },
+                ]
+            }
         ],
     },
     {
-        label: "المخزون والمبيعات",
+        label: "",
         links: [
-            // RESTORED: /dashboard/inventory was previously missing from the sidebar
-            { name: "المخزون", href: "/dashboard/inventory", icon: Package },
-            // Inventory sub-tools (Stocktakes, Barcode, Bulk Pricing, Transfers,
-            // Shortages, Expired, Margin Warnings, Product Movement, Batches)
-            // → accessible as tabs/buttons inside the Inventory page
-            { name: "المبيعات", href: "/dashboard/sales", icon: ShoppingCart },
-            // Invoices, Returns, Payments → tabs inside Sales page
-            { name: "دفتر الديون", href: "/dashboard/debts", icon: BookOpen },
+            {
+                name: "المخزون والمبيعات",
+                href: "#",
+                icon: ShoppingCart, // Package or ShoppingCart
+                subLinks: [
+                    // RESTORED: /dashboard/inventory was previously missing from the sidebar
+                    { name: "المخزون", href: "/dashboard/inventory" },
+                    // Inventory sub-tools (Stocktakes, etc) → accessible inside the Inventory page
+                    { name: "المبيعات", href: "/dashboard/sales" },
+                    // Invoices, Returns, Payments → tabs inside Sales page
+                    { name: "دفتر الديون", href: "/dashboard/debts" },
+                ]
+            }
         ],
     },
     {
-        label: "العملاء والتوريد",
+        label: "",
         links: [
-            { name: "المرضى", href: "/dashboard/patients", icon: UserCircle },
-            // Insurance, Loyalty → tabs inside Patients page
-            { name: "الموردون", href: "/dashboard/suppliers", icon: Truck },
-            { name: "المشتريات", href: "/dashboard/purchases", icon: ShoppingCart },
-            // CTO Override: Smart Orders stays in main nav (other supply sub-pages via row-clicks)
-            { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order", icon: Brain },
+            {
+                name: "العملاء والتوريد",
+                href: "#",
+                icon: Users,
+                subLinks: [
+                    { name: "المرضى", href: "/dashboard/patients" },
+                    // Insurance, Loyalty → tabs inside Patients page
+                    { name: "الموردون", href: "/dashboard/suppliers" },
+                    { name: "المشتريات", href: "/dashboard/purchases" },
+                    // CTO Override: Smart Orders stays in main nav (other supply sub-pages via row-clicks)
+                    { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order" },
+                ]
+            }
         ],
     },
     {
-        label: "الإدارة",
+        label: "",
         links: [
-            { name: "التقارير", href: "/dashboard/reports", icon: BarChart3 },
-            // All 14 sub-reports (Sales, Profits, Inventory, Expiry, Margins,
-            // Top Sellers, Slow Movers, Purchases, Employees, Shifts,
-            // Audit Log, Branch Comparison, Forecast, Analytics)
-            // → accessible as tabs inside the Reports hub page
+            {
+                name: "الإدارة",
+                href: "#",
+                icon: BarChart3,
+                subLinks: [
+                    { name: "التقارير", href: "/dashboard/reports" },
+                    // All 14 sub-reports → accessible as tabs inside the Reports hub page
+                    { name: "الفريق", href: "/dashboard/users" },
+                ]
+            }
         ],
     },
 
@@ -150,8 +205,30 @@ export default function SideNav({ settings, userPermissions, userRole }: {
     const pathname = usePathname();
     const [mounted, setMounted] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [openAccordions, setOpenAccordions] = useState<string[]>([]);
 
     useEffect(() => { setMounted(true); }, []);
+
+    // Auto-open accordion if active route is a child
+    useEffect(() => {
+        const activeParents: string[] = [];
+        sections.forEach(sec => {
+            sec.links.forEach(l => {
+                if (l.subLinks && l.subLinks.some(sub => pathname.startsWith(sub.href))) {
+                    activeParents.push(l.name);
+                }
+            });
+        });
+        if (activeParents.length > 0) {
+            setOpenAccordions(prev => Array.from(new Set([...prev, ...activeParents])));
+        }
+    }, [pathname]);
+
+    const toggleAccordion = (name: string) => {
+        setOpenAccordions(prev =>
+            prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+        );
+    };
 
     // Close drawer on route change
     useEffect(() => { setMobileOpen(false); }, [pathname]);
@@ -163,15 +240,35 @@ export default function SideNav({ settings, userPermissions, userRole }: {
     }, [mobileOpen]);
 
     const filteredSections = sections.map(section => {
-        const visibleLinks = section.links.filter(link => {
+        const visibleLinks = section.links.map(link => {
+            if (link.subLinks) {
+                const visibleSubLinks = link.subLinks.filter(sub => {
+                    if (!userPermissions) return true;
+                    if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') return true;
+                    // If sublink relies on permission but the permission isn't there, allow standard permission system to handle.
+                    // For the scope of this update, we will simply rely on getLinkPermission
+                    const requiredPerm = getLinkPermission(sub.href);
+                    if (!requiredPerm) return true;
+                    return userPermissions[requiredPerm as keyof UserPermissions];
+                });
+                return { ...link, subLinks: visibleSubLinks };
+            }
+            return link;
+        }).filter(link => {
+            if (link.subLinks) {
+                return link.subLinks.length > 0;
+            }
             if (!userPermissions) return true;
-            if (userRole === 'ADMIN') return true;
+            if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') return true;
             const requiredPerm = getLinkPermission(link.href);
             if (!requiredPerm) return true;
-            return userPermissions[requiredPerm];
+            return userPermissions[requiredPerm as keyof UserPermissions];
         });
         return { ...section, links: visibleLinks };
     }).filter(s => s.links.length > 0);
+
+    // SUPER_ADMIN sees the Control Tower nav; all other roles see the pharmacy nav.
+    const activeSections = userRole === "SUPER_ADMIN" ? controlTowerSections : filteredSections;
 
     if (!mounted) {
         return (
@@ -211,9 +308,9 @@ export default function SideNav({ settings, userPermissions, userRole }: {
             </Link>
 
             {/* Navigation */}
-            <nav className="flex grow flex-col overflow-y-auto space-y-1 px-0.5" style={{ scrollbarWidth: "thin" }}>
-                {filteredSections.map((section, sIdx) => (
-                    <div key={sIdx}>
+            <nav className="flex grow flex-col overflow-y-auto space-y-1 px-0.5 pb-4" style={{ scrollbarWidth: "thin" }}>
+                {activeSections.map((section, sIdx) => (
+                    <div key={sIdx} className="mb-2">
                         {section.label && (
                             <div className="px-3 pt-4 pb-1.5 first:pt-0">
                                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -221,53 +318,112 @@ export default function SideNav({ settings, userPermissions, userRole }: {
                                 </span>
                             </div>
                         )}
-                        {section.links.map((link) => {
-                            const LinkIcon = link.icon;
-                            const isActive = pathname === link.href;
-                            return (
-                                <Link
-                                    key={link.name}
-                                    href={link.href}
-                                    onClick={() => setMobileOpen(false)}
-                                    className={cn(
-                                        "flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
-                                        {
-                                            "bg-primary/10 text-primary shadow-sm": isActive,
-                                            "text-muted-foreground hover:bg-muted hover:text-foreground": !isActive,
-                                        },
-                                    )}
-                                >
-                                    <LinkIcon className="w-[18px] h-[18px] shrink-0" />
-                                    <span className="truncate">{link.name}</span>
-                                </Link>
-                            );
-                        })}
+                        <div className="space-y-1 mt-1">
+                            {section.links.map((link) => {
+                                const LinkIcon = link.icon;
+                                // Exact match for flat links, startsWith or exact for subLinks
+                                const isExactActive = pathname === link.href || (link.href !== "#" && pathname.startsWith(link.href + "/"));
+                                const isChildActive = link.subLinks?.some(sub => pathname.startsWith(sub.href)) || false;
+                                const isActive = isExactActive || isChildActive;
+                                const isExpanded = openAccordions.includes(link.name);
+
+                                if (link.subLinks) {
+                                    return (
+                                        <div key={link.name} className="flex flex-col space-y-1">
+                                            <button
+                                                onClick={() => toggleAccordion(link.name)}
+                                                className={cn(
+                                                    "flex w-full h-9 items-center justify-between rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
+                                                    {
+                                                        "bg-primary/10 text-primary shadow-sm": isActive && !isExpanded,
+                                                        "text-foreground bg-muted/50": isExpanded && !isActive,
+                                                        "bg-primary/10 text-primary": isExpanded && isActive,
+                                                        "text-muted-foreground hover:bg-muted hover:text-foreground": !isActive && !isExpanded,
+                                                    },
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <LinkIcon className="w-[18px] h-[18px] shrink-0" />
+                                                    <span className="truncate">{link.name}</span>
+                                                </div>
+                                                <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", isExpanded && "rotate-180")} />
+                                            </button>
+
+                                            <div className={cn("grid transition-all duration-200 ease-in-out", isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
+                                                <div className="overflow-hidden">
+                                                    <div className="flex flex-col gap-1 pr-9 pl-3 pt-1">
+                                                        {link.subLinks.map(subLink => {
+                                                            const isSubActive = pathname === subLink.href || pathname.startsWith(subLink.href + "/");
+                                                            return (
+                                                                <Link
+                                                                    key={subLink.name}
+                                                                    href={subLink.href}
+                                                                    onClick={() => setMobileOpen(false)}
+                                                                    className={cn(
+                                                                        "flex h-8 items-center rounded-md px-3 text-[12px] font-semibold transition-all duration-150 relative",
+                                                                        {
+                                                                            "text-primary bg-primary/5": isSubActive,
+                                                                            "text-muted-foreground hover:text-foreground hover:bg-muted/50": !isSubActive,
+                                                                        }
+                                                                    )}
+                                                                >
+                                                                    {isSubActive && <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-primary rounded-l-full" />}
+                                                                    <span className="truncate">{subLink.name}</span>
+                                                                </Link>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <Link
+                                        key={link.name}
+                                        href={link.href}
+                                        onClick={() => setMobileOpen(false)}
+                                        className={cn(
+                                            "flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
+                                            {
+                                                "bg-primary/10 text-primary shadow-sm": isActive,
+                                                "text-muted-foreground hover:bg-muted hover:text-foreground": !isActive,
+                                            },
+                                        )}
+                                    >
+                                        <LinkIcon className="w-[18px] h-[18px] shrink-0" />
+                                        <span className="truncate">{link.name}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
                     </div>
                 ))}
                 <div className="flex-1" />
             </nav>
 
-            {/* ─── Settings Gear — Admin/SuperAdmin only ─── */}
-            {(userRole === "ADMIN" || userRole === "SUPER_ADMIN") && (
-                <div className="px-0.5 mt-1">
+            {/* ─── Admin Footer: Settings (pharmacy ADMINs only — SUPER_ADMIN has Settings in their Control Tower nav) ─── */}
+            {userRole === "ADMIN" && (
+                <div className="px-0.5 mt-1 flex gap-1">
+                    {/* Settings Gear — org, branches, finance, expenses */}
                     <Link
                         href="/dashboard/settings"
                         onClick={() => setMobileOpen(false)}
                         className={cn(
-                            "flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
+                            "flex flex-1 h-9 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
                             pathname.startsWith("/dashboard/settings") ||
-                            pathname.startsWith("/dashboard/users") ||
-                            pathname.startsWith("/dashboard/branches") ||
-                            pathname.startsWith("/dashboard/finance") ||
-                            pathname.startsWith("/dashboard/expenses") ||
-                            pathname.startsWith("/dashboard/organizations") ||
-                            pathname.startsWith("/dashboard/notifications")
+                                pathname.startsWith("/dashboard/branches") ||
+                                pathname.startsWith("/dashboard/finance") ||
+                                pathname.startsWith("/dashboard/expenses") ||
+                                pathname.startsWith("/dashboard/organizations") ||
+                                pathname.startsWith("/dashboard/notifications")
                                 ? "bg-primary/10 text-primary shadow-sm"
                                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         )}
                     >
                         <SettingsIcon className="w-[18px] h-[18px] shrink-0" />
-                        <span>الإعدادات</span>
+                        <span>الإعدادات الشاملة</span>
                     </Link>
                 </div>
             )}

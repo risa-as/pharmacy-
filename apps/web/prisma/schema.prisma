@@ -8,11 +8,13 @@ datasource db {
 }
 
 model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  branches  Branch[]
+  id          String    @id @default(uuid())
+  name        String
+  isSuspended Boolean   @default(false)
+  suspendedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  branches    Branch[]
 }
 
 model Branch {
@@ -26,18 +28,91 @@ model Branch {
   purchases      Purchase[]
   sales          Sale[]
   users          User[]
+  expenses       Expense[]
+  patients       Patient[]
+  supplierPayments SupplierPayment[]
+  shifts           Shift[]
+  safes            Safe[]
+  saleReturns      SaleReturn[]
+  stocktakes       Stocktake[]
+  transfersOut     Transfer[]   @relation("BranchTransfersOut")
+  transfersIn      Transfer[]   @relation("BranchTransfersIn")
+  warehouseOrders  WarehouseOrder[]
+  marketplaceListings MarketplaceListing[] @relation("MarketplaceSeller")
+  marketplaceBuys    MarketplaceOrder[]   @relation("MarketplaceBuyer")
+  patientAppOrders   PatientAppOrder[]
+  demandForecasts    DemandForecast[]
+  deviceLicenses     DeviceLicense[]
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  role      Role     @default(PHARMACIST)
-  branchId  String?
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  branch    Branch?  @relation(fields: [branchId], references: [id])
+  id             String   @id @default(uuid())
+  email          String   @unique
+  name           String?
+  role           Role     @default(PHARMACIST)
+  branchId       String?
+  password       String
+  permissions    String?  // JSON string of granular permissions
+  expoPushToken  String?  // Expo push token for notifications
+  pushEnabled    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  branch         Branch?  @relation(fields: [branchId], references: [id])
+  sales          Sale[]
+  shifts         Shift[]
+  stocktakes     Stocktake[]
+}
+
+model Shift {
+  id           String    @id @default(uuid())
+  userId       String
+  branchId     String
+  safeId       String?   // Ensure this shift is tied to a specific cash drawer/safe
+  startTime    DateTime  @default(now())
+  endTime      DateTime?
+  duration     Float     @default(0) // In hours
+  startingCash Float     @default(0)
+  expectedCash Float     @default(0)
+  actualCash   Float?
+  status       String    @default("OPEN") // OPEN, CLOSED
+  user         User      @relation(fields: [userId], references: [id])
+  branch       Branch    @relation(fields: [branchId], references: [id])
+  safe         Safe?     @relation(fields: [safeId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Safe {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   @default("CASH_DRAWER") // CASH_DRAWER, BANK, VAULT, MOBILE_WALLET
+  balance     Float    @default(0)
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shifts           Shift[]
+  transactions     Transaction[]
+  sales            Sale[]
+  expenses         Expense[]
+  supplierPayments SupplierPayment[]
+  saleReturns      SaleReturn[]
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  safeId        String
+  type          String   // IN, OUT
+  amount        Float
+  referenceType String   // SALE, EXPENSE, SUPPLIER_PAYMENT, CUSTOMER_RECEIPT, TRANSFER
+  referenceId   String?  // ID of the related record
+  description   String?
+  userId        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  safe          Safe     @relation(fields: [safeId], references: [id])
 }
 
 model GlobalDrug {
@@ -49,8 +124,17 @@ model GlobalDrug {
   image          String?
   isActive       Boolean  @default(true)
   alternatives   String[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  inventories    Inventory[]
+  saleItems      SaleItem[]
+  purchaseItems  PurchaseItem[]
+  saleReturnItems SaleReturnItem[]
+  transferItems  TransferItem[]
+  warehouseOrderItems WarehouseOrderItem[]
+  marketplaceListings MarketplaceListing[]
+  patientAppOrderItems PatientAppOrderItem[]
+  demandForecasts     DemandForecast[]
 
   @@index([tradeName])
   @@index([barcode])
@@ -60,6 +144,7 @@ model Inventory {
   id        String   @id @default(uuid())
   branchId  String
   drugId    String
+  drug      GlobalDrug @relation(fields: [drugId], references: [id])
   price     Float
   cost      Float
   createdAt DateTime @default(now())
@@ -68,6 +153,8 @@ model Inventory {
   minStock  Int      @default(0)
   batches   Batch[]
   branch    Branch   @relation(fields: [branchId], references: [id])
+
+  @@unique([drugId, branchId])
 }
 
 model Batch {
@@ -76,19 +163,69 @@ model Batch {
   expiryDate  DateTime
   quantity    Int
   batchNumber String
+  costPrice   Float     @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  stocktakeItems StocktakeItem[]
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  branchId    String
+  safeId      String?
+  amount      Float
+  category    String   // e.g., Rent, Utilities, Salaries
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  safe        Safe?    @relation(fields: [safeId], references: [id])
+}
+
+model SyncActionLog {
+  idempotencyKey String   @id
+  actionType     String   // e.g., 'SALE', 'INVENTORY_ADD', 'CREATE_DRUG'
+  branchId       String
+  status         String   @default("PROCESSED") // 'PROCESSED', 'FAILED'
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([actionType])
+  @@index([branchId])
 }
 
 model Sale {
   id        String     @id @default(uuid())
   branchId  String
+  safeId    String?    // The safe where the cash for this sale went
+  patientId String?    // Linked to CRM
   total     Float
+  discount  Float      @default(0)
   createdAt DateTime   @default(now())
   branch    Branch     @relation(fields: [branchId], references: [id])
+  safe      Safe?      @relation(fields: [safeId], references: [id])
+  patient   Patient?   @relation(fields: [patientId], references: [id])
   items     SaleItem[]
   payment   Payment?
+  debtPayments DebtPayment[]
+  returns   SaleReturn[]
+  userId    String?    // Employee who made the sale
+  user      User?      @relation(fields: [userId], references: [id])
+}
+
+// ... (Rest of models)
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_WALLET
+  BANK_TRANSFER
+  ZAIN_CASH
+  STRIPE
+  CREDIT
 }
 
 model SaleItem {
@@ -97,7 +234,36 @@ model SaleItem {
   drugId   String
   quantity Int
   price    Float
-  sale     Sale   @relation(fields: [saleId], references: [id])
+  cost     Float  @default(0)
+  sale     Sale       @relation(fields: [saleId], references: [id])
+  drug     GlobalDrug @relation(fields: [drugId], references: [id])
+}
+
+model SaleReturn {
+  id           String           @id @default(uuid())
+  returnNumber String?          @unique // Independent return invoice number
+  saleId       String
+  branchId     String
+  safeId       String?          // The safe used to refund the customer, if CASH
+  total        Float
+  createdAt    DateTime         @default(now())
+  notes        String?
+  
+  sale         Sale             @relation(fields: [saleId], references: [id])
+  branch       Branch           @relation(fields: [branchId], references: [id])
+  safe         Safe?            @relation(fields: [safeId], references: [id])
+  items        SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id           String     @id @default(uuid())
+  saleReturnId String
+  drugId       String
+  quantity     Int
+  price        Float      // The price at which it was refunded
+  
+  saleReturn   SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  drug         GlobalDrug @relation(fields: [drugId], references: [id])
 }
 
 model Supplier {
@@ -106,9 +272,11 @@ model Supplier {
   email     String?
   phone     String?
   address   String?
+  balance   Float      @default(0)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   purchases Purchase[]
+  payments  SupplierPayment[]
 }
 
 model Purchase {
@@ -116,6 +284,7 @@ model Purchase {
   supplierId    String
   branchId      String
   total         Float
+  paidAmount    Float          @default(0)
   status        String         @default("PENDING")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -134,7 +303,24 @@ model PurchaseItem {
   cost        Float
   expiryDate  DateTime?
   batchNumber String?
-  purchase    Purchase  @relation(fields: [purchaseId], references: [id])
+  purchase    Purchase    @relation(fields: [purchaseId], references: [id])
+  drug        GlobalDrug  @relation(fields: [drugId], references: [id])
+}
+
+model SupplierPayment {
+  id         String   @id @default(uuid())
+  supplierId String
+  branchId   String
+  safeId     String?
+  amount     Float
+  method     String   @default("CASH")
+  reference  String?
+  notes      String?
+  date       DateTime @default(now())
+  createdAt  DateTime @default(now())
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  branch     Branch   @relation(fields: [branchId], references: [id])
+  safe       Safe?    @relation(fields: [safeId], references: [id])
 }
 
 // ==================== الميزات الجديدة ====================
@@ -149,10 +335,15 @@ model Patient {
   allergies       String[]
   chronicDiseases String[]
   notes           String?
+  balance         Float             @default(0) // الرصيد المدين (الديون)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   prescriptions   Prescription[]
   insurancePolicies InsurancePolicy[]
+  sales           Sale[]
+  loyaltyAccount  LoyaltyAccount?
+  branchId        String?
+  branch          Branch?         @relation(fields: [branchId], references: [id])
 }
 
 // الوصفات الطبية
@@ -252,12 +443,7 @@ enum PrescriptionStatus {
   CANCELLED
 }
 
-enum PaymentMethod {
-  CASH
-  CARD
-  MOBILE_WALLET
-  BANK_TRANSFER
-}
+
 
 enum PaymentStatus {
   PENDING
@@ -269,4 +455,430 @@ enum PaymentStatus {
 enum DiscountType {
   PERCENTAGE
   FIXED
+}
+
+// ==================== الإعدادات العامة ====================
+model CompanySettings {
+  id           String   @id @default(uuid())
+  name         String   @default("Pharmacy System")
+  phone        String?
+  address      String?
+  email        String?
+  website      String?
+  logoUrl      String?
+  taxNumber    String?
+  facebookUrl  String?
+  instagramUrl String?
+  currency     String   @default("IQD")
+  loyaltyEnabled        Boolean @default(false)
+  loyaltyPointsPerDinar Float   @default(0.01)
+  loyaltyRedemptionValue Float  @default(2.5)
+  loyaltyMinRedemption  Int     @default(500)
+  maxDiscountPercent    Float   @default(10)
+  minProfitMargin       Float   @default(5) // Minimum profit margin percentage - warn if selling below this
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ==================== برنامج الولاء ====================
+
+model LoyaltyAccount {
+  id             String               @id @default(uuid())
+  patientId      String               @unique
+  totalPoints    Int                  @default(0)
+  lifetimePoints Int                  @default(0)
+  tier           String               @default("BRONZE")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  patient        Patient              @relation(fields: [patientId], references: [id])
+  transactions   LoyaltyTransaction[]
+}
+
+model LoyaltyTransaction {
+  id          String         @id @default(uuid())
+  accountId   String
+  type        String         // EARN or REDEEM
+  points      Int
+  description String?
+  saleId      String?
+  createdAt   DateTime       @default(now())
+  account     LoyaltyAccount @relation(fields: [accountId], references: [id])
+}
+
+model Backup {
+  id        String   @id @default(uuid())
+  name      String
+  url       String
+  size      Int
+  branchId  String?  @default("default")
+  createdAt DateTime @default(now())
+}
+
+// ==================== دفتر الديون ====================
+model DebtPayment {
+  id        String        @id @default(uuid())
+  saleId    String
+  amount    Float
+  method    PaymentMethod @default(CASH)
+  note      String?
+  createdAt DateTime      @default(now())
+  sale      Sale          @relation(fields: [saleId], references: [id])
+}
+
+// ==================== التفاعلات الدوائية ====================
+model DrugInteraction {
+  id             String   @id @default(uuid())
+  drug1          String   // Scientific Name 1
+  drug2          String   // Scientific Name 2
+  severity       String   // HIGH, MODERATE, LOW
+  description    String
+  createdAt      DateTime @default(now())
+
+  @@unique([drug1, drug2])
+  @@index([drug1])
+  @@index([drug2])
+}
+
+// ==================== الجرد الفعلي وتسوية المخزون ====================
+model Stocktake {
+  id                     String          @id @default(uuid())
+  branchId               String
+  status                 String          @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  totalDiscrepancyAmount Float           @default(0) // Financial value of the difference (+/-)
+  notes                  String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  userId                 String          // User who initiated the stocktake
+  
+  branch                 Branch          @relation(fields: [branchId], references: [id])
+  user                   User            @relation(fields: [userId], references: [id])
+  items                  StocktakeItem[]
+}
+
+model StocktakeItem {
+  id             String     @id @default(uuid())
+  stocktakeId    String
+  batchId        String     // Specific batch being counted
+  systemQuantity Int        // What the DB said
+  actualQuantity Int        // What the user counted
+  difference     Int        // actual - system
+  costPrice      Float      // Cost price at the time of stocktake to calculate financial impact
+  reason         String?    // EXPIRED, DAMAGED, MISSING, FOUND
+  
+  stocktake      Stocktake  @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  batch          Batch      @relation(fields: [batchId], references: [id])
+}
+
+// =======================
+// Branch Transfers Models
+// =======================
+
+model Transfer {
+  id             String         @id @default(uuid())
+  fromBranchId   String
+  toBranchId     String
+  status         String         @default("PENDING") // PENDING, IN_TRANSIT, COMPLETED, CANCELLED
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  
+  fromBranch     Branch         @relation("BranchTransfersOut", fields: [fromBranchId], references: [id])
+  toBranch       Branch         @relation("BranchTransfersIn", fields: [toBranchId], references: [id])
+  items          TransferItem[]
+}
+
+model TransferItem {
+  id             String         @id @default(uuid())
+  transferId     String
+  drugId         String
+  batchNumber    String
+  expiryDate     DateTime
+  quantity       Int
+  costPrice      Float          @default(0)
+  
+  transfer       Transfer       @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  drug           GlobalDrug     @relation(fields: [drugId], references: [id])
+}
+
+// =======================
+// Audit Log
+// =======================
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  userName    String
+  action      String   // CREATE, UPDATE, DELETE, RETURN, LOGIN, PRICE_CHANGE, etc.
+  entity      String   // SALE, INVENTORY, DRUG, USER, EXPENSE, TRANSFER, etc.
+  entityId    String?
+  details     String?  // JSON string with old/new values or description
+  ipAddress   String?
+  branchId    String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+// =======================
+// المرحلة 3: المستودعات العراقية
+// =======================
+model Warehouse {
+  id          String           @id @default(uuid())
+  name        String
+  code        String?          @unique
+  phone       String?
+  address     String?
+  city        String?
+  contactPerson String?
+  email       String?
+  apiEndpoint String?
+  apiKey      String?
+  isActive    Boolean          @default(true)
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  orders      WarehouseOrder[]
+}
+
+model WarehouseOrder {
+  id            String              @id @default(uuid())
+  warehouseId   String
+  branchId      String
+  orderNumber   String?             @unique
+  status        WarehouseOrderStatus @default(PENDING)
+  totalAmount   Float               @default(0)
+  notes         String?
+  expectedDate  DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  warehouse     Warehouse           @relation(fields: [warehouseId], references: [id])
+  branch        Branch              @relation(fields: [branchId], references: [id])
+  items         WarehouseOrderItem[]
+}
+
+model WarehouseOrderItem {
+  id              String         @id @default(uuid())
+  warehouseOrderId String
+  drugId          String
+  quantity        Int
+  unitPrice       Float          @default(0)
+  totalPrice      Float          @default(0)
+
+  warehouseOrder  WarehouseOrder @relation(fields: [warehouseOrderId], references: [id], onDelete: Cascade)
+  drug            GlobalDrug     @relation(fields: [drugId], references: [id])
+}
+
+enum WarehouseOrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+// =======================
+// B2B Marketplace
+// =======================
+model MarketplaceListing {
+  id            String               @id @default(uuid())
+  sellerId      String
+  drugId        String
+  quantity      Int
+  unitPrice     Float
+  minOrderQty   Int                  @default(1)
+  description   String?
+  expiryDate    DateTime?
+  batchNumber   String?
+  status        MarketplaceListingStatus @default(ACTIVE)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  seller        Branch               @relation("MarketplaceSeller", fields: [sellerId], references: [id])
+  drug          GlobalDrug           @relation(fields: [drugId], references: [id])
+  orders        MarketplaceOrder[]
+}
+
+enum MarketplaceListingStatus {
+  ACTIVE
+  SOLD_OUT
+  EXPIRED
+  ARCHIVED
+}
+
+model MarketplaceOrder {
+  id            String               @id @default(uuid())
+  listingId     String
+  buyerId       String
+  quantity      Int
+  totalPrice    Float
+  status        MarketplaceOrderStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  listing       MarketplaceListing   @relation(fields: [listingId], references: [id])
+  buyer         Branch               @relation("MarketplaceBuyer", fields: [buyerId], references: [id])
+}
+
+enum MarketplaceOrderStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+// =======================
+// Multi-tenant SaaS
+// =======================
+model Tenant {
+  id              String        @id @default(uuid())
+  name            String
+  slug            String        @unique
+  ownerEmail      String
+  phone           String?
+  plan            TenantPlan    @default(FREE)
+  maxBranches     Int           @default(1)
+  maxUsers        Int           @default(3)
+  isActive        Boolean       @default(true)
+  trialEndsAt     DateTime?
+  subscriptionEndsAt DateTime?
+  isSuspended     Boolean       @default(false)
+  suspendedAt     DateTime?
+  monthlyPrice    Float         @default(0)
+  currency        String        @default("USD")
+  features        String?
+  customDomain    String?
+  logoUrl         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum TenantPlan {
+  FREE
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+// =======================
+// Patient App
+// =======================
+model PatientAppUser {
+  id            String             @id @default(uuid())
+  phone         String             @unique
+  name          String?
+  email         String?
+  password      String
+  dateOfBirth   DateTime?
+  gender        String?
+  bloodType     String?
+  allergies     String?
+  chronicDiseases String?
+  emergencyContact String?
+  isVerified    Boolean            @default(false)
+  expoPushToken String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  orders        PatientAppOrder[]
+}
+
+model PatientAppOrder {
+  id              String              @id @default(uuid())
+  patientId       String
+  branchId        String?
+  prescriptionUrl String?
+  status          PatientAppOrderStatus @default(PENDING)
+  totalAmount     Float?
+  deliveryAddress String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  patient         PatientAppUser      @relation(fields: [patientId], references: [id])
+  branch          Branch?             @relation(fields: [branchId], references: [id])
+  items           PatientAppOrderItem[]
+}
+
+model PatientAppOrderItem {
+  id          String          @id @default(uuid())
+  orderId     String
+  drugId      String
+  quantity    Int
+  price       Float
+
+  order       PatientAppOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  drug        GlobalDrug      @relation(fields: [drugId], references: [id])
+}
+
+enum PatientAppOrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+// =======================
+// WhatsApp Templates
+// =======================
+model WhatsAppTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  type        String
+  bodyAr      String
+  bodyEn      String?
+  variables   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// =======================
+// AI Demand Forecasting
+// =======================
+model DemandForecast {
+  id            String   @id @default(uuid())
+  drugId        String
+  branchId      String?
+  forecastDate  DateTime
+  predictedQty  Int
+  confidenceLevel Float  @default(0.5)
+  actualQty     Int?
+  algorithm     String   @default("moving_average")
+  createdAt     DateTime @default(now())
+
+  drug          GlobalDrug @relation(fields: [drugId], references: [id])
+  branch        Branch?    @relation(fields: [branchId], references: [id])
+
+  @@index([drugId, forecastDate])
+  @@index([branchId, forecastDate])
+}
+
+// =======================
+// Licensing System
+// =======================
+model DeviceLicense {
+  id          String    @id @default(uuid())
+  licenseKey  String    @unique
+  branchId    String
+  hardwareId  String?   
+  deviceName  String?   
+  isActive    Boolean   @default(true)
+  suspendedByOrgSuspension Boolean @default(false)
+  expiresAt   DateTime? 
+  activatedAt DateTime? 
+  lastSeenAt  DateTime? 
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  
+  @@index([licenseKey])
+  @@index([hardwareId])
+  @@index([branchId])
 }

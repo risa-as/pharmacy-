@@ -9,9 +9,9 @@ const prisma = new PrismaClient();
 
 const DrugSchema = z.object({
     id: z.string(),
-    barcode: z.string().min(1, "Barcode is required"),
-    tradeName: z.string().min(1, "Trade Name is required"),
-    scientificName: z.string().min(1, "Scientific Name is required"),
+    barcode: z.string().min(1, "الباركود مطلوب"),
+    tradeName: z.string().min(1, "الاسم التجاري مطلوب"),
+    scientificName: z.string().min(1, "الاسم العلمي مطلوب"),
     origin: z.string().optional(),
     // image: z.string().optional(), // Handle image upload later
     isActive: z.boolean().optional(),
@@ -32,7 +32,7 @@ export async function createDrug(prevState: any, formData: FormData) {
     if (!validatedFields.success) {
         return {
             errors: validatedFields.error.flatten().fieldErrors,
-            message: "Missing Fields. Failed to Create Drug.",
+            message: "يرجى ملء جميع الحقول المطلوبة.",
         };
     }
 
@@ -50,10 +50,10 @@ export async function createDrug(prevState: any, formData: FormData) {
         });
     } catch (error: any) {
         if (error.code === 'P2002') {
-            return { message: "Barcode already exists." };
+            return { message: "الباركود موجود مسبقاً. يرجى استخدام باركود مختلف." };
         }
         return {
-            message: "Database Error: Failed to Create Drug.",
+            message: "حدث خطأ أثناء إضافة الدواء. يرجى المحاولة مرة أخرى.",
         };
     }
 
@@ -63,11 +63,32 @@ export async function createDrug(prevState: any, formData: FormData) {
 
 export async function deleteDrug(id: string) {
     try {
-        await prisma.globalDrug.delete({
+        // Check if drug has sales
+        const drugWithSales = await prisma.globalDrug.findUnique({
             where: { id },
+            include: { _count: { select: { saleItems: true } } }
         });
+
+        if (drugWithSales && drugWithSales._count.saleItems > 0) {
+            return { message: "لا يمكن حذف الدواء لأنه مرتبط بعمليات بيع سابقة. يمكنك إلغاء تفعيله بدلاً من ذلك." };
+        }
+
+        await prisma.$transaction(async (tx) => {
+            // Delete associated inventory items first
+            await tx.inventory.deleteMany({
+                where: { drugId: id }
+            });
+
+            // Delete the drug
+            await tx.globalDrug.delete({
+                where: { id },
+            });
+        });
+
         revalidatePath("/dashboard/drugs");
+        return { message: "تم حذف الدواء بنجاح" };
     } catch (error) {
+        console.error("Delete Drug Error:", error);
         return { message: "خطأ في قاعدة البيانات: فشل في حذف الدواء." };
     }
 }

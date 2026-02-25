@@ -38,6 +38,8 @@ type ModalTab = 'provision' | 'existing';
 export default function AdminLicensesPage() {
     const [licenses, setLicenses] = useState<License[]>([]);
     const [branches, setBranches] = useState<any[]>([]);
+    const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>([]);
+    const [selectedOrg, setSelectedOrg] = useState('');
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [generating, setGenerating] = useState(false);
@@ -95,7 +97,21 @@ export default function AdminLicensesPage() {
     useEffect(() => {
         fetchLicenses();
         fetchBranches();
+        fetchOrganizations();
     }, []);
+
+    // Fetch organizations for the org selector
+    const fetchOrganizations = async () => {
+        try {
+            const res = await fetch('/api/admin/organizations');
+            if (res.ok) {
+                const data = await res.json();
+                setOrganizations(Array.isArray(data) ? data : []);
+            }
+        } catch (e) {
+            console.error('Failed to fetch organizations:', e);
+        }
+    };
 
     const resetModal = () => {
         setShowModal(false);
@@ -106,6 +122,7 @@ export default function AdminLicensesPage() {
         setOwnerPassword('');
         setOwnerName('');
         setSelectedBranch('');
+        setSelectedOrg('');
         setSelectedDuration(12);
         setShowPassword(false);
     };
@@ -148,7 +165,7 @@ export default function AdminLicensesPage() {
 
     // Generate license for existing branch
     const handleGenerate = async () => {
-        if (!selectedBranch) return;
+        if (!selectedBranch || !selectedOrg) return;
         setGenerating(true);
         setModalError('');
         try {
@@ -157,6 +174,7 @@ export default function AdminLicensesPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     branchId: selectedBranch,
+                    organizationId: selectedOrg,
                     durationMonths: selectedDuration || null,
                 }),
             });
@@ -465,17 +483,34 @@ export default function AdminLicensesPage() {
                                 {/* Tab: Existing Branch */}
                                 {modalTab === 'existing' && (
                                     <div className="space-y-3">
+                                        {/* Organisation selector (required for DRM binding) */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">المؤسسة *</label>
+                                            <select
+                                                value={selectedOrg}
+                                                onChange={e => { setSelectedOrg(e.target.value); setSelectedBranch(''); }}
+                                                className={inputClass}
+                                            >
+                                                <option value="">اختر المؤسسة...</option>
+                                                {organizations.map(org => (
+                                                    <option key={org.id} value={org.id}>{org.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         <div>
                                             <label className="block text-sm font-medium text-muted-foreground mb-1.5">الفرع</label>
                                             <select
                                                 value={selectedBranch}
                                                 onChange={e => setSelectedBranch(e.target.value)}
                                                 className={inputClass}
+                                                disabled={!selectedOrg}
                                             >
                                                 <option value="">اختر الفرع...</option>
-                                                {branches.map((b: any) => (
-                                                    <option key={b.id} value={b.id}>{b.name}</option>
-                                                ))}
+                                                {branches
+                                                    .filter((b: any) => !selectedOrg || b.organizationId === selectedOrg)
+                                                    .map((b: any) => (
+                                                        <option key={b.id} value={b.id}>{b.name}</option>
+                                                    ))}
                                             </select>
                                         </div>
                                         <div>
@@ -499,7 +534,7 @@ export default function AdminLicensesPage() {
                                         onClick={modalTab === 'provision' ? handleProvision : handleGenerate}
                                         disabled={
                                             generating ||
-                                            (modalTab === 'provision' ? !pharmacyName || !ownerEmail || !ownerPassword : !selectedBranch)
+                                            (modalTab === 'provision' ? !pharmacyName || !ownerEmail || !ownerPassword : !selectedBranch || !selectedOrg)
                                         }
                                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-l from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground rounded-xl text-sm font-bold disabled:opacity-50 transition-all"
                                     >

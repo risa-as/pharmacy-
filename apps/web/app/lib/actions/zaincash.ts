@@ -1,10 +1,8 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
-
-const prisma = new PrismaClient();
 
 // Zain Cash Configuration
 const ZAINCASH_MERCHANT_ID = process.env.ZAINCASH_MERCHANT_ID || "";
@@ -66,7 +64,7 @@ export async function createZainCashTransaction(
             serviceType,
             msisdn: ZAINCASH_MERCHANT_ID,
             orderId: saleId,
-            redirectUrl: ZAINCASH_SUCCESS_URL,
+            redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/payment/callback`,
             iat: Math.floor(Date.now() / 1000),
             exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour expiry
         };
@@ -108,23 +106,60 @@ export async function verifyZainCashPayment(token: string) {
         const payload = verifyZainCashToken(token) as any;
 
         if (!payload) {
-            return { error: "Invalid token" };
+            return { error: "رمز التحقق غير صالح" };
         }
 
         if (payload.status === "success") {
-            // تسجيل الدفع في قاعدة البيانات
-            await prisma.payment.create({
+            // 1. تسجيل الدفع في قاعدة البيانات
+            const payment = await prisma.payment.create({
                 data: {
                     saleId: payload.orderId,
                     amount: payload.amount,
-                    method: "MOBILE_WALLET",
+                    method: "ZAIN_CASH",
                     referenceNumber: payload.transactionId,
                     status: "COMPLETED",
                 },
+                include: { sale: true },
             });
+
+            // 2. تحديث رصيد المريض إذا كانت الفاتورة تابعة لمريض
+            if (payment.sale && payment.sale.patientId) {
+                // تقليل الرصيد
+                await prisma.patient.update({
+                    where: { id: payment.sale.patientId },
+                    data: { balance: { decrement: payload.amount } },
+                });
+
+                // تسجيل دفعة دين (لأغراض التتبع)
+                await prisma.debtPayment.create({
+                    data: {
+                        saleId: payload.orderId,
+                        amount: payload.amount,
+                        method: "ZAIN_CASH",
+                        note: `سداد إلكتروني (Zain Cash: ${payload.transactionId})`,
+                    },
+                });
+
+                // التحقق مما إذا تم سداد الفاتورة بالكامل
+                // نحتاج لحساب المجموع المدفوع
+                const totalPaidAgg = await prisma.debtPayment.aggregate({
+                    where: { saleId: payload.orderId },
+                    _sum: { amount: true },
+                });
+                const totalPaid = totalPaidAgg._sum.amount || 0;
+
+                // إذا تم السداد بالكامل (أو أكثر)، نحدث حالة البيع
+                if (totalPaid >= (payment.sale.total - payment.sale.discount)) {
+                    // حالة البيع لا تتغير هنا لأنها تعتمد على PaymentMethod الأصلي
+                    // لكن يمكن تحديث حالة الدفع في Payment الأصلي إذا كان PENDING
+                    // ولكننا أنشأنا Payment جديد بـ COMPLETED
+                }
+            }
 
             revalidatePath("/dashboard/payments");
             revalidatePath("/dashboard/sales");
+            // Revalidate debts pages too
+            revalidatePath("/dashboard/debts");
 
             return { success: true, transactionId: payload.transactionId };
         } else {

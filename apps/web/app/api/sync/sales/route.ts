@@ -7,7 +7,11 @@ const prisma = new PrismaClient();
 const SyncSaleSchema = z.object({
     id: z.string(),
     total: z.number(),
+    discount: z.number().optional().default(0),
     createdAt: z.string().or(z.date()),
+    userId: z.string().nullable().optional(),
+    patientId: z.string().nullable().optional(),
+    paymentMethod: z.string().optional().default("CASH"),
     items: z.array(z.object({
         drugId: z.string(),
         quantity: z.number(),
@@ -37,72 +41,109 @@ export async function POST(req: NextRequest) {
 
         // Note: We might want to check if sale already exists to avoid duplicates (idempotency)
 
-        const results = await prisma.$transaction(async (tx) => {
-            const processedIds = [];
-            for (const sale of sales) {
-                const existing = await tx.sale.findUnique({ where: { id: sale.id } });
-                if (existing) {
-                    processedIds.push(sale.id);
-                    continue; // Already synced
-                }
+        const processedIds: string[] = [];
 
-                await tx.sale.create({
-                    data: {
-                        id: sale.id, // Use the ID generated on Desktop
-                        branchId: branchId,
-                        total: sale.total,
-                        createdAt: new Date(sale.createdAt),
-                        items: {
-                            create: sale.items.map(item => ({
-                                drugId: item.drugId, // This assumes GlobalDrug IDs match!
-                                quantity: item.quantity,
-                                price: item.price
-                            }))
-                        }
+        // Process each sale in a separate transaction to avoid timeouts
+        for (const sale of sales) {
+            try {
+                await prisma.$transaction(async (tx) => {
+                    const existing = await tx.sale.findUnique({ where: { id: sale.id } });
+                    if (existing) {
+                        return; // Already synced
                     }
-                });
-                processedIds.push(sale.id);
 
-                // Also decrement Cloud Inventory?
-                // "Inventory Rules": Cloud mimics stock? Or just tracks sales?
-                // Usually Cloud Inventory = Sum of Branch Inventories.
-                // If we have a 'Inventory' record for this branch/drug, we should update it.
+                    const isCredit = sale.paymentMethod === "CREDIT";
 
-                for (const item of sale.items) {
-                    // Find cloud inventory for this branch and drug
-                    // We don't have a direct "upsert" for inventory based on drug+branch easily without unique constraint
-                    // But let's assume it exists or we create it.
-                    // For now, let's just log the sale. Inventory sync might be a separate "Pull" process or explicit "Stock Take".
-                    // But to be cool, let's try to update if exists.
-                    const inv = await tx.inventory.findFirst({
-                        where: { branchId: branchId, drugId: item.drugId }
-                    });
+                    const saleItemsData = [];
 
-                    if (inv) {
-                        await tx.inventory.update({
-                            where: { id: inv.id },
-                            data: {
-                                batches: {
-                                    // This is hard because we don't know WHICH batch was sold locally unless we track batch IDs.
-                                    // Simplified: Just update main quantity if we had a flat quantity field?
-                                    // Models: Cloud Inventory has batches. It doesn't have a flat 'quantity' field to decrement?
-                                    // Wait, cloud schema:
-                                    // model Inventory { ... batches Batch[] ... }
-                                    // It does NOT have a quantity field. It relies on Batches.
-                                    // This makes syncing sales harder without batch details.
-                                    // DECISION: For now, we only record the Sale. Inventory adjustment in Cloud requires Batch Tracking in POS, 
-                                    // which we implemented in DB but maybe not fully in UI/Sync.
-                                    // Let's stick to recording Sales for Reporting.
+                    // Update Inventory (FIFO Deduction from Batches) and Calculate Cost
+                    for (const item of sale.items) {
+                        let itemTotalCost = 0;
+                        let remainingToDeduct = item.quantity;
+
+                        const inv = await tx.inventory.findFirst({
+                            where: { branchId: branchId, drugId: item.drugId },
+                            include: { batches: { orderBy: { expiryDate: 'asc' }, where: { quantity: { gt: 0 } } } }
+                        });
+
+                        if (inv) {
+                            if (inv.batches.length > 0) {
+                                for (const batch of inv.batches) {
+                                    if (remainingToDeduct <= 0) break;
+
+                                    const deduction = Math.min(batch.quantity, remainingToDeduct);
+
+                                    if (deduction > 0) {
+                                        itemTotalCost += deduction * batch.costPrice;
+                                        await tx.batch.update({
+                                            where: { id: batch.id },
+                                            data: { quantity: { decrement: deduction } }
+                                        });
+                                        remainingToDeduct -= deduction;
+                                    }
                                 }
                             }
+
+                            // Fallback cost if batches insufficient
+                            if (remainingToDeduct > 0 && inv.cost) {
+                                itemTotalCost += remainingToDeduct * inv.cost;
+                            }
+                        }
+
+                        const unitCost = item.quantity > 0 ? (itemTotalCost / item.quantity) : 0;
+
+                        saleItemsData.push({
+                            drugId: item.drugId,
+                            quantity: item.quantity,
+                            price: item.price,
+                            cost: unitCost
                         });
                     }
-                }
-            }
-            return processedIds;
-        });
 
-        return NextResponse.json({ success: true, syncedIds: results });
+                    await tx.sale.create({
+                        data: {
+                            id: sale.id,
+                            branchId: branchId,
+                            total: sale.total,
+                            discount: sale.discount || 0,
+                            createdAt: new Date(sale.createdAt),
+                            userId: sale.userId,
+                            patientId: sale.patientId || null,
+                            items: {
+                                create: saleItemsData
+                            }
+                        }
+                    });
+
+                    // Create Payment record
+                    await tx.payment.create({
+                        data: {
+                            saleId: sale.id,
+                            amount: sale.total,
+                            method: (sale.paymentMethod || "CASH") as any,
+                            status: isCredit ? "PENDING" : "COMPLETED",
+                        }
+                    });
+
+                    // For credit sales: update patient balance
+                    if (isCredit && sale.patientId) {
+                        await tx.patient.update({
+                            where: { id: sale.patientId },
+                            data: { balance: { increment: sale.total - (sale.discount || 0) } }
+                        });
+                    }
+                }, {
+                    maxWait: 5000, // default: 2000
+                    timeout: 20000 // default: 5000
+                });
+                processedIds.push(sale.id);
+            } catch (err) {
+                console.error(`Failed to sync sale ${sale.id}:`, err);
+                // Continue with other sales
+            }
+        }
+
+        return NextResponse.json({ success: true, syncedIds: processedIds });
 
     } catch (error) {
         console.error("Sync Error:", error);

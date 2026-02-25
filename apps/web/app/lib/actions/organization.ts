@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 
 const OrganizationSchema = z.object({
     id: z.string(),
-    name: z.string().min(1, "Organization name is required"),
+    name: z.string().min(1, "اسم المنظمة مطلوب"),
 });
 
 const CreateOrganization = OrganizationSchema.omit({ id: true });
@@ -23,7 +23,7 @@ export async function createOrganization(prevState: any, formData: FormData) {
     if (!validatedFields.success) {
         return {
             errors: validatedFields.error.flatten().fieldErrors,
-            message: "Missing Fields. Failed to Create Organization.",
+            message: "يرجى ملء جميع الحقول المطلوبة.",
         };
     }
 
@@ -37,7 +37,7 @@ export async function createOrganization(prevState: any, formData: FormData) {
         });
     } catch (error) {
         return {
-            message: "Database Error: Failed to Create Organization.",
+            message: "حدث خطأ أثناء إنشاء المنظمة. يرجى المحاولة مرة أخرى.",
         };
     }
 
@@ -58,7 +58,7 @@ export async function updateOrganization(
     if (!validatedFields.success) {
         return {
             errors: validatedFields.error.flatten().fieldErrors,
-            message: "Missing Fields. Failed to Update Organization.",
+            message: "يرجى ملء جميع الحقول المطلوبة.",
         };
     }
 
@@ -70,7 +70,7 @@ export async function updateOrganization(
             data: { name },
         });
     } catch (error) {
-        return { message: "Database Error: Failed to Update Organization." };
+        return { message: "حدث خطأ أثناء تحديث المنظمة. يرجى المحاولة مرة أخرى." };
     }
 
     revalidatePath("/dashboard/organizations");
@@ -84,6 +84,6 @@ export async function deleteOrganization(id: string) {
         });
         revalidatePath("/dashboard/organizations");
     } catch (error) {
-        return { message: "Database Error: Failed to Delete Organization." };
+        return { message: "حدث خطأ أثناء حذف المنظمة. يرجى المحاولة مرة أخرى." };
     }
 }

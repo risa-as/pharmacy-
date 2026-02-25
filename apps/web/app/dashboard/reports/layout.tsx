@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Reports Hub Layout
  *

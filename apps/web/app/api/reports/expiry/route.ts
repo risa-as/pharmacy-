@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { BILINGUAL_HEADERS, STATUS_LABELS, formatDateArabic, sanitizeForPdf } from "@/app/lib/utils/pdf-arabic";
 
 declare module "jspdf" {
     interface jsPDF {
@@ -51,26 +48,27 @@ export async function GET() {
 
         // إنشاء PDF
         const doc = new jsPDF();
+        const h = BILINGUAL_HEADERS.expiry;
 
-        // العنوان
-        doc.setFontSize(20);
-        doc.text("Expiry Report - Faramace", 105, 20, { align: "center" });
+        // العنوان (bilingual)
+        doc.setFontSize(18);
+        doc.text(h.title, 105, 20, { align: "center" });
 
-        doc.setFontSize(12);
-        doc.text(`Generated: ${new Date().toLocaleDateString('en-US')}`, 105, 30, { align: "center" });
-        doc.text(`Showing: Items expiring within 90 days`, 105, 38, { align: "center" });
+        doc.setFontSize(10);
+        doc.text(h.subtitle, 105, 28, { align: "center" });
+        doc.text(formatDateArabic(new Date()), 105, 34, { align: "center" });
 
         // إحصائيات
         const now = new Date();
         const expiredCount = batches.filter(b => new Date(b.expiryDate) < now).length;
         const expiringCount = batches.filter(b => new Date(b.expiryDate) >= now).length;
 
-        doc.setFontSize(14);
-        doc.setTextColor(220, 38, 38); // أحمر
-        doc.text(`Already Expired: ${expiredCount}`, 20, 55);
-        doc.setTextColor(234, 179, 8); // أصفر
-        doc.text(`Expiring Soon: ${expiringCount}`, 20, 65);
-        doc.setTextColor(0, 0, 0); // أسود
+        doc.setFontSize(12);
+        doc.setTextColor(220, 38, 38);
+        doc.text(`Already Expired: ${expiredCount}`, 20, 50);
+        doc.setTextColor(234, 179, 8);
+        doc.text(`Expiring Soon: ${expiringCount}`, 20, 58);
+        doc.setTextColor(0, 0, 0);
 
         // جدول
         const tableData = batches.map((batch, index) => {
@@ -81,20 +79,20 @@ export async function GET() {
 
             return [
                 (index + 1).toString(),
-                drug?.tradeName || 'Unknown',
-                batch.batchNumber,
-                batch.inventory.branch?.name || 'N/A',
+                sanitizeForPdf(drug?.tradeName) || 'Unknown',
+                sanitizeForPdf(batch.batchNumber),
+                sanitizeForPdf(batch.inventory.branch?.name) || 'N/A',
                 batch.quantity.toString(),
-                expiryDate.toLocaleDateString('en-US'),
-                isExpired ? 'EXPIRED' : `${daysLeft} days`
+                formatDateArabic(expiryDate),
+                isExpired ? STATUS_LABELS.EXPIRED : `${daysLeft} days`
             ];
         });
 
         doc.autoTable({
-            head: [['#', 'Drug Name', 'Batch', 'Branch', 'Qty', 'Expiry Date', 'Status']],
+            head: [h.columns],
             body: tableData,
-            startY: 80,
-            styles: { fontSize: 9 },
+            startY: 68,
+            styles: { fontSize: 8 },
             headStyles: { fillColor: [239, 68, 68] },
             theme: 'striped'
         });

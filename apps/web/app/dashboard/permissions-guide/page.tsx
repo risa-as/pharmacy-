@@ -421,7 +421,7 @@ export default function PermissionsGuidePage() {
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
-                        <<Shield className="w-6 h-6 text-primary-foreground" />
+                        <Shield className="w-6 h-6 text-primary-foreground" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-foreground">دليل الصلاحيات</h1>

@@ -1,9 +1,45 @@
 import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
+import { isSuperAdminRoute, isPharmacyOnlyRoute } from "@/app/lib/super-admin-guard";
+import { isBlockedInGracePeriod } from "@/app/lib/grace-period-guard";
+import { NextResponse } from "next/server";
 
-export default NextAuth(authConfig).auth;
+const { auth } = NextAuth(authConfig);
+
+export default auth((req) => {
+    const { nextUrl } = req;
+    const method = req.method;
+    const role = (req.auth?.user as any)?.role as string | undefined;
+
+    // ── US1: SUPER_ADMIN isolation ────────────────────────────────────────────
+    // SUPER_ADMIN must not access pharmacy operations routes
+    if (role === "SUPER_ADMIN" && isPharmacyOnlyRoute(nextUrl.pathname)) {
+        return Response.redirect(new URL("/dashboard", nextUrl));
+    }
+
+    // Pharmacy roles must not access SUPER_ADMIN control tower routes
+    if (role !== "SUPER_ADMIN" && isSuperAdminRoute(nextUrl.pathname)) {
+        return Response.redirect(new URL("/dashboard", nextUrl));
+    }
+
+    // ── US4: Grace period write-blocking ─────────────────────────────────────
+    // subscriptionState is stored in the JWT by auth.ts (populated on sign-in).
+    // Only API routes need to be blocked here; UI forms are gated by the overlay.
+    const subscriptionState = (req.auth?.user as any)?.subscriptionState as string | undefined;
+    if (subscriptionState === "grace" && isBlockedInGracePeriod(nextUrl.pathname, method ?? "GET")) {
+        return NextResponse.json(
+            {
+                gracePeriodActive: true,
+                message:
+                    "الإجراءات الإدارية محدودة خلال فترة السماح. يرجى تجديد الاشتراك.",
+            },
+            { status: 403 }
+        );
+    }
+});
 
 export const config = {
-    // https://nextjs.org/docs/app/building-your-application/routing/middleware#matcher
-    matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+    // Include API routes so the grace-period write-block (T022) can intercept
+    // blocked operations. Static assets and image optimization are still excluded.
+    matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

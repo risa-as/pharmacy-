@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { BILINGUAL_HEADERS, STATUS_LABELS, formatDateArabic, sanitizeForPdf } from "@/app/lib/utils/pdf-arabic";
 
 declare module "jspdf" {
     interface jsPDF {
@@ -41,13 +38,15 @@ export async function GET() {
 
         // إنشاء PDF
         const doc = new jsPDF();
+        const h = BILINGUAL_HEADERS.inventory;
 
-        // العنوان
-        doc.setFontSize(20);
-        doc.text("Inventory Report - Faramace", 105, 20, { align: "center" });
+        // العنوان (bilingual)
+        doc.setFontSize(18);
+        doc.text(h.title, 105, 20, { align: "center" });
 
-        doc.setFontSize(12);
-        doc.text(`Generated: ${new Date().toLocaleDateString('en-US')}`, 105, 30, { align: "center" });
+        doc.setFontSize(10);
+        doc.text(h.subtitle, 105, 28, { align: "center" });
+        doc.text(formatDateArabic(new Date()), 105, 34, { align: "center" });
 
         // إحصائيات
         const totalItems = inventory.length;
@@ -56,21 +55,25 @@ export async function GET() {
             return totalQty <= i.minStock;
         }).length;
 
-        doc.setFontSize(14);
+        doc.setFontSize(12);
         doc.text(`Total Products: ${totalItems}`, 20, 50);
-        doc.text(`Low Stock Items: ${lowStockItems}`, 20, 60);
+        doc.text(`Low Stock Items: ${lowStockItems}`, 20, 58);
 
         // جدول المخزون
         const tableData = inventory.map((item, index) => {
             const drug = drugMap.get(item.drugId);
             const totalQty = item.batches.reduce((acc: number, b) => acc + b.quantity, 0);
-            const status = totalQty <= item.minStock ? 'LOW' : totalQty >= item.maxStock ? 'OVER' : 'OK';
+            const status = totalQty <= item.minStock
+                ? STATUS_LABELS.LOW
+                : totalQty >= item.maxStock
+                    ? STATUS_LABELS.OVER
+                    : STATUS_LABELS.OK;
 
             return [
                 (index + 1).toString(),
-                drug?.tradeName || 'Unknown',
-                drug?.barcode || 'N/A',
-                item.branch?.name || 'N/A',
+                sanitizeForPdf(drug?.tradeName) || 'Unknown',
+                sanitizeForPdf(drug?.barcode) || 'N/A',
+                sanitizeForPdf(item.branch?.name) || 'N/A',
                 totalQty.toString(),
                 `${item.minStock} / ${item.maxStock}`,
                 status
@@ -78,10 +81,10 @@ export async function GET() {
         });
 
         doc.autoTable({
-            head: [['#', 'Drug Name', 'Barcode', 'Branch', 'Qty', 'Min/Max', 'Status']],
+            head: [h.columns],
             body: tableData,
-            startY: 75,
-            styles: { fontSize: 9 },
+            startY: 68,
+            styles: { fontSize: 8 },
             headStyles: { fillColor: [34, 197, 94] },
             theme: 'striped'
         });

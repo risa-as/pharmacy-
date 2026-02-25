@@ -1,92 +1,102 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { NextResponse } from 'next/server';
+import { prisma } from '@/app/lib/prisma';
 
-// تعريف النوع لـ autoTable
-declare module "jspdf" {
-    interface jsPDF {
-        autoTable: (options: {
-            head: string[][];
-            body: (string | number)[][];
-            startY?: number;
-            styles?: Record<string, unknown>;
-            headStyles?: Record<string, unknown>;
-            theme?: string;
-        }) => jsPDF;
-    }
-}
-
-export async function GET() {
+export async function GET(req: Request) {
     try {
-        // جلب المبيعات من آخر 30 يوم
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const { searchParams } = new URL(req.url);
+        const period = searchParams.get('period') || 'daily';
+        const branchId = searchParams.get('branchId');
 
-        const sales = await prisma.sale.findMany({
-            where: {
-                createdAt: { gte: thirtyDaysAgo }
-            },
-            include: {
-                items: true,
-                branch: true
-            },
-            orderBy: { createdAt: 'desc' }
+        const startDate = new Date();
+        if (period === 'monthly') {
+            startDate.setDate(1); // Start of month
+            startDate.setHours(0, 0, 0, 0);
+        } else {
+            // daily
+            startDate.setHours(0, 0, 0, 0);
+        }
+
+        const whereClause: any = {
+            createdAt: { gte: startDate },
+        };
+
+        if (branchId) {
+            whereClause.branchId = branchId;
+        }
+
+        // Revenue
+        const totalSales = await prisma.sale.aggregate({
+            _sum: { total: true },
+            where: whereClause
         });
 
-        // إنشاء PDF
-        const doc = new jsPDF();
+        // Expenses
+        const expenseWhere: any = {
+            date: { gte: startDate }
+        };
 
-        // العنوان
-        doc.setFontSize(20);
-        doc.text("Sales Report - Faramace", 105, 20, { align: "center" });
+        if (branchId) {
+            expenseWhere.branchId = branchId;
+        }
 
-        doc.setFontSize(12);
-        doc.text(`Generated: ${new Date().toLocaleDateString('en-US')}`, 105, 30, { align: "center" });
-        doc.text(`Period: Last 30 days`, 105, 38, { align: "center" });
+        const totalExpenses = await prisma.expense.aggregate({
+            _sum: { amount: true },
+            where: expenseWhere
+        }).catch(() => {
+            // Fallback if 'date' doesn't exist, try createdAt
+            const fallbackWhere: any = { createdAt: { gte: startDate } };
+            if (branchId) fallbackWhere.branchId = branchId;
 
-        // إحصائيات
-        const totalSales = sales.reduce((acc, sale) => acc + sale.total, 0);
-        const totalItems = sales.reduce((acc, sale) => acc + sale.items.length, 0);
-
-        doc.setFontSize(14);
-        doc.text(`Total Sales: ${totalSales.toLocaleString()} IQD`, 20, 55);
-        doc.text(`Number of Transactions: ${sales.length}`, 20, 65);
-        doc.text(`Total Items Sold: ${totalItems}`, 20, 75);
-
-        // جدول المبيعات
-        const tableData = sales.map((sale, index) => [
-            (index + 1).toString(),
-            new Date(sale.createdAt).toLocaleDateString('en-US'),
-            sale.branch?.name || 'N/A',
-            sale.items.length.toString(),
-            sale.total.toLocaleString() + ' IQD'
-        ]);
-
-        doc.autoTable({
-            head: [['#', 'Date', 'Branch', 'Items', 'Total']],
-            body: tableData,
-            startY: 90,
-            styles: { fontSize: 10 },
-            headStyles: { fillColor: [59, 130, 246] },
-            theme: 'striped'
+            return prisma.expense.aggregate({
+                _sum: { amount: true },
+                where: fallbackWhere
+            })
         });
 
-        // تحويل إلى buffer
-        const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+        // Chart Data (Last 7 days dynamic)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
 
-        return new NextResponse(pdfBuffer, {
-            headers: {
-                'Content-Type': 'application/pdf',
-                'Content-Disposition': 'attachment; filename="sales-report.pdf"'
-            }
+        const recentSales = await prisma.sale.findMany({
+            where: { createdAt: { gte: sevenDaysAgo } },
+            select: { createdAt: true, total: true },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        const chartData = recentSales.reduce((acc: any, sale) => {
+            const date = sale.createdAt.toISOString().split('T')[0];
+            acc[date] = (acc[date] || 0) + sale.total;
+            return acc;
+        }, {});
+
+        // Fill in missing days for chart
+        const filledChart = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateStr = d.toISOString().split('T')[0];
+            filledChart.push({
+                date: dateStr,
+                amount: chartData[dateStr] || 0
+            });
+        }
+
+        const revenue = totalSales._sum.total || 0;
+        const expenses = totalExpenses._sum.amount || 0;
+
+        return NextResponse.json({
+            revenue: revenue,
+            expenses: expenses,
+            profit: revenue - expenses,
+            chart: filledChart,
         });
     } catch (error) {
-        console.error("Error generating sales report:", error);
-        return NextResponse.json({ error: "Failed to generate report" }, { status: 500 });
+        console.error('Reports API Error:', error);
+        return NextResponse.json(
+            { message: 'Internal server error' },
+            { status: 500 }
+        );
     }
 }
