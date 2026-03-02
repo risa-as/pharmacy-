@@ -111,9 +111,9 @@ async function fetchOnce<T>(
     options: RequestInit,
     token: string | null,
     baseUrl: string,
+    noAutoLogout = false,
 ): Promise<T> {
     // Short-circuit immediately if the session has already expired.
-    // This prevents polling jobs that are already mid-interval from hitting the server.
     if (sessionExpired) {
         throw new Error('انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً');
     }
@@ -143,8 +143,11 @@ async function fetchOnce<T>(
 
         clearTimeout(timeoutId);
 
-        // Fix #5: معالجة انتهاء الجلسة تلقائياً
         if (response.status === 401) {
+            if (noAutoLogout) {
+                // Background/polling call — throw silently without wiping the session
+                throw new Error('انتهت صلاحية الجلسة');
+            }
             console.warn('[API] Session expired (401). Auto-logging out.');
             await handleSessionExpiry();
             throw new Error('انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً');
@@ -171,7 +174,8 @@ async function fetchOnce<T>(
 // Helper to make authenticated requests with exponential backoff retry on network errors
 async function request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    noAutoLogout = false,
 ): Promise<T> {
     const token = await getStoredToken();
     const baseUrl = await getBaseUrl();
@@ -182,7 +186,7 @@ async function request<T>(
     let lastError: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-            return await fetchOnce<T>(endpoint, options, token, baseUrl);
+            return await fetchOnce<T>(endpoint, options, token, baseUrl, noAutoLogout);
         } catch (error) {
             lastError = error;
             // Only retry on network/timeout errors — not on 4xx/5xx or auth failures
@@ -195,8 +199,16 @@ async function request<T>(
     throw lastError;
 }
 
-// Export request helper
-export { request };
+/**
+ * Like request(), but a 401 response throws silently without wiping the session.
+ * Use for background polling jobs where a transient 401 should not log the user out.
+ */
+async function backgroundRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return request<T>(endpoint, options, true);
+}
+
+// Export request helpers
+export { request, backgroundRequest };
 
 // API Service methods
 export const apiService = {
