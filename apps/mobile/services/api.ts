@@ -63,6 +63,13 @@ async function getStoredToken(): Promise<string | null> {
 // Avoids an infinite loop where polling jobs keep hitting 401 repeatedly.
 let sessionExpired = false;
 
+// Optional callback registered by AuthContext so it can clear React state
+// when the session expires without creating a circular import dependency.
+let _sessionExpiredHandler: (() => void) | null = null;
+export function registerSessionExpiredHandler(fn: () => void) {
+    _sessionExpiredHandler = fn;
+}
+
 // معالجة انتهاء الجلسة — خروج تلقائي عند 401
 async function handleSessionExpiry() {
     if (sessionExpired) return; // already handled — don't run twice
@@ -70,6 +77,10 @@ async function handleSessionExpiry() {
 
     // Stop all background polling immediately so no more requests are made
     pollingService.unregisterAll();
+
+    // Notify AuthContext to clear its React user state so the next login
+    // always gets the freshly-stored user, not stale admin/previous user data.
+    _sessionExpiredHandler?.();
 
     try {
         await SecureStore.deleteItemAsync('authToken');

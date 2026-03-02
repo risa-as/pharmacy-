@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -13,12 +13,51 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { authService } from '../services/auth';
+import { biometricService } from '../services/biometric';
+import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen() {
+    const { refreshUser } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+    const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
+
+    useEffect(() => {
+        checkBiometric();
+    }, []);
+
+    const checkBiometric = async () => {
+        const supported = await biometricService.checkHardware();
+        setIsBiometricSupported(supported);
+        if (supported) {
+            const creds = await biometricService.getCredentials();
+            setHasSavedCredentials(!!creds);
+        }
+    };
+
+    const handleBiometricLogin = async () => {
+        const authenticated = await biometricService.authenticate();
+        if (authenticated) {
+            setLoading(true);
+            try {
+                const creds = await biometricService.getCredentials();
+                if (creds) {
+                    await authService.login(creds.email, creds.pass);
+                    await refreshUser(); // sync AuthContext React state with SecureStore
+                    router.replace('/(tabs)');
+                } else {
+                    Alert.alert('خطأ', 'لا توجد بيانات محفوظة');
+                }
+            } catch (error: any) {
+                Alert.alert('خطأ', error.message || 'فشل تسجيل الدخول بالبصمة');
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -29,7 +68,33 @@ export default function LoginScreen() {
         setLoading(true);
         try {
             await authService.login(email, password);
-            router.replace('/(tabs)');
+            // Sync AuthContext React state with the newly stored user so the
+            // role-based dashboard renders correctly even on the very first navigation.
+            await refreshUser();
+
+            // Prompt to save for biometrics if supported and not already saved
+            if (isBiometricSupported) {
+                Alert.alert(
+                    'تفعيل الدخول السريع',
+                    'هل تريد تفعيل الدخول بالبصمة/الوجه للمرات القادمة؟',
+                    [
+                        {
+                            text: 'لا',
+                            style: 'cancel',
+                            onPress: () => router.replace('/(tabs)')
+                        },
+                        {
+                            text: 'نعم',
+                            onPress: async () => {
+                                await biometricService.saveCredentials(email, password);
+                                router.replace('/(tabs)');
+                            }
+                        }
+                    ]
+                );
+            } else {
+                router.replace('/(tabs)');
+            }
         } catch (error: any) {
             Alert.alert('خطأ', error.message || 'فشل تسجيل الدخول');
         } finally {
@@ -102,6 +167,17 @@ export default function LoginScreen() {
                         </>
                     )}
                 </TouchableOpacity>
+
+                {isBiometricSupported && hasSavedCredentials && (
+                    <TouchableOpacity
+                        style={[styles.biometricButton, loading && styles.buttonDisabled]}
+                        onPress={handleBiometricLogin}
+                        disabled={loading}
+                    >
+                        <Ionicons name="finger-print" size={28} color="#2563eb" />
+                        <Text style={styles.biometricText}>الدخول بالبصمة</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <Text style={styles.footer}>© 2024 فاراماس - جميع الحقوق محفوظة</Text>
@@ -190,5 +266,22 @@ const styles = StyleSheet.create({
         fontSize: 12,
         paddingVertical: 20,
         backgroundColor: '#fff',
+    },
+    biometricButton: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 20,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: '#2563eb',
+        borderRadius: 12,
+        backgroundColor: '#eff6ff',
+    },
+    biometricText: {
+        color: '#2563eb',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
 });
