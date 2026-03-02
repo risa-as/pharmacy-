@@ -1,72 +1,131 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+import { getBaseUrl, API_BASE_URL, resetSessionExpired } from './api';
 
 export interface User {
     id: string;
     email: string;
     name: string;
     role: string;
+    branchId?: string | null;
+}
+
+// مفاتيح التخزين الآمن
+const TOKEN_KEY = 'authToken';
+const USER_KEY = 'user';
+
+// دوال التخزين الآمن - تستخدم SecureStore للأمان
+async function secureSet(key: string, value: string) {
+    try {
+        await SecureStore.setItemAsync(key, value);
+    } catch {
+        // Fallback to AsyncStorage if SecureStore fails (e.g. web/simulator)
+        await AsyncStorage.setItem(key, value);
+    }
+}
+
+async function secureGet(key: string): Promise<string | null> {
+    try {
+        return await SecureStore.getItemAsync(key);
+    } catch {
+        return await AsyncStorage.getItem(key);
+    }
+}
+
+async function secureDelete(key: string) {
+    try {
+        await SecureStore.deleteItemAsync(key);
+    } catch {
+        await AsyncStorage.removeItem(key);
+    }
 }
 
 export const authService = {
     // Login
     async login(email: string, password: string): Promise<User> {
-        try {
-            const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-                email,
-                password,
-            });
+        const baseUrl = await getBaseUrl();
+        const response = await fetch(`${baseUrl}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+        });
 
-            const { token, user } = response.data;
+        const data = await response.json();
 
-            // Store token and user data
-            await AsyncStorage.setItem('authToken', token);
-            await AsyncStorage.setItem('user', JSON.stringify(user));
-
-            return user;
-        } catch (error: any) {
-            // For development, allow mock login
-            if (email === 'admin@faramace.com' && password === 'password') {
-                const mockUser: User = {
-                    id: '1',
-                    email: 'admin@faramace.com',
-                    name: 'مدير النظام',
-                    role: 'ADMIN',
-                };
-                await AsyncStorage.setItem('authToken', 'mock-token');
-                await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-                return mockUser;
-            }
-
-            throw new Error(error.response?.data?.message || 'فشل تسجيل الدخول');
+        if (!response.ok) {
+            throw new Error(data.message || 'فشل تسجيل الدخول');
         }
+
+        const { token, user } = data;
+
+        // Store token securely and user data
+        await secureSet(TOKEN_KEY, token);
+        await secureSet(USER_KEY, JSON.stringify(user));
+
+        // Reset the session-expired flag so background polling can resume
+        resetSessionExpired();
+
+        return user;
     },
 
     // Logout
     async logout(): Promise<void> {
-        await AsyncStorage.removeItem('authToken');
-        await AsyncStorage.removeItem('user');
+        await secureDelete(TOKEN_KEY);
+        await secureDelete(USER_KEY);
     },
 
     // Check if authenticated
     async isAuthenticated(): Promise<boolean> {
-        const token = await AsyncStorage.getItem('authToken');
+        const token = await secureGet(TOKEN_KEY);
         return !!token;
     },
 
     // Get current user
     async getCurrentUser(): Promise<User | null> {
-        const userStr = await AsyncStorage.getItem('user');
+        const userStr = await secureGet(USER_KEY);
         if (userStr) {
-            return JSON.parse(userStr);
+            try {
+                return JSON.parse(userStr);
+            } catch {
+                return null;
+            }
         }
         return null;
     },
 
     // Get auth token
     async getToken(): Promise<string | null> {
-        return await AsyncStorage.getItem('authToken');
+        return await secureGet(TOKEN_KEY);
+    },
+
+    // Change Password — now uses request() with auth token
+    async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+        const user = await this.getCurrentUser();
+        if (!user || !user.email) throw new Error('User not found');
+
+        const token = await this.getToken();
+        const baseUrl = await getBaseUrl();
+        const response = await fetch(`${baseUrl}/auth/change-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+                email: user.email,
+                currentPassword,
+                newPassword,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || 'فشل تحديث كلمة المرور');
+        }
     },
 };
