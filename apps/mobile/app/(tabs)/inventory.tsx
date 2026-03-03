@@ -80,7 +80,10 @@ export default function InventoryScreen() {
             const online = await syncService.isOnline();
             setIsOnline(online);
             if (online) {
-                const data = await apiService.getInventory(selectedBranch || undefined);
+                // Pharmacists are always scoped to their own branch.
+                // Admins can browse any branch via the BranchSelector (selectedBranch).
+                const effectiveBranchId = !isAdmin ? authBranchId : selectedBranch;
+                const data = await apiService.getInventory(effectiveBranchId || undefined);
                 setItems(data);
             } else {
                 const products = await dbService.searchProducts('');
@@ -101,7 +104,7 @@ export default function InventoryScreen() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [selectedBranch]);
+    }, [selectedBranch, isAdmin, authBranchId]);
 
     useEffect(() => { fetchInventory(); }, [fetchInventory]);
 
