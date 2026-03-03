@@ -1,17 +1,20 @@
-import React from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    ScrollView,
-    Alert,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { authService } from '../../services/auth';
+import { authService, User } from '../../services/auth';
+import { useTheme } from '../../context/ThemeContext';
+import { Colors } from '../../constants/colors';
 
 export default function SettingsScreen() {
+    const [user, setUser] = useState<User | null>(null);
+    const { isDarkMode } = useTheme();
+    const C = Colors(isDarkMode);
+
+    useEffect(() => {
+        authService.getCurrentUser().then(setUser);
+    }, []);
+
     const handleLogout = () => {
         Alert.alert(
             'تسجيل الخروج',
@@ -33,68 +36,91 @@ export default function SettingsScreen() {
     const menuItems = [
         {
             title: 'الحساب',
-            icon: 'person-outline',
+            icon: 'person-outline' as const,
             items: [
-                { label: 'معلومات الحساب', icon: 'person-circle-outline', onPress: () => { } },
-                { label: 'تغيير كلمة المرور', icon: 'key-outline', onPress: () => { } },
+                { label: 'معلومات الحساب',    icon: 'person-circle-outline' as const, onPress: () => router.push('/settings/account' as any) },
+                { label: 'تغيير كلمة المرور', icon: 'key-outline' as const,           onPress: () => router.push('/settings/password' as any) },
             ],
         },
         {
             title: 'التطبيق',
-            icon: 'settings-outline',
+            icon: 'settings-outline' as const,
             items: [
-                { label: 'الإشعارات', icon: 'notifications-outline', onPress: () => { } },
-                { label: 'اللغة', icon: 'language-outline', onPress: () => { } },
-                { label: 'المظهر', icon: 'moon-outline', onPress: () => { } },
+                { label: 'الإشعارات', icon: 'notifications-outline' as const, onPress: () => router.push('/settings/notifications' as any) },
+                { label: 'المظهر',    icon: 'moon-outline' as const,           onPress: () => router.push('/settings/theme' as any) },
             ],
         },
         {
             title: 'المساعدة',
-            icon: 'help-circle-outline',
+            icon: 'help-circle-outline' as const,
             items: [
-                { label: 'الدعم الفني', icon: 'headset-outline', onPress: () => { } },
-                { label: 'حول التطبيق', icon: 'information-circle-outline', onPress: () => { } },
+                { label: 'الدعم الفني',  icon: 'headset-outline' as const,             onPress: () => router.push('/settings/support' as any) },
+                { label: 'حول التطبيق', icon: 'information-circle-outline' as const, onPress: () => router.push('/settings/about' as any) },
             ],
         },
     ];
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView style={{ flex: 1, backgroundColor: C.background }}>
             {/* User Card */}
-            <View style={styles.userCard}>
-                <View style={styles.userAvatar}>
-                    <Ionicons name="person" size={32} color="#2563eb" />
+            <View style={{
+                flexDirection: 'row-reverse',
+                alignItems: 'center',
+                backgroundColor: C.card,
+                margin: 16,
+                padding: 16,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: C.border,
+            }}>
+                <View style={{
+                    width: 64, height: 64, borderRadius: 32,
+                    backgroundColor: C.primaryMuted,
+                    justifyContent: 'center', alignItems: 'center',
+                }}>
+                    <Ionicons name="person" size={32} color={C.primary} />
                 </View>
-                <View style={styles.userInfo}>
-                    <Text style={styles.userName}>المستخدم</Text>
-                    <Text style={styles.userEmail}>user@faramace.com</Text>
+                <View style={{ flex: 1, marginRight: 16, alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: C.foreground }}>
+                        {user?.name || 'المستخدم'}
+                    </Text>
+                    <Text style={{ fontSize: 14, color: C.mutedForeground, marginTop: 4 }}>
+                        {user?.email || 'user@faramace.com'}
+                    </Text>
                 </View>
             </View>
 
             {/* Menu Sections */}
             {menuItems.map((section, sectionIndex) => (
-                <View key={sectionIndex} style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>{section.title}</Text>
-                        <Ionicons name={section.icon as any} size={18} color="#6b7280" />
+                <View key={sectionIndex} style={{ marginHorizontal: 16, marginBottom: 16 }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8, paddingHorizontal: 4 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: C.mutedForeground }}>
+                            {section.title}
+                        </Text>
+                        <Ionicons name={section.icon} size={18} color={C.mutedForeground} />
                     </View>
-                    <View style={styles.menuGroup}>
+                    <View style={{ backgroundColor: C.card, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
                         {section.items.map((item, itemIndex) => (
                             <TouchableOpacity
                                 key={itemIndex}
                                 style={[
-                                    styles.menuItem,
-                                    itemIndex < section.items.length - 1 && styles.menuItemBorder,
+                                    { flexDirection: 'row-reverse', alignItems: 'center', padding: 16 },
+                                    itemIndex < section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
                                 ]}
                                 onPress={item.onPress}
+                                activeOpacity={0.7}
                             >
-                                <Ionicons name="chevron-back" size={20} color="#d1d5db" />
-                                <View style={styles.menuItemContent}>
-                                    <Text style={styles.menuItemLabel}>{item.label}</Text>
-                                    <View style={styles.menuItemIcon}>
-                                        <Ionicons name={item.icon as any} size={20} color="#6b7280" />
-                                    </View>
+                                <View style={{
+                                    width: 36, height: 36, borderRadius: 10,
+                                    backgroundColor: C.input,
+                                    justifyContent: 'center', alignItems: 'center',
+                                }}>
+                                    <Ionicons name={item.icon} size={20} color={C.mutedForeground} />
                                 </View>
+                                <Text style={{ fontSize: 16, color: C.foreground, flex: 1, textAlign: 'right', marginRight: 12 }}>
+                                    {item.label}
+                                </Text>
+                                <Ionicons name="chevron-back" size={18} color={C.mutedForeground} />
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -102,126 +128,22 @@ export default function SettingsScreen() {
             ))}
 
             {/* Logout Button */}
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-                <Text style={styles.logoutText}>تسجيل الخروج</Text>
+            <TouchableOpacity
+                style={{
+                    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    backgroundColor: C.dangerBg,
+                    marginHorizontal: 16, padding: 16, borderRadius: 16, marginTop: 8,
+                }}
+                onPress={handleLogout}
+                activeOpacity={0.8}
+            >
+                <Ionicons name="log-out-outline" size={20} color={C.danger} />
+                <Text style={{ fontSize: 16, fontWeight: '600', color: C.danger }}>تسجيل الخروج</Text>
             </TouchableOpacity>
 
-            {/* Version */}
-            <Text style={styles.version}>الإصدار 1.0.0</Text>
+            <Text style={{ textAlign: 'center', color: C.mutedForeground, fontSize: 12, marginVertical: 24 }}>
+                الإصدار 1.0.0
+            </Text>
         </ScrollView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    userCard: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        backgroundColor: '#fff',
-        margin: 16,
-        padding: 16,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    userAvatar: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: '#dbeafe',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    userInfo: {
-        flex: 1,
-        marginRight: 16,
-        alignItems: 'flex-end',
-    },
-    userName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    userEmail: {
-        fontSize: 14,
-        color: '#6b7280',
-        marginTop: 4,
-    },
-    section: {
-        marginHorizontal: 16,
-        marginBottom: 16,
-    },
-    sectionHeader: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-        paddingHorizontal: 4,
-    },
-    sectionTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#6b7280',
-    },
-    menuGroup: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        overflow: 'hidden',
-    },
-    menuItem: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        padding: 16,
-    },
-    menuItemBorder: {
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    menuItemContent: {
-        flex: 1,
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        gap: 12,
-    },
-    menuItemIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: '#f3f4f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    menuItemLabel: {
-        fontSize: 16,
-        color: '#1f2937',
-    },
-    logoutButton: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: '#fef2f2',
-        marginHorizontal: 16,
-        padding: 16,
-        borderRadius: 16,
-        marginTop: 8,
-    },
-    logoutText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#ef4444',
-    },
-    version: {
-        textAlign: 'center',
-        color: '#9ca3af',
-        fontSize: 12,
-        marginVertical: 24,
-    },
-});
