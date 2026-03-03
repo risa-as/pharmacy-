@@ -220,7 +220,9 @@ export function AdminDashboard() {
                                         <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 }}>
                                             <View style={{ flex: 1 }}>
                                                 <Text style={{ color: C.foreground, fontWeight: '600', textAlign: 'right', fontSize: 13 }}>
-                                                    {new Date(sale.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                                    {sale.createdAt
+                                        ? new Date(sale.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+                                        : '--:--'}
                                                 </Text>
                                                 {sale.paymentMethod && (
                                                     <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
@@ -229,7 +231,7 @@ export function AdminDashboard() {
                                                 )}
                                             </View>
                                             <Text style={{ color: C.success, fontWeight: '800', fontSize: 15 }}>
-                                                {sale.totalAmount.toLocaleString()} د.ع
+                                                {(sale.totalAmount ?? 0).toLocaleString()} د.ع
                                             </Text>
                                         </View>
                                         {idx < recentSales.length - 1 && (

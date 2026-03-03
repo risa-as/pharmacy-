@@ -47,8 +47,9 @@ export function PharmacistDashboard() {
                 apiService.getSales().catch(() => [] as Sale[]),
                 apiService.getAlerts(branchId ?? undefined).catch(() => [] as Alert[]),
             ]);
+            const today = new Date().toDateString();
             const todaySales = (salesData as Sale[]).filter(s =>
-                new Date(s.createdAt).toDateString() === new Date().toDateString()
+                s.createdAt && new Date(s.createdAt).toDateString() === today
             );
             setSales(todaySales);
             setAlerts((alertsData as Alert[]).slice(0, 3));
