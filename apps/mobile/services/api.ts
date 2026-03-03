@@ -7,6 +7,9 @@ import { pollingService } from './polling';
 // متغير لتخزين الرابط في الذاكرة لتجنب القراءة من الستورج في كل طلب
 let cachedBaseUrl: string | null = null;
 
+// Default URL driven by .env — update EXPO_PUBLIC_API_URL when your LAN IP changes.
+const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.106:3000/api';
+
 // الحصول على الرابط الأساسي
 export const getBaseUrl = async (): Promise<string> => {
     if (cachedBaseUrl) return cachedBaseUrl;
@@ -14,18 +17,24 @@ export const getBaseUrl = async (): Promise<string> => {
     try {
         const stored = await AsyncStorage.getItem('server_url');
         if (stored) {
-            cachedBaseUrl = stored;
-            return stored;
+            // Migration guard: wipe stale IPs so the env default takes over
+            // after a network/IP change. Only applies to obviously stale entries.
+            const staleIps = ['192.168.0.172', '10.0.2.2'];
+            const isStale = staleIps.some(ip => stored.includes(ip));
+            if (!isStale) {
+                cachedBaseUrl = stored;
+                return stored;
+            }
+            // Clear the stale entry so next app launch uses the env default
+            await AsyncStorage.removeItem('server_url');
         }
     } catch (e) {
         console.error("Failed to read server url", e);
     }
 
-    // Default Fallback (fail-safe)
-    if (Platform.OS === 'android') {
-        return 'http://192.168.0.172:3000/api';
-    }
-    return 'http://localhost:3000/api';
+    // Default Fallback — env var is the source of truth for dev environments
+    cachedBaseUrl = ENV_API_URL;
+    return ENV_API_URL;
 };
 
 // حفظ الرابط الجديد
@@ -40,6 +49,9 @@ export const setServerUrl = async (url: string) => {
 
 // التحقق هل تم إعداد السيرفر أم لا
 export const isServerConfigured = async (): Promise<boolean> => {
+    // Always "configured" when an env URL is set — dev workflow uses env var,
+    // field deployments use ServerConfigScreen + AsyncStorage.
+    if (process.env.EXPO_PUBLIC_API_URL) return true;
     const stored = await AsyncStorage.getItem('server_url');
     return !!stored;
 };
