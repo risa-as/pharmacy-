@@ -5,17 +5,20 @@ import { getUserPermissions } from "@/app/lib/permissions";
 import { ThemeToggle } from "@/app/ui/theme-toggle";
 import { getSubscriptionState } from "@/app/lib/subscription-state";
 import SubscriptionBanner from "@/app/ui/dashboard/subscription-banner";
-import SuspendedOverlay from "@/app/ui/dashboard/suspended-overlay";
+import OverlayManager from "@/app/ui/dashboard/overlay-manager";
 import { prisma } from "@/app/lib/prisma";
 
-import dynamic from "next/dynamic";
+import dynamicImport from "next/dynamic";
 
-const ElectronSessionSync = dynamic(() => import("../ui/electron-session-sync"), { ssr: false });
+const ElectronSessionSync = dynamicImport(() => import("../ui/electron-session-sync"), { ssr: false });
+
+export const dynamic = 'force-dynamic';
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
     let settings = null;
     let userPermissions = null;
     let userRole: string | undefined;
+    let branchId: string | undefined;
 
     try {
         settings = await getCompanySettings();
@@ -25,26 +28,27 @@ export default async function Layout({ children }: { children: React.ReactNode }
 
     try {
         const session = await auth();
-        const user = session?.user as { role: string; permissions?: string | null } | undefined;
+        const user = session?.user as { role: string; permissions?: string | null; branchId?: string } | undefined;
         userPermissions = user ? getUserPermissions(user) : null;
         userRole = user?.role;
+        branchId = user?.branchId;
     } catch (e) {
         console.error("[Layout] Failed to load session:", e);
     }
 
-    // Fetch subscription state from the active Tenant record.
-    // TODO: link Organization → tenantId so each org maps to its own Tenant plan.
     let subscriptionResult = getSubscriptionState({ subscriptionEndsAt: null, isSuspended: false });
     try {
-        const tenant = await prisma.tenant.findFirst({
-            where: { isActive: true },
-            select: { subscriptionEndsAt: true, isSuspended: true },
-        });
-        if (tenant) {
-            subscriptionResult = getSubscriptionState({
-                subscriptionEndsAt: tenant.subscriptionEndsAt,
-                isSuspended: tenant.isSuspended,
+        if (branchId) {
+            const branch = await prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { organization: { select: { isSuspended: true, subscriptionEndsAt: true } } },
             });
+            if (branch?.organization) {
+                subscriptionResult = getSubscriptionState({
+                    subscriptionEndsAt: branch.organization.subscriptionEndsAt ?? null,
+                    isSuspended: branch.organization.isSuspended,
+                });
+            }
         }
     } catch (e) {
         console.error("[Layout] Failed to load subscription state:", e);
@@ -76,7 +80,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
                 </div>
                 {/* Page content — always rendered for read-only access even when suspended */}
                 <div className="relative">
-                    {isSuspended && <SuspendedOverlay />}
+                    <OverlayManager isSuspended={isSuspended} />
                     <div className="p-4 md:p-6 lg:p-12">
                         {children}
                     </div>

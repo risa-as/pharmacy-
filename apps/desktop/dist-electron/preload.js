@@ -20,3 +20,13 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   // You can expose other APTs you need here.
   // ...
 });
+electron.contextBridge.exposeInMainWorld("electronTheme", {
+  getTheme: () => electron.ipcRenderer.invoke("theme:get"),
+  setTheme: (v) => electron.ipcRenderer.invoke("theme:set", v)
+});
+electron.contextBridge.exposeInMainWorld("electronLicense", {
+  getHardwareId: () => electron.ipcRenderer.invoke("get-hardware-id"),
+  activate: (payload) => electron.ipcRenderer.invoke("license:activate", payload),
+  verify: (payload) => electron.ipcRenderer.invoke("license:verify", payload),
+  saveTenantContext: (context) => electron.ipcRenderer.invoke("license:save-tenant-context", context)
+});

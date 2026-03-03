@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
 
 const prisma = new PrismaClient();
 
@@ -30,6 +31,31 @@ export async function POST(req: Request) {
                 }
             }
         });
+
+        // T034 — New-purchase trigger: notify managers/admins in the branch
+        void (async () => {
+            try {
+                const managers = await prisma.user.findMany({
+                    where: {
+                        branchId,
+                        role: { in: ['ADMIN', 'MANAGER'] as any[] },
+                    },
+                    select: { id: true },
+                });
+                if (managers.length > 0) {
+                    await sendAndPersistNotification({
+                        type: 'NEW_PURCHASE',
+                        title: 'طلب شراء جديد',
+                        body: `تم إنشاء طلب شراء جديد بقيمة ${total.toLocaleString('ar-IQ')} د.ع`,
+                        targetUserIds: managers.map(m => m.id),
+                        branchId,
+                        data: { purchaseId: purchase.id },
+                    });
+                }
+            } catch (triggerErr) {
+                console.error('[create-purchase] New-purchase trigger failed:', triggerErr);
+            }
+        })();
 
         return NextResponse.json({ success: true, purchaseId: purchase.id });
     } catch (error) {

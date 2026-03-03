@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Reports Hub Layout
  *
@@ -32,19 +30,19 @@ import {
 } from "lucide-react";
 
 const TABS: HubTab[] = [
-    { name: "النظرة العامة",      href: "/dashboard/reports",                    icon: BarChart3 },
-    { name: "المبيعات",           href: "/dashboard/reports/sales",              icon: ShoppingCart },
-    { name: "الأرباح",            href: "/dashboard/reports/profits",            icon: TrendingUp },
-    { name: "المخزون",            href: "/dashboard/reports/inventory",          icon: Package },
-    { name: "هامش الربح",        href: "/dashboard/reports/margins",            icon: DollarSign },
-    { name: "الصلاحية",           href: "/dashboard/reports/expiry",             icon: CalendarX },
-    { name: "الأكثر مبيعاً",     href: "/dashboard/reports/top-sellers",        icon: Star },
-    { name: "البطيئة الحركة",     href: "/dashboard/reports/slow-movers",        icon: TrendingDown },
-    { name: "المشتريات",          href: "/dashboard/reports/purchases",          icon: Truck },
-    { name: "الموظفون",           href: "/dashboard/reports/employees",          icon: Users },
-    { name: "الورديات",           href: "/dashboard/reports/shifts",             icon: Clock },
-    { name: "سجل النشاطات",      href: "/dashboard/reports/audit-log",          icon: ScrollText },
-    { name: "مقارنة الفروع",     href: "/dashboard/reports/branch-comparison",  icon: GitCompareArrows },
+    { name: "النظرة العامة",      href: "/dashboard/reports",                    icon: <BarChart3 className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "المبيعات",           href: "/dashboard/reports/sales",              icon: <ShoppingCart className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "الأرباح",            href: "/dashboard/reports/profits",            icon: <TrendingUp className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "المخزون",            href: "/dashboard/reports/inventory",          icon: <Package className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "هامش الربح",        href: "/dashboard/reports/margins",            icon: <DollarSign className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "الصلاحية",           href: "/dashboard/reports/expiry",             icon: <CalendarX className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "الأكثر مبيعاً",     href: "/dashboard/reports/top-sellers",        icon: <Star className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "البطيئة الحركة",     href: "/dashboard/reports/slow-movers",        icon: <TrendingDown className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "المشتريات",          href: "/dashboard/reports/purchases",          icon: <Truck className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "الموظفون",           href: "/dashboard/reports/employees",          icon: <Users className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "الورديات",           href: "/dashboard/reports/shifts",             icon: <Clock className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "سجل النشاطات",      href: "/dashboard/reports/audit-log",          icon: <ScrollText className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "مقارنة الفروع",     href: "/dashboard/reports/branch-comparison",  icon: <GitCompareArrows className="w-3.5 h-3.5 shrink-0" /> },
 ];
 
 export default function ReportsLayout({

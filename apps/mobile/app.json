@@ -1,8 +1,9 @@
 {
   "expo": {
     "name": "فاراماس",
-    "slug": "faramace-mobile",
+    "slug": "faramace",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "faramace",
@@ -10,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2563eb"
+      "backgroundColor": "#0F7575"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -20,17 +21,21 @@
       "bundleIdentifier": "com.faramace.mobile",
       "infoPlist": {
         "NSCameraUsageDescription": "نحتاج الوصول للكاميرا لمسح الباركود",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone"
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#2563eb"
+        "backgroundColor": "#0F7575"
       },
       "package": "com.faramace.mobile",
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -41,11 +46,29 @@
     "plugins": [
       "expo-router",
       [
-        "expo-barcode-scanner",
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#0F7575",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-camera",
         {
           "cameraPermission": "نحتاج الوصول للكاميرا لمسح الباركود"
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true
@@ -55,7 +78,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "dfdb6a16-976f-4d6e-8f83-c920c3974d93"
+        "projectId": "89cd48b4-b1ea-49b7-8811-d1ceda7edac7"
       }
     }
   }

@@ -72,7 +72,7 @@ export default async function DebtDetailPage({
                     sales.map((sale: any) => (
                         <div
                             key={sale.id}
-                            className={`bg-card rounded-2xl border ${sale.isPaid ? "border-green-200" : "border-red-200"
+                            className={`bg-card rounded-2xl border ${sale.isPaid ? "border-success/40" : "border-destructive/40"
                                 } overflow-hidden`}
                         >
                             {/* Sale Header */}

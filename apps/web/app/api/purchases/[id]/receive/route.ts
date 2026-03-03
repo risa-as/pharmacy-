@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
 
 const prisma = new PrismaClient();
 
@@ -83,6 +84,28 @@ export async function POST(req: Request, { params }: { params: { id: string } })
                 }
             });
         });
+
+        // T033 — Expiry trigger: notify for batches expiring within 30 days
+        void (async () => {
+            try {
+                const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                const soonExpiring = items.filter((i: any) => {
+                    if (!i.expiryDate) return false;
+                    const expiry = new Date(i.expiryDate);
+                    return expiry <= thirtyDaysFromNow && expiry >= new Date();
+                });
+                if (soonExpiring.length > 0) {
+                    await sendAndPersistNotification({
+                        type: 'EXPIRY',
+                        title: 'تحذير: أدوية قاربت انتهاء الصلاحية',
+                        body: `${soonExpiring.length} وحدة/وحدات ستنتهي صلاحيتها خلال 30 يوماً — يرجى المراجعة`,
+                        branchId: purchase.branchId,
+                    });
+                }
+            } catch (triggerErr) {
+                console.error('[receive] Expiry trigger failed:', triggerErr);
+            }
+        })();
 
         return NextResponse.json({ success: true });
 

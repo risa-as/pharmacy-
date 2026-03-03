@@ -1,38 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
     :root {
-        --background: 0 0% 100%;
-        --foreground: 222.2 84% 4.9%;
+        /* Backgrounds — warm off-white, reduces glare vs pure white */
+        --background:          40 20% 98%;
+        --foreground:          20 15% 9%;
 
-        --card: 0 0% 100%;
-        --card-foreground: 222.2 84% 4.9%;
+        --card:                0 0% 100%;
+        --card-foreground:     20 15% 9%;
 
-        --popover: 0 0% 100%;
-        --popover-foreground: 222.2 84% 4.9%;
+        --popover:             0 0% 100%;
+        --popover-foreground:  20 15% 9%;
 
-        --primary: 221.2 83.2% 53.3%;
-        --primary-foreground: 210 40% 98%;
+        /* Brand — medical teal */
+        --primary:             177 90% 30%;
+        --primary-foreground:  0 0% 100%;
 
-        --secondary: 210 40% 96.1%;
-        --secondary-foreground: 222.2 47.4% 11.2%;
+        --secondary:           177 20% 93%;
+        --secondary-foreground: 177 90% 20%;
 
-        --muted: 210 40% 96.1%;
-        --muted-foreground: 215.4 16.3% 46.9%;
+        --muted:               40 10% 93%;
+        --muted-foreground:    20 8% 46%;
 
-        --accent: 210 40% 96.1%;
-        --accent-foreground: 222.2 47.4% 11.2%;
+        --accent:              177 20% 93%;
+        --accent-foreground:   177 80% 20%;
 
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 210 40% 98%;
+        /* Semantic — Light Mode */
+        --destructive:         0 72% 45%;
+        --destructive-foreground: 0 0% 100%;
+        --success:             142 50% 35%;
+        --success-foreground:  0 0% 100%;
+        --warning:             32 85% 40%;
+        --warning-foreground:  0 0% 100%;
+        --info:                205 60% 40%;
+        --info-foreground:     0 0% 100%;
 
-        --border: 214.3 31.8% 91.4%;
-        --input: 214.3 31.8% 91.4%;
-        --ring: 221.2 83.2% 53.3%;
+        /* Structure */
+        --border:              40 12% 88%;
+        --input:               40 12% 88%;
+        --ring:                177 90% 30%;
 
-        --radius: 0.5rem;
+        --radius:              0.5rem;
+
+        /* Auth gradient — desktop login screen */
+        --gradient-auth-from:  #0f0c29;
+        --gradient-auth-via:   #302b63;
+        --gradient-auth-to:    #24243e;
+    }
+
+    .dark {
+        /* Backgrounds — warm darks reduce blue-light for night-shift pharmacists */
+        --background:          20 15% 9%;
+        --foreground:          40 15% 95%;
+
+        --card:                20 12% 13%;
+        --card-foreground:     40 15% 95%;
+
+        --popover:             20 10% 11%;
+        --popover-foreground:  40 15% 95%;
+
+        /* Brand — brighter teal is readable in dark context */
+        --primary:             177 65% 45%;
+        --primary-foreground:  20 15% 9%;
+
+        --secondary:           177 10% 18%;
+        --secondary-foreground: 177 40% 80%;
+
+        --muted:               20 8% 16%;
+        --muted-foreground:    30 8% 63%;
+
+        --accent:              177 10% 22%;
+        --accent-foreground:   177 60% 85%;
+
+        /* Semantic — warmer, less harsh for extended night use */
+        --destructive:         0 60% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --success:             142 45% 52%;
+        --success-foreground:  0 0% 100%;
+        --warning:             32 75% 58%;
+        --warning-foreground:  20 15% 9%;
+        --info:                205 50% 58%;
+        --info-foreground:     0 0% 100%;
+
+        /* Structure */
+        --border:              20 8% 20%;
+        --input:               20 8% 20%;
+        --ring:                177 65% 45%;
     }
 }
 
@@ -44,6 +101,106 @@
     body {
         background-color: hsl(var(--background));
         color: hsl(var(--foreground));
-        font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+        font-family: 'IBM Plex Sans Arabic', 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: hsl(var(--border) / 0.3);
+        border-radius: 9999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: hsl(var(--border) / 0.55);
+    }
+
+    /* Focus Ring */
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2);
+        border-color: hsl(var(--primary));
+    }
+}
+
+/* ===== Custom Animations ===== */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes successBounce {
+    0% { transform: scale(0.3); opacity: 0; }
+    50% { transform: scale(1.08); opacity: 1; }
+    70% { transform: scale(0.95); }
+    100% { transform: scale(1); }
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.animate-fadeIn {
+    animation: fadeIn 0.2s ease-out both;
+}
+
+.animate-slideUp {
+    animation: slideUp 0.25s ease-out both;
+}
+
+.animate-scaleIn {
+    animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-successBounce {
+    animation: successBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-shimmer {
+    background: linear-gradient(90deg, transparent 0%, hsl(var(--primary) / 0.1) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+}
+
+/* Smooth hover transitions for product cards */
+.product-card {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Print styles */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    .print-area, .print-area * {
+        visibility: visible;
+    }
+    .print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
     }
 }

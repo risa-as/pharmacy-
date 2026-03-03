@@ -11,34 +11,71 @@ datasource db {
 // Local models mirror cloud models but focused on this Branch
 
 model LocalSettings {
-  id String @id @default(uuid())
-  branchId String? // The branch this device is linked to
-  lastSync DateTime?
+  id          String    @id @default(uuid())
+  branchId    String? // The branch this device is linked to
+  printerName String? // Local printer name
+  paperSize   String    @default("80mm") // 80mm or A4
+  autoPrint   Boolean   @default(true)
+  lastSync    DateTime?
+}
+
+model CompanySettings {
+  id                     String   @id @default(uuid())
+  name                   String   @default("Pharmacy System")
+  phone                  String?
+  address                String?
+  email                  String?
+  website                String?
+  logoUrl                String?
+  taxNumber              String?
+  facebookUrl            String?
+  instagramUrl           String?
+  currency               String   @default("IQD")
+  loyaltyEnabled         Boolean  @default(false)
+  loyaltyPointsPerDinar  Float    @default(0.01)
+  loyaltyRedemptionValue Float    @default(2.5)
+  loyaltyMinRedemption   Int      @default(500)
+  maxDiscountPercent     Float    @default(10)
+  updatedAt              DateTime @updatedAt
 }
 
 model User {
-  id       String @id
+  id       String  @id
   name     String
-  email    String
+  email    String  @unique
   role     String
   password String // Hashed
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+  sales    Sale[]
+  shifts   Shift[]
+  stocktakes Stocktake[]
 }
 
 model GlobalDrug {
-  id             String   @id
-  barcode        String   @unique
+  id             String      @id
+  barcode        String      @unique
   tradeName      String
   scientificName String
-  price          Float    @default(0) // Local override or cached price
-  isActive       Boolean  @default(true)
+  origin         String?
+  price          Float       @default(0) // Local override or cached price
+  isActive       Boolean     @default(true)
   inventory      Inventory[]
+  saleItems      SaleItem[]
+  saleReturnItems SaleReturnItem[]
+  transferItems  TransferItem[]
 }
 
 model Inventory {
   id        String     @id @default(uuid())
+  branchId  String? // Added to support branch filtering/Admin view
+  branch    Branch?    @relation(fields: [branchId], references: [id])
   drugId    String
   drug      GlobalDrug @relation(fields: [drugId], references: [id])
   quantity  Int
+  costPrice Float      @default(0) // Added for inventory management
+  minStock  Int        @default(10)
+  maxStock  Int        @default(100)
   batches   Batch[]
 }
 
@@ -49,21 +86,333 @@ model Batch {
   batchNumber String
   expiryDate  DateTime
   quantity    Int
+  costPrice   Float     @default(0)
+  stocktakeItems StocktakeItem[]
 }
 
 model Sale {
-  id        String     @id @default(uuid())
-  total     Float
-  createdAt DateTime   @default(now())
-  items     SaleItem[]
-  synced    Boolean    @default(false)
+  id                  String               @id @default(uuid())
+  total               Float
+  createdAt           DateTime             @default(now())
+  items               SaleItem[]
+  synced              Boolean              @default(false)
+  discount            Float                @default(0)
+  userId              String?
+  user                User?                @relation(fields: [userId], references: [id])
+  patientId           String?
+  patient             Patient?             @relation(fields: [patientId], references: [id])
+  safeId              String?
+  safe                Safe?                @relation(fields: [safeId], references: [id])
+  payment             Payment?
+  debtPayments        DebtPayment[]
+  loyaltyTransactions LoyaltyTransaction[]
+  returns             SaleReturn[]
+}
+
+model Patient {
+  id              String          @id @default(uuid())
+  name            String
+  phone           String          @unique
+  dateOfBirth     DateTime?
+  gender          String?
+  allergies       String // Stored as comma-separated string or JSON since SQLite doesn't support arrays well
+  chronicDiseases String // Stored as comma-separated string or JSON
+  notes           String?
+  balance         Float           @default(0)
+  sales           Sale[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  loyaltyAccount  LoyaltyAccount?
+  branchId        String?
+  branch          Branch?         @relation(fields: [branchId], references: [id])
 }
 
 model SaleItem {
-  id       String @id @default(uuid())
+  id       String     @id @default(uuid())
   saleId   String
-  sale     Sale   @relation(fields: [saleId], references: [id])
+  sale     Sale       @relation(fields: [saleId], references: [id])
   drugId   String
   quantity Int
   price    Float
+  cost     Float      @default(0)
+  drug     GlobalDrug @relation(fields: [drugId], references: [id])
+}
+
+model SaleReturn {
+  id        String           @id @default(uuid())
+  saleId    String
+  branchId  String?
+  safeId    String?          // The safe used to refund the customer, if CASH
+  total     Float
+  createdAt DateTime         @default(now())
+  notes     String?
+  synced    Boolean          @default(false)
+  
+  sale      Sale             @relation(fields: [saleId], references: [id])
+  branch    Branch?          @relation(fields: [branchId], references: [id])
+  safe      Safe?            @relation(fields: [safeId], references: [id])
+  items     SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id           String     @id @default(uuid())
+  saleReturnId String
+  drugId       String
+  quantity     Int
+  price        Float      // The price at which it was refunded
+  
+  saleReturn   SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  drug         GlobalDrug @relation(fields: [drugId], references: [id])
+}
+
+model LoyaltyAccount {
+  id             String               @id @default(uuid())
+  patientId      String               @unique
+  totalPoints    Int                  @default(0)
+  lifetimePoints Int                  @default(0)
+  tier           String               @default("BRONZE")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  patient        Patient              @relation(fields: [patientId], references: [id])
+  transactions   LoyaltyTransaction[]
+}
+
+model LoyaltyTransaction {
+  id          String         @id @default(uuid())
+  accountId   String
+  type        String // EARN or REDEEM
+  points      Int
+  description String?
+  saleId      String?
+  createdAt   DateTime       @default(now())
+  synced      Boolean        @default(false)
+  account     LoyaltyAccount @relation(fields: [accountId], references: [id])
+  sale        Sale?          @relation(fields: [saleId], references: [id])
+}
+
+model Payment {
+  id              String   @id @default(uuid())
+  saleId          String   @unique
+  amount          Float
+  method          String // Store as string for SQLite (CASH, CREDIT, ZAIN_CASH, etc.)
+  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  referenceNumber String?
+  createdAt       DateTime @default(now())
+  sale            Sale     @relation(fields: [saleId], references: [id])
+}
+
+model DebtPayment {
+  id        String   @id @default(uuid())
+  saleId    String
+  amount    Float
+  method    String   @default("CASH")
+  note      String?
+  createdAt DateTime @default(now())
+  synced    Boolean  @default(false)
+  sale      Sale     @relation(fields: [saleId], references: [id])
+}
+
+model Branch {
+  id        String      @id @default(uuid())
+  name      String
+  location  String?
+  phone     String?
+  users     User[]
+  inventory Inventory[]
+  patients  Patient[]
+  shifts    Shift[]
+  safes     Safe[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  saleReturns SaleReturn[]
+  stocktakes Stocktake[]
+  transfersOut Transfer[] @relation("BranchTransfersOut")
+  transfersIn  Transfer[] @relation("BranchTransfersIn")
+}
+
+// ==================== التفاعلات الدوائية ====================
+model DrugInteraction {
+  id          String   @id @default(uuid())
+  drug1       String // Scientific Name 1
+  drug2       String // Scientific Name 2
+  severity    String // HIGH, MODERATE, LOW
+  description String
+  createdAt   DateTime @default(now())
+
+  @@unique([drug1, drug2])
+  @@index([drug1])
+  @@index([drug2])
+}
+
+model Shift {
+  id           String    @id @default(uuid())
+  userId       String
+  branchId     String
+  safeId       String?
+  startTime    DateTime  @default(now())
+  endTime      DateTime?
+  duration     Float     @default(0)
+  startingCash Float     @default(0)
+  expectedCash Float     @default(0)
+  actualCash   Float?
+  status       String    @default("OPEN")
+  user         User      @relation(fields: [userId], references: [id])
+  branch       Branch    @relation(fields: [branchId], references: [id])
+  safe         Safe?     @relation(fields: [safeId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  synced       Boolean   @default(false)
+}
+
+model Safe {
+  id               String   @id @default(uuid())
+  name             String
+  type             String   @default("CASH_DRAWER") // CASH_DRAWER, BANK, VAULT, MOBILE_WALLET
+  balance          Float    @default(0)
+  branchId         String
+  branch           Branch   @relation(fields: [branchId], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  shifts           Shift[]
+  transactions     Transaction[]
+  sales            Sale[]
+  expenses         Expense[]
+  supplierPayments SupplierPayment[]
+  saleReturns      SaleReturn[]
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  safeId        String
+  type          String   // IN, OUT
+  amount        Float
+  referenceType String   // SALE, EXPENSE, SUPPLIER_PAYMENT, CUSTOMER_RECEIPT, TRANSFER
+  referenceId   String?  // ID of the related record
+  description   String?
+  userId        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  synced        Boolean  @default(false)
+  
+  safe          Safe     @relation(fields: [safeId], references: [id])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  branchId    String
+  safeId      String?
+  amount      Float
+  category    String
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  synced      Boolean  @default(false)
+  safe        Safe?    @relation(fields: [safeId], references: [id])
+}
+
+model SupplierPayment {
+  id         String   @id @default(uuid())
+  supplierId String
+  branchId   String
+  safeId     String?
+  amount     Float
+  method     String   @default("CASH")
+  reference  String?
+  notes      String?
+  date       DateTime @default(now())
+  createdAt  DateTime @default(now())
+  synced     Boolean  @default(false)
+  safe       Safe?    @relation(fields: [safeId], references: [id])
+}
+
+// ==================== Dead-Letter Queue (أخطاء المزامنة) ====================
+model SyncFailure {
+  id           String   @id @default(uuid())
+  entityType   String // SALE, INVENTORY, DEBT, etc.
+  entityId     String // The original local ID (e.g. saleId)
+  payload      String // JSON Dump of what we tried to send
+  errorMessage String // The exact error from the server/network
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([entityType])
+}
+
+// ==================== الجرد الفعلي ====================
+model Stocktake {
+  id                     String          @id @default(uuid())
+  branchId               String
+  status                 String          @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  totalDiscrepancyAmount Float           @default(0) // Financial value of the difference (+/-)
+  notes                  String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  userId                 String
+  synced                 Boolean         @default(false)
+  
+  branch                 Branch          @relation(fields: [branchId], references: [id])
+  user                   User            @relation(fields: [userId], references: [id])
+  items                  StocktakeItem[]
+}
+
+model StocktakeItem {
+  id             String     @id @default(uuid())
+  stocktakeId    String
+  batchId        String     // Specific batch being counted
+  systemQuantity Int        // What the DB said
+  actualQuantity Int        // What the user counted
+  difference     Int        // actual - system
+  costPrice      Float      // Cost price at the time of stocktake to calculate financial impact
+  reason         String?    // EXPIRED, DAMAGED, MISSING, FOUND
+  
+  stocktake      Stocktake  @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  batch          Batch      @relation(fields: [batchId], references: [id])
+}
+
+// =======================
+// Branch Transfers Models
+// =======================
+
+model Transfer {
+  id             String         @id @default(uuid())
+  fromBranchId   String
+  toBranchId     String
+  status         String         @default("PENDING") // PENDING, IN_TRANSIT, COMPLETED, CANCELLED
+  notes          String?
+  synced         Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  
+  fromBranch     Branch         @relation("BranchTransfersOut", fields: [fromBranchId], references: [id])
+  toBranch       Branch         @relation("BranchTransfersIn", fields: [toBranchId], references: [id])
+  items          TransferItem[]
+}
+
+model TransferItem {
+  id             String         @id @default(uuid())
+  transferId     String
+  drugId         String
+  batchNumber    String
+  expiryDate     DateTime
+  quantity       Int
+  costPrice      Float          @default(0)
+  
+  transfer       Transfer       @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  drug           GlobalDrug     @relation(fields: [drugId], references: [id])
+}
+
+// =======================
+// Local Licensing State
+// =======================
+model LocalLicense {
+  id          String    @id @default(uuid())
+  licenseKey  String    @unique
+  hardwareId  String?
+  deviceName  String?
+  isActive    Boolean   @default(false)
+  expiresAt   DateTime?
+  lastChecked DateTime? // Last time we verified with the cloud
+  synced      Boolean   @default(true)
 }

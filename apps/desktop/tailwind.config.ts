@@ -1,48 +1,38 @@
-import type { Config } from "tailwindcss";
+import type { Config } from 'tailwindcss';
+import sharedConfig from '../../packages/shared/tailwind.config';
 
 const config: Config = {
-    content: [
-        "./index.html",
-        "./src/**/*.{ts,tsx}",
-        "../../packages/ui/src/**/*.{ts,tsx}",
-    ],
-    theme: {
-        extend: {
-            colors: {
-                border: "hsl(var(--border))",
-                input: "hsl(var(--input))",
-                ring: "hsl(var(--ring))",
-                background: "hsl(var(--background))",
-                foreground: "hsl(var(--foreground))",
-                primary: {
-                    DEFAULT: "hsl(var(--primary))",
-                    foreground: "hsl(var(--primary-foreground))",
-                },
-                secondary: {
-                    DEFAULT: "hsl(var(--secondary))",
-                    foreground: "hsl(var(--secondary-foreground))",
-                },
-                destructive: {
-                    DEFAULT: "hsl(var(--destructive))",
-                    foreground: "hsl(var(--destructive-foreground))",
-                },
-                muted: {
-                    DEFAULT: "hsl(var(--muted))",
-                    foreground: "hsl(var(--muted-foreground))",
-                },
-                accent: {
-                    DEFAULT: "hsl(var(--accent))",
-                    foreground: "hsl(var(--accent-foreground))",
-                },
-            },
-            borderRadius: {
-                lg: "var(--radius)",
-                md: "calc(var(--radius) - 2px)",
-                sm: "calc(var(--radius) - 4px)",
-            },
+  // All token definitions (colours, radius, fonts, darkMode) come from the shared preset
+  presets: [sharedConfig],
+
+  content: [
+    './index.html',
+    './src/**/*.{ts,tsx}',
+    // Include shared UI package so its class names are not purged during build
+    '../../packages/ui/src/**/*.{ts,tsx}',
+  ],
+
+  theme: {
+    extend: {
+      // Desktop-specific animations (slide-up for modals, scale-in for dropdowns)
+      keyframes: {
+        slideUp: {
+          '0%':   { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)',     opacity: '1' },
         },
+        scaleIn: {
+          '0%':   { transform: 'scale(0)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+      },
+      animation: {
+        slideUp: 'slideUp 0.3s ease-out',
+        scaleIn: 'scaleIn 0.2s ease-out',
+      },
     },
-    plugins: [],
+  },
+
+  plugins: [],
 };
 
 export default config;

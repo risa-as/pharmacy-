@@ -12,11 +12,13 @@ export const authConfig = {
       const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
 
       if (isOnDashboard) {
-        if (!isLoggedIn) return false; // Redirect to login
+        if (!isLoggedIn) {
+          return false; // Redirect to login
+        }
 
-        // Admin has full access
+        // Admin and Super Admin have full access (middleware handles specific isolations)
         const role = auth?.user?.role;
-        if (role === "ADMIN") return true;
+        if (role === "ADMIN" || role === "SUPER_ADMIN") return true;
 
         // Check granular permissions for non-admin users
         const user = { role: role || "CASHIER", permissions: (auth?.user as any)?.permissions };

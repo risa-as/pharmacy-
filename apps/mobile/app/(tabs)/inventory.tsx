@@ -1,276 +1,430 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    FlatList,
-    TextInput,
-    TouchableOpacity,
-    RefreshControl,
+    View, Text, FlatList, TextInput, TouchableOpacity,
+    RefreshControl, ActivityIndicator, Alert, Modal, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router, useLocalSearchParams } from 'expo-router';
 import { apiService } from '../../services/api';
+import { dbService } from '../../services/db';
+import { syncService } from '../../services/sync';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { Colors } from '../../constants/colors';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { BranchSelector } from '../../components/BranchSelector';
+import { useSyncStatus } from '../../context/SyncContext';
+
+type TabKey = 'all' | 'low-stock' | 'expiring';
 
 interface InventoryItem {
     id: string;
+    barcode?: string;
     drugName: string;
     quantity: number;
     price: number;
     reorderLevel: number;
+    expiryDate?: string;
+}
+
+const TABS: { key: TabKey; label: string }[] = [
+    { key: 'all', label: 'الكل' },
+    { key: 'low-stock', label: 'نواقص' },
+    { key: 'expiring', label: 'قارب الانتهاء' },
+];
+
+function getDaysToExpiry(expiryDate?: string): number | null {
+    if (!expiryDate) return null;
+    const diff = new Date(expiryDate).getTime() - Date.now();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
 export default function InventoryScreen() {
+    const { isDarkMode } = useTheme();
+    const { isAdmin, branchId: authBranchId } = useAuth();
+    const { triggerSync } = useSyncStatus();
+    const C = Colors(isDarkMode);
+
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [search, setSearch] = useState('');
+    const [activeTab, setActiveTab] = useState<TabKey>('all');
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+    const [isOnline, setIsOnline] = useState(true);
 
-    const fetchInventory = async () => {
+    // Modal states (preserved)
+    const [showBatchModal, setShowBatchModal] = useState<any | null>(null);
+    const [showBranchModal, setShowBranchModal] = useState<any | null>(null);
+    const [showCreateModal, setShowCreateModal] = useState<string | null>(null);
+    const [modalLoading, setModalLoading] = useState(false);
+    const [formData, setFormData] = useState({
+        tradeName: '', scientificName: '', price: '', costPrice: '',
+        minStock: '5', maxStock: '100', batchNumber: '', quantity: '', expiryDate: '',
+    });
+
+    const params = useLocalSearchParams();
+
+    // Auto-set branch for pharmacist
+    useEffect(() => {
+        if (!isAdmin && authBranchId) setSelectedBranch(authBranchId);
+    }, [isAdmin, authBranchId]);
+
+    const fetchInventory = useCallback(async () => {
+        setLoading(true);
         try {
-            const data = await apiService.getInventory();
-            setItems(data);
-        } catch (error) {
-            console.error('Error fetching inventory:', error);
+            const online = await syncService.isOnline();
+            setIsOnline(online);
+            if (online) {
+                const data = await apiService.getInventory(selectedBranch || undefined);
+                setItems(data);
+            } else {
+                const products = await dbService.searchProducts('');
+                setItems(products.map((p: any) => ({
+                    id: p.id, drugName: p.drugName, price: p.price,
+                    quantity: p.quantity, reorderLevel: p.reorderLevel,
+                })));
+            }
+        } catch {
+            try {
+                const products = await dbService.searchProducts('');
+                setItems(products.map((p: any) => ({
+                    id: p.id, drugName: p.drugName, price: p.price,
+                    quantity: p.quantity, reorderLevel: p.reorderLevel,
+                })));
+            } catch { /* silent fallback */ }
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    };
+    }, [selectedBranch]);
 
-    const onRefresh = async () => {
-        setRefreshing(true);
-        await fetchInventory();
-        setRefreshing(false);
+    useEffect(() => { fetchInventory(); }, [fetchInventory]);
+
+    // Barcode scan return handler
+    const handleScannedProduct = async (code: string) => {
+        if (!isOnline) { Alert.alert('تنبيه', 'يجب أن تكون متصلاً بالإنترنت لإضافة عناصر جديدة.'); return; }
+        setLoading(true);
+        try {
+            const res = await apiService.checkBarcodeExact(code, selectedBranch || undefined);
+            if (res.success && res.exists) {
+                if (res.inventory) setShowBatchModal(res.inventory);
+                else if (res.drug) setShowBranchModal(res.drug);
+            } else {
+                setShowCreateModal(code);
+            }
+        } catch { Alert.alert('خطأ', 'فشل التحقق من المنتج'); }
+        finally { setLoading(false); }
     };
 
     useEffect(() => {
+        if (params.scannedBarcode) {
+            handleScannedProduct(params.scannedBarcode as string);
+            router.setParams({ scannedBarcode: '' });
+        }
+    }, [params.scannedBarcode]);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        triggerSync('inventory');
+        await syncService.syncData();
         fetchInventory();
-    }, []);
+    }, [fetchInventory, triggerSync]);
 
-    const filteredItems = items.filter(item =>
-        item.drugName.toLowerCase().includes(search.toLowerCase())
-    );
-
-    const getStatusColor = (quantity: number, reorderLevel: number) => {
-        if (quantity === 0) return '#ef4444';
-        if (quantity <= reorderLevel) return '#f59e0b';
-        return '#10b981';
+    // Modal handlers (preserved)
+    const handleAddBatch = async () => {
+        if (!formData.quantity || !formData.batchNumber || !formData.expiryDate) {
+            Alert.alert('تنبيه', 'يرجى ملء كافة الحقول الأساسية'); return;
+        }
+        setModalLoading(true);
+        try {
+            await apiService.addBatch({
+                inventoryId: showBatchModal.id,
+                batchNumber: formData.batchNumber,
+                quantity: parseInt(formData.quantity) || 0,
+                expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+            });
+            setShowBatchModal(null);
+            setFormData(f => ({ ...f, quantity: '', batchNumber: '', expiryDate: '' }));
+            fetchInventory();
+        } catch { Alert.alert('خطأ', 'فشل إضافة الجرعة'); }
+        finally { setModalLoading(false); }
     };
 
-    const getStatusLabel = (quantity: number, reorderLevel: number) => {
-        if (quantity === 0) return 'نفاد';
-        if (quantity <= reorderLevel) return 'منخفض';
-        return 'جيد';
+    const handleAddToBranch = async () => {
+        if (!formData.price || !formData.quantity || !formData.batchNumber || !formData.expiryDate) {
+            Alert.alert('تنبيه', 'يرجى ملء كافة الحقول الأساسية'); return;
+        }
+        setModalLoading(true);
+        try {
+            await apiService.addToBranch({
+                drugId: showBranchModal.id, branchId: selectedBranch!,
+                price: parseFloat(formData.price) || 0,
+                costPrice: parseFloat(formData.costPrice) || 0,
+                minStock: parseInt(formData.minStock) || 5,
+                maxStock: parseInt(formData.maxStock) || 100,
+                batchNumber: formData.batchNumber,
+                quantity: parseInt(formData.quantity) || 0,
+                expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+            });
+            setShowBranchModal(null);
+            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', batchNumber: '', quantity: '', expiryDate: '' });
+            fetchInventory();
+        } catch { Alert.alert('خطأ', 'فشل إضافة الدواء للفرع'); }
+        finally { setModalLoading(false); }
     };
 
-    const renderItem = ({ item }: { item: InventoryItem }) => (
-        <TouchableOpacity style={styles.itemCard}>
-            <View style={styles.itemHeader}>
-                <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: `${getStatusColor(item.quantity, item.reorderLevel)}20` }
-                ]}>
-                    <Text style={[
-                        styles.statusText,
-                        { color: getStatusColor(item.quantity, item.reorderLevel) }
-                    ]}>
-                        {getStatusLabel(item.quantity, item.reorderLevel)}
-                    </Text>
+    const handleCreateDrug = async () => {
+        if (!formData.tradeName || !formData.price || !formData.quantity || !formData.expiryDate) {
+            Alert.alert('تنبيه', 'يرجى ملء الحقول الأساسية'); return;
+        }
+        setModalLoading(true);
+        try {
+            await apiService.createQuickDrug({
+                barcode: showCreateModal!, tradeName: formData.tradeName,
+                scientificName: formData.scientificName, drugType: 'Tablet', dosage: 'Custom',
+                unit: 'Box', category: 'General', manufacturer: 'Unknown', country: 'Unknown',
+                branchId: selectedBranch!, price: parseFloat(formData.price) || 0,
+                costPrice: parseFloat(formData.costPrice) || 0,
+                minStock: parseInt(formData.minStock) || 5, maxStock: parseInt(formData.maxStock) || 100,
+                batchNumber: formData.batchNumber, quantity: parseInt(formData.quantity) || 0,
+                expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+            });
+            setShowCreateModal(null);
+            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', batchNumber: '', quantity: '', expiryDate: '' });
+            fetchInventory();
+        } catch { Alert.alert('خطأ', 'فشل تسجيل الدواء الجديد'); }
+        finally { setModalLoading(false); }
+    };
+
+    // Filter pipeline
+    const filtered = items
+        .filter(i => {
+            const q = search.toLowerCase();
+            return !q || i.drugName.toLowerCase().includes(q) || (i.barcode?.includes(search) ?? false);
+        })
+        .filter(i => {
+            if (activeTab === 'low-stock') return i.quantity <= i.reorderLevel;
+            if (activeTab === 'expiring') {
+                const days = getDaysToExpiry(i.expiryDate);
+                return days !== null && days <= 30 && days >= 0;
+            }
+            return true;
+        });
+
+    const stockBadge = (item: InventoryItem): { label: string; variant: 'success' | 'warning' | 'danger' } => {
+        if (item.quantity === 0) return { label: 'نفاد المخزون', variant: 'danger' };
+        if (item.quantity <= item.reorderLevel) return { label: `${item.quantity} — منخفض`, variant: 'warning' };
+        return { label: `${item.quantity} — جيد`, variant: 'success' };
+    };
+
+    const renderItem = ({ item }: { item: InventoryItem }) => {
+        const { label, variant } = stockBadge(item);
+        const days = getDaysToExpiry(item.expiryDate);
+        const expiryVariant = days !== null && days <= 7 ? 'danger' as const : days !== null && days <= 30 ? 'warning' as const : 'info' as const;
+
+        return (
+            <Card className="mb-3">
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                    <View style={{ flex: 1, paddingLeft: 8 }}>
+                        <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 15, textAlign: 'right' }}>{item.drugName}</Text>
+                        <Text style={{ color: C.primary, fontWeight: '700', fontSize: 13, textAlign: 'right', marginTop: 3 }}>
+                            {item.price.toLocaleString()} د.ع
+                        </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                        <Badge label={label} variant={variant} />
+                        {days !== null && (
+                            <Badge label={`${days} يوم للانتهاء`} variant={expiryVariant} />
+                        )}
+                    </View>
                 </View>
-                <Text style={styles.itemName}>{item.drugName}</Text>
-            </View>
-            <View style={styles.itemDetails}>
-                <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>الكمية</Text>
-                    <Text style={[
-                        styles.detailValue,
-                        { color: getStatusColor(item.quantity, item.reorderLevel) }
-                    ]}>
-                        {item.quantity}
-                    </Text>
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border }}>
+                    <Text style={{ color: C.mutedForeground, fontSize: 12 }}>حد الطلب: {item.reorderLevel}</Text>
+                    {item.barcode && (
+                        <Text style={{ color: C.mutedForeground, fontSize: 12 }}>{item.barcode}</Text>
+                    )}
                 </View>
-                <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>السعر</Text>
-                    <Text style={styles.detailValue}>{item.price.toFixed(2)}</Text>
-                </View>
-            </View>
-        </TouchableOpacity>
-    );
+            </Card>
+        );
+    };
+
+    const inputStyle = {
+        backgroundColor: C.input, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+        paddingHorizontal: 16, height: 50, marginBottom: 12, fontSize: 16,
+        textAlign: 'right' as const, color: C.foreground,
+    };
 
     return (
-        <View style={styles.container}>
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color="#9ca3af" />
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="ابحث عن دواء..."
-                    placeholderTextColor="#9ca3af"
-                    value={search}
-                    onChangeText={setSearch}
-                    textAlign="right"
-                />
-                {search.length > 0 && (
-                    <TouchableOpacity onPress={() => setSearch('')}>
-                        <Ionicons name="close-circle" size={20} color="#9ca3af" />
+        <View style={{ flex: 1, backgroundColor: C.background }}>
+            {/* Pinned header */}
+            <View style={{ backgroundColor: C.background, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
+                {isAdmin && (
+                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} />
+                )}
+
+                {!isOnline && (
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.dangerBg, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10, gap: 6 }}>
+                        <Ionicons name="cloud-offline" size={14} color={C.danger} />
+                        <Text style={{ color: C.danger, fontSize: 12, fontWeight: '700' }}>وضع عدم الاتصال</Text>
+                    </View>
+                )}
+
+                {/* Search bar */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, marginBottom: 10, gap: 8 }}>
+                    <Ionicons name="search" size={18} color={C.mutedForeground} />
+                    <TextInput
+                        style={{ flex: 1, color: C.foreground, paddingVertical: 10, textAlign: 'right', fontSize: 14 }}
+                        placeholder="ابحث عن دواء أو باركود..."
+                        placeholderTextColor={C.mutedForeground}
+                        value={search}
+                        onChangeText={setSearch}
+                    />
+                    <TouchableOpacity onPress={() => router.push({ pathname: '/scan', params: { from: 'inventory' } })}>
+                        <Ionicons name="scan-outline" size={22} color={C.primary} />
                     </TouchableOpacity>
+                </View>
+
+                {/* Tab filter pills */}
+                <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 6 }}>
+                    {TABS.map(tab => {
+                        const active = activeTab === tab.key;
+                        return (
+                            <TouchableOpacity
+                                key={tab.key}
+                                onPress={() => setActiveTab(tab.key)}
+                                style={{
+                                    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+                                    backgroundColor: active ? C.primary : C.card,
+                                    borderWidth: 1, borderColor: active ? C.primary : C.border,
+                                }}
+                            >
+                                <Text style={{ color: active ? '#fff' : C.mutedForeground, fontSize: 13, fontWeight: '600' }}>
+                                    {tab.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+
+                {/* Summary counts */}
+                {!loading && (
+                    <View style={{ flexDirection: 'row-reverse', gap: 10, paddingBottom: 6 }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 12 }}>{filtered.length} عنصر</Text>
+                        {activeTab === 'all' && (
+                            <>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12 }}>·</Text>
+                                <Text style={{ color: C.warning, fontSize: 12 }}>
+                                    {items.filter(i => i.quantity <= i.reorderLevel && i.quantity > 0).length} نواقص
+                                </Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12 }}>·</Text>
+                                <Text style={{ color: C.danger, fontSize: 12 }}>
+                                    {items.filter(i => i.quantity === 0).length} نفاد
+                                </Text>
+                            </>
+                        )}
+                    </View>
                 )}
             </View>
 
-            {/* Stats */}
-            <View style={styles.stats}>
-                <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{items.length}</Text>
-                    <Text style={styles.statLabel}>إجمالي الأصناف</Text>
+            {/* Drug list */}
+            {loading && !refreshing ? (
+                <View style={{ padding: 16, gap: 10 }}>
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <Skeleton key={i} height={72} radius={16} />
+                    ))}
                 </View>
-                <View style={styles.statItem}>
-                    <Text style={[styles.statNumber, { color: '#f59e0b' }]}>
-                        {items.filter(i => i.quantity <= i.reorderLevel && i.quantity > 0).length}
-                    </Text>
-                    <Text style={styles.statLabel}>مخزون منخفض</Text>
-                </View>
-                <View style={styles.statItem}>
-                    <Text style={[styles.statNumber, { color: '#ef4444' }]}>
-                        {items.filter(i => i.quantity === 0).length}
-                    </Text>
-                    <Text style={styles.statLabel}>نفاد المخزون</Text>
-                </View>
-            </View>
+            ) : (
+                <FlatList
+                    data={filtered}
+                    keyExtractor={item => item.id}
+                    renderItem={renderItem}
+                    contentContainerStyle={{ padding: 16, paddingTop: 6, paddingBottom: 110 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+                    ListEmptyComponent={
+                        <EmptyState
+                            icon="cube-outline"
+                            title="لا توجد عناصر"
+                            subtitle={
+                                search ? 'لا توجد نتائج للبحث' :
+                                activeTab === 'low-stock' ? 'المخزون بمستويات جيدة' :
+                                'لا توجد أدوية قاربت الانتهاء'
+                            }
+                        />
+                    }
+                />
+            )}
 
-            {/* List */}
-            <FlatList
-                data={filteredItems}
-                renderItem={renderItem}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.list}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Ionicons name="cube-outline" size={48} color="#d1d5db" />
-                        <Text style={styles.emptyText}>
-                            {loading ? 'جارٍ التحميل...' : 'لا توجد أصناف'}
+            {/* Add Batch Modal */}
+            <Modal visible={!!showBatchModal} transparent animationType="slide" onRequestClose={() => setShowBatchModal(null)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}>
+                        <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 16 }}>
+                            إضافة كمية: {showBatchModal?.drug?.tradeName}
                         </Text>
+                        <TextInput style={inputStyle} placeholder="رقم التشغيلة (Batch)" placeholderTextColor={C.mutedForeground} value={formData.batchNumber} onChangeText={t => setFormData(f => ({ ...f, batchNumber: t }))} />
+                        <TextInput style={inputStyle} placeholder="الكمية" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        <View style={{ gap: 8, marginTop: 4 }}>
+                            <Button label="حفظ" loading={modalLoading} onPress={handleAddBatch} />
+                            <Button label="إلغاء" variant="ghost" onPress={() => setShowBatchModal(null)} />
+                        </View>
                     </View>
-                }
-            />
+                </View>
+            </Modal>
+
+            {/* Add to Branch Modal */}
+            <Modal visible={!!showBranchModal} transparent animationType="slide" onRequestClose={() => setShowBranchModal(null)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }} contentContainerStyle={{ padding: 24 }}>
+                        <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 16 }}>
+                            تنشيط دواء: {showBranchModal?.tradeName}
+                        </Text>
+                        <TextInput style={inputStyle} placeholder="سعر البيع" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
+                        <TextInput style={inputStyle} placeholder="سعر التكلفة" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.costPrice} onChangeText={t => setFormData(f => ({ ...f, costPrice: t }))} />
+                        <TextInput style={inputStyle} placeholder="حد النواقص" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.minStock} onChangeText={t => setFormData(f => ({ ...f, minStock: t }))} />
+                        <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
+                        <TextInput style={inputStyle} placeholder="رقم التشغيلة (Batch)" placeholderTextColor={C.mutedForeground} value={formData.batchNumber} onChangeText={t => setFormData(f => ({ ...f, batchNumber: t }))} />
+                        <TextInput style={inputStyle} placeholder="الكمية" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        <View style={{ gap: 8, marginTop: 4, paddingBottom: 24 }}>
+                            <Button label="تنشيط وإضافة" loading={modalLoading} onPress={handleAddToBranch} />
+                            <Button label="إلغاء" variant="ghost" onPress={() => setShowBranchModal(null)} />
+                        </View>
+                    </ScrollView>
+                </View>
+            </Modal>
+
+            {/* Create Drug Modal */}
+            <Modal visible={!!showCreateModal} transparent animationType="slide" onRequestClose={() => setShowCreateModal(null)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }} contentContainerStyle={{ padding: 24 }}>
+                        <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 2 }}>
+                            تسجيل دواء جديد
+                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginBottom: 16 }}>
+                            الباركود: {showCreateModal}
+                        </Text>
+                        <TextInput style={inputStyle} placeholder="الاسم التجاري *" placeholderTextColor={C.mutedForeground} value={formData.tradeName} onChangeText={t => setFormData(f => ({ ...f, tradeName: t }))} />
+                        <TextInput style={inputStyle} placeholder="الاسم العلمي" placeholderTextColor={C.mutedForeground} value={formData.scientificName} onChangeText={t => setFormData(f => ({ ...f, scientificName: t }))} />
+                        <TextInput style={inputStyle} placeholder="سعر البيع *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
+                        <TextInput style={inputStyle} placeholder="سعر التكلفة" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.costPrice} onChangeText={t => setFormData(f => ({ ...f, costPrice: t }))} />
+                        <TextInput style={inputStyle} placeholder="حد النواقص" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.minStock} onChangeText={t => setFormData(f => ({ ...f, minStock: t }))} />
+                        <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
+                        <TextInput style={inputStyle} placeholder="رقم التشغيلة *" placeholderTextColor={C.mutedForeground} value={formData.batchNumber} onChangeText={t => setFormData(f => ({ ...f, batchNumber: t }))} />
+                        <TextInput style={inputStyle} placeholder="الكمية *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        <View style={{ gap: 8, marginTop: 4, paddingBottom: 30 }}>
+                            <Button label="حفظ الدواء" loading={modalLoading} onPress={handleCreateDrug} />
+                            <Button label="إلغاء" variant="ghost" onPress={() => setShowCreateModal(null)} />
+                        </View>
+                    </ScrollView>
+                </View>
+            </Modal>
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    searchContainer: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        backgroundColor: '#fff',
-        margin: 16,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        height: 48,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1f2937',
-        marginRight: 12,
-    },
-    stats: {
-        flexDirection: 'row-reverse',
-        paddingHorizontal: 16,
-        marginBottom: 8,
-        gap: 12,
-    },
-    statItem: {
-        flex: 1,
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 12,
-        alignItems: 'center',
-    },
-    statNumber: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    statLabel: {
-        fontSize: 11,
-        color: '#6b7280',
-        marginTop: 4,
-    },
-    list: {
-        padding: 16,
-        paddingTop: 8,
-    },
-    itemCard: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    itemHeader: {
-        flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    itemName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        flex: 1,
-        textAlign: 'right',
-    },
-    statusBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 8,
-        marginLeft: 8,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    itemDetails: {
-        flexDirection: 'row-reverse',
-        justifyContent: 'space-around',
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-        paddingTop: 12,
-    },
-    detailItem: {
-        alignItems: 'center',
-    },
-    detailLabel: {
-        fontSize: 12,
-        color: '#9ca3af',
-        marginBottom: 4,
-    },
-    detailValue: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    emptyState: {
-        alignItems: 'center',
-        paddingTop: 60,
-    },
-    emptyText: {
-        color: '#9ca3af',
-        marginTop: 12,
-        fontSize: 14,
-    },
-});

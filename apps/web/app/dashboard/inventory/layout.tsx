@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Inventory Hub Layout
  *
@@ -28,19 +26,19 @@ import {
 } from "lucide-react";
 
 const TABS: HubTab[] = [
-    { name: "المخزون",                href: "/dashboard/inventory",                   icon: Package },
-    { name: "الجرد",                   href: "/dashboard/inventory/stocktakes",         icon: CheckSquare },
-    { name: "النواقص",                 href: "/dashboard/inventory/shortages",          icon: AlertTriangle },
-    { name: "المنتهية والتوالف",       href: "/dashboard/inventory/expired-damaged",    icon: PackageMinus },
-    { name: "التحويلات",               href: "/dashboard/inventory/transfers",          icon: ArrowRightLeft },
-    { name: "الدفعات",                 href: "/dashboard/batches",                      icon: Layers },
-    { name: "حركة منتج",              href: "/dashboard/inventory/product-movement",   icon: Activity },
-    { name: "تحذيرات الهامش",         href: "/dashboard/inventory/margin-warnings",    icon: TrendingDown },
+    { name: "المخزون",                href: "/dashboard/inventory",                   icon: <Package className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "الجرد",                   href: "/dashboard/inventory/stocktakes",         icon: <CheckSquare className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "النواقص",                 href: "/dashboard/inventory/shortages",          icon: <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "المنتهية والتوالف",       href: "/dashboard/inventory/expired-damaged",    icon: <PackageMinus className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "التحويلات",               href: "/dashboard/inventory/transfers",          icon: <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "الدفعات",                 href: "/dashboard/batches",                      icon: <Layers className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "حركة منتج",              href: "/dashboard/inventory/product-movement",   icon: <Activity className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "تحذيرات الهامش",         href: "/dashboard/inventory/margin-warnings",    icon: <TrendingDown className="w-3.5 h-3.5 shrink-0" /> },
 ];
 
 const ACTIONS: HubAction[] = [
-    { name: "طباعة الباركود",    href: "/dashboard/inventory/barcode-print", icon: Tag,       variant: "outline" },
-    { name: "تعديل الأسعار",    href: "/dashboard/inventory/bulk-pricing",  icon: DollarSign, variant: "outline" },
+    { name: "طباعة الباركود",    href: "/dashboard/inventory/barcode-print", icon: <Tag className="w-3.5 h-3.5 shrink-0" />,       variant: "outline" },
+    { name: "تعديل الأسعار",    href: "/dashboard/inventory/bulk-pricing",  icon: <DollarSign className="w-3.5 h-3.5 shrink-0" />, variant: "outline" },
 ];
 
 export default function InventoryLayout({

@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import {
     Store, Pill, Package, AlertTriangle, Users, Bell,
     BarChart3, TrendingUp, DollarSign, ShoppingCart, Clock,
-    Stethoscope, BookOpen, ClipboardList, Undo2
+    Stethoscope, BookOpen, ClipboardList, Undo2, Building2, Crown
 } from "lucide-react";
 import Link from "next/link";
 import { getAlertStats } from "@/app/lib/alerts";
@@ -142,6 +142,49 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     const params = await searchParams;
     const session = await auth();
     const role = session?.user?.role || 'CASHIER';
+    const isSuperAdmin = role === 'SUPER_ADMIN';
+
+    if (isSuperAdmin) {
+        const orgCount = await prisma.organization.count();
+        const activeLicenses = await prisma.deviceLicense.count({ where: { isActive: true } });
+
+        return (
+            <main dir="rtl" className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-l from-primary to-info">
+                            لوحة تحكم المنصة
+                        </h1>
+                        <p className="text-muted-foreground text-sm">
+                            مرحباً {session?.user?.name || 'بك'} · <span className="text-primary font-medium">مدير المنصة (SUPER_ADMIN)</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-xl border border-border bg-card p-4 shadow-sm hover:shadow-md hover:scale-[1.02] transition-all flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                            <Building2 className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold text-foreground tabular-nums">{orgCount}</div>
+                            <div className="text-xs text-muted-foreground">إجمالي المؤسسات</div>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-border bg-card p-4 shadow-sm hover:shadow-md hover:scale-[1.02] transition-all flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-info/10">
+                            <Crown className="w-5 h-5 text-info" />
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold text-foreground tabular-nums">{activeLicenses}</div>
+                            <div className="text-xs text-muted-foreground">التراخيص النشطة</div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        );
+    }
+
     const isAdmin = role === 'ADMIN';
     const data = await getDashboardData(isAdmin);
 

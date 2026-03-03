@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
         // Get current stock
         const inventories = await prisma.inventory.findMany({
             where: { branchId, drugId: { in: drugIds } },
-            select: { drugId: true, quantity: true, minStock: true }
+            include: { batches: true }
         });
 
         const inventoryMap = new Map(inventories.map(i => [i.drugId, i]));
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
             const totalSold = sale._sum.quantity || 0;
             const dailyAvg = totalSold / 90;
             const predictedDemand = Math.ceil(dailyAvg * days);
-            const currentStock = inv?.quantity || 0;
+            const currentStock = inv?.batches?.reduce((acc: number, batch: any) => acc + batch.quantity, 0) || 0;
             const minStock = inv?.minStock || 10;
             const daysUntilStockout = dailyAvg > 0 ? Math.floor(currentStock / dailyAvg) : 999;
             const suggestedOrder = Math.max(0, predictedDemand - currentStock + minStock);

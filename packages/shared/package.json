@@ -9,6 +9,7 @@
         "dev": "tsc --watch"
     },
     "devDependencies": {
+        "tailwindcss": "^3.4.0",
         "typescript": "^5.3.3",
         "zod": "^3.22.4"
     }

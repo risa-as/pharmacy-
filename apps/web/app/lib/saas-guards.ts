@@ -41,17 +41,15 @@ export async function checkPlanLimit(
     organizationId: string,
     resource: PlanLimitResource
 ): Promise<PlanLimitResult> {
-    // Look up plan limits from the active Tenant.
-    // -1 on Tenant fields is treated as "unlimited" (Enterprise plan).
-    const tenant = await prisma.tenant.findFirst({
-        where: { isActive: true },
-        select: { maxBranches: true, maxUsers: true },
+    const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        include: { plan: true },
     });
 
-    const max =
-        resource === "branches"
-            ? (tenant?.maxBranches ?? FREE_PLAN_LIMITS.maxBranches)
-            : (tenant?.maxUsers ?? FREE_PLAN_LIMITS.maxUsers);
+    let maxBranches = org?.maxBranches ?? org?.plan?.maxBranches ?? FREE_PLAN_LIMITS.maxBranches;
+    let maxUsers = org?.maxUsers ?? org?.plan?.maxUsers ?? FREE_PLAN_LIMITS.maxUsers;
+
+    const max = resource === "branches" ? maxBranches : maxUsers;
 
     let current: number;
     if (resource === "branches") {

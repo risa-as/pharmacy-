@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
 
 type AckStatus = "processed" | "duplicate" | "noop";
 
@@ -113,6 +114,31 @@ export async function POST(req: Request) {
 
             return { inventory, ackStatus: "processed" as AckStatus };
         });
+
+        // T032 — Low-stock trigger: fire-and-forget after success
+        void (async () => {
+            try {
+                const batches = await prisma.batch.findMany({
+                    where: { inventoryId: result.inventory.id },
+                    select: { quantity: true },
+                });
+                const totalQty = batches.reduce((s, b) => s + b.quantity, 0);
+                if (totalQty <= result.inventory.minStock) {
+                    const drug = await prisma.inventory.findUnique({
+                        where: { id: result.inventory.id },
+                        include: { drug: { select: { tradeName: true } } },
+                    });
+                    await sendAndPersistNotification({
+                        type: 'LOW_STOCK',
+                        title: 'تحذير: نقص مخزون',
+                        body: `${drug?.drug?.tradeName ?? 'دواء'}: الكمية الحالية (${totalQty}) أقل من أو تساوي الحد الأدنى (${result.inventory.minStock})`,
+                        branchId: result.inventory.branchId,
+                    });
+                }
+            } catch (triggerErr) {
+                console.error('[add-batch] Low-stock trigger failed:', triggerErr);
+            }
+        })();
 
         return NextResponse.json({
             success: true,

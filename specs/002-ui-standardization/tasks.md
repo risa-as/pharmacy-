@@ -193,12 +193,12 @@ Phase N: Polish (T058–T062)
 
 ### Same-File Sequential Dependencies
 
-| File | Ordered Tasks |
-|------|---------------|
-| `apps/web/app/globals.css` | T035 (add vars) — no other tasks touch this file |
-| `apps/desktop/src/index.css` | T036 (add vars) — no other tasks touch this file |
-| `apps/web/app/login/page.tsx` | T035 → T041 (vars before page references them) |
-| `apps/web/app/page.tsx` | T035 → T042 (vars before page references them) |
+| File                                          | Ordered Tasks                                       |
+| --------------------------------------------- | --------------------------------------------------- |
+| `apps/web/app/globals.css`                    | T035 (add vars) — no other tasks touch this file    |
+| `apps/desktop/src/index.css`                  | T036 (add vars) — no other tasks touch this file    |
+| `apps/web/app/login/page.tsx`                 | T035 → T041 (vars before page references them)      |
+| `apps/web/app/page.tsx`                       | T035 → T042 (vars before page references them)      |
 | `apps/desktop/src/components/LoginScreen.tsx` | T036 → T046 (vars before component references them) |
 
 ### User Story Dependencies
@@ -301,7 +301,7 @@ With multiple developers (post-Phase-2):
 
 **Purpose**: After Phases 1–6 migrated the top-impact files, a broad sweep revealed that
 89 dashboard page files and 57 UI component files still contain residual hardcoded Tailwind
-color classes (bg-white, bg-gray-*, text-gray-*, border-gray-*, and inline palette accents
+color classes (bg-white, bg-gray-_, text-gray-_, border-gray-\*, and inline palette accents
 like text-blue-600 and bg-orange-100). This phase performs the final comprehensive sweep
 to achieve a fully token-clean codebase.
 

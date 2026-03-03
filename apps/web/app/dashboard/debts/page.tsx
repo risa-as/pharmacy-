@@ -35,7 +35,7 @@ export default async function DebtsPage({
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <div className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-2xl p-5">
+                <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-destructive/10 dark:to-destructive/5 border border-red-200 dark:border-destructive/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-destructive/10 rounded-xl">
                             <Banknote className="w-5 h-5 text-destructive" />
@@ -45,7 +45,7 @@ export default async function DebtsPage({
                     <p className="text-2xl font-bold text-destructive">{formatIQD(stats.totalDebt)}</p>
                 </div>
 
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-2xl p-5">
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-warning/10 dark:to-warning/5 border border-orange-200 dark:border-warning/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-warning/10 rounded-xl">
                             <Users className="w-5 h-5 text-warning" />
@@ -55,7 +55,7 @@ export default async function DebtsPage({
                     <p className="text-2xl font-bold text-warning">{stats.debtorCount}</p>
                 </div>
 
-                <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-2xl p-5">
+                <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-success/10 dark:to-success/5 border border-green-200 dark:border-success/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-success/10 rounded-xl">
                             <ArrowDownCircle className="w-5 h-5 text-success" />
@@ -92,9 +92,9 @@ export default async function DebtsPage({
                                     <th className="p-3 text-center font-medium">إجراء</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-border">
                                 {debtors.map((debtor) => (
-                                    <tr key={debtor.id} className="hover:bg-primary/10/30 transition-colors">
+                                    <tr key={debtor.id} className="hover:bg-accent transition-colors">
                                         <td className="p-3 font-medium text-foreground">{debtor.name}</td>
                                         <td className="p-3 text-muted-foreground" dir="ltr">{debtor.phone}</td>
                                         <td className="p-3">

@@ -13,7 +13,7 @@ export default defineConfig({
                 vite: {
                     build: {
                         rollupOptions: {
-                            external: ['node-fetch', '@prisma/client', '.prisma/client'],
+                            external: ['node-fetch', '@prisma/client', '.prisma/client', 'electron-store'],
                         },
                     },
                 },

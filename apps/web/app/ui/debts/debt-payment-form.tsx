@@ -69,7 +69,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                         onChange={(e) => setAmount(Number(e.target.value))}
                         max={remaining}
                         min={1}
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     />
                     <p className="text-xs text-muted-foreground mt-1">المتبقي: {formatIQD(remaining)}</p>
                 </div>
@@ -78,7 +78,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                     <select
                         value={method}
                         onChange={(e) => setMethod(e.target.value)}
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     >
                         <option value="CASH">نقدي</option>
                         <option value="CARD">بطاقة</option>
@@ -95,7 +95,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                         value={safeId}
                         onChange={(e) => setSafeId(e.target.value)}
                         required
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     >
                         {safes.map((safe) => (
                             <option key={safe.id} value={safe.id}>
@@ -111,7 +111,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         placeholder="مثال: دفعة جزئية..."
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     />
                 </div>
             </div>

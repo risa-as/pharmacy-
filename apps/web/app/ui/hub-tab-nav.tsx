@@ -11,19 +11,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import React, { useState, useEffect } from "react";
 import { cn } from "@faramace/ui";
-import type { LucideIcon } from "lucide-react";
 
 export interface HubTab {
     name: string;
     href: string;
-    icon: LucideIcon;
+    icon: React.ReactNode;
 }
 
 export interface HubAction {
     name: string;
     href: string;
-    icon: LucideIcon;
+    icon: React.ReactNode;
     /** "primary" renders a filled button; "outline" renders a ghost button. */
     variant?: "primary" | "outline";
 }
@@ -42,8 +42,12 @@ interface HubTabNavProps {
 
 export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavProps) {
     const pathname = usePathname();
+    const [mounted, setMounted] = useState(false);
 
-    // Suppress on deep sub-routes (create / edit forms)
+    useEffect(() => { setMounted(true); }, []);
+
+    // Suppress on deep sub-routes (create / edit forms).
+    // pathname is consistent between SSR and client for structural decisions.
     if (skipOnPatterns?.some((p) => pathname.includes(p))) {
         return null;
     }
@@ -53,24 +57,21 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
             {/* ── Action buttons row (optional) ─────────────────────────── */}
             {actions && actions.length > 0 && (
                 <div className="flex flex-wrap justify-end gap-2 px-4 pt-3 pb-1 border-b border-border/40">
-                    {actions.map((action) => {
-                        const Icon = action.icon;
-                        return (
-                            <Link
-                                key={action.href}
-                                href={action.href}
-                                className={cn(
-                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                                    action.variant === "primary"
-                                        ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-                                        : "border border-border/60 bg-card text-foreground hover:bg-muted",
-                                )}
-                            >
-                                <Icon className="w-3.5 h-3.5 shrink-0" />
-                                {action.name}
-                            </Link>
-                        );
-                    })}
+                    {actions.map((action) => (
+                        <Link
+                            key={action.href}
+                            href={action.href}
+                            className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                action.variant === "primary"
+                                    ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                                    : "border border-border/60 bg-card text-foreground hover:bg-muted",
+                            )}
+                        >
+                            {action.icon}
+                            {action.name}
+                        </Link>
+                    ))}
                 </div>
             )}
 
@@ -81,8 +82,6 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
                 dir="rtl"
             >
                 {tabs.map((tab) => {
-                    const Icon = tab.icon;
-
                     /**
                      * Root-tab detection:
                      * If another tab's href starts with `tab.href + "/"`, this tab
@@ -95,10 +94,13 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
                             other.href.startsWith(tab.href + "/"),
                     );
 
-                    const isActive = isRootTab
-                        ? pathname === tab.href
-                        : pathname === tab.href ||
-                          pathname.startsWith(tab.href + "/");
+                    // Defer isActive until after client mount to prevent
+                    // SSR pathname → className hydration mismatch.
+                    const isActive = mounted && (
+                        isRootTab
+                            ? pathname === tab.href
+                            : pathname === tab.href || pathname.startsWith(tab.href + "/")
+                    );
 
                     return (
                         <Link
@@ -111,7 +113,7 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
                                     : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/60",
                             )}
                         >
-                            <Icon className="w-3.5 h-3.5 shrink-0" />
+                            {tab.icon}
                             {tab.name}
                         </Link>
                     );

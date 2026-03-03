@@ -13,7 +13,7 @@ import { ShieldAlert, FileText } from "lucide-react";
 
 export default function SuspendedOverlay() {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-md">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/95 backdrop-blur-md">
             <div className="max-w-md w-full mx-4 flex flex-col items-center gap-6 text-center">
                 {/* Icon */}
                 <div className="rounded-full bg-destructive/10 p-5">
@@ -47,7 +47,7 @@ export default function SuspendedOverlay() {
                         تصدير دفتر الديون
                     </Link>
                     <Link
-                        href="/dashboard/settings"
+                        href="/dashboard/settings/billing"
                         className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors text-center"
                     >
                         جدد الاشتراك

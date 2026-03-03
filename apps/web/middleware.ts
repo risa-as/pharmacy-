@@ -12,6 +12,11 @@ export default auth((req) => {
     const role = (req.auth?.user as any)?.role as string | undefined;
 
     // ── US1: SUPER_ADMIN isolation ────────────────────────────────────────────
+    // Ensure all dashboard routes require authentication
+    if (!req.auth && nextUrl.pathname.startsWith("/dashboard")) {
+        return Response.redirect(new URL("/login", nextUrl));
+    }
+
     // SUPER_ADMIN must not access pharmacy operations routes
     if (role === "SUPER_ADMIN" && isPharmacyOnlyRoute(nextUrl.pathname)) {
         return Response.redirect(new URL("/dashboard", nextUrl));
