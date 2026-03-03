@@ -217,52 +217,60 @@ export async function makeDebtPayment(
                 : [])
         ]);
 
-        // Loyalty System Logic (Earn points on debt payment)
-        const settings = await prisma.companySettings.findFirst();
-        if (settings?.loyaltyEnabled && finalAmount > 0) {
-            const pointsPerDinar = settings.loyaltyPointsPerDinar || 0.01;
-            const pointsEarned = Math.floor(finalAmount * pointsPerDinar);
-
-            if (pointsEarned > 0) {
-                let loyaltyAccount = await prisma.loyaltyAccount.findUnique({
-                    where: { patientId: patientId }
-                });
-
-                if (!loyaltyAccount) {
-                    loyaltyAccount = await prisma.loyaltyAccount.create({
-                        data: { patientId: patientId }
-                    });
-                }
-
-                const newLifetime = loyaltyAccount.lifetimePoints + pointsEarned;
-                const newTotal = loyaltyAccount.totalPoints + pointsEarned;
-                let newTier = "BRONZE";
-                if (newLifetime >= 20000) newTier = "GOLD";
-                else if (newLifetime >= 5000) newTier = "SILVER";
-
-                await prisma.loyaltyAccount.update({
-                    where: { id: loyaltyAccount.id },
-                    data: {
-                        totalPoints: newTotal,
-                        lifetimePoints: newLifetime,
-                        tier: newTier
-                    }
-                });
-
-                await prisma.loyaltyTransaction.create({
-                    data: {
-                        accountId: loyaltyAccount.id,
-                        type: "EARN",
-                        points: pointsEarned,
-                        saleId: saleId,
-                        description: "نقاط مكتسبة من تسديد دين"
-                    }
-                });
-            }
-        }
-
+        // Revalidate immediately after the payment is committed — BEFORE any
+        // non-critical side-effects that could throw and mask the success.
         revalidatePath("/dashboard/debts");
         revalidatePath(`/dashboard/debts/${patientId}`);
+
+        // Loyalty System Logic (Earn points on debt payment)
+        // Non-critical: a loyalty failure must NOT roll back or hide the payment.
+        try {
+            const settings = await prisma.companySettings.findFirst();
+            if (settings?.loyaltyEnabled && finalAmount > 0) {
+                const pointsPerDinar = settings.loyaltyPointsPerDinar || 0.01;
+                const pointsEarned = Math.floor(finalAmount * pointsPerDinar);
+
+                if (pointsEarned > 0) {
+                    let loyaltyAccount = await prisma.loyaltyAccount.findUnique({
+                        where: { patientId: patientId }
+                    });
+
+                    if (!loyaltyAccount) {
+                        loyaltyAccount = await prisma.loyaltyAccount.create({
+                            data: { patientId: patientId }
+                        });
+                    }
+
+                    const newLifetime = loyaltyAccount.lifetimePoints + pointsEarned;
+                    const newTotal = loyaltyAccount.totalPoints + pointsEarned;
+                    let newTier = "BRONZE";
+                    if (newLifetime >= 20000) newTier = "GOLD";
+                    else if (newLifetime >= 5000) newTier = "SILVER";
+
+                    await prisma.loyaltyAccount.update({
+                        where: { id: loyaltyAccount.id },
+                        data: {
+                            totalPoints: newTotal,
+                            lifetimePoints: newLifetime,
+                            tier: newTier
+                        }
+                    });
+
+                    await prisma.loyaltyTransaction.create({
+                        data: {
+                            accountId: loyaltyAccount.id,
+                            type: "EARN",
+                            points: pointsEarned,
+                            saleId: saleId,
+                            description: "نقاط مكتسبة من تسديد دين"
+                        }
+                    });
+                }
+            }
+        } catch (loyaltyError) {
+            console.error("makeDebtPayment: loyalty system error (non-critical):", loyaltyError);
+        }
+
         return { success: true };
     } catch (error: any) {
         console.error("Debt payment error:", error);

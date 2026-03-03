@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { makeDebtPayment } from "@/app/lib/actions/debt";
 import { createZainCashTransaction } from "@/app/lib/actions/zaincash";
 
@@ -16,6 +17,7 @@ function formatIQD(amount: number) {
 }
 
 export default function DebtPaymentForm({ saleId, patientId, remaining, safes }: DebtPaymentFormProps) {
+    const router = useRouter();
     const [amount, setAmount] = useState(remaining);
     const [method, setMethod] = useState("CASH");
     const [note, setNote] = useState("");
@@ -44,7 +46,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                 const result = await makeDebtPayment(saleId, patientId, amount, method, note, safeId);
 
                 if (result.success) {
-                    window.location.reload();
+                    router.refresh();
                 } else {
                     setError(result.message || "حدث خطأ");
                 }
