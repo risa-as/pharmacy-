@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-    View, Text, ScrollView, RefreshControl, ActivityIndicator,
+    View, Text, ScrollView, RefreshControl,
     TouchableOpacity, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 
 interface SmartOrderItem {
@@ -106,7 +107,11 @@ export default function SmartOrdersScreen() {
             <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} />
 
             {loading && !refreshing ? (
-                <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40 }} />
+                <View style={{ gap: 12, marginTop: 8 }}>
+                    {[1, 2, 3].map(i => (
+                        <Skeleton key={i} height={168} radius={16} />
+                    ))}
+                </View>
             ) : items.length === 0 ? (
                 <EmptyState
                     icon="checkmark-circle"

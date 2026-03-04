@@ -61,7 +61,7 @@ export default function SettingsScreen() {
     ];
 
     return (
-        <ScrollView style={{ flex: 1, backgroundColor: C.background }}>
+        <ScrollView style={{ flex: 1, backgroundColor: C.background }} contentContainerStyle={{ paddingBottom: 32 }}>
             {/* User Card */}
             <View style={{
                 flexDirection: 'row-reverse',
