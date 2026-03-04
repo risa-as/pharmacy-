@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
 
 // GET: Compare branches on sales, expenses, profit, inventory
 export async function GET(req: Request) {
     try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
         const { searchParams } = new URL(req.url);
         const period = searchParams.get('period') || 'monthly';
         const from = searchParams.get('from');
