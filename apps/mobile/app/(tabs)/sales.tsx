@@ -413,25 +413,33 @@ export default function SalesScreen() {
                     <Badge label={`${itemCount} صنف`} variant={itemCount > 0 ? 'info' : 'default'} />
                 </View>
                 <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                    <TouchableOpacity
-                        onPress={() => handleCheckout('CREDIT')}
-                        disabled={cart.length === 0 || loading}
-                        style={{ flex: 1, backgroundColor: cart.length === 0 ? C.border : C.warning, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
-                    >
-                        <Ionicons name="time-outline" size={18} color={cart.length === 0 ? C.foreground : '#FFFFFF'} />
-                        <Text style={{ color: cart.length === 0 ? C.foreground : '#FFFFFF', fontWeight: '700', fontSize: 15 }}>آجل</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => handleCheckout('CASH')}
-                        disabled={cart.length === 0 || loading}
-                        style={{ flex: 2, backgroundColor: cart.length === 0 ? C.border : C.success, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
-                    >
-                        {loading
-                            ? <ActivityIndicator size="small" color={cart.length === 0 ? C.foreground : '#FFFFFF'} />
-                            : <><Ionicons name="cash-outline" size={18} color={cart.length === 0 ? C.foreground : '#FFFFFF'} /><Text style={{ color: cart.length === 0 ? C.foreground : '#FFFFFF', fontWeight: '700', fontSize: 15 }}>نقدي</Text></>
-                        }
-                    </TouchableOpacity>
-                </View>
+                    {(() => {
+                        const btnText = isDarkMode ? '#FFFFFF' : '#18120F';
+                        const creditBg = cart.length === 0 ? C.border : C.warning;
+                        const cashBg   = cart.length === 0 ? C.border : C.success;
+                        return (
+                            <>
+                                <TouchableOpacity
+                                    onPress={() => handleCheckout('CREDIT')}
+                                    disabled={cart.length === 0 || loading}
+                                    style={{ flex: 1, backgroundColor: creditBg, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
+                                >
+                                    <Ionicons name="time-outline" size={18} color={btnText} />
+                                    <Text style={{ color: btnText, fontWeight: '700', fontSize: 15 }}>آجل</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => handleCheckout('CASH')}
+                                    disabled={cart.length === 0 || loading}
+                                    style={{ flex: 2, backgroundColor: cashBg, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
+                                >
+                                    {loading
+                                        ? <ActivityIndicator size="small" color={btnText} />
+                                        : <><Ionicons name="cash-outline" size={18} color={btnText} /><Text style={{ color: btnText, fontWeight: '700', fontSize: 15 }}>نقدي</Text></>
+                                    }
+                                </TouchableOpacity>
+                            </>
+                        );
+                    })()}
             </View>
 
             {/* Patient modal */}
