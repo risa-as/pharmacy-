@@ -440,6 +440,7 @@ export default function SalesScreen() {
                             </>
                         );
                     })()}
+                </View>
             </View>
 
             {/* Patient modal */}
