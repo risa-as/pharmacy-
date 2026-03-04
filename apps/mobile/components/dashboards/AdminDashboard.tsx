@@ -51,21 +51,25 @@ function KpiCard({ title, value, icon, variant, route }: KpiCardProps) {
             activeOpacity={route ? 0.7 : 1}
             disabled={!route}
         >
-            <Card className="h-32 justify-center items-center gap-1" style={{ paddingHorizontal: 8 }}>
-                <View
-                    style={{ backgroundColor: `${iconColor}20`, borderRadius: 6, padding: 8 }}
-                >
-                    <Ionicons name={icon} size={22} color={iconColor} />
+            <Card
+                className="items-center justify-center"
+                style={{ padding: 12, gap: 6, minHeight: 110 }}
+            >
+                <View style={{ backgroundColor: `${iconColor}20`, borderRadius: 6, padding: 8 }}>
+                    <Ionicons name={icon} size={20} color={iconColor} />
                 </View>
                 <Text
                     numberOfLines={1}
                     adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                    style={{ color: C.foreground, fontSize: 18, fontWeight: '800', textAlign: 'center', width: '100%' }}
+                    minimumFontScale={0.65}
+                    style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'center', alignSelf: 'stretch' }}
                 >
                     {typeof value === 'number' ? value.toLocaleString('ar-EG') : value}
                 </Text>
-                <Text numberOfLines={1} style={{ color: C.mutedForeground, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>
+                <Text
+                    numberOfLines={1}
+                    style={{ color: C.mutedForeground, fontSize: 11, fontWeight: '600', textAlign: 'center' }}
+                >
                     {title}
                 </Text>
             </Card>
@@ -154,7 +158,7 @@ export function AdminDashboard() {
                     <Skeleton width={140} height={20} radius={8} style={{ marginBottom: 16, alignSelf: 'flex-end' }} />
                     <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
                         {[1, 2, 3, 4].map(i => (
-                            <Skeleton key={i} width={CARD_WIDTH} height={128} radius={8} />
+                            <Skeleton key={i} width={CARD_WIDTH} height={110} radius={8} />
                         ))}
                     </View>
                     <Skeleton height={90} radius={8} style={{ marginBottom: 16 }} />
