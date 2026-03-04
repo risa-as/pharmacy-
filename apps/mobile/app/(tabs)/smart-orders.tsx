@@ -98,7 +98,7 @@ export default function SmartOrdersScreen() {
                         أصناف تحتاج إلى إعادة طلب
                     </Text>
                 </View>
-                <View style={{ backgroundColor: C.warningBg, borderRadius: 12, padding: 10 }}>
+                <View style={{ backgroundColor: C.warningBg, borderRadius: 6, padding: 10 }}>
                     <Ionicons name="bulb" size={22} color={C.warning} />
                 </View>
             </View>
@@ -109,7 +109,7 @@ export default function SmartOrdersScreen() {
             {loading && !refreshing ? (
                 <View style={{ gap: 12, marginTop: 8 }}>
                     {[1, 2, 3].map(i => (
-                        <Skeleton key={i} height={168} radius={16} />
+                        <Skeleton key={i} height={168} radius={8} />
                     ))}
                 </View>
             ) : items.length === 0 ? (
@@ -147,7 +147,7 @@ export default function SmartOrdersScreen() {
 
                             {/* Stock info row */}
                             <View style={{ flexDirection: 'row-reverse', gap: 12, marginBottom: 14 }}>
-                                <View style={{ flex: 1, backgroundColor: C.dangerBg, borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                                <View style={{ flex: 1, backgroundColor: C.dangerBg, borderRadius: 6, padding: 10, alignItems: 'center' }}>
                                     <Text style={{ color: C.danger, fontSize: 18, fontWeight: '800' }}>
                                         {item.currentQuantity}
                                     </Text>
@@ -156,7 +156,7 @@ export default function SmartOrdersScreen() {
                                 <View style={{ justifyContent: 'center', alignItems: 'center' }}>
                                     <Ionicons name="arrow-back" size={18} color={C.mutedForeground} />
                                 </View>
-                                <View style={{ flex: 1, backgroundColor: C.successBg, borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                                <View style={{ flex: 1, backgroundColor: C.successBg, borderRadius: 6, padding: 10, alignItems: 'center' }}>
                                     <Text style={{ color: C.success, fontSize: 18, fontWeight: '800' }}>
                                         {item.suggestedReorderQuantity}
                                     </Text>

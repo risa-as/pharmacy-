@@ -79,7 +79,7 @@ export default function FinancialReportScreen() {
                 borderBottomColor: C.border,
             }}>
                 <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '800' }}>التقرير المالي التفصيلي</Text>
-                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: C.border, borderRadius: 10, padding: 8 }}>
+                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: C.border, borderRadius: 6, padding: 8 }}>
                     <Ionicons name="arrow-back" size={20} color={C.foreground} />
                 </TouchableOpacity>
             </View>
@@ -157,7 +157,7 @@ export default function FinancialReportScreen() {
                                         const barH = Math.max(4, ((day.amount ?? 0) / max) * 100);
                                         return (
                                             <View key={day.date} style={{ alignItems: 'center', gap: 4 }}>
-                                                <View style={{ width: 10, height: barH, backgroundColor: C.primary, borderRadius: 4 }} />
+                                                <View style={{ width: 10, height: barH, backgroundColor: C.primary, borderRadius: 2 }} />
                                                 <Text style={{ fontSize: 9, color: C.mutedForeground }}>
                                                     {(day.date ?? '').slice(5)}
                                                 </Text>

@@ -86,7 +86,7 @@ export default function ExpensesScreen() {
                     flexDirection: 'row-reverse',
                     alignItems: 'center',
                     backgroundColor: C.input,
-                    borderRadius: 12,
+                    borderRadius: 6,
                     paddingHorizontal: 12,
                     borderWidth: 1,
                     borderColor: C.border,
@@ -112,7 +112,7 @@ export default function ExpensesScreen() {
                             style={{
                                 paddingHorizontal: 14,
                                 paddingVertical: 7,
-                                borderRadius: 20,
+                                borderRadius: 4,
                                 backgroundColor: selectedCategory === key ? C.primary : C.card,
                                 borderWidth: 1,
                                 borderColor: selectedCategory === key ? C.primary : C.border,

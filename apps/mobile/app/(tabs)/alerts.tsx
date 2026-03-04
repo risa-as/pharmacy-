@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { request } from '../../services/api';
+import { request, apiService } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Colors } from '../../constants/colors';
@@ -52,11 +52,29 @@ export default function AlertsScreen() {
         try {
             const effectiveBranch = isAdmin ? selectedBranch : authBranchId;
             const query = effectiveBranch ? `?branchId=${effectiveBranch}` : '';
-            const res = await request<{ notifications: Notification[]; unreadCount: number }>(
-                `/notifications/in-app${query}`,
-            );
-            setNotifications(Array.isArray(res.notifications) ? res.notifications : []);
-            setUnreadCount(res.unreadCount ?? 0);
+
+            // Fetch both: stored in-app notifications AND real-time inventory alerts
+            const [res, inventoryAlerts] = await Promise.all([
+                request<{ notifications: Notification[]; unreadCount: number }>(
+                    `/notifications/in-app${query}`,
+                ).catch(() => ({ notifications: [] as Notification[], unreadCount: 0 })),
+                apiService.getAlerts(effectiveBranch ?? undefined).catch(() => [] as any[]),
+            ]);
+
+            // Convert inventory/expiry alerts to the Notification shape
+            const inventoryAsNotifications: Notification[] = (inventoryAlerts as any[]).map((a: any) => ({
+                id: `inv-${a.id}`,
+                title: a.title ?? '',
+                body: a.description ?? '',
+                type: (a.type === 'critical' ? 'LOW_STOCK' : 'EXPIRY') as Notification['type'],
+                isRead: false,
+                createdAt: new Date().toISOString(),
+            }));
+
+            // Inventory alerts shown first, then stored in-app notifications
+            const merged = [...inventoryAsNotifications, ...(Array.isArray(res.notifications) ? res.notifications : [])];
+            setNotifications(merged);
+            setUnreadCount((res.unreadCount ?? 0) + inventoryAsNotifications.length);
         } catch (error) {
             console.error('AlertsScreen: fetch error', error);
         } finally {
@@ -73,6 +91,8 @@ export default function AlertsScreen() {
         // Optimistic update
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
         setUnreadCount(prev => Math.max(0, prev - 1));
+        // Inventory alerts (id starts with "inv-") don't persist read status in DB
+        if (id.startsWith('inv-')) return;
         try {
             await request('/notifications/in-app', {
                 method: 'POST',
@@ -87,6 +107,7 @@ export default function AlertsScreen() {
         if (unreadCount === 0) return;
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
         setUnreadCount(0);
+        // Only mark stored in-app notifications (not inventory alerts) as read in DB
         try {
             await request('/notifications/in-app', {
                 method: 'POST',

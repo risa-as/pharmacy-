@@ -24,9 +24,9 @@ export function EmptyState({ icon = 'document-outline', title, subtitle, actionL
     return (
         <View className="flex-1 items-center justify-center px-8 py-16">
             <Ionicons name={icon} size={56} color={C.mutedForeground} />
-            <Text className="text-foreground text-lg font-semibold mt-4 text-center">{title}</Text>
+            <Text className="text-lg font-semibold mt-4 text-center" style={{ color: C.foreground }}>{title}</Text>
             {subtitle ? (
-                <Text className="text-muted-foreground text-sm mt-2 text-center">{subtitle}</Text>
+                <Text className="text-sm mt-2 text-center" style={{ color: C.mutedForeground }}>{subtitle}</Text>
             ) : null}
             {actionLabel && onAction ? (
                 <View className="mt-6">

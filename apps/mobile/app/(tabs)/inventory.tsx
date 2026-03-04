@@ -257,7 +257,7 @@ export default function InventoryScreen() {
     };
 
     const inputStyle = {
-        backgroundColor: C.input, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+        backgroundColor: C.input, borderRadius: 6, borderWidth: 1, borderColor: C.border,
         paddingHorizontal: 16, height: 50, marginBottom: 12, fontSize: 16,
         textAlign: 'right' as const, color: C.foreground,
     };
@@ -271,14 +271,14 @@ export default function InventoryScreen() {
                 )}
 
                 {!isOnline && (
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.dangerBg, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10, gap: 6 }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.dangerBg, borderRadius: 4, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10, gap: 6 }}>
                         <Ionicons name="cloud-offline" size={14} color={C.danger} />
                         <Text style={{ color: C.danger, fontSize: 12, fontWeight: '700' }}>وضع عدم الاتصال</Text>
                     </View>
                 )}
 
                 {/* Search bar */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, marginBottom: 10, gap: 8 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, marginBottom: 10, gap: 8 }}>
                     <Ionicons name="search" size={18} color={C.mutedForeground} />
                     <TextInput
                         style={{ flex: 1, color: C.foreground, paddingVertical: 10, textAlign: 'right', fontSize: 14 }}
@@ -301,7 +301,7 @@ export default function InventoryScreen() {
                                 key={tab.key}
                                 onPress={() => setActiveTab(tab.key)}
                                 style={{
-                                    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+                                    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 4,
                                     backgroundColor: active ? C.primary : C.card,
                                     borderWidth: 1, borderColor: active ? C.primary : C.border,
                                 }}
@@ -338,7 +338,7 @@ export default function InventoryScreen() {
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 10 }}>
                     {[1, 2, 3, 4, 5].map(i => (
-                        <Skeleton key={i} height={72} radius={16} />
+                        <Skeleton key={i} height={72} radius={8} />
                     ))}
                 </View>
             ) : (
@@ -365,7 +365,7 @@ export default function InventoryScreen() {
             {/* Add Batch Modal */}
             <Modal visible={!!showBatchModal} transparent animationType="slide" onRequestClose={() => setShowBatchModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}>
+                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24 }}>
                         <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 16 }}>
                             إضافة كمية: {showBatchModal?.drug?.tradeName}
                         </Text>
@@ -383,7 +383,7 @@ export default function InventoryScreen() {
             {/* Add to Branch Modal */}
             <Modal visible={!!showBranchModal} transparent animationType="slide" onRequestClose={() => setShowBranchModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }} contentContainerStyle={{ padding: 24 }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} contentContainerStyle={{ padding: 24 }}>
                         <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 16 }}>
                             تنشيط دواء: {showBranchModal?.tradeName}
                         </Text>
@@ -405,7 +405,7 @@ export default function InventoryScreen() {
             {/* Create Drug Modal */}
             <Modal visible={!!showCreateModal} transparent animationType="slide" onRequestClose={() => setShowCreateModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }} contentContainerStyle={{ padding: 24 }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} contentContainerStyle={{ padding: 24 }}>
                         <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 2 }}>
                             تسجيل دواء جديد
                         </Text>

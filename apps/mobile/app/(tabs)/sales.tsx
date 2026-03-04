@@ -43,7 +43,7 @@ const CartItemRow = React.memo(({ item, C, onUpdateQuantity, onRemove }: {
 }) => (
     <View style={{ flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: C.border }}>
         {/* Drug icon */}
-        <View style={{ backgroundColor: `${C.primary}18`, borderRadius: 10, padding: 8 }}>
+        <View style={{ backgroundColor: `${C.primary}18`, borderRadius: 6, padding: 8 }}>
             <Ionicons name="medical" size={18} color={C.primary} />
         </View>
 
@@ -61,7 +61,7 @@ const CartItemRow = React.memo(({ item, C, onUpdateQuantity, onRemove }: {
         </View>
 
         {/* Qty controls */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.border, borderRadius: 10, overflow: 'hidden' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.border, borderRadius: 6, overflow: 'hidden' }}>
             <TouchableOpacity onPress={() => onUpdateQuantity(item.id, -1)} style={{ padding: 8 }}>
                 <Ionicons name="remove" size={16} color={C.danger} />
             </TouchableOpacity>
@@ -281,7 +281,7 @@ export default function SalesScreen() {
                         {/* Patient picker */}
                         <TouchableOpacity
                             onPress={() => setShowPatientModal(true)}
-                            style={{ backgroundColor: selectedPatient ? C.primaryMuted : C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                            style={{ backgroundColor: selectedPatient ? C.primaryMuted : C.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                         >
                             <Ionicons name={selectedPatient ? 'person' : 'person-add-outline'} size={16} color={selectedPatient ? C.primary : C.mutedForeground} />
                             <Text style={{ color: selectedPatient ? C.primary : C.mutedForeground, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
@@ -291,7 +291,7 @@ export default function SalesScreen() {
                         {/* Scan button — opens camera screen */}
                         <TouchableOpacity
                             onPress={() => router.push({ pathname: '/scan', params: { from: 'sales' } } as any)}
-                            style={{ backgroundColor: C.primary, borderRadius: 10, padding: 9 }}
+                            style={{ backgroundColor: C.primary, borderRadius: 6, padding: 9 }}
                         >
                             <Ionicons name="scan" size={20} color="#FFFFFF" />
                         </TouchableOpacity>
@@ -300,7 +300,7 @@ export default function SalesScreen() {
 
                 {/* Barcode / drug name search input */}
                 <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                    <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, gap: 8 }}>
+                    <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, gap: 8 }}>
                         <Ionicons name="barcode-outline" size={18} color={C.mutedForeground} />
                         <TextInput
                             style={{ flex: 1, color: C.foreground, paddingVertical: 10, textAlign: 'right', fontSize: 14 }}
@@ -316,7 +316,7 @@ export default function SalesScreen() {
                     </View>
                     <TouchableOpacity
                         onPress={() => handleBarcodeAdd(barcode)}
-                        style={{ backgroundColor: C.success, borderRadius: 12, padding: 12, justifyContent: 'center' }}
+                        style={{ backgroundColor: C.success, borderRadius: 6, padding: 12, justifyContent: 'center' }}
                     >
                         <Ionicons name="add" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
@@ -327,7 +327,7 @@ export default function SalesScreen() {
             {(allergyWarnings.length > 0 || interactions.length > 0) && (
                 <View style={{ paddingHorizontal: 14, paddingTop: 10, gap: 8 }}>
                     {allergyWarnings.length > 0 && (
-                        <View style={{ backgroundColor: C.dangerBg, borderWidth: 1, borderColor: `${C.danger}40`, borderRadius: 12, padding: 12, flexDirection: 'row-reverse', gap: 10, alignItems: 'flex-start' }}>
+                        <View style={{ backgroundColor: C.dangerBg, borderWidth: 1, borderColor: `${C.danger}40`, borderRadius: 6, padding: 12, flexDirection: 'row-reverse', gap: 10, alignItems: 'flex-start' }}>
                             <Ionicons name="warning" size={20} color={C.danger} />
                             <View style={{ flex: 1 }}>
                                 <Text style={{ color: C.danger, fontWeight: '700', textAlign: 'right', fontSize: 13 }}>تحذير حساسية!</Text>
@@ -338,7 +338,7 @@ export default function SalesScreen() {
                         </View>
                     )}
                     {interactions.map((ix, i) => (
-                        <View key={i} style={{ backgroundColor: ix.severity === 'HIGH' ? C.dangerBg : C.warningBg, borderWidth: 1, borderColor: `${ix.severity === 'HIGH' ? C.danger : C.warning}40`, borderRadius: 12, padding: 12, flexDirection: 'row-reverse', gap: 10, alignItems: 'flex-start' }}>
+                        <View key={i} style={{ backgroundColor: ix.severity === 'HIGH' ? C.dangerBg : C.warningBg, borderWidth: 1, borderColor: `${ix.severity === 'HIGH' ? C.danger : C.warning}40`, borderRadius: 6, padding: 12, flexDirection: 'row-reverse', gap: 10, alignItems: 'flex-start' }}>
                             <Ionicons name="warning" size={20} color={ix.severity === 'HIGH' ? C.danger : C.warning} />
                             <View style={{ flex: 1 }}>
                                 <Text style={{ color: ix.severity === 'HIGH' ? C.danger : C.warning, fontWeight: '700', textAlign: 'right', fontSize: 13 }}>
@@ -364,7 +364,7 @@ export default function SalesScreen() {
                             <TouchableOpacity
                                 key={item.id}
                                 onPress={() => addToCart(item)}
-                                style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 8 }}
+                                style={{ backgroundColor: C.card, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 8 }}
                             >
                                 <Text style={{ color: C.foreground, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
                                     {item.tradeName ?? item.name}
@@ -387,7 +387,7 @@ export default function SalesScreen() {
                 contentContainerStyle={cart.length === 0 ? { flex: 1 } : undefined}
                 ListEmptyComponent={
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 48 }}>
-                        <View style={{ backgroundColor: C.border, borderRadius: 24, padding: 20, marginBottom: 14 }}>
+                        <View style={{ backgroundColor: C.border, borderRadius: 12, padding: 20, marginBottom: 14 }}>
                             <Ionicons name="cart-outline" size={40} color={C.mutedForeground} />
                         </View>
                         <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 16 }}>السلة فارغة</Text>
@@ -411,7 +411,7 @@ export default function SalesScreen() {
                     <TouchableOpacity
                         onPress={() => handleCheckout('CREDIT')}
                         disabled={cart.length === 0 || loading}
-                        style={{ flex: 1, backgroundColor: cart.length === 0 ? C.border : C.warning, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
+                        style={{ flex: 1, backgroundColor: cart.length === 0 ? C.border : C.warning, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
                     >
                         <Ionicons name="time-outline" size={18} color="#FFFFFF" />
                         <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15 }}>آجل</Text>
@@ -419,7 +419,7 @@ export default function SalesScreen() {
                     <TouchableOpacity
                         onPress={() => handleCheckout('CASH')}
                         disabled={cart.length === 0 || loading}
-                        style={{ flex: 2, backgroundColor: cart.length === 0 ? C.border : C.success, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
+                        style={{ flex: 2, backgroundColor: cart.length === 0 ? C.border : C.success, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
                     >
                         {loading
                             ? <ActivityIndicator size="small" color="#FFFFFF" />
@@ -432,10 +432,10 @@ export default function SalesScreen() {
             {/* Patient modal */}
             <Modal visible={showPatientModal} animationType="slide" transparent onRequestClose={() => setShowPatientModal(false)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '70%' }}>
+                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 20, maxHeight: '70%' }}>
                         <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
                         <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '700', textAlign: 'right', marginBottom: 12 }}>بحث عن عميل</Text>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, marginBottom: 12, gap: 8 }}>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, marginBottom: 12, gap: 8 }}>
                             <Ionicons name="search" size={18} color={C.mutedForeground} />
                             <TextInput
                                 style={{ flex: 1, color: C.foreground, paddingVertical: 10, textAlign: 'right', fontSize: 14 }}

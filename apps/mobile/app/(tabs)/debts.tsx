@@ -112,12 +112,12 @@ export default function DebtsScreen() {
                         onPress={() => { setPayingId(item.id); setPayAmount(''); setPayNote(''); }}
                     />
                 ) : (
-                    <View style={{ backgroundColor: C.primaryMuted, borderRadius: 12, padding: 12, gap: 10 }}>
+                    <View style={{ backgroundColor: C.primaryMuted, borderRadius: 6, padding: 12, gap: 10 }}>
                         <Text style={{ color: C.primary, fontWeight: '700', textAlign: 'right', marginBottom: 2 }}>
                             تسجيل دفعة
                         </Text>
                         <TextInput
-                            style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 9, color: C.foreground, textAlign: 'right', fontSize: 15 }}
+                            style={{ backgroundColor: C.card, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 9, color: C.foreground, textAlign: 'right', fontSize: 15 }}
                             placeholder={`الرصيد: ${item.balance.toLocaleString()} د.ع`}
                             placeholderTextColor={C.mutedForeground}
                             keyboardType="numeric"
@@ -126,7 +126,7 @@ export default function DebtsScreen() {
                             autoFocus
                         />
                         <TextInput
-                            style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 9, color: C.foreground, textAlign: 'right', fontSize: 14 }}
+                            style={{ backgroundColor: C.card, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 9, color: C.foreground, textAlign: 'right', fontSize: 14 }}
                             placeholder="ملاحظة (اختياري)"
                             placeholderTextColor={C.mutedForeground}
                             value={payNote}
@@ -155,13 +155,13 @@ export default function DebtsScreen() {
                                 {totalDebt.toLocaleString()} د.ع
                             </Text>
                         </View>
-                        <View style={{ backgroundColor: C.dangerBg, borderRadius: 12, padding: 10 }}>
+                        <View style={{ backgroundColor: C.dangerBg, borderRadius: 6, padding: 10 }}>
                             <Ionicons name="book" size={22} color={C.danger} />
                         </View>
                     </Card>
                 )}
 
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, gap: 8 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, gap: 8 }}>
                     <Ionicons name="search" size={18} color={C.mutedForeground} />
                     <TextInput
                         style={{ flex: 1, color: C.foreground, paddingVertical: 10, textAlign: 'right', fontSize: 14 }}
@@ -175,9 +175,9 @@ export default function DebtsScreen() {
 
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 12 }}>
-                    <Skeleton height={70} radius={16} />
+                    <Skeleton height={70} radius={8} />
                     {[1, 2, 3].map(i => (
-                        <Skeleton key={i} height={110} radius={16} />
+                        <Skeleton key={i} height={110} radius={8} />
                     ))}
                 </View>
             ) : (

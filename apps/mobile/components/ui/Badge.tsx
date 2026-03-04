@@ -13,7 +13,7 @@ const variantClasses: Record<BadgeVariant, { container: string; text: string }> 
     warning:  { container: 'bg-yellow-100 dark:bg-yellow-950', text: 'text-yellow-700 dark:text-yellow-400' },
     danger:   { container: 'bg-red-100 dark:bg-red-950',      text: 'text-red-700 dark:text-red-400' },
     info:     { container: 'bg-blue-100 dark:bg-blue-950',    text: 'text-blue-700 dark:text-blue-400' },
-    default:  { container: 'bg-border',                        text: 'text-muted-foreground' },
+    default:  { container: 'bg-stone-200 dark:bg-stone-700',    text: 'text-stone-600 dark:text-stone-300' },
 };
 
 /**

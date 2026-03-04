@@ -69,12 +69,12 @@ export default function SettingsScreen() {
                 backgroundColor: C.card,
                 margin: 16,
                 padding: 16,
-                borderRadius: 16,
+                borderRadius: 8,
                 borderWidth: 1,
                 borderColor: C.border,
             }}>
                 <View style={{
-                    width: 64, height: 64, borderRadius: 32,
+                    width: 64, height: 64, borderRadius: 8,
                     backgroundColor: C.primaryMuted,
                     justifyContent: 'center', alignItems: 'center',
                 }}>
@@ -99,7 +99,7 @@ export default function SettingsScreen() {
                         </Text>
                         <Ionicons name={section.icon} size={18} color={C.mutedForeground} />
                     </View>
-                    <View style={{ backgroundColor: C.card, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
+                    <View style={{ backgroundColor: C.card, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
                         {section.items.map((item, itemIndex) => (
                             <TouchableOpacity
                                 key={itemIndex}
@@ -111,7 +111,7 @@ export default function SettingsScreen() {
                                 activeOpacity={0.7}
                             >
                                 <View style={{
-                                    width: 36, height: 36, borderRadius: 10,
+                                    width: 36, height: 36, borderRadius: 4,
                                     backgroundColor: C.input,
                                     justifyContent: 'center', alignItems: 'center',
                                 }}>
@@ -132,7 +132,7 @@ export default function SettingsScreen() {
                 style={{
                     flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8,
                     backgroundColor: C.dangerBg,
-                    marginHorizontal: 16, padding: 16, borderRadius: 16, marginTop: 8,
+                    marginHorizontal: 16, padding: 16, borderRadius: 6, marginTop: 8,
                 }}
                 onPress={handleLogout}
                 activeOpacity={0.8}

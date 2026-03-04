@@ -12,6 +12,9 @@ export async function GET(req: Request) {
         if (period === 'monthly') {
             startDate.setDate(1); // Start of month
             startDate.setHours(0, 0, 0, 0);
+        } else if (period === 'weekly') {
+            startDate.setDate(startDate.getDate() - 6); // Last 7 days
+            startDate.setHours(0, 0, 0, 0);
         } else {
             // daily
             startDate.setHours(0, 0, 0, 0);
@@ -25,11 +28,14 @@ export async function GET(req: Request) {
             whereClause.branchId = branchId;
         }
 
-        // Revenue
-        const totalSales = await prisma.sale.aggregate({
-            _sum: { total: true },
-            where: whereClause
-        });
+        // Revenue + transaction count
+        const [totalSales, salesCount] = await Promise.all([
+            prisma.sale.aggregate({
+                _sum: { total: true },
+                where: whereClause,
+            }),
+            prisma.sale.count({ where: whereClause }),
+        ]);
 
         // Expenses
         const expenseWhere: any = {
@@ -59,10 +65,13 @@ export async function GET(req: Request) {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         sevenDaysAgo.setHours(0, 0, 0, 0);
 
+        const chartWhere: any = { createdAt: { gte: sevenDaysAgo } };
+        if (branchId) chartWhere.branchId = branchId;
+
         const recentSales = await prisma.sale.findMany({
-            where: { createdAt: { gte: sevenDaysAgo } },
+            where: chartWhere,
             select: { createdAt: true, total: true },
-            orderBy: { createdAt: 'asc' }
+            orderBy: { createdAt: 'asc' },
         });
 
         const chartData = recentSales.reduce((acc: any, sale) => {
@@ -87,9 +96,10 @@ export async function GET(req: Request) {
         const expenses = totalExpenses._sum.amount || 0;
 
         return NextResponse.json({
-            revenue: revenue,
-            expenses: expenses,
+            revenue,
+            expenses,
             profit: revenue - expenses,
+            transactions: salesCount,
             chart: filledChart,
         });
     } catch (error) {

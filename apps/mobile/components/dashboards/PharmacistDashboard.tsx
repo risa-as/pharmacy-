@@ -81,11 +81,11 @@ export function PharmacistDashboard() {
             {loading && !refreshing ? (
                 <View style={{ gap: 16, marginTop: 8 }}>
                     <Skeleton width="60%" height={24} radius={8} style={{ alignSelf: 'flex-end' }} />
-                    <Skeleton height={140} radius={16} />
-                    <Skeleton height={20} width={120} radius={8} style={{ alignSelf: 'flex-end' }} />
+                    <Skeleton height={140} radius={8} />
+                    <Skeleton height={20} width={120} radius={4} style={{ alignSelf: 'flex-end' }} />
                     <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 }}>
                         {[1, 2, 3, 4].map(i => (
-                            <Skeleton key={i} height={90} radius={16} style={{ flex: 1, minWidth: '42%' }} />
+                            <Skeleton key={i} height={90} radius={8} style={{ flex: 1, minWidth: '42%' }} />
                         ))}
                     </View>
                 </View>
@@ -109,7 +109,7 @@ export function PharmacistDashboard() {
                 </Text>
                 <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
                     {/* Today's revenue */}
-                    <View style={{ flex: 1, backgroundColor: C.primaryMuted, borderRadius: 14, padding: 14, alignItems: 'center' }}>
+                    <View style={{ flex: 1, backgroundColor: C.primaryMuted, borderRadius: 6, padding: 14, alignItems: 'center' }}>
                         <Ionicons name="cash" size={22} color={C.primary} />
                         <Text style={{ color: C.primary, fontSize: 20, fontWeight: '900', marginTop: 6 }}>
                             {todayRevenue.toLocaleString('ar-EG')}
@@ -117,7 +117,7 @@ export function PharmacistDashboard() {
                         <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 2 }}>إجمالي اليوم</Text>
                     </View>
                     {/* Today's sales count */}
-                    <View style={{ flex: 1, backgroundColor: C.successBg, borderRadius: 14, padding: 14, alignItems: 'center' }}>
+                    <View style={{ flex: 1, backgroundColor: C.successBg, borderRadius: 6, padding: 14, alignItems: 'center' }}>
                         <Ionicons name="receipt" size={22} color={C.success} />
                         <Text style={{ color: C.success, fontSize: 20, fontWeight: '900', marginTop: 6 }}>
                             {todaySalesCount}
@@ -131,19 +131,19 @@ export function PharmacistDashboard() {
             <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '700', textAlign: 'right', marginBottom: 10 }}>
                 إجراءات سريعة
             </Text>
-            <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+            <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 20 }}>
                 {QUICK_ACTIONS.map((action) => (
                     <TouchableOpacity
                         key={action.title}
                         onPress={() => router.push(action.route as any)}
                         activeOpacity={0.75}
-                        style={{ width: '47.5%' }}
+                        style={{ flex: 1 }}
                     >
-                        <Card className="items-center py-4 gap-2">
-                            <View style={{ backgroundColor: `${C.primary}18`, borderRadius: 12, padding: 10 }}>
-                                <Ionicons name={action.icon} size={24} color={C.primary} />
+                        <Card className="items-center py-2 gap-1">
+                            <View style={{ backgroundColor: `${C.primary}18`, borderRadius: 4, padding: 7 }}>
+                                <Ionicons name={action.icon} size={18} color={C.primary} />
                             </View>
-                            <Text style={{ color: C.foreground, fontWeight: '600', fontSize: 13, textAlign: 'center' }}>
+                            <Text style={{ color: C.foreground, fontWeight: '600', fontSize: 10, textAlign: 'center' }} numberOfLines={1}>
                                 {action.title}
                             </Text>
                         </Card>
@@ -165,7 +165,7 @@ export function PharmacistDashboard() {
                     <View style={{ gap: 8 }}>
                         {alerts.map((alert) => (
                             <Card key={alert.id} className="flex-row-reverse items-center gap-3">
-                                <View style={{ backgroundColor: C.warningBg, borderRadius: 10, padding: 8 }}>
+                                <View style={{ backgroundColor: C.warningBg, borderRadius: 6, padding: 8 }}>
                                     <Ionicons name="notifications" size={18} color={C.warning} />
                                 </View>
                                 <View style={{ flex: 1 }}>

@@ -66,10 +66,10 @@ module.exports = {
             },
 
             borderRadius: {
-                DEFAULT: '8px',
-                lg:      '12px',
-                xl:      '16px',
-                '2xl':   '20px',
+                DEFAULT: '2px',
+                lg:      '4px',
+                xl:      '6px',
+                '2xl':   '8px',
             },
         },
     },

@@ -117,7 +117,7 @@ export default function PaymentScreen() {
             {/* Header */}
             <View style={{ backgroundColor: C.card, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border }}>
                 <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '800' }}>الدفع</Text>
-                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: C.border, borderRadius: 10, padding: 8 }}>
+                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: C.border, borderRadius: 6, padding: 8 }}>
                     <Ionicons name="arrow-back" size={20} color={C.foreground} />
                 </TouchableOpacity>
             </View>
@@ -150,7 +150,7 @@ export default function PaymentScreen() {
                     {PAYMENT_METHODS.map(({ key, label, icon }) => {
                         const active = method === key;
                         return (
-                            <TouchableOpacity key={key} onPress={() => setMethod(key)} style={{ flex: 1, minWidth: '45%', borderRadius: 14, borderWidth: active ? 2 : 1, borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primaryMuted : C.card, paddingVertical: 14, alignItems: 'center', gap: 6 }}>
+                            <TouchableOpacity key={key} onPress={() => setMethod(key)} style={{ flex: 1, minWidth: '45%', borderRadius: 6, borderWidth: active ? 2 : 1, borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primaryMuted : C.card, paddingVertical: 14, alignItems: 'center', gap: 6 }}>
                                 <Ionicons name={icon} size={22} color={active ? C.primary : C.mutedForeground} />
                                 <Text style={{ color: active ? C.primary : C.foreground, fontWeight: '600', fontSize: 13 }}>{label}</Text>
                             </TouchableOpacity>
@@ -164,14 +164,14 @@ export default function PaymentScreen() {
                         <Text style={{ color: C.foreground, fontWeight: '700', textAlign: 'right', marginBottom: 10 }}>حاسبة الباقي</Text>
                         <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginBottom: 6 }}>المبلغ المستلم</Text>
                         <TextInput
-                            style={{ backgroundColor: C.input, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 10, color: C.foreground, fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: 12 }}
+                            style={{ backgroundColor: C.input, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 10, color: C.foreground, fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: 12 }}
                             placeholder={total.toLocaleString()}
                             placeholderTextColor={C.mutedForeground}
                             keyboardType="numeric"
                             value={amountGiven}
                             onChangeText={setAmountGiven}
                         />
-                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', padding: 14, backgroundColor: change > 0 ? C.successBg : C.border, borderRadius: 12 }}>
+                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', padding: 14, backgroundColor: change > 0 ? C.successBg : C.border, borderRadius: 6 }}>
                             <Text style={{ color: C.foreground, fontWeight: '700' }}>الباقي</Text>
                             <Text style={{ color: change > 0 ? C.success : C.foreground, fontWeight: '900', fontSize: 18 }}>
                                 {change.toLocaleString()} د.ع

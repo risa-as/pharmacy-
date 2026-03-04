@@ -51,9 +51,9 @@ function KpiCard({ title, value, icon, variant, route }: KpiCardProps) {
             activeOpacity={route ? 0.7 : 1}
             disabled={!route}
         >
-            <Card className="h-36 justify-center items-center gap-2">
+            <Card className="h-28 justify-center items-center gap-2">
                 <View
-                    style={{ backgroundColor: `${iconColor}20`, borderRadius: 14, padding: 10 }}
+                    style={{ backgroundColor: `${iconColor}20`, borderRadius: 6, padding: 10 }}
                 >
                     <Ionicons name={icon} size={26} color={iconColor} />
                 </View>
@@ -135,7 +135,7 @@ export function AdminDashboard() {
                         {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </Text>
                 </View>
-                <View style={{ backgroundColor: C.primaryMuted, borderRadius: 12, padding: 10 }}>
+                <View style={{ backgroundColor: C.primaryMuted, borderRadius: 6, padding: 10 }}>
                     <Ionicons name="analytics" size={22} color={C.primary} />
                 </View>
             </View>
@@ -149,11 +149,11 @@ export function AdminDashboard() {
                     <Skeleton width={140} height={20} radius={8} style={{ marginBottom: 16, alignSelf: 'flex-end' }} />
                     <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
                         {[1, 2, 3, 4].map(i => (
-                            <Skeleton key={i} width={CARD_WIDTH} height={144} radius={16} />
+                            <Skeleton key={i} width={CARD_WIDTH} height={120} radius={8} />
                         ))}
                     </View>
-                    <Skeleton height={90} radius={16} style={{ marginBottom: 16 }} />
-                    <Skeleton height={200} radius={16} />
+                    <Skeleton height={90} radius={8} style={{ marginBottom: 16 }} />
+                    <Skeleton height={200} radius={8} />
                 </View>
             ) : (
                 <>
@@ -194,7 +194,7 @@ export function AdminDashboard() {
                     {/* Low Stock Warning */}
                     {(stats?.lowStock ?? 0) > 0 && (
                         <Card className="mb-6 flex-row-reverse items-center gap-3">
-                            <View style={{ backgroundColor: `${C.warning}20`, borderRadius: 10, padding: 8 }}>
+                            <View style={{ backgroundColor: `${C.warning}20`, borderRadius: 6, padding: 8 }}>
                                 <Ionicons name="alert-circle" size={20} color={C.warning} />
                             </View>
                             <View style={{ flex: 1 }}>

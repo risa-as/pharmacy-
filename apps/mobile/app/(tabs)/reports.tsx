@@ -53,9 +53,7 @@ export default function ReportsScreen() {
 
     const fetchReport = useCallback(async () => {
         try {
-            // API currently supports daily/monthly — weekly maps to daily gracefully
-            const apiPeriod = period === 'weekly' ? 'daily' : period;
-            const data = await apiService.getReports(apiPeriod, selectedBranch ?? undefined);
+            const data = await apiService.getReports(period, selectedBranch ?? undefined);
             setReport(data);
         } catch (error) {
             console.error('ReportsScreen: fetch error', error);
@@ -167,7 +165,7 @@ export default function ReportsScreen() {
                     <View style={{ flexDirection: 'row-reverse', gap: 12, marginBottom: 20 }}>
                         <Card className="flex-1 items-center py-4 gap-1">
                             <Ionicons name="arrow-up-circle" size={22} color={C.success} />
-                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>المبيعات</Text>
+                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>الإيرادات</Text>
                             <Text style={{ color: C.success, fontWeight: '700', fontSize: 15 }}>
                                 {(report?.revenue ?? 0).toLocaleString()}
                             </Text>
@@ -183,7 +181,7 @@ export default function ReportsScreen() {
                             <Ionicons name="receipt" size={22} color={C.info} />
                             <Text style={{ color: C.mutedForeground, fontSize: 11 }}>العمليات</Text>
                             <Text style={{ color: C.info, fontWeight: '700', fontSize: 15 }}>
-                                {(report?.transactions ?? report?.chart?.length ?? 0).toLocaleString()}
+                                {(report?.transactions ?? 0).toLocaleString()}
                             </Text>
                         </Card>
                     </View>

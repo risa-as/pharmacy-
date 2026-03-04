@@ -81,7 +81,7 @@ export default function ReceiveItemsScreen() {
         backgroundColor: C.input,
         borderWidth: 1,
         borderColor: C.border,
-        borderRadius: 10,
+        borderRadius: 6,
         padding: 12,
         fontSize: 14,
         color: C.foreground,
@@ -100,7 +100,7 @@ export default function ReceiveItemsScreen() {
                 <View style={{
                     flexDirection: 'row-reverse',
                     backgroundColor: C.infoBg,
-                    padding: 16, borderRadius: 12, marginBottom: 20, gap: 12, alignItems: 'center',
+                    padding: 16, borderRadius: 6, marginBottom: 20, gap: 12, alignItems: 'center',
                 }}>
                     <Ionicons name="information-circle" size={24} color={C.info} />
                     <Text style={{ flex: 1, fontSize: 14, color: C.info, textAlign: 'right', lineHeight: 20 }}>
@@ -111,7 +111,7 @@ export default function ReceiveItemsScreen() {
                 {items.map((item, index) => (
                     <View key={item.id} style={{
                         backgroundColor: C.card,
-                        borderRadius: 16, padding: 16, marginBottom: 16,
+                        borderRadius: 6, padding: 16, marginBottom: 16,
                         borderWidth: 1, borderColor: C.border,
                     }}>
                         {/* Card Header */}
@@ -167,7 +167,7 @@ export default function ReceiveItemsScreen() {
                 <TouchableOpacity
                     style={{
                         backgroundColor: submitting ? C.primarySoft : C.primary,
-                        padding: 16, borderRadius: 16, alignItems: 'center',
+                        padding: 16, borderRadius: 6, alignItems: 'center',
                         opacity: submitting ? 0.7 : 1,
                     }}
                     onPress={handleReceive}

@@ -174,7 +174,7 @@ export default function LoginScreen() {
                         onPress={handleBiometricLogin}
                         disabled={loading}
                     >
-                        <Ionicons name="finger-print" size={28} color="#2563eb" />
+                        <Ionicons name="finger-print" size={28} color="#0F7575" />
                         <Text style={styles.biometricText}>الدخول بالبصمة</Text>
                     </TouchableOpacity>
                 )}
@@ -188,7 +188,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#2563eb',
+        backgroundColor: '#0F7575',
     },
     header: {
         flex: 1,
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     iconContainer: {
         width: 100,
         height: 100,
-        borderRadius: 25,
+        borderRadius: 8,
         backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
@@ -217,8 +217,8 @@ const styles = StyleSheet.create({
     },
     form: {
         backgroundColor: '#fff',
-        borderTopLeftRadius: 30,
-        borderTopRightRadius: 30,
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
         padding: 30,
         paddingTop: 40,
     },
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse',
         alignItems: 'center',
         backgroundColor: '#f3f4f6',
-        borderRadius: 12,
+        borderRadius: 6,
         marginBottom: 16,
         paddingHorizontal: 16,
     },
@@ -243,8 +243,8 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     button: {
-        backgroundColor: '#2563eb',
-        borderRadius: 12,
+        backgroundColor: '#0F7575',
+        borderRadius: 6,
         height: 54,
         flexDirection: 'row-reverse',
         justifyContent: 'center',
@@ -275,12 +275,12 @@ const styles = StyleSheet.create({
         marginTop: 20,
         padding: 10,
         borderWidth: 1,
-        borderColor: '#2563eb',
-        borderRadius: 12,
-        backgroundColor: '#eff6ff',
+        borderColor: '#0F7575',
+        borderRadius: 6,
+        backgroundColor: '#f0fafa',
     },
     biometricText: {
-        color: '#2563eb',
+        color: '#0F7575',
         fontSize: 16,
         fontWeight: 'bold',
     },

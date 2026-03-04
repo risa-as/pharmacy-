@@ -20,7 +20,7 @@ export function Card({ children, className, style, ...props }: CardProps) {
 
     return (
         <View
-            className={`rounded-2xl p-4 ${className ?? ''}`}
+            className={`rounded-xl p-4 ${className ?? ''}`}
             style={[
                 { backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
                 style,

@@ -66,12 +66,12 @@ export default function PurchaseDetailsScreen() {
                 {/* Header Card */}
                 <View style={{
                     backgroundColor: C.card,
-                    borderRadius: 20, padding: 20, marginBottom: 20,
+                    borderRadius: 8, padding: 20, marginBottom: 20,
                     borderWidth: 1, borderColor: C.border,
                 }}>
                     <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 16 }}>
                         <View style={{
-                            width: 48, height: 48, borderRadius: 14,
+                            width: 48, height: 48, borderRadius: 6,
                             backgroundColor: C.primaryMuted,
                             justifyContent: 'center', alignItems: 'center', marginLeft: 16,
                         }}>
@@ -95,7 +95,7 @@ export default function PurchaseDetailsScreen() {
                         <View style={{ alignItems: 'flex-end' }}>
                             <Text style={{ fontSize: 12, color: C.mutedForeground, marginBottom: 4 }}>الحالة</Text>
                             <View style={{
-                                paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8,
+                                paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4,
                                 backgroundColor: isPending ? C.warningBg : C.successBg,
                             }}>
                                 <Text style={{
@@ -115,7 +115,7 @@ export default function PurchaseDetailsScreen() {
                         style={{
                             flex: 1, flexDirection: 'row-reverse',
                             justifyContent: 'center', alignItems: 'center',
-                            padding: 16, borderRadius: 16, gap: 8,
+                            padding: 16, borderRadius: 6, gap: 8,
                             backgroundColor: '#25D366',
                         }}
                         onPress={handleWhatsApp}
@@ -130,7 +130,7 @@ export default function PurchaseDetailsScreen() {
                             style={{
                                 flex: 1, flexDirection: 'row-reverse',
                                 justifyContent: 'center', alignItems: 'center',
-                                padding: 16, borderRadius: 16, gap: 8,
+                                padding: 16, borderRadius: 6, gap: 8,
                                 backgroundColor: C.primary,
                             }}
                             onPress={() => router.push(`/purchases/${id}/receive` as any)}
@@ -150,7 +150,7 @@ export default function PurchaseDetailsScreen() {
                 {purchase.items.map((item: any, index: number) => (
                     <View key={index} style={{
                         backgroundColor: C.card,
-                        borderRadius: 16, padding: 16, marginBottom: 12,
+                        borderRadius: 6, padding: 16, marginBottom: 12,
                         borderWidth: 1, borderColor: C.border,
                     }}>
                         <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -166,7 +166,7 @@ export default function PurchaseDetailsScreen() {
                 {/* Total */}
                 <View style={{
                     flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center',
-                    backgroundColor: C.card, padding: 20, borderRadius: 20, marginTop: 10,
+                    backgroundColor: C.card, padding: 20, borderRadius: 8, marginTop: 10,
                     borderWidth: 1, borderColor: C.border,
                 }}>
                     <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.mutedForeground }}>الإجمالي التقديري</Text>

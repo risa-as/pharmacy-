@@ -500,7 +500,7 @@ export const apiService = {
     },
 
     // Get Reports (Sales)
-    async getReports(period: 'daily' | 'monthly' = 'daily', branchId?: string) {
+    async getReports(period: 'daily' | 'weekly' | 'monthly' = 'daily', branchId?: string) {
         try {
             const query = branchId ? `&branchId=${branchId}` : '';
             return await request<any>(`/reports/sales?period=${period}${query}`);

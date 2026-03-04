@@ -90,7 +90,8 @@ function RootStack() {
                 <Stack.Screen name="server-config"   options={{ headerShown: false }} />
                 <Stack.Screen name="printer-settings" options={{ headerShown: false }} />
                 <Stack.Screen name="(tabs)"          options={{ headerShown: false }} />
-                <Stack.Screen name="settings"        options={{ headerShown: false }} />
+                <Stack.Screen name="settings"           options={{ headerShown: false }} />
+                <Stack.Screen name="reports/financial" options={{ headerShown: false }} />
             </Stack>
         </>
     );
