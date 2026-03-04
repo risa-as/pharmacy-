@@ -558,7 +558,7 @@ export const apiService = {
     // Search Patients
     async searchPatients(query: string) {
         try {
-            return await request<any[]>(`/patients/search?q=${encodeURIComponent(query)}`);
+            return await request<any[]>(`/patients?query=${encodeURIComponent(query)}`);
         } catch (error) {
             console.error('API Error searchPatients:', error);
             return [];
