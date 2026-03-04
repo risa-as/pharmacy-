@@ -223,7 +223,12 @@ export default function SalesScreen() {
             try {
                 await apiService.createSale(saleData);
                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                setRecentItems(prev => [...cart.slice(0, 5), ...prev].slice(0, 5));
+                setRecentItems(prev => {
+                    const seen = new Set<string>();
+                    return [...cart.slice(0, 5), ...prev]
+                        .filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; })
+                        .slice(0, 5);
+                });
                 setCart([]); setSelectedPatient(null); setInteractions([]); setAllergyWarnings([]);
                 Alert.alert('تمت العملية', 'تمت عملية البيع', [
                     { text: 'طباعة', onPress: printReceipt },
@@ -413,8 +418,8 @@ export default function SalesScreen() {
                         disabled={cart.length === 0 || loading}
                         style={{ flex: 1, backgroundColor: cart.length === 0 ? C.border : C.warning, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
                     >
-                        <Ionicons name="time-outline" size={18} color="#FFFFFF" />
-                        <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15 }}>آجل</Text>
+                        <Ionicons name="time-outline" size={18} color={cart.length === 0 ? C.foreground : '#FFFFFF'} />
+                        <Text style={{ color: cart.length === 0 ? C.foreground : '#FFFFFF', fontWeight: '700', fontSize: 15 }}>آجل</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={() => handleCheckout('CASH')}
@@ -422,8 +427,8 @@ export default function SalesScreen() {
                         style={{ flex: 2, backgroundColor: cart.length === 0 ? C.border : C.success, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
                     >
                         {loading
-                            ? <ActivityIndicator size="small" color="#FFFFFF" />
-                            : <><Ionicons name="cash-outline" size={18} color="#FFFFFF" /><Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15 }}>نقدي</Text></>
+                            ? <ActivityIndicator size="small" color={cart.length === 0 ? C.foreground : '#FFFFFF'} />
+                            : <><Ionicons name="cash-outline" size={18} color={cart.length === 0 ? C.foreground : '#FFFFFF'} /><Text style={{ color: cart.length === 0 ? C.foreground : '#FFFFFF', fontWeight: '700', fontSize: 15 }}>نقدي</Text></>
                         }
                     </TouchableOpacity>
                 </View>
