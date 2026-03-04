@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
+
+const ACTION_CARD_WIDTH = (Dimensions.get('window').width - 80) / 3.4;
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { apiService } from '../../services/api';
@@ -127,29 +129,34 @@ export function PharmacistDashboard() {
                 </View>
             </Card>
 
-            {/* Quick Action Buttons */}
-            <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '700', textAlign: 'right', marginBottom: 12 }}>
+            {/* Quick Action Buttons — horizontal compact strip */}
+            <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '700', textAlign: 'right', marginBottom: 10 }}>
                 إجراءات سريعة
             </Text>
-            <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ flexDirection: 'row-reverse', gap: 10, paddingBottom: 4 }}
+                style={{ marginBottom: 20 }}
+            >
                 {QUICK_ACTIONS.map((action) => (
                     <TouchableOpacity
                         key={action.title}
                         onPress={() => router.push(action.route as any)}
                         activeOpacity={0.75}
-                        style={{ flex: 1, minWidth: '42%' }}
+                        style={{ width: ACTION_CARD_WIDTH }}
                     >
-                        <Card className="items-center py-5 gap-2">
-                            <View style={{ backgroundColor: `${C.primary}18`, borderRadius: 14, padding: 10 }}>
-                                <Ionicons name={action.icon} size={24} color={C.primary} />
+                        <Card className="items-center py-3 gap-1.5">
+                            <View style={{ backgroundColor: `${C.primary}18`, borderRadius: 10, padding: 8 }}>
+                                <Ionicons name={action.icon} size={22} color={C.primary} />
                             </View>
-                            <Text style={{ color: C.foreground, fontWeight: '600', fontSize: 13, textAlign: 'center' }}>
+                            <Text style={{ color: C.foreground, fontWeight: '600', fontSize: 11, textAlign: 'center' }} numberOfLines={1}>
                                 {action.title}
                             </Text>
                         </Card>
                     </TouchableOpacity>
                 ))}
-            </View>
+            </ScrollView>
 
             {/* Recent Alerts Preview */}
             {alerts.length > 0 && (

@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Platform, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { backgroundRequest } from '../../services/api';
 import { pollingService } from '../../services/polling';
@@ -78,6 +79,7 @@ export default function TabLayout() {
     const [alertsCount, setAlertsCount] = useState(0);
     const { isDarkMode } = useTheme();
     const { isPharmacist, isLoading } = useAuth();
+    const insets = useSafeAreaInsets();
     const { markSynced, setSyncing, registerTrigger } = useSyncStatus();
     const C = Colors(isDarkMode);
 
@@ -138,11 +140,11 @@ export default function TabLayout() {
                     shadowColor: '#000',
                     shadowOpacity: 0.1,
                     shadowRadius: 10,
-                    height: Platform.OS === 'ios' ? 85 : 65,
-                    paddingBottom: Platform.OS === 'ios' ? 25 : 8,
+                    height: 65 + insets.bottom,
+                    paddingBottom: insets.bottom + 8,
                     paddingTop: 8,
                     marginHorizontal: 16,
-                    marginBottom: 16,
+                    marginBottom: Platform.OS === 'android' ? 8 : 16,
                     borderRadius: 20,
                     position: 'absolute',
                 },

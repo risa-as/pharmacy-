@@ -10,6 +10,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
 
 interface Notification {
@@ -34,7 +35,7 @@ const TYPE_CONFIG: Record<string, {
 
 export default function AlertsScreen() {
     const { isDarkMode } = useTheme();
-    const { isAdmin, branchId } = useAuth();
+    const { isAdmin, branchId: authBranchId } = useAuth();
     const { triggerSync } = useSyncStatus();
     const C = Colors(isDarkMode);
 
@@ -42,11 +43,17 @@ export default function AlertsScreen() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    // Admin can filter by branch; pharmacists are always scoped to their own branch.
+    const [selectedBranch, setSelectedBranch] = useState<string | null>(
+        isAdmin ? null : (authBranchId ?? null)
+    );
 
     const fetchNotifications = useCallback(async () => {
         try {
+            const effectiveBranch = isAdmin ? selectedBranch : authBranchId;
+            const query = effectiveBranch ? `?branchId=${effectiveBranch}` : '';
             const res = await request<{ notifications: Notification[]; unreadCount: number }>(
-                '/notifications/in-app',
+                `/notifications/in-app${query}`,
             );
             setNotifications(Array.isArray(res.notifications) ? res.notifications : []);
             setUnreadCount(res.unreadCount ?? 0);
@@ -56,7 +63,7 @@ export default function AlertsScreen() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [isAdmin, selectedBranch, authBranchId]);
 
     useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
@@ -167,6 +174,13 @@ export default function AlertsScreen() {
                     )}
                 </View>
             </View>
+
+            {/* Branch selector — admin only */}
+            {isAdmin && (
+                <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} />
+                </View>
+            )}
 
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 12 }}>

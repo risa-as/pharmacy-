@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { apiService } from '../../services/api';
+import { apiService, request } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Colors } from '../../constants/colors';
@@ -10,14 +10,26 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { BranchSelector } from '../../components/BranchSelector';
 
+interface BranchRow {
+    branchId: string;
+    branchName: string;
+    revenue: number;
+    expenses: number;
+    netProfit: number;
+    profitMargin: number;
+    salesCount: number;
+}
+
 export default function FinancialReportScreen() {
     const { isDarkMode } = useTheme();
-    const { branchId: authBranchId } = useAuth();
+    const { branchId: authBranchId, isAdmin } = useAuth();
     const C = Colors(isDarkMode);
 
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedBranch, setSelectedBranch] = useState<string | null>(authBranchId);
+    const [branchComparison, setBranchComparison] = useState<BranchRow[]>([]);
+    const [compLoading, setCompLoading] = useState(false);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -32,6 +44,21 @@ export default function FinancialReportScreen() {
     }, [selectedBranch]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    const fetchComparison = useCallback(async () => {
+        if (!isAdmin) return;
+        setCompLoading(true);
+        try {
+            const res = await request<{ comparison: BranchRow[] }>('/reports/branch-comparison');
+            setBranchComparison(Array.isArray(res.comparison) ? res.comparison : []);
+        } catch {
+            setBranchComparison([]);
+        } finally {
+            setCompLoading(false);
+        }
+    }, [isAdmin]);
+
+    useEffect(() => { fetchComparison(); }, [fetchComparison]);
 
     const profitMargin = data?.revenue
         ? Math.round((data.profit / data.revenue) * 100)
@@ -144,16 +171,58 @@ export default function FinancialReportScreen() {
                             </Card>
                         )}
 
-                        {/* Branch Comparison placeholder */}
-                        <Card>
-                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 15 }}>مقارنة الفروع</Text>
-                                <Badge label="قريباً" variant="info" />
-                            </View>
-                            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 8 }}>
-                                حدد فرعاً من القائمة أعلاه لتصفية النتائج
-                            </Text>
-                        </Card>
+                        {/* Branch Comparison — admins only */}
+                        {isAdmin && (
+                            <Card>
+                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                    <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 15 }}>مقارنة الفروع</Text>
+                                    {compLoading && <ActivityIndicator size="small" color={C.primary} />}
+                                </View>
+                                {branchComparison.length === 0 && !compLoading ? (
+                                    <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right' }}>
+                                        لا توجد بيانات للمقارنة
+                                    </Text>
+                                ) : (
+                                    branchComparison.map((branch, idx) => (
+                                        <View key={branch.branchId} style={{
+                                            borderTopWidth: idx === 0 ? 0 : 1,
+                                            borderTopColor: C.border,
+                                            paddingVertical: 10,
+                                        }}>
+                                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                                <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13 }}>
+                                                    {branch.branchName}
+                                                </Text>
+                                                <Badge
+                                                    label={`${branch.profitMargin}%`}
+                                                    variant={branch.profitMargin >= 20 ? 'success' : branch.profitMargin >= 10 ? 'warning' : 'danger'}
+                                                />
+                                            </View>
+                                            <View style={{ flexDirection: 'row-reverse', gap: 16 }}>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>الإيرادات</Text>
+                                                    <Text style={{ color: C.success, fontWeight: '700', fontSize: 13 }}>
+                                                        {branch.revenue.toLocaleString()}
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>صافي الربح</Text>
+                                                    <Text style={{ color: branch.netProfit >= 0 ? C.success : C.danger, fontWeight: '700', fontSize: 13 }}>
+                                                        {branch.netProfit.toLocaleString()}
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>المبيعات</Text>
+                                                    <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13 }}>
+                                                        {branch.salesCount}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    ))
+                                )}
+                            </Card>
+                        )}
                     </>
                 )}
             </ScrollView>

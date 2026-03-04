@@ -16,11 +16,13 @@ import { BranchSelector } from '../../components/BranchSelector';
 
 interface SmartOrderItem {
     id: string;
-    name: string;
-    currentStock: number;
-    suggestedQty: number;
-    supplier?: string;
-    unit?: string;
+    // API returns nested drug relation: item.drug.tradeName
+    drug?: { tradeName?: string; scientificName?: string };
+    // API field names from /api/smart-order
+    currentQuantity: number;
+    suggestedReorderQuantity: number;
+    daysUntilStockout?: number;
+    branch?: { name?: string };
 }
 
 export default function SmartOrdersScreen() {
@@ -57,9 +59,10 @@ export default function SmartOrdersScreen() {
     }, [fetchData]);
 
     const handleApprove = useCallback(async (item: SmartOrderItem) => {
+        const drugName = item.drug?.tradeName ?? 'دواء';
         Alert.alert(
             'تأكيد الطلب',
-            `هل تريد إنشاء طلب شراء لـ "${item.name}" بكمية ${item.suggestedQty}؟`,
+            `هل تريد إنشاء طلب شراء لـ "${drugName}" بكمية ${item.suggestedReorderQuantity}؟`,
             [
                 { text: 'إلغاء', style: 'cancel' },
                 {
@@ -118,22 +121,30 @@ export default function SmartOrdersScreen() {
                             <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                                 <View style={{ flex: 1 }}>
                                     <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 15, textAlign: 'right' }}>
-                                        {item.name}
+                                        {item.drug?.tradeName ?? 'دواء غير محدد'}
                                     </Text>
-                                    {item.supplier && (
+                                    {item.drug?.scientificName && (
                                         <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }}>
-                                            المورد: {item.supplier}
+                                            {item.drug.scientificName}
+                                        </Text>
+                                    )}
+                                    {item.branch?.name && (
+                                        <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 1 }}>
+                                            الفرع: {item.branch.name}
                                         </Text>
                                     )}
                                 </View>
-                                <Badge label="نقص" variant="danger" />
+                                <Badge
+                                    label={item.daysUntilStockout !== undefined && item.daysUntilStockout <= 7 ? 'عاجل' : 'نقص'}
+                                    variant={item.daysUntilStockout !== undefined && item.daysUntilStockout <= 7 ? 'danger' : 'warning'}
+                                />
                             </View>
 
                             {/* Stock info row */}
                             <View style={{ flexDirection: 'row-reverse', gap: 12, marginBottom: 14 }}>
                                 <View style={{ flex: 1, backgroundColor: C.dangerBg, borderRadius: 10, padding: 10, alignItems: 'center' }}>
                                     <Text style={{ color: C.danger, fontSize: 18, fontWeight: '800' }}>
-                                        {item.currentStock}
+                                        {item.currentQuantity}
                                     </Text>
                                     <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 2 }}>المخزون الحالي</Text>
                                 </View>
@@ -142,7 +153,7 @@ export default function SmartOrdersScreen() {
                                 </View>
                                 <View style={{ flex: 1, backgroundColor: C.successBg, borderRadius: 10, padding: 10, alignItems: 'center' }}>
                                     <Text style={{ color: C.success, fontSize: 18, fontWeight: '800' }}>
-                                        {item.suggestedQty}
+                                        {item.suggestedReorderQuantity}
                                     </Text>
                                     <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 2 }}>الكمية المقترحة</Text>
                                 </View>

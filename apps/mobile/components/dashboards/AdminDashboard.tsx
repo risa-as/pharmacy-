@@ -70,7 +70,8 @@ function KpiCard({ title, value, icon, variant, route }: KpiCardProps) {
 
 interface RecentSale {
     id: string;
-    totalAmount: number;
+    total?: number;        // Prisma Sale field returned by /api/sales
+    totalAmount?: number;  // legacy alias — kept for backwards compat
     createdAt: string;
     paymentMethod?: string;
 }
@@ -231,7 +232,7 @@ export function AdminDashboard() {
                                                 )}
                                             </View>
                                             <Text style={{ color: C.success, fontWeight: '800', fontSize: 15 }}>
-                                                {(sale.totalAmount ?? 0).toLocaleString()} د.ع
+                                                {(sale.total ?? sale.totalAmount ?? 0).toLocaleString()} د.ع
                                             </Text>
                                         </View>
                                         {idx < recentSales.length - 1 && (
