@@ -53,14 +53,18 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                 ref={ref}
                 {...props}
             >
-                {children}
-                {shortcut && !asChild && (
-                    <kbd
-                        className="ml-2 text-[0.65rem] font-mono opacity-70 border border-current/30 rounded px-1 py-0.5"
-                        aria-hidden="true"
-                    >
-                        {shortcut}
-                    </kbd>
+                {asChild ? children : (
+                    <>
+                        {children}
+                        {shortcut && (
+                            <kbd
+                                className="ml-2 text-[0.65rem] font-mono opacity-70 border border-current/30 rounded px-1 py-0.5"
+                                aria-hidden="true"
+                            >
+                                {shortcut}
+                            </kbd>
+                        )}
+                    </>
                 )}
             </Comp>
         )
