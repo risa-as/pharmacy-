@@ -297,13 +297,14 @@ export const apiService = {
             });
             if (result && result.exists && result.drug) {
                 return {
-                    id: result.drug.id, // Strictly use GlobalDrug ID for sales
+                    id: result.drug.id,
                     barcode: result.drug.barcode,
                     name: result.drug.tradeName,
                     tradeName: result.drug.tradeName,
-                    price: result.inventory?.price || 0,
-                    publicPrice: result.inventory?.price || 0,
-                    quantity: result.inventory?.quantity || 0,
+                    scientificName: result.drug.scientificName ?? '',
+                    price: result.inventory?.price ?? 0,
+                    publicPrice: result.inventory?.price ?? 0,
+                    quantity: result.inventory?.quantity ?? 0,
                 };
             }
             return null;

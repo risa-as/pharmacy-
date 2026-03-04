@@ -18,6 +18,7 @@ export async function POST(req: Request) {
                 id: true,
                 barcode: true,
                 tradeName: true,
+                scientificName: true,
             },
         });
 
@@ -35,19 +36,35 @@ export async function POST(req: Request) {
             inventoryWhere.branchId = branchId;
         }
 
-        const inventory = await prisma.inventory.findFirst({
+        const inventoryRaw = await prisma.inventory.findFirst({
             where: inventoryWhere,
             select: {
                 id: true,
                 branchId: true,
+                price: true,
                 branch: {
                     select: {
                         id: true,
                         name: true,
                     },
                 },
-            }, // distinct? just first one for now
+                batches: {
+                    select: { quantity: true },
+                    where: { quantity: { gt: 0 } },
+                },
+            },
         });
+
+        // Compute total available quantity from batches
+        const inventory = inventoryRaw
+            ? {
+                id: inventoryRaw.id,
+                branchId: inventoryRaw.branchId,
+                price: inventoryRaw.price,
+                quantity: inventoryRaw.batches.reduce((sum, b) => sum + b.quantity, 0),
+                branch: inventoryRaw.branch,
+              }
+            : null;
 
         return NextResponse.json({
             success: true,
