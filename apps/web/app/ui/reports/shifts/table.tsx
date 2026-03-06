@@ -5,16 +5,13 @@ export default async function ShiftsTable({
     query,
     currentPage,
     date,
+    tenantBranchWhere,
 }: {
     query: string;
     currentPage: number;
     date: string;
+    tenantBranchWhere: any;
 }) {
-    const session = await auth();
-    const branchId = session?.user?.branchId;
-
-    if (!branchId) return null;
-
     // Pagination logic
     const ITEMS_PER_PAGE = 20;
     const offset = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -35,7 +32,7 @@ export default async function ShiftsTable({
 
     const shifts = await prisma.shift.findMany({
         where: {
-            branchId,
+            ...tenantBranchWhere,
             createdAt: { gte: startDate, lte: endDate },
             user: {
                 name: { contains: query, mode: 'insensitive' }

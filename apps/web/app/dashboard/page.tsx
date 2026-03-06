@@ -10,16 +10,18 @@ import { getAlertStats } from "@/app/lib/alerts";
 import { GlassKpiCard } from "@/app/ui/dashboard/kpi-card";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
 
-async function getDashboardData(isAdmin: boolean) {
+async function getDashboardData(isAdmin: boolean, organizationId?: string, branchId?: string) {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    const inventoryWhere = isAdmin ? { branch: { organizationId } } : { branchId };
+
     // Basic data everyone can see
     const [drugCount, inventoryCount, alerts] = await Promise.all([
         prisma.globalDrug.count(),
-        prisma.inventory.count(),
-        getAlertStats(),
+        prisma.inventory.count({ where: inventoryWhere }),
+        getAlertStats(isAdmin ? undefined : branchId, isAdmin ? organizationId : undefined),
     ]);
 
     if (!isAdmin) {
@@ -35,32 +37,36 @@ async function getDashboardData(isAdmin: boolean) {
     }
 
     // Admin-only financial data
+    const orgWhere = { organizationId };
+    const orgBranchWhere = { branch: { organizationId } };
+
     const [
         branchCount, userCount,
         todaySales, todayExpenses, monthSales, monthExpenses,
         recentSales, topDrugs, todayReturns,
     ] = await Promise.all([
-        prisma.branch.count(),
-        prisma.user.count(),
+        prisma.branch.count({ where: orgWhere }),
+        prisma.user.count({ where: orgBranchWhere }),
         prisma.sale.aggregate({
             _sum: { total: true }, _count: true,
-            where: { createdAt: { gte: todayStart } }
+            where: { createdAt: { gte: todayStart }, ...orgBranchWhere }
         }),
         prisma.expense.aggregate({
             _sum: { amount: true },
-            where: { date: { gte: todayStart } }
+            where: { date: { gte: todayStart }, ...orgBranchWhere }
         }),
         prisma.sale.aggregate({
             _sum: { total: true }, _count: true,
-            where: { createdAt: { gte: monthStart } }
+            where: { createdAt: { gte: monthStart }, ...orgBranchWhere }
         }),
         prisma.expense.aggregate({
             _sum: { amount: true },
-            where: { date: { gte: monthStart } }
+            where: { date: { gte: monthStart }, ...orgBranchWhere }
         }),
         prisma.sale.findMany({
             take: 5,
             orderBy: { createdAt: 'desc' },
+            where: orgBranchWhere,
             include: {
                 user: { select: { name: true } },
                 branch: { select: { name: true } },
@@ -70,13 +76,13 @@ async function getDashboardData(isAdmin: boolean) {
         prisma.saleItem.groupBy({
             by: ['drugId'],
             _sum: { quantity: true, cost: true },
-            where: { sale: { createdAt: { gte: monthStart } } },
+            where: { sale: { createdAt: { gte: monthStart }, ...orgBranchWhere } },
             orderBy: { _sum: { quantity: 'desc' } },
             take: 5
         }),
         prisma.saleReturn.aggregate({
             _sum: { total: true }, _count: true,
-            where: { createdAt: { gte: todayStart } }
+            where: { createdAt: { gte: todayStart }, ...orgBranchWhere }
         }),
     ]);
 
@@ -94,7 +100,7 @@ async function getDashboardData(isAdmin: boolean) {
     const sevenDaysAgo = new Date(todayStart);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     const rawWeeklySales = await prisma.sale.findMany({
-        where: { createdAt: { gte: sevenDaysAgo } },
+        where: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere },
         select: { total: true, createdAt: true },
     });
     // Build ordered day buckets
@@ -143,6 +149,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     const session = await auth();
     const role = session?.user?.role || 'CASHIER';
     const isSuperAdmin = role === 'SUPER_ADMIN';
+    const organizationId = ((session?.user as any)?.organizationId as string) || undefined;
+    const branchId = (session?.user?.branchId as string) || undefined;
 
     if (isSuperAdmin) {
         const orgCount = await prisma.organization.count();
@@ -186,7 +194,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     }
 
     const isAdmin = role === 'ADMIN';
-    const data = await getDashboardData(isAdmin);
+    const data = await getDashboardData(isAdmin, organizationId, branchId);
 
     const fmt = (v: number) => new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v);
 

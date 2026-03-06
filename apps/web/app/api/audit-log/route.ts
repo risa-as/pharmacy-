@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 // GET: List audit logs with filters
 export async function GET(req: NextRequest) {
@@ -21,7 +22,11 @@ export async function GET(req: NextRequest) {
         const to = searchParams.get('to');
         const search = searchParams.get('search');
 
-        const where: any = {};
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
+        const where: any = { ...tenantBranchWhere };
         if (userId) where.userId = userId;
         if (entity) where.entity = entity;
         if (action) where.action = action;

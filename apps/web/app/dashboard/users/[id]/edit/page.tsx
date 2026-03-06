@@ -4,28 +4,35 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import EditUserForm from "@/app/ui/users/edit-form";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-async function getBranches() {
+async function getBranches(tenantWhere: any) {
     return await prisma.branch.findMany({
+        where: tenantWhere,
         orderBy: { name: 'asc' },
     });
 }
 
-async function getUser(id: string) {
+async function getUser(id: string, tenantBranchWhere: any) {
     return await prisma.user.findUnique({
-        where: { id },
+        where: { id, ...tenantBranchWhere },
         include: { branch: true },
     });
 }
 
 export default async function EditUserPage({ params }: { params: { id: string } }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantWhere, tenantBranchWhere } = tenantCtx;
+
     const [user, branches] = await Promise.all([
-        getUser(params.id),
-        getBranches(),
+        getUser(params.id, tenantBranchWhere),
+        getBranches(tenantWhere),
     ]);
 
     if (!user) {

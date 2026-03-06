@@ -2,6 +2,8 @@ import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { User, Award, TrendingUp, DollarSign, BarChart3 } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function EmployeesReportPage({
     searchParams,
@@ -10,11 +12,18 @@ export default async function EmployeesReportPage({
 }) {
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     // 1. Fetch Users with their Sales (filtered by branch)
+    const userWhereClause = { ...tenantBranchWhere, ...(branchId ? { branchId } : {}) };
+    const salesWhereClause = { ...tenantBranchWhere, ...(branchId ? { branchId } : {}) };
+
     const users = await prisma.user.findMany({
-        where: branchId ? { branchId } : {},
+        where: userWhereClause,
         include: {
-            sales: branchId ? { where: { branchId } } : true,
+            sales: { where: salesWhereClause },
         },
     });
 

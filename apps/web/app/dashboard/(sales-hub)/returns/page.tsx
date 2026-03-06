@@ -2,9 +2,14 @@ import { PrismaClient } from "@prisma/client";
 import { Undo2, Search, Calendar } from "lucide-react";
 
 const prisma = new PrismaClient();
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export default async function ReturnsPage() {
+    const tenantCtx = await getTenantContext();
+    const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+
     const returns = await prisma.saleReturn.findMany({
+        where: tenantBranchWhere,
         orderBy: { createdAt: "desc" },
         include: {
             sale: {

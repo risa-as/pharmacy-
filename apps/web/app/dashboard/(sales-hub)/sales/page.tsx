@@ -6,11 +6,16 @@ import SalesTable from "@/app/ui/dashboard/sales/sales-table";
 const prisma = new PrismaClient();
 
 import { getCompanySettings } from "@/app/lib/actions/settings";
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export default async function SalesPage() {
+    const tenantCtx = await getTenantContext();
+    const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+
     const settings = await getCompanySettings();
     // جلب المبيعات
     const sales = await prisma.sale.findMany({
+        where: tenantBranchWhere,
         orderBy: { createdAt: "desc" },
         include: {
             items: {

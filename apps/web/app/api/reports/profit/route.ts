@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
@@ -35,7 +36,11 @@ export async function GET(req: Request) {
             startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         }
 
-        const branchFilter = branchId ? { branchId } : {};
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
+        const branchFilter = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
         // 1. Total Sales Revenue
         const salesAgg = await prisma.sale.aggregate({

@@ -2,13 +2,22 @@ import { PrismaClient } from "@prisma/client";
 import { FileText, Plus, Clock, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
 import { UpdatePrescription, DeletePrescription, CancelPrescription } from "@/app/ui/prescriptions/buttons";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export default async function PrescriptionsPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     const prescriptions = await prisma.prescription.findMany({
+        where: {
+            patient: tenantBranchWhere
+        },
         orderBy: { createdAt: "desc" },
         include: {
             patient: true,

@@ -3,19 +3,26 @@ import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import CreateUserForm from "@/app/ui/users/create-form";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-async function getBranches() {
+async function getBranches(tenantWhere: any) {
     return await prisma.branch.findMany({
+        where: tenantWhere,
         orderBy: { name: 'asc' },
     });
 }
 
 export default async function CreateUserPage() {
-    const branches = await getBranches();
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantWhere } = tenantCtx;
+
+    const branches = await getBranches(tenantWhere);
 
     return (
         <div className="w-full max-w-2xl mx-auto" suppressHydrationWarning>

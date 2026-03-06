@@ -2,6 +2,8 @@ import { Suspense } from 'react';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
 import ProfitReportClient from '@/app/ui/reports/profit-report-client';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function ProfitReportPage({
     searchParams
@@ -9,10 +11,15 @@ export default async function ProfitReportPage({
     searchParams?: { period?: string; from?: string; to?: string; branchId?: string }
 }) {
     const session = await auth();
-    const branchId = searchParams?.branchId || session?.user?.branchId;
+    const defaultBranchId = searchParams?.branchId || session?.user?.branchId || '';
+
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantWhere } = tenantCtx;
 
     // Fetch branches for filter dropdown
     const branches = await prisma.branch.findMany({
+        where: tenantWhere,
         select: { id: true, name: true }
     });
 
@@ -26,7 +33,7 @@ export default async function ProfitReportPage({
             }>
                 <ProfitReportClient
                     branches={branches}
-                    defaultBranchId={branchId || ''}
+                    defaultBranchId={defaultBranchId}
                     defaultPeriod={searchParams?.period || 'daily'}
                 />
             </Suspense>

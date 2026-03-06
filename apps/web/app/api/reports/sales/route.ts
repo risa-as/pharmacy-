@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
@@ -20,8 +21,13 @@ export async function GET(req: Request) {
             startDate.setHours(0, 0, 0, 0);
         }
 
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const whereClause: any = {
             createdAt: { gte: startDate },
+            ...tenantBranchWhere,
         };
 
         if (branchId) {
@@ -39,7 +45,8 @@ export async function GET(req: Request) {
 
         // Expenses
         const expenseWhere: any = {
-            date: { gte: startDate }
+            date: { gte: startDate },
+            ...tenantBranchWhere,
         };
 
         if (branchId) {
@@ -65,7 +72,10 @@ export async function GET(req: Request) {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         sevenDaysAgo.setHours(0, 0, 0, 0);
 
-        const chartWhere: any = { createdAt: { gte: sevenDaysAgo } };
+        const chartWhere: any = {
+            createdAt: { gte: sevenDaysAgo },
+            ...tenantBranchWhere,
+        };
         if (branchId) chartWhere.branchId = branchId;
 
         const recentSales = await prisma.sale.findMany({

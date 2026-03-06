@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
+import bcrypt from 'bcryptjs';
+import { generateLicenseKey } from '@/app/lib/license-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,56 +52,118 @@ export async function GET() {
 // POST: Create a new tenant (onboarding)
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
-        const { name, ownerEmail, phone, plan, maxBranches, maxUsers } = body;
-
-        if (!name || !ownerEmail) {
-            return NextResponse.json({ error: "name and ownerEmail are required" }, { status: 400 });
+        const session = await auth();
+        if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // Generate slug from name
-        const slug = name.toLowerCase()
-            .replace(/[^\w\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .trim();
+        const body = await req.json();
+        const { name, ownerEmail, ownerName, ownerPassword, plan, maxBranches, maxUsers } = body;
 
-        // Check uniqueness
-        const existing = await prisma.tenant.findUnique({ where: { slug } });
-        if (existing) return NextResponse.json({ error: "اسم المؤسسة محجوز" }, { status: 400 });
+        if (!name || !ownerEmail || !ownerPassword) {
+            return NextResponse.json({ error: "الاسم، الإيميل، وكلمة المرور مطلوبة" }, { status: 400 });
+        }
 
-        // Fetch plan dynamically, fallback to first ACTIVE FREE plan
+        // Check if email already exists
+        const existingUser = await prisma.user.findUnique({ where: { email: ownerEmail } });
+        if (existingUser) {
+            return NextResponse.json(
+                { error: "يوجد مستخدم مسجل بنفس البريد الإلكتروني مسبقاً" },
+                { status: 409 }
+            );
+        }
+
+        // Fetch plan, fallback to first active FREE plan
         let selectedPlan = null;
         if (plan) {
             selectedPlan = await prisma.subscriptionPlan.findUnique({ where: { id: plan } });
         }
-
         if (!selectedPlan) {
             selectedPlan = await prisma.subscriptionPlan.findFirst({
                 where: { name: 'FREE', isActive: true }
             });
         }
-
         if (!selectedPlan) {
             return NextResponse.json({ error: "لا توجد باقة صالحة تم العثور عليها" }, { status: 400 });
         }
 
-        const tenant = await prisma.tenant.create({
-            data: {
-                name,
-                slug,
-                ownerEmail,
-                phone: phone || null,
-                planId: selectedPlan.id,
-                maxBranches: maxBranches || selectedPlan.maxBranches,
-                maxUsers: maxUsers || selectedPlan.maxUsers,
-                monthlyPrice: selectedPlan.price,
-                trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14-day trial
-                features: JSON.stringify(['pos', 'inventory', 'reports'])
-            }
+        // Generate unique license key
+        let licenseKey = generateLicenseKey();
+        let exists = await prisma.deviceLicense.findUnique({ where: { licenseKey } });
+        while (exists) {
+            licenseKey = generateLicenseKey();
+            exists = await prisma.deviceLicense.findUnique({ where: { licenseKey } });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(ownerPassword, 10);
+
+        // Run everything in a single transaction
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Create Organization
+            const organization = await tx.organization.create({
+                data: {
+                    name,
+                    planId: selectedPlan.id,
+                    maxBranches: maxBranches || selectedPlan.maxBranches,
+                    maxUsers: maxUsers || selectedPlan.maxUsers,
+                },
+            });
+
+            // 2. Create Branch (default "الفرع الرئيسي")
+            const branch = await tx.branch.create({
+                data: {
+                    name: "الفرع الرئيسي",
+                    organizationId: organization.id,
+                },
+            });
+
+            // 3. Create Admin User linked to the branch
+            const adminUser = await tx.user.create({
+                data: {
+                    email: ownerEmail,
+                    name: ownerName || name,
+                    password: hashedPassword,
+                    role: "ADMIN",
+                    branchId: branch.id,
+                },
+            });
+
+            // 4. Create DeviceLicense linked to the branch
+            const license = await tx.deviceLicense.create({
+                data: {
+                    licenseKey,
+                    branchId: branch.id,
+                    isActive: true,
+                    // Optionally set expiresAt based on the plan, or allow overriding
+                },
+            });
+
+            return {
+                organization,
+                branch,
+                user: adminUser,
+                license
+            };
         });
 
-        return NextResponse.json({ tenant }, { status: 201 });
+        // Return in the same shape as GET
+        const tenant = {
+            id: result.organization.id,
+            name: result.organization.name,
+            slug: result.organization.id,
+            ownerEmail,
+            planId: selectedPlan.id,
+            plan: selectedPlan,
+            maxBranches: result.organization.maxBranches || selectedPlan.maxBranches,
+            maxUsers: result.organization.maxUsers || selectedPlan.maxUsers,
+            monthlyPrice: selectedPlan.price,
+            isActive: !result.organization.isSuspended,
+            trialEndsAt: null,
+            licenseKey: result.license.licenseKey // Useful to show right after creation
+        };
+
+        return NextResponse.json({ tenant, success: true }, { status: 201 });
     } catch (e: any) {
         return NextResponse.json({ error: e.message }, { status: 500 });
     }

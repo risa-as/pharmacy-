@@ -1,6 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { DollarSign, TrendingUp, TrendingDown, AlertTriangle, Package } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function MarginsReportPage({
     searchParams,
@@ -10,8 +12,12 @@ export default async function MarginsReportPage({
     const sortBy = typeof searchParams.sort === "string" ? searchParams.sort : "margin_asc";
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     const inventory = await prisma.inventory.findMany({
-        where: branchId ? { branchId } : {},
+        where: branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere },
         include: {
             drug: { select: { tradeName: true, barcode: true } },
             branch: { select: { name: true } },

@@ -87,7 +87,16 @@ model Batch {
   expiryDate  DateTime
   quantity    Int
   costPrice   Float     @default(0)
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
   stocktakeItems StocktakeItem[]
+}
+
+model Supplier {
+  id      String  @id
+  name    String
+  phone   String?
+  batches Batch[]
 }
 
 model Sale {

@@ -2,7 +2,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 
+import { getTenantContext } from '@/app/lib/tenant-utils';
+
 // Helper to validate user from token (Mock implementation matching login)
+// Deprecated: Using auth session via getTenantContext for security
 async function getUserFromRequest(request: Request) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -25,7 +28,12 @@ async function getUserFromRequest(request: Request) {
 
 export async function GET(request: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const sales = await prisma.sale.findMany({
+            where: tenantBranchWhere,
             orderBy: { createdAt: 'desc' },
             take: 20
         });
@@ -37,13 +45,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const user = await getUserFromRequest(request);
-        if (!user || !user.branchId) {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { user } = tenantCtx;
+
+        if (!user || (!user.branchId && user.role !== 'SUPER_ADMIN')) {
             return NextResponse.json({ message: 'Unauthorized or No Branch Assigned' }, { status: 401 });
         }
 
         const body = await request.json();
-        const { items, totalAmount } = body;
+        const { items, totalAmount, patientId, discount, paymentMethod } = body;
 
         // 1. Extract Idempotency Key
         const idempotencyKey = String(request.headers.get('x-idempotency-key') || body.clientActionId || '').trim();
@@ -111,12 +122,23 @@ export async function POST(request: Request) {
             const newSale = await tx.sale.create({
                 data: {
                     branchId: user.branchId!,
+                    userId: user.id,
                     total: totalAmount,
+                    discount: discount ?? 0,
+                    patientId: patientId || null,
                     items: {
                         create: saleItemsData
                     }
                 }
             });
+
+            // 5. Handle CREDIT: add debt to patient balance
+            if (paymentMethod === 'CREDIT' && patientId) {
+                await tx.patient.update({
+                    where: { id: patientId },
+                    data: { balance: { increment: totalAmount } },
+                });
+            }
 
             // 5. Record Idempotency Key
             if (idempotencyKey) {

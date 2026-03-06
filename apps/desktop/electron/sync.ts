@@ -334,14 +334,17 @@ export async function syncDebtPayments() {
             const data = await responsePull.json() as { payments: any[] };
             const payments = data.payments || [];
 
-            await prisma.$transaction(async (tx) => {
-                for (const payment of payments) {
-                    const existing = await tx.debtPayment.findUnique({
-                        where: { id: payment.id }
-                    });
+            let pulled = 0;
+            for (const payment of payments) {
+                try {
+                    await prisma.$transaction(async (tx) => {
+                        const existing = await tx.debtPayment.findUnique({ where: { id: payment.id } });
+                        if (existing) return;
 
-                    if (!existing) {
-                        // 1. Create locally 
+                        // Verify the referenced sale exists locally (FK guard)
+                        const localSale = await tx.sale.findUnique({ where: { id: payment.saleId }, select: { id: true } });
+                        if (!localSale) return; // Sale not synced locally yet — skip
+
                         await tx.debtPayment.create({
                             data: {
                                 id: payment.id,
@@ -350,23 +353,32 @@ export async function syncDebtPayments() {
                                 method: payment.method,
                                 note: payment.note,
                                 createdAt: new Date(payment.createdAt),
-                                synced: true // Came from cloud
-                            }
+                                synced: true,
+                            },
                         });
 
-                        // 2. Decrement patient balance locally 
+                        // Decrement patient balance — never go below 0
                         if (payment.patientId) {
-                            await tx.patient.update({
+                            const patient = await tx.patient.findUnique({
                                 where: { id: payment.patientId },
-                                data: { balance: { decrement: payment.amount } }
+                                select: { balance: true },
                             });
+                            if (patient) {
+                                await tx.patient.update({
+                                    where: { id: payment.patientId },
+                                    data: { balance: Math.max(0, patient.balance - payment.amount) },
+                                });
+                            }
                         }
-                    }
+                    });
+                    pulled++;
+                } catch (pullErr: any) {
+                    console.warn(`[Sync] Skipping cloud payment ${payment.id}: ${pullErr.message}`);
                 }
-            });
+            }
 
-            if (payments.length > 0) {
-                console.log(`[Sync] Pulled and verified ${payments.length} recent debt payment(s) from cloud.`);
+            if (pulled > 0) {
+                console.log(`[Sync] Pulled ${pulled} new debt payment(s) from cloud.`);
             }
         } else {
             console.error(`[Sync] Failed to pull debt payments: HTTP ${responsePull.status}`);
@@ -404,6 +416,75 @@ function BrowsersNotifyFailure() {
     });
 }
 
+export async function syncSaleReturns() {
+    const taskName = "saleReturns";
+    if (!beginSyncTask(taskName)) return;
+
+    try {
+        isOnline = await checkConnection();
+        if (!isOnline) {
+            console.log("[Sync] Server unavailable. Sale returns sync postponed.");
+            return;
+        }
+
+        const unsyncedReturns = await prisma.saleReturn.findMany({
+            where: { synced: false },
+            include: { items: true },
+            take: 10
+        });
+
+        if (unsyncedReturns.length === 0) return;
+
+        console.log(`[Sync] Syncing ${unsyncedReturns.length} unsynced sale return(s)...`);
+
+        const branchId = getBranchId();
+        if (!branchId) {
+            console.log("[Sync] Branch ID missing. Login is required before sync.");
+            return;
+        }
+
+        const returnsPayload = unsyncedReturns.map(ret => ({
+            id: ret.id,
+            saleId: ret.saleId,
+            safeId: ret.safeId,
+            total: ret.total,
+            createdAt: ret.createdAt,
+            notes: ret.notes,
+            items: ret.items.map(item => ({
+                drugId: item.drugId,
+                quantity: item.quantity,
+                price: item.price
+            }))
+        }));
+
+        const response = await fetchWithRetry(buildApiUrl('/sync/returns'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ branchId, returns: returnsPayload })
+        });
+
+        const result = await response.json() as { syncedIds?: string[] };
+        const syncedIds = result.syncedIds;
+
+        if (syncedIds && syncedIds.length > 0) {
+            await prisma.saleReturn.updateMany({
+                where: { id: { in: syncedIds } },
+                data: { synced: true }
+            });
+            console.log(`[Sync] Sale returns sync completed. Marked ${syncedIds.length} return(s) as synced.`);
+        }
+
+    } catch (error: any) {
+        if (error.name === 'SyncClientError') {
+            console.error("[Sync DLQ] Permanent Client Error in Sale Returns Sync:", error.message);
+        } else {
+            console.log("[Sync] Sale returns sync paused (offline mode).", error.message);
+        }
+    } finally {
+        endSyncTask(taskName);
+    }
+}
+
 // Start Sync Interval
 export function startSyncService() {
     if (syncServiceStarted) {
@@ -417,10 +498,12 @@ export function startSyncService() {
     // Warmup syncs on startup
     setTimeout(syncCurrentBranch, 1000); // Verify branch first!
     setTimeout(syncSettings, 3000); // Sync settings very early
+    setTimeout(syncSuppliers, 4000); // Sync suppliers before products (FK dependency)
     setTimeout(syncProducts, 5000); // Sync products early
     setTimeout(syncPatients, 8000); // Sync patients
     setTimeout(syncUsers, 10000); // Sync users
     setTimeout(syncSales, 15000);
+    setTimeout(syncSaleReturns, 17000); // Sync returns after sales
     setTimeout(syncLoyalty, 20000); // Sync loyalty
     setTimeout(syncDebtPayments, 25000); // Sync debt payments
     setTimeout(syncTransfers, 30000); // Sync transfers
@@ -428,6 +511,8 @@ export function startSyncService() {
     // Regular background intervals
     setInterval(syncCurrentBranch, 60 * 60 * 1000); // Check branch details hourly
     setInterval(syncSales, 2 * 60 * 1000);
+    setInterval(syncSaleReturns, 2 * 60 * 1000); // Every 2 mins
+    setInterval(syncSuppliers, 15 * 60 * 1000); // Sync suppliers every 15 mins
     setInterval(syncProducts, 5 * 60 * 1000); // Sync products every 5 mins
     setInterval(syncUsers, 5 * 60 * 1000); // Every 5 mins
     setInterval(syncPatients, 2 * 60 * 1000); // Every 2 mins
@@ -784,6 +869,32 @@ export async function syncLoyalty() {
         endSyncTask(taskName);
     }
 }
+export async function syncSuppliers() {
+    const taskName = "suppliers";
+    if (!beginSyncTask(taskName)) return;
+    try {
+        if (!await checkConnection()) return;
+        console.log('[Sync] Syncing suppliers list...');
+        const response = await fetchWithRetry(buildApiUrl('/suppliers'));
+        if (!response.ok) throw new Error('Suppliers fetch failed');
+        const suppliers = await response.json() as Array<{ id: string; name: string; phone?: string }>;
+        if (Array.isArray(suppliers)) {
+            for (const s of suppliers) {
+                await prisma.supplier.upsert({
+                    where: { id: s.id },
+                    update: { name: s.name, phone: s.phone ?? null },
+                    create: { id: s.id, name: s.name, phone: s.phone ?? null },
+                });
+            }
+            console.log(`[Sync] Suppliers synced: ${suppliers.length} records`);
+        }
+    } catch (err) {
+        console.error('[Sync] Supplier sync failed:', err);
+    } finally {
+        endSyncTask(taskName);
+    }
+}
+
 export async function syncProducts() {
     const taskName = "products";
     if (!beginSyncTask(taskName)) return;
@@ -1560,6 +1671,7 @@ export async function pushAddBatchToCloud(data: {
     expiryDate: string;
     drugId?: string;
     branchId?: string;
+    supplierId?: string | null;
 }, options?: { actionId?: string }): Promise<boolean> {
     try {
         if (!await checkConnection()) return false;
@@ -1582,7 +1694,8 @@ export async function pushAddBatchToCloud(data: {
                 quantity: data.quantity,
                 expiryDate: data.expiryDate,
                 drugId: data.drugId || null,
-                branchId: data.branchId || null
+                branchId: data.branchId || null,
+                supplierId: data.supplierId ?? null,
             })
         });
 

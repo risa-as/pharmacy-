@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2 } from 'lucide-react';
 import { suspendOrganization, reactivateOrganization } from '@/app/lib/actions/organization-suspension';
 
 export default function TenantsPage() {
@@ -9,9 +9,16 @@ export default function TenantsPage() {
     const [plans, setPlans] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [form, setForm] = useState({ name: '', ownerEmail: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+    const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [provisionResult, setProvisionResult] = useState<{
+        licenseKey: string;
+        organizationName: string;
+        ownerEmail: string;
+    } | null>(null);
 
     useEffect(() => {
         Promise.all([
@@ -47,20 +54,53 @@ export default function TenantsPage() {
         }));
     };
 
-    const handleCreate = async () => {
-        if (!form.name || !form.ownerEmail) return;
+    const handleCreateOrUpdate = async () => {
+        if (!form.name) return; // Name is required for both create and update
+
+        if (!editingId && (!form.ownerEmail || !form.ownerPassword)) {
+            // For creation, email and password are required
+            return;
+        }
+
         setSaving(true);
         try {
-            const res = await fetch('/api/admin/tenants', {
-                method: 'POST',
+            const url = editingId ? `/api/admin/tenants/${editingId}` : '/api/admin/tenants';
+            const method = editingId ? 'PATCH' : 'POST';
+
+            // Only send ownerEmail and ownerPassword if creating
+            const payload = editingId ? {
+                name: form.name,
+                plan: form.plan,
+                maxBranches: form.maxBranches,
+                maxUsers: form.maxUsers
+            } : form;
+
+            const res = await fetch(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
+                body: JSON.stringify(payload)
             });
+
             if (res.ok) {
                 const data = await res.json();
-                setTenants([data.tenant, ...tenants]);
+                if (editingId) {
+                    // Re-fetch tenants after update
+                    const tenantsData = await fetch('/api/admin/tenants').then(r => r.json());
+                    setTenants(tenantsData.tenants || []);
+                } else {
+                    setTenants([data.tenant, ...tenants]);
+                    setProvisionResult({
+                        licenseKey: data.tenant.licenseKey,
+                        organizationName: data.tenant.name,
+                        ownerEmail: data.tenant.ownerEmail,
+                    });
+                }
                 setShowForm(false);
-                setForm({ name: '', ownerEmail: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+                setEditingId(null);
+                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+            } else {
+                const data = await res.json();
+                alert(data.error || 'حدث خطأ');
             }
         } catch (e) { console.error(e); }
         finally { setSaving(false); }
@@ -90,13 +130,59 @@ export default function TenantsPage() {
         setActionLoading(null);
     };
 
+    const handleEditClick = (tenant: any) => {
+        setEditingId(tenant.id);
+        const plan = plans.find(p => p.id === tenant.planId) || plans[0];
+        setForm({
+            name: tenant.name,
+            ownerName: '', // Not editable
+            ownerEmail: tenant.ownerEmail, // Informational, cannot be edited here
+            ownerPassword: '', // Not editable
+            phone: '',
+            plan: plan?.id || '',
+            maxBranches: tenant.maxBranches,
+            maxUsers: tenant.maxUsers,
+        });
+        setShowForm(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleDeleteTenant = async (tenant: any) => {
+        if (!confirm(`هل أنت متأكد من حذف مؤسسة ${tenant.name} نهائياً؟ سيتم حذف جميع الفروع والتراخيص والمستخدمين المرتبطين بها!`)) return;
+
+        setActionLoading(`delete-${tenant.id}`);
+        try {
+            const res = await fetch(`/api/admin/tenants/${tenant.id}`, { method: 'DELETE' });
+            if (res.ok) {
+                setTenants(tenants.filter(t => t.id !== tenant.id));
+            } else {
+                const data = await res.json();
+                alert(data.error || 'حدث خطأ أثناء الحذف');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('تعذر الاتصال بالسيرفر');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const formatDate = (d: string) => new Date(d).toLocaleDateString('ar-IQ');
+
+    const handleCopy = (key: string) => {
+        navigator.clipboard.writeText(key);
+        alert('تم نسخ المفتاح');
+    };
 
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
-                <button onClick={() => setShowForm(!showForm)}
+                <button onClick={() => {
+                    setEditingId(null);
+                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+                    setShowForm(!showForm);
+                }}
                     className="flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors shadow-sm">
                     <Plus className="w-4 h-4" /> إضافة مؤسسة
                 </button>
@@ -104,16 +190,33 @@ export default function TenantsPage() {
 
             {showForm && (
                 <div className="bg-card rounded-xl shadow-sm border p-5 space-y-3">
-                    <h2 className="font-bold text-foreground">مؤسسة جديدة</h2>
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="font-bold text-foreground">{editingId ? `تعديل مؤسسة: ${form.name}` : 'مؤسسة جديدة'}</h2>
+                        <button onClick={() => { setShowForm(false); setEditingId(null); }} className="text-muted-foreground hover:text-foreground">✕</button>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <input placeholder="اسم المؤسسة *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                             className="border rounded-lg px-3 py-2 text-sm bg-muted" />
+                        <input placeholder="اسم المالك" value={form.ownerName} onChange={e => setForm({ ...form, ownerName: e.target.value })}
+                            className="border rounded-lg px-3 py-2 text-sm bg-muted" disabled={!!editingId} />
                         <input placeholder="إيميل المالك *" value={form.ownerEmail} onChange={e => setForm({ ...form, ownerEmail: e.target.value })}
-                            className="border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                            className="border rounded-lg px-3 py-2 text-sm bg-muted opacity-60" dir="ltr" disabled={!!editingId} />
+                        <div className="relative">
+                            <input type={showPassword ? 'text' : 'password'} placeholder="كلمة المرور الافتراضية *" value={form.ownerPassword} onChange={e => setForm({ ...form, ownerPassword: e.target.value })}
+                                className="w-full border rounded-lg px-3 py-2 text-sm bg-muted pl-10" dir="ltr" disabled={!!editingId} title={editingId ? "لا يمكن تعديل كلمة المرور من هنا" : ""} />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                disabled={!!editingId}
+                            >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                        </div>
                         <input placeholder="الهاتف" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
                             className="border rounded-lg px-3 py-2 text-sm bg-muted" />
                         <select value={form.plan} onChange={handlePlanChange}
-                            className="border rounded-lg px-3 py-2 text-sm bg-muted col-span-1 md:col-span-2">
+                            className="border rounded-lg px-3 py-2 text-sm bg-muted col-span-1 md:col-span-1">
                             {plans.map(p => (
                                 <option key={p.id} value={p.id}>
                                     {p.name} - {p.price === 0 ? 'مجاني' : `$${p.price}/شهر`}
@@ -133,10 +236,37 @@ export default function TenantsPage() {
                             </div>
                         </div>
                     </div>
-                    <button onClick={handleCreate} disabled={saving || !form.name || !form.ownerEmail}
-                        className="px-4 py-2 bg-success text-success-foreground rounded-lg text-sm hover:bg-success/90 disabled:opacity-50">
-                        {saving ? 'جاري الإنشاء...' : 'إنشاء'}
+                    <button onClick={handleCreateOrUpdate} disabled={saving || !form.name || (!editingId && (!form.ownerEmail || !form.ownerPassword))}
+                        className="px-4 py-2 bg-success text-success-foreground rounded-lg text-sm hover:bg-success/90 disabled:opacity-50 mt-2">
+                        {saving ? (editingId ? 'جاري التحديث...' : 'جاري الإنشاء...') : (editingId ? 'تحديث المؤسسة' : 'إنشاء')}
                     </button>
+                </div>
+            )}
+
+            {provisionResult && (
+                <div className="bg-success/10 border border-success/20 rounded-xl p-5 space-y-3 relative">
+                    <button onClick={() => setProvisionResult(null)} className="absolute top-3 left-3 text-muted-foreground hover:text-foreground">✕</button>
+                    <div className="flex items-center gap-2 text-success">
+                        <Check className="w-5 h-5" />
+                        <h2 className="font-bold">تم التأسيس بنجاح!</h2>
+                    </div>
+                    <div className="text-sm font-medium">مؤسسة: {provisionResult.organizationName}</div>
+                    <div className="text-sm">إيميل المالك: <span dir="ltr">{provisionResult.ownerEmail}</span></div>
+                    <div className="mt-2">
+                        <div className="text-xs text-muted-foreground mb-1">مفتاح الترخيص الخاص بالفرع الرئيسي</div>
+                        <div className="flex items-center gap-2 max-w-md">
+                            <code className="flex-1 font-mono text-base bg-background px-3 py-2 rounded-lg text-foreground tracking-widest border border-border text-center">
+                                {provisionResult.licenseKey}
+                            </code>
+                            <button
+                                onClick={() => handleCopy(provisionResult.licenseKey)}
+                                className="p-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                                title="نسخ"
+                            >
+                                <Copy className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -200,17 +330,38 @@ export default function TenantsPage() {
                                             <div className="flex items-center gap-1">
                                                 {actionLoading === t.id ? (
                                                     <Loader2 className="w-5 h-5 animate-spin mx-2 text-muted-foreground" />
+                                                ) : actionLoading === `delete-${t.id}` ? (
+                                                    <Loader2 className="w-5 h-5 animate-spin mx-2 text-destructive" />
                                                 ) : (
-                                                    <button
-                                                        onClick={() => handleToggleStatus(t)}
-                                                        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${t.isActive
-                                                            ? 'bg-destructive/10 text-destructive hover:bg-destructive hover:text-white border border-destructive/20'
-                                                            : 'bg-success/10 text-success hover:bg-success hover:text-white border border-success/20'
-                                                            }`}
-                                                    >
-                                                        {t.isActive ? <ShieldAlert className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                                                        {t.isActive ? 'تعطيل' : 'تفعيل'}
-                                                    </button>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            onClick={() => handleToggleStatus(t)}
+                                                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${t.isActive
+                                                                ? 'bg-warning/10 text-warning hover:bg-warning hover:text-white border border-warning/20'
+                                                                : 'bg-success/10 text-success hover:bg-success hover:text-white border border-success/20'
+                                                                }`}
+                                                            title={t.isActive ? 'تعطيل' : 'تفعيل'}
+                                                        >
+                                                            {t.isActive ? <ShieldAlert className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => handleEditClick(t)}
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-primary/10 text-primary hover:bg-primary hover:text-white border border-primary/20"
+                                                            title="تعديل"
+                                                        >
+                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => handleDeleteTenant(t)}
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-destructive/10 text-destructive hover:bg-destructive hover:text-white border border-destructive/20"
+                                                            title="حذف"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+
                                                 )}
                                             </div>
                                         </td>

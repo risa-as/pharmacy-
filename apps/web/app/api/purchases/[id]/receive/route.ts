@@ -16,7 +16,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
         const purchase = await prisma.purchase.findUnique({
             where: { id },
-            include: { items: true }
+            include: { items: true, supplier: { select: { id: true } } }
         });
 
         if (!purchase) {
@@ -45,13 +45,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
                 });
 
                 if (inventory) {
-                    // Create Batch
+                    // Create Batch (auto-inherit supplierId from purchase order)
                     await tx.batch.create({
                         data: {
                             inventoryId: inventory.id,
                             quantity: receivedItem.quantity,
                             batchNumber: receivedItem.batchNumber,
-                            expiryDate: new Date(receivedItem.expiryDate)
+                            expiryDate: new Date(receivedItem.expiryDate),
+                            supplierId: purchase.supplier?.id ?? null,
                         }
                     });
 

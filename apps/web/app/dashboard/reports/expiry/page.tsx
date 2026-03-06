@@ -1,6 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { AlertTriangle, Clock, CheckCircle, XCircle, Package } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function ExpiryReportPage({
     searchParams,
@@ -8,6 +10,10 @@ export default async function ExpiryReportPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
+
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
 
     const now = new Date();
     const in30Days = new Date();
@@ -19,7 +25,10 @@ export default async function ExpiryReportPage({
     const batches = await prisma.batch.findMany({
         where: {
             quantity: { gt: 0 },
-            ...(branchId ? { inventory: { branchId } } : {}),
+            inventory: {
+                ...tenantBranchWhere,
+                ...(branchId ? { branchId } : {}),
+            }
         },
         include: {
             inventory: {

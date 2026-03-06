@@ -2,6 +2,8 @@ import { PrismaClient } from "@prisma/client";
 import { BarChart3, TrendingUp, AlertOctagon } from "lucide-react";
 import BestSellingChart from "@/app/ui/dashboard/reports/best-selling-chart";
 import StagnantItemsTable from "@/app/ui/dashboard/reports/stagnant-items-table";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from "next/server";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -12,6 +14,10 @@ export default async function AnalyticsPage({
 }: {
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const stagnantPeriod = typeof searchParams.stagnantPeriod === 'string' ? parseInt(searchParams.stagnantPeriod) : 90;
 
     // --- 1. Best Selling Items (Last 30 Days) ---
@@ -22,7 +28,8 @@ export default async function AnalyticsPage({
         by: ['drugId'],
         where: {
             sale: {
-                createdAt: { gte: thirtyDaysAgo }
+                createdAt: { gte: thirtyDaysAgo },
+                ...tenantBranchWhere
             }
         },
         _sum: {
@@ -58,7 +65,10 @@ export default async function AnalyticsPage({
         const revenueAgg = await prisma.saleItem.findMany({
             where: {
                 drugId: item.drugId,
-                sale: { createdAt: { gte: thirtyDaysAgo } }
+                sale: {
+                    createdAt: { gte: thirtyDaysAgo },
+                    ...tenantBranchWhere
+                }
             },
             select: { quantity: true, price: true }
         });
@@ -94,7 +104,8 @@ export default async function AnalyticsPage({
     const soldDrugIds = await prisma.saleItem.findMany({
         where: {
             sale: {
-                createdAt: { gte: stagnantThresholdDate }
+                createdAt: { gte: stagnantThresholdDate },
+                ...tenantBranchWhere
             }
         },
         select: { drugId: true },
@@ -107,9 +118,7 @@ export default async function AnalyticsPage({
             id: { notIn: soldDrugIds },
             inventories: {
                 some: {
-                    // We want strictly items appearing in inventory (linked to a branch)
-                    // And preferably with stock > 0.
-                    // Checking stock > 0 in Prisma efficiently:
+                    ...tenantBranchWhere,
                     batches: {
                         some: {
                             quantity: { gt: 0 }

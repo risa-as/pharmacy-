@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 // GET: Compare branches on sales, expenses, profit, inventory
 export async function GET(req: Request) {
@@ -28,8 +29,13 @@ export async function GET(req: Request) {
             startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         }
 
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantWhere } = tenantCtx;
+
         // Fetch all branches
         const branches = await prisma.branch.findMany({
+            where: tenantWhere,
             select: { id: true, name: true }
         });
 

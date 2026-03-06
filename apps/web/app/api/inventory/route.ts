@@ -1,19 +1,16 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
-        const { searchParams } = new URL(req.url);
-        const branchId = searchParams.get('branchId');
-
-        const whereClause: any = {};
-        if (branchId) {
-            whereClause.branchId = branchId;
-        }
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
 
         const inventory = await prisma.inventory.findMany({
-            where: whereClause,
+            where: tenantBranchWhere,
             include: {
                 batches: true,
                 // No direct relation to GlobalDrug in schema (drugId is just string)

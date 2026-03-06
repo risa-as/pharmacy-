@@ -122,15 +122,21 @@ export async function deleteInventory(id: string) {
     }
 }
 
+function generateBatchNumber(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 // إضافة دفعة جديدة
 export async function addBatch(prevState: any, formData: FormData) {
     const inventoryId = formData.get("inventoryId") as string;
-    const batchNumber = formData.get("batchNumber") as string;
+    const batchNumber = generateBatchNumber();
     const quantity = parseInt(formData.get("quantity") as string);
     const costPrice = parseFloat(formData.get("costPrice") as string) || 0;
     const expiryDate = new Date(formData.get("expiryDate") as string);
+    const supplierId = (formData.get("supplierId") as string) || null;
 
-    if (!inventoryId || !batchNumber || !quantity || !expiryDate) {
+    if (!inventoryId || !quantity || !expiryDate) {
         return { message: "جميع الحقول مطلوبة." };
     }
 
@@ -142,6 +148,7 @@ export async function addBatch(prevState: any, formData: FormData) {
                 quantity,
                 costPrice,
                 expiryDate,
+                supplierId,
             },
         });
     } catch (error) {

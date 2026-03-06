@@ -17,10 +17,7 @@ export default async function PurchasesPage() {
         return <div className="p-8 text-center text-destructive">يرجى تسجيل الدخول لعرض المشتريات.</div>;
     }
 
-    // If Admin, fetch all. If not, fetch for specific branch.
-    // Note: If Admin wants to see ONLY their branch, we might need a filter later.
-    // For now, showing ALL ensures they see the orders they just created for other branches.
-    const purchases = await getPurchases(isAdmin ? undefined : (branchId || undefined));
+    const purchases = await getPurchases();
 
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">

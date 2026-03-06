@@ -1,6 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 interface BranchFilterProps {
     currentBranch: string | undefined;
@@ -9,7 +11,12 @@ interface BranchFilterProps {
 }
 
 export async function BranchFilter({ currentBranch, baseUrl, extraParams }: BranchFilterProps) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantWhere } = tenantCtx;
+
     const branches = await prisma.branch.findMany({
+        where: tenantWhere,
         select: { id: true, name: true },
         orderBy: { name: "asc" },
     });

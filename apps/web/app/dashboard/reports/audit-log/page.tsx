@@ -1,12 +1,20 @@
 import { prisma } from "@/app/lib/prisma";
 import AuditLogClient from "@/app/ui/reports/audit-log-client";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function AuditLogPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const users = await prisma.user.findMany({
+        where: tenantBranchWhere,
         select: { id: true, name: true }
     });
 
     const branches = await prisma.branch.findMany({
+        where: tenantWhere,
         select: { id: true, name: true }
     });
 

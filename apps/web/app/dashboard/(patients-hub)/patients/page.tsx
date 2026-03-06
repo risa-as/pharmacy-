@@ -3,6 +3,8 @@ import { Users, Plus, Phone, Calendar, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { UpdatePatient, DeletePatient } from "@/app/ui/patients/buttons";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -14,7 +16,12 @@ export default async function PatientsPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
-    const branchWhere = branchId ? { branchId } : {};
+
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
+    const branchWhere = { ...tenantBranchWhere, ...(branchId ? { branchId } : {}) };
 
     const patients = await prisma.patient.findMany({
         where: branchWhere,

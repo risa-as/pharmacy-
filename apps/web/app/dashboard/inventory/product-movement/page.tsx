@@ -1,5 +1,8 @@
 import { PrismaClient } from "@prisma/client";
-import { Activity, ArrowUpDown } from "lucide-react";
+import { Activity, ArrowUpDown, Search } from "lucide-react";
+
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -8,18 +11,14 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 export default async function ProductMovementPage({
     searchParams,
 }: {
-    searchParams?: { drugId?: string };
+    searchParams?: { barcode?: string };
 }) {
-    const drugId = searchParams?.drugId;
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
 
-    // Get all drugs for the dropdown
-    const drugs = await prisma.globalDrug.findMany({
-        orderBy: { tradeName: "asc" },
-        select: { id: true, tradeName: true, barcode: true },
-        take: 200,
-    });
+    const barcode = searchParams?.barcode?.trim();
 
-    // If a drug is selected, get its movement (sales + purchases)
     let movements: {
         date: Date;
         type: string;
@@ -28,60 +27,65 @@ export default async function ProductMovementPage({
         branch: string;
     }[] = [];
     let selectedDrug: { tradeName: string; barcode: string } | null = null;
+    let notFound = false;
     let totalIn = 0;
     let totalOut = 0;
 
-    if (drugId) {
-        const drug = await prisma.globalDrug.findUnique({
-            where: { id: drugId },
-            select: { tradeName: true, barcode: true },
-        });
-        selectedDrug = drug;
-
-        // Get sales of this drug
-        const saleItems = await prisma.saleItem.findMany({
-            where: { drugId },
-            include: {
-                sale: { include: { branch: true } },
-            },
-            orderBy: { sale: { createdAt: "desc" } },
-            take: 100,
+    if (barcode) {
+        const drug = await prisma.globalDrug.findFirst({
+            where: { barcode },
+            select: { id: true, tradeName: true, barcode: true },
         });
 
-        for (const si of saleItems) {
-            movements.push({
-                date: si.sale.createdAt,
-                type: "بيع",
-                quantity: -si.quantity,
-                reference: `فاتورة #${si.saleId.slice(0, 8)}`,
-                branch: si.sale.branch.name,
+        if (!drug) {
+            notFound = true;
+        } else {
+            selectedDrug = { tradeName: drug.tradeName, barcode: drug.barcode };
+
+            const saleItems = await prisma.saleItem.findMany({
+                where: {
+                    drugId: drug.id,
+                    sale: tenantBranchWhere
+                },
+                include: { sale: { include: { branch: true } } },
+                orderBy: { sale: { createdAt: "desc" } },
+                take: 100,
             });
-            totalOut += si.quantity;
-        }
 
-        // Get purchase items for this drug
-        const purchaseItems = await prisma.purchaseItem.findMany({
-            where: { drugId },
-            include: {
-                purchase: { include: { branch: true } },
-            },
-            orderBy: { purchase: { createdAt: "desc" } },
-            take: 100,
-        });
+            for (const si of saleItems) {
+                movements.push({
+                    date: si.sale.createdAt,
+                    type: "بيع",
+                    quantity: -si.quantity,
+                    reference: `فاتورة #${si.saleId.slice(0, 8)}`,
+                    branch: si.sale.branch.name,
+                });
+                totalOut += si.quantity;
+            }
 
-        for (const pi of purchaseItems) {
-            movements.push({
-                date: pi.purchase.createdAt,
-                type: "شراء",
-                quantity: pi.quantity,
-                reference: `مشتريات #${pi.purchaseId.slice(0, 8)}`,
-                branch: pi.purchase.branch.name,
+            const purchaseItems = await prisma.purchaseItem.findMany({
+                where: {
+                    drugId: drug.id,
+                    purchase: tenantBranchWhere
+                },
+                include: { purchase: { include: { branch: true } } },
+                orderBy: { purchase: { createdAt: "desc" } },
+                take: 100,
             });
-            totalIn += pi.quantity;
-        }
 
-        // Sort by date desc
-        movements.sort((a, b) => b.date.getTime() - a.date.getTime());
+            for (const pi of purchaseItems) {
+                movements.push({
+                    date: pi.purchase.createdAt,
+                    type: "شراء",
+                    quantity: pi.quantity,
+                    reference: `مشتريات #${pi.purchaseId.slice(0, 8)}`,
+                    branch: pi.purchase.branch.name,
+                });
+                totalIn += pi.quantity;
+            }
+
+            movements.sort((a, b) => b.date.getTime() - a.date.getTime());
+        }
     }
 
     return (
@@ -93,23 +97,24 @@ export default async function ProductMovementPage({
                 </h1>
             </div>
 
-            {/* Drug Selector */}
+            {/* Barcode Search */}
             <div className="bg-card rounded-xl border border-border p-6 mb-6">
                 <form className="flex flex-col sm:flex-row gap-4 items-end">
                     <div className="flex-1 w-full">
-                        <label className="block text-sm font-bold text-foreground mb-2">اختر المنتج</label>
-                        <select
-                            name="drugId"
-                            defaultValue={drugId || ""}
-                            className="w-full rounded-lg border border-border px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-primary"
-                        >
-                            <option value="">-- اختر منتج --</option>
-                            {drugs.map(d => (
-                                <option key={d.id} value={d.id}>
-                                    {d.tradeName} ({d.barcode})
-                                </option>
-                            ))}
-                        </select>
+                        <label className="block text-sm font-bold text-foreground mb-2">
+                            باركود المنتج
+                        </label>
+                        <div className="relative">
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <input
+                                type="text"
+                                name="barcode"
+                                defaultValue={barcode || ""}
+                                placeholder="امسح الباركود أو اكتبه يدوياً..."
+                                autoFocus
+                                className="w-full rounded-lg border border-border pr-9 pl-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-primary font-mono"
+                            />
+                        </div>
                     </div>
                     <button
                         type="submit"
@@ -119,6 +124,13 @@ export default async function ProductMovementPage({
                     </button>
                 </form>
             </div>
+
+            {/* Not found */}
+            {notFound && (
+                <div className="bg-destructive/10 rounded-xl border border-destructive/30 p-6 text-center text-destructive mb-6">
+                    <p className="font-bold">لم يُعثر على منتج بالباركود: <span className="font-mono">{barcode}</span></p>
+                </div>
+            )}
 
             {/* Stats */}
             {selectedDrug && (
@@ -190,10 +202,10 @@ export default async function ProductMovementPage({
                 </>
             )}
 
-            {!drugId && (
+            {!barcode && !notFound && (
                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
                     <ArrowUpDown className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                    <p className="font-bold">اختر منتجاً لعرض حركته</p>
+                    <p className="font-bold">امسح باركود منتج لعرض حركته</p>
                     <p className="text-sm mt-1">ستظهر هنا جميع عمليات البيع والشراء للمنتج المحدد</p>
                 </div>
             )}

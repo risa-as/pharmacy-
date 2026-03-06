@@ -54,6 +54,7 @@ export async function POST(req: Request) {
             quantity,
             expiryDate,
             inventoryId,
+            supplierId,
         } = body;
 
         if (!barcode || !tradeName || !branchId) {
@@ -141,9 +142,8 @@ export async function POST(req: Request) {
 
             let ackStatus: AckStatus = parsedQuantity > 0 ? "processed" : "noop";
             if (parsedQuantity > 0) {
-                const batchNumber = idempotencyKey
-                    ? `SYNC-${sanitizeBatchKey(idempotencyKey)}`
-                    : "INITIAL-" + new Date().getFullYear();
+                const batchChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                const batchNumber = Array.from({ length: 8 }, () => batchChars[Math.floor(Math.random() * batchChars.length)]).join('');
 
                 await tx.batch.create({
                     data: {
@@ -154,6 +154,7 @@ export async function POST(req: Request) {
                             : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
                         batchNumber,
                         costPrice: parsedCost,
+                        supplierId: supplierId ?? null,
                     }
                 });
             }

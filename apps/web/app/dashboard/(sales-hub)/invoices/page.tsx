@@ -3,13 +3,16 @@ import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { PrismaClient } from "@prisma/client";
 import { DeleteInvoice } from "@/app/ui/invoices/buttons";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-async function getInvoices() {
+async function getInvoices(tenantBranchWhere: any) {
     const invoices = await prisma.purchase.findMany({
+        where: tenantBranchWhere,
         orderBy: { createdAt: 'desc' },
         include: {
             supplier: true,
@@ -21,7 +24,11 @@ async function getInvoices() {
 }
 
 export default async function Page() {
-    const invoices = await getInvoices();
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
+    const invoices = await getInvoices(tenantBranchWhere);
 
     return (
         <div className="w-full">

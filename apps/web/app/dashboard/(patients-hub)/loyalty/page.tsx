@@ -1,6 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { Gift, Award, Users, TrendingUp, Star, Crown, Medal } from "lucide-react";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function LoyaltyDashboardPage() {
     // 1. Get settings
@@ -9,9 +11,16 @@ export default async function LoyaltyDashboardPage() {
         settings = await prisma.companySettings.create({ data: {} });
     }
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     // 2. Get loyalty stats
-    const totalAccounts = await prisma.loyaltyAccount.count();
+    const totalAccounts = await prisma.loyaltyAccount.count({
+        where: { patient: { ...tenantBranchWhere } }
+    });
     const accounts = await prisma.loyaltyAccount.findMany({
+        where: { patient: { ...tenantBranchWhere } },
         include: {
             patient: { select: { name: true, phone: true } },
             transactions: {

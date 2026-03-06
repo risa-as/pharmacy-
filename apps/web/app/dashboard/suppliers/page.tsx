@@ -3,8 +3,16 @@ import Link from "next/link";
 import { Plus, Users, Mail, Phone, MapPin, FileText, DollarSign } from "lucide-react";
 import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
 
-async function getSuppliers() {
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
+
+async function getSuppliers(tenantBranchWhere?: any) {
     const suppliers = await prisma.supplier.findMany({
+        where: tenantBranchWhere && Object.keys(tenantBranchWhere).length > 0 ? {
+            purchases: {
+                some: tenantBranchWhere
+            }
+        } : {},
         orderBy: { createdAt: 'desc' },
         include: {
             _count: { select: { purchases: true } }
@@ -14,7 +22,17 @@ async function getSuppliers() {
 }
 
 export default async function Page() {
-    const suppliers = await getSuppliers();
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, user } = tenantCtx;
+
+    // Super Admin sees everything. Others see only suppliers they interacted with.
+    let suppliers = [];
+    try {
+        suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? {} : tenantBranchWhere);
+    } catch (e) {
+        suppliers = await getSuppliers({});
+    }
 
     return (
         <div className="glass-card w-full p-6">

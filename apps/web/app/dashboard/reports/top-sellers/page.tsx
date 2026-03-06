@@ -1,6 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { TrendingUp, Award, Package, DollarSign } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function TopSellersPage({
     searchParams,
@@ -10,12 +12,16 @@ export default async function TopSellersPage({
     const period = typeof searchParams.period === "string" ? parseInt(searchParams.period) : 30;
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const sinceDate = new Date();
     sinceDate.setDate(sinceDate.getDate() - period);
 
     const saleWhere = branchId
-        ? { sale: { createdAt: { gte: sinceDate }, branchId } }
-        : { sale: { createdAt: { gte: sinceDate } } };
+        ? { sale: { createdAt: { gte: sinceDate }, branchId, ...tenantWhere } }
+        : { sale: { createdAt: { gte: sinceDate }, ...tenantBranchWhere } };
 
     // 1. Group SaleItems by drugId, ordered by quantity
     const grouped = await prisma.saleItem.groupBy({

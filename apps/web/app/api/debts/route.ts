@@ -1,14 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 
+import { getTenantContext } from '@/app/lib/tenant-utils';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     try {
-        const { searchParams } = new URL(request.url);
-        const branchId = searchParams.get('branchId');
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
 
         const where: any = {
+            ...tenantBranchWhere,
             // Assuming balance < 0 means debt, OR balance > 0 means debt depending on convention. 
             // Usually in retail systems: 
             // - Positive Balance = Store Credit (Customer paid in advance)
@@ -23,9 +27,6 @@ export async function GET(request: Request) {
             }
         };
 
-        if (branchId) {
-            where.branchId = branchId;
-        }
 
         const patients = await prisma.patient.findMany({
             where,

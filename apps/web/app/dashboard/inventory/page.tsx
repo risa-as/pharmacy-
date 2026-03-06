@@ -3,6 +3,8 @@ import { Package, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import InventoryTable from "@/app/ui/inventory/inventory-table";
 import QuickBarcodeEntry from "@/app/ui/inventory/quick-barcode-entry";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from "next/server";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -10,11 +12,11 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 const ITEMS_PER_PAGE = 50;
 
-async function getInventory(page: number, query: string) {
+async function getInventory(page: number, query: string, tenantBranchWhere: any) {
     const skip = (page - 1) * ITEMS_PER_PAGE;
 
     // Basic search if query exists (can be improved)
-    const where = query ? {
+    const baseWhere = query ? {
         drug: {
             OR: [
                 { tradeName: { contains: query, mode: 'insensitive' as const } },
@@ -22,6 +24,8 @@ async function getInventory(page: number, query: string) {
             ]
         }
     } : {};
+
+    const where = { ...baseWhere, ...tenantBranchWhere };
 
     const [total, inventory] = await Promise.all([
         prisma.inventory.count({ where }),
@@ -48,8 +52,9 @@ async function getInventory(page: number, query: string) {
     };
 }
 
-async function getBranches() {
+async function getBranches(tenantWhere: any) {
     return await prisma.branch.findMany({
+        where: tenantWhere,
         select: { id: true, name: true }
     });
 }
@@ -62,11 +67,15 @@ export default async function Page({
         page?: string;
     };
 }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const query = searchParams?.query || "";
     const currentPage = Number(searchParams?.page) || 1;
 
-    const { items, totalPages } = await getInventory(currentPage, query);
-    const branches = await getBranches();
+    const { items, totalPages } = await getInventory(currentPage, query, tenantBranchWhere);
+    const branches = await getBranches(tenantWhere);
 
     return (
         <div className="glass-card w-full p-6">

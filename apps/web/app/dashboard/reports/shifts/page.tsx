@@ -2,14 +2,15 @@ import { Metadata } from 'next';
 import { Suspense } from 'react';
 import ShiftsTable from '@/app/ui/reports/shifts/table';
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export const metadata: Metadata = {
     title: 'سجل إقفالات الورديات | Faramace',
 };
 
 // Summary Cards Component
-async function ShiftSummaryCards({ query, date, branchId }: { query: string, date: string, branchId: string }) {
+async function ShiftSummaryCards({ query, date, tenantBranchWhere }: { query: string, date: string, tenantBranchWhere: any }) {
     // Parse Date filter
     const now = new Date();
     let startDate = new Date(0); // Epoch start
@@ -27,7 +28,7 @@ async function ShiftSummaryCards({ query, date, branchId }: { query: string, dat
     // Fetch aggregated data
     const shifts = await prisma.shift.findMany({
         where: {
-            branchId,
+            ...tenantBranchWhere,
             status: 'CLOSED',
             createdAt: { gte: startDate, lte: endDate },
             user: {
@@ -104,10 +105,9 @@ export default async function Page({
         date?: string;
     };
 }) {
-    const session = await auth();
-    const branchId = session?.user?.branchId;
-
-    if (!branchId) return <div>يرجى تسجيل الدخول</div>;
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
 
     const query = searchParams?.query || '';
     const date = searchParams?.date || 'all';
@@ -154,13 +154,13 @@ export default async function Page({
 
             <div className="mt-8">
                 <Suspense fallback={<div>جاري حساب ملخص الورديات...</div>}>
-                    <ShiftSummaryCards query={query} date={date} branchId={branchId} />
+                    <ShiftSummaryCards query={query} date={date} tenantBranchWhere={tenantBranchWhere} />
                 </Suspense>
             </div>
 
             <div className="mt-4">
                 <Suspense fallback={<div>جاري تحميل سجل الورديات...</div>}>
-                    <ShiftsTable query={query} currentPage={currentPage} date={date} />
+                    <ShiftsTable query={query} currentPage={currentPage} date={date} tenantBranchWhere={tenantBranchWhere} />
                 </Suspense>
             </div>
         </div>

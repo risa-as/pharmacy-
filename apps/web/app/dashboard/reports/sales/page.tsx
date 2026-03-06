@@ -3,14 +3,20 @@ import { TrendingUp, Calendar, Download, ArrowRight, DollarSign } from "lucide-r
 import Link from "next/link";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from "next/server";
 
 export default async function SalesReportPage({
     searchParams,
 }: {
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
-    const branchWhere = branchId ? { branchId } : {};
+    const branchWhere = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
     // Get sales for last 7 days
     const sevenDaysAgo = new Date();

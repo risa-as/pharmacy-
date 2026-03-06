@@ -33,8 +33,6 @@ const durationOptions = [
     { value: 0, label: 'بدون انتهاء (دائم)' },
 ];
 
-type ModalTab = 'provision' | 'existing';
-
 export default function AdminLicensesPage() {
     const [licenses, setLicenses] = useState<License[]>([]);
     const [branches, setBranches] = useState<any[]>([]);
@@ -45,16 +43,9 @@ export default function AdminLicensesPage() {
     const [generating, setGenerating] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [modalTab, setModalTab] = useState<ModalTab>('provision');
     const [modalError, setModalError] = useState('');
 
-    // Provision form state
-    const [pharmacyName, setPharmacyName] = useState('');
-    const [ownerEmail, setOwnerEmail] = useState('');
-    const [ownerPassword, setOwnerPassword] = useState('');
-    const [ownerName, setOwnerName] = useState('');
     const [selectedDuration, setSelectedDuration] = useState(12);
-    const [showPassword, setShowPassword] = useState(false);
 
     // Existing branch form state
     const [selectedBranch, setSelectedBranch] = useState('');
@@ -117,50 +108,9 @@ export default function AdminLicensesPage() {
         setShowModal(false);
         setModalError('');
         setProvisionResult(null);
-        setPharmacyName('');
-        setOwnerEmail('');
-        setOwnerPassword('');
-        setOwnerName('');
         setSelectedBranch('');
         setSelectedOrg('');
         setSelectedDuration(12);
-        setShowPassword(false);
-    };
-
-    // Provision new tenant (Org + Branch + User + License)
-    const handleProvision = async () => {
-        if (!pharmacyName || !ownerEmail || !ownerPassword) return;
-        setGenerating(true);
-        setModalError('');
-        try {
-            const res = await fetch('/api/admin/provision-tenant', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    pharmacyName,
-                    ownerEmail,
-                    ownerPassword,
-                    ownerName: ownerName || pharmacyName,
-                    durationMonths: selectedDuration || null,
-                }),
-            });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                setProvisionResult({
-                    licenseKey: data.license.licenseKey,
-                    organizationName: data.organization.name,
-                    ownerEmail: data.user.email,
-                });
-                fetchLicenses();
-            } else {
-                setModalError(data.error || 'حدث خطأ غير متوقع');
-            }
-        } catch (e) {
-            console.error('Failed to provision tenant:', e);
-            setModalError('تعذر الاتصال بالسيرفر');
-        } finally {
-            setGenerating(false);
-        }
     };
 
     // Generate license for existing branch
@@ -299,7 +249,7 @@ export default function AdminLicensesPage() {
                     className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-l from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20"
                 >
                     <Plus className="w-4 h-4" />
-                    تأسيس صيدلية جديدة
+                    تشفير ترخيص لفرع
                 </button>
             </div>
 
@@ -379,30 +329,7 @@ export default function AdminLicensesPage() {
                             </div>
                         ) : (
                             <>
-                                {/* Tab Switcher */}
-                                <div className="flex gap-1 bg-muted/30 rounded-xl p-1 mb-5">
-                                    <button
-                                        onClick={() => setModalTab('provision')}
-                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-bold transition-all ${modalTab === 'provision'
-                                                ? 'bg-background text-foreground shadow-sm'
-                                                : 'text-muted-foreground hover:text-foreground'
-                                            }`}
-                                    >
-                                        <Building2 className="w-4 h-4" />
-                                        صيدلية جديدة
-                                    </button>
-                                    <button
-                                        onClick={() => setModalTab('existing')}
-                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-bold transition-all ${modalTab === 'existing'
-                                                ? 'bg-background text-foreground shadow-sm'
-                                                : 'text-muted-foreground hover:text-foreground'
-                                            }`}
-                                    >
-                                        <KeyRound className="w-4 h-4" />
-                                        فرع موجود
-                                    </button>
-                                </div>
-
+                                <h3 className="font-bold text-foreground mb-4">توليد مفتاح ترخيص للفرع</h3>
                                 {/* Error */}
                                 {modalError && (
                                     <div className="mb-4 p-3 rounded-xl text-sm flex items-start gap-2 bg-destructive/10 border border-destructive/20 text-destructive/70">
@@ -411,135 +338,62 @@ export default function AdminLicensesPage() {
                                     </div>
                                 )}
 
-                                {/* Tab: Provision New Tenant */}
-                                {modalTab === 'provision' && (
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">اسم الصيدلية *</label>
-                                            <input
-                                                type="text"
-                                                value={pharmacyName}
-                                                onChange={e => setPharmacyName(e.target.value)}
-                                                placeholder="مثال: صيدلية الأمل"
-                                                className={inputClass}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">اسم المالك</label>
-                                            <input
-                                                type="text"
-                                                value={ownerName}
-                                                onChange={e => setOwnerName(e.target.value)}
-                                                placeholder="اسم صاحب الصيدلية"
-                                                className={inputClass}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">البريد الإلكتروني *</label>
-                                            <input
-                                                type="email"
-                                                value={ownerEmail}
-                                                onChange={e => setOwnerEmail(e.target.value)}
-                                                placeholder="owner@example.com"
-                                                className={inputClass}
-                                                dir="ltr"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">كلمة المرور الافتراضية *</label>
-                                            <div className="relative">
-                                                <input
-                                                    type={showPassword ? 'text' : 'password'}
-                                                    value={ownerPassword}
-                                                    onChange={e => setOwnerPassword(e.target.value)}
-                                                    placeholder="كلمة مرور أولية للمالك"
-                                                    className={inputClass + ' pl-10'}
-                                                    dir="ltr"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowPassword(!showPassword)}
-                                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                                >
-                                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">مدة الاشتراك</label>
-                                            <select
-                                                value={selectedDuration}
-                                                onChange={e => setSelectedDuration(Number(e.target.value))}
-                                                className={inputClass}
-                                            >
-                                                {durationOptions.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-                                )}
 
-                                {/* Tab: Existing Branch */}
-                                {modalTab === 'existing' && (
-                                    <div className="space-y-3">
-                                        {/* Organisation selector (required for DRM binding) */}
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">المؤسسة *</label>
-                                            <select
-                                                value={selectedOrg}
-                                                onChange={e => { setSelectedOrg(e.target.value); setSelectedBranch(''); }}
-                                                className={inputClass}
-                                            >
-                                                <option value="">اختر المؤسسة...</option>
-                                                {organizations.map(org => (
-                                                    <option key={org.id} value={org.id}>{org.name}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">الفرع</label>
-                                            <select
-                                                value={selectedBranch}
-                                                onChange={e => setSelectedBranch(e.target.value)}
-                                                className={inputClass}
-                                                disabled={!selectedOrg}
-                                            >
-                                                <option value="">اختر الفرع...</option>
-                                                {branches
-                                                    .filter((b: any) => !selectedOrg || b.organizationId === selectedOrg)
-                                                    .map((b: any) => (
-                                                        <option key={b.id} value={b.id}>{b.name}</option>
-                                                    ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-muted-foreground mb-1.5">مدة الاشتراك</label>
-                                            <select
-                                                value={selectedDuration}
-                                                onChange={e => setSelectedDuration(Number(e.target.value))}
-                                                className={inputClass}
-                                            >
-                                                {durationOptions.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                ))}
-                                            </select>
-                                        </div>
+                                <div className="space-y-3">
+                                    {/* Organisation selector (required for DRM binding) */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-muted-foreground mb-1.5">المؤسسة *</label>
+                                        <select
+                                            value={selectedOrg}
+                                            onChange={e => { setSelectedOrg(e.target.value); setSelectedBranch(''); }}
+                                            className={inputClass}
+                                        >
+                                            <option value="">اختر المؤسسة...</option>
+                                            {organizations.map(org => (
+                                                <option key={org.id} value={org.id}>{org.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
-                                )}
+                                    <div>
+                                        <label className="block text-sm font-medium text-muted-foreground mb-1.5">الفرع</label>
+                                        <select
+                                            value={selectedBranch}
+                                            onChange={e => setSelectedBranch(e.target.value)}
+                                            className={inputClass}
+                                            disabled={!selectedOrg}
+                                        >
+                                            <option value="">اختر الفرع...</option>
+                                            {branches
+                                                .filter((b: any) => !selectedOrg || b.organizationId === selectedOrg)
+                                                .map((b: any) => (
+                                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-muted-foreground mb-1.5">مدة الاشتراك</label>
+                                        <select
+                                            value={selectedDuration}
+                                            onChange={e => setSelectedDuration(Number(e.target.value))}
+                                            className={inputClass}
+                                        >
+                                            {durationOptions.map(opt => (
+                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
 
                                 {/* Actions */}
                                 <div className="flex gap-3 mt-6">
                                     <button
-                                        onClick={modalTab === 'provision' ? handleProvision : handleGenerate}
-                                        disabled={
-                                            generating ||
-                                            (modalTab === 'provision' ? !pharmacyName || !ownerEmail || !ownerPassword : !selectedBranch || !selectedOrg)
-                                        }
+                                        onClick={handleGenerate}
+                                        disabled={generating || !selectedBranch || !selectedOrg}
                                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-l from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground rounded-xl text-sm font-bold disabled:opacity-50 transition-all"
                                     >
-                                        {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : modalTab === 'provision' ? <Building2 className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />}
-                                        {generating ? 'جاري المعالجة...' : modalTab === 'provision' ? 'تأسيس وتوليد المفتاح' : 'توليد المفتاح'}
+                                        {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                                        {generating ? 'جاري المعالجة...' : 'توليد المفتاح'}
                                     </button>
                                     <button
                                         onClick={resetModal}
@@ -646,8 +500,8 @@ export default function AdminLicensesPage() {
                                                         <button
                                                             onClick={() => handleToggle(license)}
                                                             className={`p-1.5 rounded-lg transition-colors text-xs ${license.isActive
-                                                                    ? 'hover:bg-destructive/10 text-destructive/70 hover:text-destructive'
-                                                                    : 'hover:bg-success/10 text-success/70 hover:text-success'
+                                                                ? 'hover:bg-destructive/10 text-destructive/70 hover:text-destructive'
+                                                                : 'hover:bg-success/10 text-success/70 hover:text-success'
                                                                 }`}
                                                             title={license.isActive ? 'إيقاف' : 'تفعيل'}
                                                         >

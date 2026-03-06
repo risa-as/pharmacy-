@@ -125,9 +125,9 @@ export async function POST(req: NextRequest) {
                         }
                     });
 
-                    // For credit sales: update patient balance
+                    // For credit sales: update patient balance (updateMany avoids P2025 if patient missing)
                     if (isCredit && sale.patientId) {
-                        await tx.patient.update({
+                        await tx.patient.updateMany({
                             where: { id: sale.patientId },
                             data: { balance: { increment: sale.total - (sale.discount || 0) } }
                         });

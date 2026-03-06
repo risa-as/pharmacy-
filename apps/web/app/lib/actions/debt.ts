@@ -2,10 +2,17 @@
 
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 // جلب جميع المدينين
 export async function getAllDebtors(branchId?: string) {
-    const whereClause: any = { balance: { gt: 0 } };
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantBranchWhere } = tenantCtx;
+
+    let whereClause: any = { balance: { gt: 0 }, ...tenantBranchWhere };
+
     if (branchId) {
         whereClause.branchId = branchId;
     }
@@ -47,29 +54,27 @@ export async function getAllDebtors(branchId?: string) {
 
 // إحصائيات الديون
 export async function getDebtStats(branchId?: string) {
-    const wherePatients: any = { balance: { gt: 0 } };
-    const wherePayments: any = {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) {
+        return { totalDebt: 0, debtorCount: 0, todayPaymentsAmount: 0, todayPaymentsCount: 0 };
+    }
+    const { tenantBranchWhere } = tenantCtx;
+
+    let wherePatients: any = { balance: { gt: 0 }, ...tenantBranchWhere };
+    let wherePayments: any = {
         createdAt: {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
         },
+        sale: {
+            patient: {
+                ...tenantBranchWhere
+            }
+        }
     };
 
     if (branchId) {
         wherePatients.branchId = branchId;
-        // For payments, we need to filter by the sale's branch or the patient's branch
-        // Assuming DebtPayment -> Sale -> User (who has branchId) or Patient (who has branchId)
-        // In our schema: DebtPayment -> Sale. Sale -> User (maybe null) or Patient (maybe null).
-        // Best proxy is Sale's branch or Patient's branch.
-        // Let's check schema/relationship. DebtPayment -> Sale.
-        // We can filter debt payments by: Sale.Patient.branchId OR Sale.User.branchId?
-        // Simpler: Filter by Sale's Patient Branch ID if available, or just rely on Patient stats.
-
-        // Actually, let's filter DebtPayment by `sale: { patient: { branchId } }`
-        wherePayments.sale = {
-            patient: {
-                branchId: branchId
-            }
-        };
+        wherePayments.sale.patient.branchId = branchId;
     }
 
     const [totalDebt, debtorCount, todayPayments] = await Promise.all([
@@ -97,8 +102,12 @@ export async function getDebtStats(branchId?: string) {
 
 // جلب ديون مريض معين مع كشف حساب
 export async function getPatientDebts(patientId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     const patient = await prisma.patient.findUnique({
-        where: { id: patientId },
+        where: { id: patientId, ...tenantBranchWhere },
         include: {
             sales: {
                 where: {

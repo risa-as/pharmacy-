@@ -2,13 +2,19 @@
 
 import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export async function getLowStockInventory(branchId?: string) {
-    // 1. Fetch inventory based on branchId (if provided)
-    const whereClause = branchId ? { branchId } : {};
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantBranchWhere } = tenantCtx;
+
+    // 1. Fetch inventory based on branchId (if provided) or tenantBranchWhere
+    const finalWhere = branchId ? { ...tenantBranchWhere, branchId } : { ...tenantBranchWhere };
 
     const inventories = await prisma.inventory.findMany({
-        where: whereClause,
+        where: finalWhere,
         include: {
             batches: true,
             branch: true,
@@ -43,11 +49,9 @@ export async function getLowStockInventory(branchId?: string) {
     }).filter(item => item.currentStock <= item.minStock);
 
     // 4. Exclude items already in PENDING purchases
+    const pendingFinalWhere = branchId ? { ...tenantBranchWhere, branchId, status: 'PENDING' } : { ...tenantBranchWhere, status: 'PENDING' };
     const pendingPurchases = await prisma.purchase.findMany({
-        where: {
-            status: 'PENDING',
-            branchId: branchId // Filter by branch if provided
-        },
+        where: pendingFinalWhere,
         include: { items: true }
     });
 
@@ -61,6 +65,12 @@ export async function getLowStockInventory(branchId?: string) {
 
 export async function createSmartPurchase(branchId: string, supplierId: string, items: any[]) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return { success: false, error: 'Unauthorized Session' };
+        const { tenantBranchWhere } = tenantCtx;
+
+        // Optionally enforce that branchId matches `tenantBranchWhere` if this is not admin...
+
         const total = items.reduce((sum, item) => sum + (item.quantity * item.cost), 0);
 
         const purchase = await prisma.purchase.create({
@@ -88,15 +98,28 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
 }
 
 export async function getSuppliers() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantWhere } = tenantCtx;
+
     return await prisma.supplier.findMany({
+        where: tenantWhere,
         orderBy: { name: 'asc' }
     });
 }
 
 export async function getPurchases(branchId?: string) {
-    const whereClause = branchId ? { branchId } : {};
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return []; // Fallback empty array instead of exposing errors in TS
+    const { tenantBranchWhere } = tenantCtx;
+
+    let finalWhere = { ...tenantBranchWhere };
+    if (branchId) {
+        finalWhere = { ...finalWhere, branchId };
+    }
+
     return await prisma.purchase.findMany({
-        where: whereClause,
+        where: finalWhere,
         include: {
             supplier: true,
             branch: true,
