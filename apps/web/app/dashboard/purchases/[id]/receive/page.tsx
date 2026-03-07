@@ -39,7 +39,7 @@ export default function ReceivePurchasePage({ params }: { params: { id: string }
 
     const handleConfirm = async () => {
         try {
-            const itemsToSubmit = Object.entries(receivedItems).map(([itemId, data]: [string, any]: any) => ({
+            const itemsToSubmit = Object.entries(receivedItems).map(([itemId, data]: [string, any]) => ({
                 itemId,
                 quantity: Number(data.quantity),
                 expiryDate: new Date(data.expiryDate),
