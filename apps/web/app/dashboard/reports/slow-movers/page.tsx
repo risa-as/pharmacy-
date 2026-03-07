@@ -30,7 +30,7 @@ export default async function SlowMoversPage({
             select: { drugId: true },
             distinct: ["drugId"],
         })
-        .then((items) => items.map((i: any) => i.drugId));
+        .then((items: any[]) => items.map((i: any) => i.drugId));
 
     // 2. Find drugs NOT sold, but WITH stock > 0
     const inventoryFilter = branchId
