@@ -1,23 +1,19 @@
-
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { UpdateOrganization, DeleteOrganization } from "@/app/ui/organizations/buttons";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export default async function Page() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
 
-async function getOrganizations() {
-    const orgs = await prisma.organization.findMany({
+    const organizations = await prisma.organization.findMany({
         orderBy: { createdAt: 'desc' },
         include: { _count: { select: { branches: true } } }
     });
-    return orgs;
-}
-
-export default async function Page() {
-    const organizations = await getOrganizations();
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>

@@ -1,16 +1,16 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
-        const { searchParams } = new URL(req.url);
-        const branchId = searchParams.get('branchId');
-
-        const where = branchId ? { branchId } : {};
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
 
         const expenses = await prisma.expense.findMany({
-            where,
+            where: tenantBranchWhere,
             orderBy: { date: 'desc' },
             take: 50,
         });
@@ -26,15 +26,23 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { user } = tenantCtx;
+
+        if (!user || (!user.branchId && user.role !== 'SUPER_ADMIN')) {
+            return NextResponse.json({ message: 'Unauthorized or No Branch Assigned' }, { status: 401 });
+        }
+
         const body = await req.json();
-        const { amount, category, description, branchId } = body;
+        const { amount, category, description } = body;
 
         const expense = await prisma.expense.create({
             data: {
                 amount: parseFloat(amount),
                 category,
                 description,
-                branchId: branchId || 'default-branch-id', // Replace with real branch ID from auth
+                branchId: user.branchId!,
             },
         });
 

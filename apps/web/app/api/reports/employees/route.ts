@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
@@ -19,8 +20,13 @@ export async function GET(req: Request) {
             startDate.setHours(0, 0, 0, 0);
         }
 
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const whereClause: any = {
             createdAt: { gte: startDate },
+            ...tenantBranchWhere,
         };
 
         if (branchId) {
@@ -45,6 +51,7 @@ export async function GET(req: Request) {
             where: {
                 startTime: { gte: startDate },
                 ...(branchId && { branchId }),
+                ...tenantBranchWhere,
                 status: 'CLOSED' // Only count closed shifts for duration
             },
             _sum: {

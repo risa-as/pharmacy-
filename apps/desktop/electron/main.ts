@@ -1853,10 +1853,12 @@ ipcMain.handle(
   "add-inventory-batch",
   async (
     _event,
-    { inventoryId, batchNumber, quantity, costPrice, expiryDate },
+    { inventoryId, quantity, costPrice, expiryDate, supplierId },
   ) => {
     try {
       const qty = parseInt(quantity, 10);
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      const batchNumber = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
       await prisma.$transaction([
         prisma.batch.create({
           data: {
@@ -1865,6 +1867,7 @@ ipcMain.handle(
             quantity: qty,
             costPrice: parseFloat(costPrice) || 0,
             expiryDate: new Date(expiryDate),
+            supplierId: supplierId || null,
           },
         }),
         prisma.inventory.update({
@@ -1887,6 +1890,7 @@ ipcMain.handle(
           expiryDate: new Date(expiryDate).toISOString(),
           drugId: inventory.drugId,
           branchId: inventory.branchId || String(store.get("branchId") || ""),
+          supplierId: supplierId || null,
         });
         void processPendingSyncActions();
       }
@@ -1901,6 +1905,18 @@ ipcMain.handle(
     }
   },
 );
+
+ipcMain.handle("get-local-suppliers", async () => {
+  try {
+    return await prisma.supplier.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+  } catch (error) {
+    console.error("Error fetching local suppliers:", error);
+    return [];
+  }
+});
 
 ipcMain.handle("get-settings", async () => {
   try {
@@ -2598,9 +2614,7 @@ ipcMain.handle(
         return { payment, patient };
       });
 
-      // Trigger sync
-      // TODO: Ensure DebtPayment is synced in sync.ts
-
+      // Periodic sync will push this payment to cloud automatically
       return { success: true, newBalance: result.patient.balance };
     } catch (error: any) {
       console.error("Failed to add debt payment:", error);

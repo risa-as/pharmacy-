@@ -2,6 +2,8 @@ import { prisma } from "@/app/lib/prisma";
 import { Package, ArrowRight, Download, AlertTriangle, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function InventoryReportPage({
     searchParams,
@@ -10,8 +12,12 @@ export default async function InventoryReportPage({
 }) {
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     const inventory = await prisma.inventory.findMany({
-        where: branchId ? { branchId } : {},
+        where: branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere },
         include: {
             branch: true,
             batches: true,

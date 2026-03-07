@@ -1,10 +1,19 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { Undo2, Search, Calendar } from "lucide-react";
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
-const prisma = new PrismaClient();
+export default async function ReturnsPage({
+    searchParams,
+}: {
+    searchParams: { [key: string]: string | string[] | undefined };
+}) {
+    const tenantCtx = await getTenantContext();
+    const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+    const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
-export default async function ReturnsPage() {
     const returns = await prisma.saleReturn.findMany({
+        where: branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere,
         orderBy: { createdAt: "desc" },
         include: {
             sale: {
@@ -32,6 +41,10 @@ export default async function ReturnsPage() {
                     <Undo2 className="w-7 h-7 text-destructive" />
                     المرتجعات
                 </h1>
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={branchId} baseUrl="/dashboard/returns" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -70,6 +83,7 @@ export default async function ReturnsPage() {
                                 <th className="px-4 py-3 text-right font-bold w-16">#</th>
                                 <th className="px-4 py-3 text-right font-bold">التاريخ</th>
                                 <th className="px-4 py-3 text-right font-bold">رقم الفاتورة الأصلية</th>
+                                <th className="px-4 py-3 text-right font-bold">الفرع</th>
                                 <th className="px-4 py-3 text-right font-bold">الكاشير (البيع)</th>
                                 <th className="px-4 py-3 text-right font-bold">الأصناف المرجعة</th>
                                 <th className="px-4 py-3 text-right font-bold">المبلغ المسترد</th>
@@ -79,7 +93,7 @@ export default async function ReturnsPage() {
                         <tbody className="divide-y divide-gray-100">
                             {returns.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                                         لا توجد مرتجعات مسجلة
                                     </td>
                                 </tr>
@@ -99,6 +113,9 @@ export default async function ReturnsPage() {
                                             <span className="font-mono text-muted-foreground text-xs bg-muted px-2 py-1 rounded">
                                                 {ret.saleId.substring(0, 8)}...
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground">
+                                            {ret.branch?.name || "غير محدد"}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {ret.sale?.user?.name || "غير محدد"}

@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from "@/auth";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
     try {
         const transferId = params.id;
-        const session = await auth();
-        const branchId = session?.user?.branchId; // Expecting the Receiver's Branch ID
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const branchId = tenantCtx.user.branchId; // Expecting the Receiver's Branch ID
 
         if (!branchId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json({ error: "Branch not assigned to user" }, { status: 400 });
         }
 
         // Fetch the transfer

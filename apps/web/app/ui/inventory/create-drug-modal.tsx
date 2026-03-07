@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+
+interface Supplier { id: string; name: string; }
 
 interface CreateDrugModalProps {
     initialBarcode: string;
@@ -13,7 +15,15 @@ interface CreateDrugModalProps {
 
 export default function CreateDrugModal({ initialBarcode, branches, onClose }: CreateDrugModalProps) {
     const [loading, setLoading] = useState(false);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const router = useRouter();
+
+    useEffect(() => {
+        fetch("/api/suppliers")
+            .then(r => r.ok ? r.json() : [])
+            .then(setSuppliers)
+            .catch(() => {});
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -36,6 +46,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                     maxStock: parseInt(formData.get("maxStock") as string, 10),
                     quantity: parseInt(formData.get("quantity") as string, 10),
                     expiryDate: formData.get("expiryDate"),
+                    supplierId: formData.get("supplierId") || null,
                 }),
                 headers: { "Content-Type": "application/json" },
             });
@@ -179,6 +190,19 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                                     className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
                                 />
                             </div>
+                        </div>
+
+                        <div className="col-span-2">
+                            <label className="block text-sm font-bold text-foreground mb-1">المورد (اختياري)</label>
+                            <select
+                                name="supplierId"
+                                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
+                            >
+                                <option value="">اختر مورداً...</option>
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="col-span-2 border-t pt-4 mt-2">

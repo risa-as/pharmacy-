@@ -1,7 +1,8 @@
-import { getAllDebtors, getDebtStats } from "@/app/lib/actions/debt";
-import { BookOpen, Users, Banknote, ArrowDownCircle } from "lucide-react";
+import { getAllDebtors, getDebtStats, getRecentDebtPayments } from "@/app/lib/actions/debt";
+import { BookOpen, Users, Banknote, ArrowDownCircle, History, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import DebtorsTable from "@/app/ui/debts/debtors-table";
 
 function formatIQD(amount: number) {
     return new Intl.NumberFormat("ar-IQ").format(Math.round(amount)) + " د.ع";
@@ -14,9 +15,10 @@ export default async function DebtsPage({
 }) {
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
-    const [stats, debtors] = await Promise.all([
+    const [stats, debtors, recentPayments] = await Promise.all([
         getDebtStats(branchId),
         getAllDebtors(branchId),
+        getRecentDebtPayments(branchId, 20),
     ]);
 
     return (
@@ -80,39 +82,66 @@ export default async function DebtsPage({
                         <p className="text-sm mt-1">سيظهر هنا أي بيع بالآجل</p>
                     </div>
                 ) : (
+                    <DebtorsTable debtors={debtors} />
+                )}
+            </div>
+            {/* Recent Payments History */}
+            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden mt-6">
+                <div className="p-4 border-b border-border bg-muted/50 flex items-center gap-2">
+                    <History className="w-4 h-4 text-success" />
+                    <h2 className="font-bold text-foreground">سجل التسديدات الأخيرة</h2>
+                    <span className="text-xs text-muted-foreground mr-auto">آخر 20 عملية</span>
+                </div>
+
+                {recentPayments.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                        <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">لا توجد تسديدات مسجلة حتى الآن</p>
+                    </div>
+                ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead className="bg-muted/80 text-muted-foreground text-xs">
                                 <tr>
-                                    <th className="p-3 text-right font-medium">الاسم</th>
+                                    <th className="p-3 text-right font-medium">العميل</th>
                                     <th className="p-3 text-right font-medium">الهاتف</th>
-                                    <th className="p-3 text-right font-medium">المبلغ المستحق</th>
-                                    <th className="p-3 text-right font-medium">فواتير غير مسددة</th>
-                                    <th className="p-3 text-right font-medium">آخر عملية</th>
-                                    <th className="p-3 text-center font-medium">إجراء</th>
+                                    <th className="p-3 text-right font-medium">المبلغ المسدد</th>
+                                    <th className="p-3 text-right font-medium">طريقة الدفع</th>
+                                    <th className="p-3 text-right font-medium">ملاحظة</th>
+                                    <th className="p-3 text-right font-medium">التاريخ</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {debtors.map((debtor) => (
-                                    <tr key={debtor.id} className="hover:bg-accent transition-colors">
-                                        <td className="p-3 font-medium text-foreground">{debtor.name}</td>
-                                        <td className="p-3 text-muted-foreground" dir="ltr">{debtor.phone}</td>
+                                {recentPayments.map((payment) => (
+                                    <tr key={payment.id} className="hover:bg-accent transition-colors">
                                         <td className="p-3">
-                                            <span className="text-destructive font-bold">{formatIQD(debtor.balance)}</span>
-                                        </td>
-                                        <td className="p-3 text-muted-foreground">{debtor.unpaidSalesCount}</td>
-                                        <td className="p-3 text-muted-foreground">
-                                            {debtor.lastSaleDate
-                                                ? new Date(debtor.lastSaleDate).toLocaleDateString("ar-IQ")
-                                                : "—"}
-                                        </td>
-                                        <td className="p-3 text-center">
                                             <Link
-                                                href={`/dashboard/debts/${debtor.id}`}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-medium hover:bg-primary/10 transition-colors"
+                                                href={`/dashboard/debts/${payment.patientId}`}
+                                                className="font-medium text-primary hover:underline"
                                             >
-                                                كشف حساب
+                                                {payment.patientName}
                                             </Link>
+                                        </td>
+                                        <td className="p-3 text-muted-foreground" dir="ltr">{payment.patientPhone}</td>
+                                        <td className="p-3">
+                                            <span className="inline-flex items-center gap-1 text-success font-bold">
+                                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                                {formatIQD(payment.amount)}
+                                            </span>
+                                        </td>
+                                        <td className="p-3 text-muted-foreground">
+                                            {payment.method === "CASH" ? "نقدي" :
+                                             payment.method === "CARD" ? "بطاقة" :
+                                             payment.method === "MOBILE_WALLET" ? "محفظة" :
+                                             payment.method === "BANK_TRANSFER" ? "تحويل بنكي" :
+                                             payment.method === "ZAIN_CASH" ? "زين كاش" : payment.method}
+                                        </td>
+                                        <td className="p-3 text-muted-foreground">{payment.note || "—"}</td>
+                                        <td className="p-3 text-muted-foreground">
+                                            {new Date(payment.createdAt).toLocaleDateString("ar-IQ")}
+                                            <span className="text-xs block">
+                                                {new Date(payment.createdAt).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}
+                                            </span>
                                         </td>
                                     </tr>
                                 ))}

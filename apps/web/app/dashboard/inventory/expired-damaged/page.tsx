@@ -1,11 +1,14 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { PackageMinus, Trash2, AlertTriangle, Clock } from "lucide-react";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export default async function ExpiredDamagedPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     const now = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(now.getDate() + 30);
@@ -14,6 +17,7 @@ export default async function ExpiredDamagedPage() {
     const batches = await prisma.batch.findMany({
         where: {
             quantity: { gt: 0 },
+            inventory: tenantBranchWhere
         },
         include: {
             inventory: {

@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from "@/app/lib/prisma";
 import { auth } from '@/auth';
 
-const prisma = new PrismaClient();
 
 /**
  * GET /api/sync/notifications?since=ISO_TIMESTAMP

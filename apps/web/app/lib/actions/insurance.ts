@@ -1,11 +1,12 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 // ==================== شركات التأمين ====================
 
@@ -18,6 +19,9 @@ const InsuranceCompanySchema = z.object({
 
 // إنشاء شركة تأمين
 export async function createInsuranceCompany(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = InsuranceCompanySchema.safeParse({
         name: formData.get("name"),
         discountRate: formData.get("discountRate"),
@@ -53,6 +57,9 @@ export async function createInsuranceCompany(prevState: any, formData: FormData)
 
 // تحديث شركة تأمين
 export async function updateInsuranceCompany(id: string, prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = InsuranceCompanySchema.safeParse({
         name: formData.get("name"),
         discountRate: formData.get("discountRate"),
@@ -89,6 +96,9 @@ export async function updateInsuranceCompany(id: string, prevState: any, formDat
 
 // حذف شركة تأمين
 export async function deleteInsuranceCompany(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         await prisma.insuranceCompany.delete({ where: { id } });
     } catch (error) {
@@ -118,6 +128,9 @@ const InsurancePolicySchema = z.object({
 
 // إضافة بوليصة تأمين لمريض
 export async function createInsurancePolicy(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = InsurancePolicySchema.safeParse({
         patientId: formData.get("patientId"),
         companyId: formData.get("companyId"),
@@ -155,6 +168,9 @@ export async function createInsurancePolicy(prevState: any, formData: FormData) 
 
 // حذف بوليصة تأمين
 export async function deleteInsurancePolicy(id: string, patientId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         await prisma.insurancePolicy.delete({ where: { id } });
     } catch (error) {

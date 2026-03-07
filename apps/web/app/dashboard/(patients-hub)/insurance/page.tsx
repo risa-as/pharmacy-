@@ -1,13 +1,15 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { Building2, Plus } from "lucide-react";
 import Link from "next/link";
 import { UpdateInsurance, DeleteInsurance } from "@/app/ui/insurance/buttons";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 export default async function InsurancePage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+
     const companies = await prisma.insuranceCompany.findMany({
         orderBy: { name: "asc" },
         include: {

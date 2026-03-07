@@ -297,13 +297,14 @@ export const apiService = {
             });
             if (result && result.exists && result.drug) {
                 return {
-                    id: result.drug.id, // Strictly use GlobalDrug ID for sales
+                    id: result.drug.id,
                     barcode: result.drug.barcode,
                     name: result.drug.tradeName,
                     tradeName: result.drug.tradeName,
-                    price: result.inventory?.price || 0,
-                    publicPrice: result.inventory?.price || 0,
-                    quantity: result.inventory?.quantity || 0,
+                    scientificName: result.drug.scientificName ?? '',
+                    price: result.inventory?.price ?? 0,
+                    publicPrice: result.inventory?.price ?? 0,
+                    quantity: result.inventory?.quantity ?? 0,
                 };
             }
             return null;
@@ -383,6 +384,7 @@ export const apiService = {
         batchNumber: string;
         quantity: number;
         expiryDate: string;
+        supplierId?: string | null;
     }) {
         try {
             return await request<any>(`/inventory/create-quick`, {
@@ -443,12 +445,12 @@ export const apiService = {
     },
 
     // Get Suppliers
-    async getSuppliers() {
+    async getSuppliers(): Promise<Array<{ id: string; name: string; phone?: string }>> {
         try {
-            return await request('/suppliers');
+            return await request<Array<{ id: string; name: string; phone?: string }>>('/suppliers');
         } catch (error) {
             console.error('API Error getSuppliers:', error);
-            throw error;
+            return [];
         }
     },
 
@@ -554,10 +556,44 @@ export const apiService = {
         }
     },
 
+    // Loyalty
+    async getLoyaltySettings() {
+        try {
+            return await request<{
+                loyaltyEnabled: boolean;
+                loyaltyPointsPerDinar: number;
+                loyaltyRedemptionValue: number;
+                loyaltyMinRedemption: number;
+            }>('/loyalty');
+        } catch { return null; }
+    },
+
+    async getLoyaltyAccount(patientId: string) {
+        try {
+            const res = await request<{ account: any }>(`/loyalty/account?patientId=${patientId}`);
+            return (res as any)?.account ?? null;
+        } catch { return null; }
+    },
+
+    async redeemLoyaltyPoints(patientId: string, points: number) {
+        return await request<{ redeemed: number; discountAmount: number; remainingPoints: number }>(
+            '/loyalty/redeem', { method: 'POST', body: JSON.stringify({ patientId, points }) }
+        );
+    },
+
+    async earnLoyaltyPoints(patientId: string, saleId: string | null, amount: number) {
+        try {
+            await request('/loyalty/earn', {
+                method: 'POST',
+                body: JSON.stringify({ patientId, saleId, amount }),
+            });
+        } catch { /* silent — earning is best-effort */ }
+    },
+
     // Search Patients
     async searchPatients(query: string) {
         try {
-            return await request<any[]>(`/patients/search?q=${encodeURIComponent(query)}`);
+            return await request<any[]>(`/patients?query=${encodeURIComponent(query)}`);
         } catch (error) {
             console.error('API Error searchPatients:', error);
             return [];

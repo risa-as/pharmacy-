@@ -1,12 +1,14 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { Tag, Plus, Percent, Calendar, ChevronLeft } from "lucide-react";
 import Link from "next/link";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 export default async function DiscountsPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+
     const discounts = await prisma.discount.findMany({
         orderBy: { createdAt: "desc" },
     });

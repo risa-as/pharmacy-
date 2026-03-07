@@ -1,8 +1,10 @@
 import { getPatientDebts } from "@/app/lib/actions/debt";
-import { getSafes } from "@/app/lib/actions/finance-actions";
+import { getSafes, getSafesForOrg } from "@/app/lib/actions/finance-actions";
 import { ArrowRight, BookOpen, CheckCircle, Clock, Receipt } from "lucide-react";
 import Link from "next/link";
 import DebtPaymentForm from "@/app/ui/debts/debt-payment-form";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
 function formatIQD(amount: number) {
     return new Intl.NumberFormat("ar-IQ").format(Math.round(amount)) + " د.ع";
@@ -13,11 +15,19 @@ export default async function DebtDetailPage({
 }: {
     params: { id: string };
 }) {
-    // using the default branchId for the dashboard
-    const branchId = 'branch-1';
+    const tenantCtx = await getTenantContext();
+
+    const safesPromise = tenantCtx instanceof NextResponse
+        ? Promise.resolve([])
+        : tenantCtx.user.branchId
+            ? getSafes(tenantCtx.user.branchId)
+            : tenantCtx.user.organizationId
+                ? getSafesForOrg(tenantCtx.user.organizationId)
+                : Promise.resolve([]);
+
     const [data, safes] = await Promise.all([
         getPatientDebts(params.id),
-        getSafes(branchId) // we need branchId to fetch safes
+        safesPromise,
     ]);
 
     if (!data) {
@@ -59,6 +69,22 @@ export default async function DebtDetailPage({
                 <p className="text-xs opacity-60 mt-2">
                     {sales.filter((s: any) => !s.isPaid).length} فاتورة غير مسددة من أصل {sales.length}
                 </p>
+                {(() => {
+                    const totalBilled = sales.reduce((sum: number, s: any) => sum + s.total - s.discount, 0);
+                    const totalPaid = sales.reduce((sum: number, s: any) => sum + s.totalPaid, 0);
+                    return (
+                        <div className="flex gap-6 mt-4 pt-3 border-t border-white/20 text-xs">
+                            <div>
+                                <p className="opacity-60">إجمالي الفواتير</p>
+                                <p className="font-bold opacity-90">{formatIQD(totalBilled)}</p>
+                            </div>
+                            <div>
+                                <p className="opacity-60">المدفوع</p>
+                                <p className="font-bold opacity-90">{formatIQD(totalPaid)}</p>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Sales List */}

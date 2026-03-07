@@ -1,9 +1,10 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 // --- Company Settings ---
 
@@ -27,6 +28,9 @@ export async function getCompanySettings() {
 }
 
 export async function updateCompanySettings(formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
+
     try {
         const name = formData.get("name") as string;
         const phone = formData.get("phone") as string;
@@ -78,6 +82,9 @@ export async function updateCompanySettings(formData: FormData) {
 // --- Backup ---
 
 export async function createBackup() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
+
     try {
         // Fetch all critical data
         const [users, drugs, inventories, sales, patients, suppliers] = await Promise.all([

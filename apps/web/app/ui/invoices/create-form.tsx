@@ -11,9 +11,10 @@ interface FormProps {
     suppliers: { id: string; name: string }[];
     branches: { id: string; name: string }[];
     drugs: { id: string; tradeName: string; barcode: string }[];
+    defaultInvoiceNumber?: string;
 }
 
-export default function Form({ suppliers, branches, drugs }: FormProps) {
+export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber }: FormProps) {
     const initialState: any = { message: "", errors: {} };
     // @ts-ignore
     const [state, dispatch] = useFormState(createPurchase, initialState);
@@ -32,10 +33,14 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
     const [cost, setCost] = useState(0);
     const [sellingPrice, setSellingPrice] = useState(0);
     const [expiryDate, setExpiryDate] = useState("");
-    const [batchNumber, setBatchNumber] = useState("");
+
+    const generateBatchNumber = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    };
 
     const addItem = () => {
-        if (!selectedDrug || quantity <= 0 || cost <= 0 || !expiryDate || !batchNumber) {
+        if (!selectedDrug || quantity <= 0 || cost <= 0 || !expiryDate) {
             alert("يرجى ملء جميع حقول العنصر بشكل صحيح.");
             return;
         }
@@ -49,7 +54,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
             cost,
             sellingPrice,
             expiryDate,
-            batchNumber
+            batchNumber: generateBatchNumber()
         }]);
 
         // إعادة تعيين الحقول
@@ -58,7 +63,6 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
         setCost(0);
         setSellingPrice(0);
         setExpiryDate("");
-        setBatchNumber("");
     };
 
     const removeItem = (index: number) => {
@@ -124,6 +128,7 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             type="text"
                             className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                             placeholder="INV-2024-001"
+                            defaultValue={defaultInvoiceNumber}
                             dir="ltr"
                         />
                     </div>
@@ -144,17 +149,6 @@ export default function Form({ suppliers, branches, drugs }: FormProps) {
                             <option value="">اختر الدواء...</option>
                             {drugs.map(d => <option key={d.id} value={d.id}>{d.tradeName} ({d.barcode})</option>)}
                         </select>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-muted-foreground">رقم الدفعة</label>
-                        <input
-                            type="text"
-                            value={batchNumber}
-                            onChange={e => setBatchNumber(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
-                            placeholder="LOT123"
-                            dir="ltr"
-                        />
                     </div>
                     <div>
                         <label className="text-xs font-bold text-muted-foreground">تاريخ الانتهاء</label>

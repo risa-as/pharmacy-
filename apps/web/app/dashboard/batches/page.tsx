@@ -1,12 +1,22 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { Box, AlertTriangle, Calendar, Plus } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency } from "@/app/lib/utils/currency";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 export default async function BatchesPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    const { tenantBranchWhere } = tenantCtx;
+
     const batches = await prisma.batch.findMany({
+        where: {
+            inventory: {
+                ...tenantBranchWhere
+            }
+        },
         orderBy: { expiryDate: "asc" },
         include: {
             inventory: {
@@ -14,6 +24,7 @@ export default async function BatchesPage() {
                     branch: true,
                 },
             },
+            supplier: { select: { name: true } },
         },
     });
 
@@ -76,6 +87,7 @@ export default async function BatchesPage() {
                             <tr>
                                 <th className="px-4 py-3 text-right font-bold">الدواء</th>
                                 <th className="px-4 py-3 text-right font-bold">الفرع</th>
+                                <th className="px-4 py-3 text-right font-bold">المورد</th>
                                 <th className="px-4 py-3 text-right font-bold">رقم الدفعة</th>
                                 <th className="px-4 py-3 text-right font-bold">سعر الشراء (للوحدة)</th>
                                 <th className="px-4 py-3 text-right font-bold">الكمية</th>
@@ -108,6 +120,9 @@ export default async function BatchesPage() {
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {batch.inventory.branch?.name || "غير محدد"}
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground">
+                                            {batch.supplier?.name || <span className="text-muted-foreground/50">—</span>}
                                         </td>
                                         <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
                                             {batch.batchNumber}

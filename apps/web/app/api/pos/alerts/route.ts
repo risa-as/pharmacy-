@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function POST(req: NextRequest) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
         const body = await req.json();
         const { scientificNames, patientId } = body;
 

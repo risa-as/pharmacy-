@@ -1,6 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { AlertOctagon, DollarSign, Package, Clock, TrendingDown } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function SlowMoversPage({
     searchParams,
@@ -10,12 +12,16 @@ export default async function SlowMoversPage({
     const period = typeof searchParams.period === "string" ? parseInt(searchParams.period) : 90;
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - period);
 
     const saleWhere = branchId
-        ? { sale: { createdAt: { gte: thresholdDate }, branchId } }
-        : { sale: { createdAt: { gte: thresholdDate } } };
+        ? { sale: { createdAt: { gte: thresholdDate }, branchId, ...tenantWhere } }
+        : { sale: { createdAt: { gte: thresholdDate }, ...tenantBranchWhere } };
 
     // 1. Find drug IDs that HAVE been sold during the period
     const soldDrugIds = await prisma.saleItem
@@ -28,8 +34,8 @@ export default async function SlowMoversPage({
 
     // 2. Find drugs NOT sold, but WITH stock > 0
     const inventoryFilter = branchId
-        ? { some: { branchId, batches: { some: { quantity: { gt: 0 } } } } }
-        : { some: { batches: { some: { quantity: { gt: 0 } } } } };
+        ? { some: { branchId, ...tenantWhere, batches: { some: { quantity: { gt: 0 } } } } }
+        : { some: { ...tenantBranchWhere, batches: { some: { quantity: { gt: 0 } } } } };
 
     const stagnantDrugs = await prisma.globalDrug.findMany({
         where: {
@@ -38,7 +44,7 @@ export default async function SlowMoversPage({
         },
         include: {
             inventories: {
-                where: branchId ? { branchId } : {},
+                where: branchId ? { branchId, ...tenantWhere } : { ...tenantBranchWhere },
                 include: { batches: true, branch: { select: { name: true } } },
             },
             saleItems: {

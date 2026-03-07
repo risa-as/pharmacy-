@@ -1,34 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-
-// Helper to validate user from token (Mock implementation matching login)
-async function getUserFromRequest(request: Request) {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-
-    const token = authHeader.split(' ')[1];
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const email = decoded.split(':')[0];
-
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: { branch: true }
-        });
-        return user;
-    } catch {
-        return null;
-    }
-}
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function POST(
     request: Request,
     { params }: { params: { id: string } }
 ) {
     try {
-        const user = await getUserFromRequest(request);
-        if (!user || !user.branchId) {
-            return NextResponse.json({ message: 'Unauthorized or No Branch Assigned' }, { status: 401 });
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { user } = tenantCtx;
+
+        if (!user.branchId && user.role !== 'SUPER_ADMIN') {
+            return NextResponse.json({ message: 'No Branch Assigned' }, { status: 403 });
         }
 
         const saleId = params.id;

@@ -50,7 +50,11 @@
       "Bash(wc:*)",
       "Bash(pnpm add:*)",
       "Bash(npx prisma:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(pwsh:*)",
+      "Bash(pnpm:*)",
+      "Bash(xargs sh:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

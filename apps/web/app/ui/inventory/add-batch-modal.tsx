@@ -1,9 +1,12 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { addBatch } from "@/app/lib/actions/inventory";
+
+interface Supplier { id: string; name: string; }
 
 interface AddBatchModalProps {
     inventoryId: string;
@@ -14,8 +17,16 @@ interface AddBatchModalProps {
 export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBatchModalProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
     const router = useRouter();
+
+    useEffect(() => {
+        fetch("/api/suppliers")
+            .then(r => r.ok ? r.json() : [])
+            .then(setSuppliers)
+            .catch(() => { });
+    }, []);
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -43,7 +54,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
         }
     };
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
             <div
                 className="bg-card rounded-xl p-6 w-full max-w-md shadow-xl"
@@ -62,14 +73,16 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-bold text-foreground mb-1">رقم الدفعة</label>
-                        <input
-                            type="text"
-                            name="batchNumber"
-                            required
+                        <label className="block text-sm font-bold text-foreground mb-1">المورد (اختياري)</label>
+                        <select
+                            name="supplierId"
                             className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
-                            placeholder="مثال: LOT-2024-001"
-                        />
+                        >
+                            <option value="">اختر مورداً...</option>
+                            {suppliers.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div>
@@ -129,6 +142,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

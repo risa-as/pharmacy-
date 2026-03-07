@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { getPurchases } from "@/app/lib/actions/purchase-actions";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+
     try {
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId') || undefined;

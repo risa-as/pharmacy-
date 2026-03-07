@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 // Dawatech-style: Full control over Batch and Pricing at entry
 const PurchaseItemSchema = z.object({
@@ -25,6 +26,9 @@ const PurchaseSchema = z.object({
 });
 
 export async function createPurchase(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const rawItems = formData.get("itemsData");
     const supplierId = formData.get("supplierId");
     const branchId = formData.get("branchId");
@@ -130,6 +134,9 @@ export async function createPurchase(prevState: any, formData: FormData) {
 }
 
 export async function deletePurchase(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         await prisma.$transaction(async (tx) => {
             // حذف عناصر الفاتورة أولاً

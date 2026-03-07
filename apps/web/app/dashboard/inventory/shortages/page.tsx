@@ -1,14 +1,19 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { AlertTriangle, ArrowDown } from "lucide-react";
 import Link from "next/link";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
+
 
 export default async function ShortagesPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     // Get all inventory items where current stock <= minStock
     const inventory = await prisma.inventory.findMany({
+        where: tenantBranchWhere,
         include: {
             drug: true,
             branch: true,

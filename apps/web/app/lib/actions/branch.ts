@@ -1,12 +1,13 @@
 "use server";
 
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { checkPlanLimit } from "@/app/lib/saas-guards";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 const BranchSchema = z.object({
   id: z.string(),
@@ -18,6 +19,9 @@ const CreateBranch = BranchSchema.omit({ id: true });
 const UpdateBranch = BranchSchema;
 
 export async function createBranch(prevState: any, formData: FormData) {
+  const tenantCtx = await getTenantContext();
+  if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
   const validatedFields = CreateBranch.safeParse({
     name: formData.get("name"),
     organizationId: formData.get("organizationId"),
@@ -66,6 +70,9 @@ export async function updateBranch(
   prevState: any,
   formData: FormData
 ) {
+  const tenantCtx = await getTenantContext();
+  if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
   const validatedFields = UpdateBranch.safeParse({
     id: id,
     name: formData.get("name"),
@@ -100,6 +107,9 @@ export async function updateBranch(
 }
 
 export async function deleteBranch(id: string) {
+  const tenantCtx = await getTenantContext();
+  if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
   try {
     await prisma.branch.delete({
       where: { id },

@@ -1,12 +1,13 @@
 "use server";
 
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcrypt";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 const UserSchema = z.object({
     id: z.string(),
@@ -135,7 +136,12 @@ export async function deleteUser(id: string) {
 }
 
 export async function getUsers() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantBranchWhere } = tenantCtx;
+
     return await prisma.user.findMany({
+        where: tenantBranchWhere,
         include: { branch: true },
         orderBy: { createdAt: "desc" },
     });

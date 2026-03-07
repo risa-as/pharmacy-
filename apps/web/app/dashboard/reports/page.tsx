@@ -2,13 +2,19 @@ import { prisma } from "@/app/lib/prisma";
 import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, FileSpreadsheet, FileText, User, AlertTriangle, DollarSign, Package, AlertOctagon } from "lucide-react";
 import Link from "next/link";
 import ExportReports from "@/app/ui/reports/export-reports";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function ReportsPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
     const [salesCount, purchasesCount, inventoryCount, userCount] = await Promise.all([
-        prisma.sale.count(),
-        prisma.purchase.count(),
-        prisma.inventory.count(),
-        prisma.user.count(),
+        prisma.sale.count({ where: tenantBranchWhere }),
+        prisma.purchase.count({ where: tenantBranchWhere }),
+        prisma.inventory.count({ where: tenantBranchWhere }),
+        prisma.user.count({ where: tenantBranchWhere }),
     ]);
 
     const reports = [

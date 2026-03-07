@@ -1,9 +1,14 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { TrendingUp, AlertTriangle, ShoppingCart } from "lucide-react";
-
-const prisma = new PrismaClient();
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 export default async function ForecastPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+    const { tenantBranchWhere } = tenantCtx;
+
     // Logic: Calculate "Run Rate" (Average Daily Sales) over last 30 days.
     // Recommended Order = (Daily Sales * 30 Days Target) - Current Stock.
 
@@ -12,6 +17,7 @@ export default async function ForecastPage() {
 
     // Get all inventory
     const allInventory = await prisma.inventory.findMany({
+        where: tenantBranchWhere,
         include: {
             drug: true,
             branch: true,

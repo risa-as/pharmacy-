@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
 export async function GET(request: Request) {
@@ -41,6 +41,74 @@ export async function GET(request: Request) {
         return NextResponse.json({ payments: payload });
     } catch (error: any) {
         console.error("Sync Debt Payments Error:", error);
+        return NextResponse.json({ error: "Internal Server Error", message: error.message }, { status: 500 });
+    }
+}
+
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { branchId, payments } = body as {
+            branchId: string;
+            payments: Array<{
+                id: string;
+                saleId: string;
+                amount: number;
+                method: string;
+                note?: string;
+                createdAt: string;
+            }>;
+        };
+
+        if (!branchId || !Array.isArray(payments) || payments.length === 0) {
+            return NextResponse.json({ error: "branchId and payments are required" }, { status: 400 });
+        }
+
+        const syncedIds: string[] = [];
+
+        for (const payment of payments) {
+            // Verify the sale belongs to this branch
+            const sale = await prisma.sale.findUnique({
+                where: { id: payment.saleId },
+                select: { branchId: true, patientId: true },
+            });
+
+            if (!sale || sale.branchId !== branchId) continue;
+
+            // Skip if already synced
+            const existing = await prisma.debtPayment.findUnique({ where: { id: payment.id } });
+            if (existing) {
+                syncedIds.push(payment.id);
+                continue;
+            }
+
+            await prisma.$transaction(async (tx) => {
+                await tx.debtPayment.create({
+                    data: {
+                        id: payment.id,
+                        saleId: payment.saleId,
+                        amount: payment.amount,
+                        method: (payment.method || "CASH") as any,
+                        note: payment.note || null,
+                        createdAt: new Date(payment.createdAt),
+                    },
+                });
+
+                if (sale.patientId) {
+                    await tx.patient.update({
+                        where: { id: sale.patientId },
+                        data: { balance: { decrement: payment.amount } },
+                    });
+                }
+            });
+
+            syncedIds.push(payment.id);
+        }
+
+        console.log(`[Sync] Debt payments received: ${payments.length}, synced: ${syncedIds.length}`);
+        return NextResponse.json({ syncedIds });
+    } catch (error: any) {
+        console.error("Sync Debt Payments POST Error:", error);
         return NextResponse.json({ error: "Internal Server Error", message: error.message }, { status: 500 });
     }
 }

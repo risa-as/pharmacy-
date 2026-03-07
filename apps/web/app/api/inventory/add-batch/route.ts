@@ -41,7 +41,7 @@ export async function POST(req: Request) {
             }
         }
 
-        const { inventoryId, batchNumber, quantity, expiryDate, branchId, drugId, costPrice } = body;
+        const { inventoryId, batchNumber, quantity, expiryDate, branchId, drugId, costPrice, supplierId } = body;
 
         if (!inventoryId && !drugId) {
             return NextResponse.json(
@@ -82,9 +82,10 @@ export async function POST(req: Request) {
                 throw new Error("Inventory record not found");
             }
 
-            // Create batch number from idempotency key or provided value
+            // Auto-generate an 8-char alphanumeric batch number
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             const effectiveBatchNumber = batchNumber
-                || (idempotencyKey ? `SYNC-${sanitizeBatchKey(idempotencyKey)}` : `BATCH-${Date.now()}`);
+                || Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 
             // Remove idempotency checks on batch number as SyncActionLog handles it
 
@@ -98,6 +99,7 @@ export async function POST(req: Request) {
                         : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
                     batchNumber: effectiveBatchNumber,
                     costPrice: Number(costPrice) || 0,
+                    supplierId: supplierId ?? null,
                 }
             });
 

@@ -1,11 +1,12 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 // Schema للتحقق
 const PatientSchema = z.object({
@@ -20,6 +21,9 @@ const PatientSchema = z.object({
 
 // إنشاء مريض جديد
 export async function createPatient(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = PatientSchema.safeParse({
         name: formData.get("name"),
         phone: formData.get("phone"),
@@ -39,22 +43,34 @@ export async function createPatient(prevState: any, formData: FormData) {
 
     const { name, phone, dateOfBirth, gender, allergies, chronicDiseases, notes } = validatedFields.data;
 
+    const branchId = tenantCtx.user.branchId || null;
+
     try {
+        // Tenant-scoped phone uniqueness check
+        const existing = await prisma.patient.findFirst({
+            where: { phone, ...tenantCtx.tenantBranchWhere },
+        });
+        if (existing) {
+            return { message: "رقم الهاتف مسجل مسبقاً في هذا الفرع" };
+        }
+
         await prisma.patient.create({
             data: {
                 name,
                 phone,
                 dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
                 gender: gender || null,
-                allergies: allergies ? allergies.split(",").map(s => s.trim()) : [],
-                chronicDiseases: chronicDiseases ? chronicDiseases.split(",").map(s => s.trim()) : [],
+                allergies: allergies ? allergies.split(",").map(s => s.trim()).filter(Boolean) : [],
+                chronicDiseases: chronicDiseases ? chronicDiseases.split(",").map(s => s.trim()).filter(Boolean) : [],
                 notes: notes || null,
+                branchId,
             },
         });
     } catch (error: any) {
         if (error.code === "P2002") {
-            return { message: "رقم الهاتف مسجل مسبقاً" };
+            return { message: "رقم الهاتف مسجل مسبقاً في هذا الفرع" };
         }
+        console.error("Create Patient Error: ", error);
         return { message: "حدث خطأ أثناء إنشاء المريض" };
     }
 
@@ -64,6 +80,15 @@ export async function createPatient(prevState: any, formData: FormData) {
 
 // تحديث مريض
 export async function updatePatient(id: string, prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
+    // Authorization check
+    const existingPatient = await prisma.patient.findFirst({
+        where: { id, ...tenantCtx.tenantBranchWhere }
+    });
+    if (!existingPatient) return { message: "غير مصرح لك بتعديل هذا المريض" };
+
     const validatedFields = PatientSchema.safeParse({
         name: formData.get("name"),
         phone: formData.get("phone"),
@@ -84,6 +109,14 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
     const { name, phone, dateOfBirth, gender, allergies, chronicDiseases, notes } = validatedFields.data;
 
     try {
+        // Tenant-scoped phone uniqueness check (excluding the patient being updated)
+        if (phone !== existingPatient.phone) {
+            const duplicate = await prisma.patient.findFirst({
+                where: { phone, ...tenantCtx.tenantBranchWhere, NOT: { id } },
+            });
+            if (duplicate) return { message: "رقم الهاتف مسجل مسبقاً في هذا الفرع" };
+        }
+
         await prisma.patient.update({
             where: { id },
             data: {
@@ -96,7 +129,8 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
                 notes: notes || null,
             },
         });
-    } catch (error) {
+    } catch (error: any) {
+        if (error.code === "P2002") return { message: "رقم الهاتف مسجل مسبقاً في هذا الفرع" };
         return { message: "حدث خطأ أثناء تحديث المريض" };
     }
 
@@ -106,10 +140,13 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
 
 // حذف مريض
 export async function deletePatient(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         // التحقق من وجود ارتباطات
-        const patient = await prisma.patient.findUnique({
-            where: { id },
+        const patient = await prisma.patient.findFirst({
+            where: { id, ...tenantCtx.tenantBranchWhere },
             include: {
                 _count: { select: { sales: true } },
                 loyaltyAccount: true,
@@ -149,7 +186,12 @@ export async function deletePatient(id: string) {
 
 // جلب جميع المرضى
 export async function getPatients() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantBranchWhere } = tenantCtx;
+
     return await prisma.patient.findMany({
+        where: tenantBranchWhere,
         orderBy: { createdAt: "desc" },
         include: {
             prescriptions: {
@@ -162,8 +204,11 @@ export async function getPatients() {
 
 // جلب مريض بالـ ID
 export async function getPatientById(id: string) {
-    return await prisma.patient.findUnique({
-        where: { id },
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+
+    return await prisma.patient.findFirst({
+        where: { id, ...tenantCtx.tenantBranchWhere },
         include: {
             prescriptions: {
                 orderBy: { createdAt: "desc" },
@@ -178,8 +223,11 @@ export async function getPatientById(id: string) {
 
 // البحث عن مريض بالهاتف
 export async function searchPatientByPhone(phone: string) {
-    return await prisma.patient.findUnique({
-        where: { phone },
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+
+    return await prisma.patient.findFirst({
+        where: { phone, ...tenantCtx.tenantBranchWhere },
         include: {
             prescriptions: {
                 where: { status: "PENDING" },

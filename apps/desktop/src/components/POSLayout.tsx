@@ -47,12 +47,7 @@ function formatIQD(amount: number) {
 
 // توليد رقم فاتورة
 function generateInvoiceNumber() {
-    const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
-    const month = (now.getMonth() + 1).toString().padStart(2, "0");
-    const day = now.getDate().toString().padStart(2, "0");
-    const random = Math.floor(Math.random() * 9999).toString().padStart(4, "0");
-    return `INV-${year}${month}${day}-${random}`;
+    return Math.floor(10000000 + Math.random() * 90000000).toString();
 }
 
 export default function POSLayout({ user }: { user: any }) {
@@ -729,11 +724,11 @@ export default function POSLayout({ user }: { user: any }) {
 
     // Escape — إغلاق أي نافذة مفتوحة
     useHotkeys('escape', () => {
-        if (showHelpPanel)         setShowHelpPanel(false);
+        if (showHelpPanel) setShowHelpPanel(false);
         else if (showPrintPreview) setShowPrintPreview(false);
         else if (showPatientModal) setShowPatientModal(false);
         else if (isZainCashProcessing) setIsZainCashProcessing(false);
-        else if (showReturnModal)  setShowReturnModal(false);
+        else if (showReturnModal) setShowReturnModal(false);
     }, { preventDefault: true }, [showHelpPanel, showPrintPreview, showPatientModal, isZainCashProcessing, showReturnModal]);
 
     return (
@@ -1060,17 +1055,18 @@ export default function POSLayout({ user }: { user: any }) {
                                     <Banknote className="w-5 h-5" />
                                     <span className="text-xs">سحب/إيداع</span>
                                 </button>
-                                <button
-                                    onClick={() => setShowReturnModal(true)}
-                                    className="flex items-center gap-2 px-3 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 rounded-xl font-bold transition-all shadow-sm"
-                                    title="إرجاع بضاعة (F6)"
-                                >
-                                    <Undo2 className="w-5 h-5" />
-                                    <span className="text-xs">إرجاع</span>
-                                    <kbd className="text-[9px] font-mono bg-destructive/10 px-1 py-0.5 rounded border border-destructive/20 opacity-70">F6</kbd>
-                                </button>
                             </>
                         )}
+
+                        <button
+                            onClick={() => setShowReturnModal(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 rounded-xl font-bold transition-all shadow-sm"
+                            title="إرجاع بضاعة (F6)"
+                        >
+                            <Undo2 className="w-5 h-5" />
+                            <span className="text-xs">إرجاع</span>
+                            <kbd className="text-[9px] font-mono bg-destructive/10 px-1 py-0.5 rounded border border-destructive/20 opacity-70">F6</kbd>
+                        </button>
 
                         <div className="w-px h-8 bg-border mx-2"></div>
                         <div className="w-11 h-11 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">

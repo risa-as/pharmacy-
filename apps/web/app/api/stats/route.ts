@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(request: NextRequest) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { searchParams } = request.nextUrl;
         const branchId = searchParams.get('branchId');
 
@@ -18,6 +23,7 @@ export async function GET(request: NextRequest) {
                 createdAt: {
                     gte: todayStart
                 },
+                ...tenantBranchWhere,
                 ...(branchId && { branchId })
             }
         });
@@ -26,6 +32,7 @@ export async function GET(request: NextRequest) {
         // 2. Total Inventory Items (Count of unique drugs in inventory)
         const inventoryCount = await prisma.inventory.count({
             where: {
+                ...tenantBranchWhere,
                 ...(branchId && { branchId })
             }
         });
@@ -60,6 +67,7 @@ export async function GET(request: NextRequest) {
                 },
                 quantity: { gt: 0 },
                 inventory: {
+                    ...tenantBranchWhere,
                     ...(branchId && { branchId })
                 }
             }

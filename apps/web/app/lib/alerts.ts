@@ -1,8 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export interface AlertItem {
     id: string;
@@ -17,8 +14,13 @@ export interface AlertItem {
 }
 
 // جلب إشعارات نقص المخزون
-export async function getLowStockAlerts(): Promise<AlertItem[]> {
+export async function getLowStockAlerts(branchId?: string, organizationId?: string): Promise<AlertItem[]> {
+    const whereClause: any = {};
+    if (branchId) whereClause.branchId = branchId;
+    else if (organizationId) whereClause.branch = { organizationId: organizationId };
+
     const inventory = await prisma.inventory.findMany({
+        where: whereClause,
         include: {
             branch: true,
             batches: true
@@ -57,15 +59,22 @@ export async function getLowStockAlerts(): Promise<AlertItem[]> {
 }
 
 // جلب إشعارات الأدوية منتهية أو قاربت على انتهاء الصلاحية
-export async function getExpiryAlerts(): Promise<AlertItem[]> {
+export async function getExpiryAlerts(branchId?: string, organizationId?: string): Promise<AlertItem[]> {
     const now = new Date();
     const ninetyDaysFromNow = new Date();
     ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
+    const batchWhereClause: any = {
+        expiryDate: { lte: ninetyDaysFromNow }
+    };
+    if (branchId) {
+        batchWhereClause.inventory = { branchId: branchId };
+    } else if (organizationId) {
+        batchWhereClause.inventory = { branch: { organizationId: organizationId } };
+    }
+
     const batches = await prisma.batch.findMany({
-        where: {
-            expiryDate: { lte: ninetyDaysFromNow }
-        },
+        where: batchWhereClause,
         include: {
             inventory: {
                 include: {
@@ -108,18 +117,18 @@ export async function getExpiryAlerts(): Promise<AlertItem[]> {
 }
 
 // جلب جميع الإشعارات
-export async function getAllAlerts(): Promise<AlertItem[]> {
+export async function getAllAlerts(branchId?: string, organizationId?: string): Promise<AlertItem[]> {
     const [lowStock, expiry] = await Promise.all([
-        getLowStockAlerts(),
-        getExpiryAlerts()
+        getLowStockAlerts(branchId, organizationId),
+        getExpiryAlerts(branchId, organizationId)
     ]);
 
     return [...lowStock, ...expiry];
 }
 
 // إحصائيات الإشعارات
-export async function getAlertStats() {
-    const alerts = await getAllAlerts();
+export async function getAlertStats(branchId?: string, organizationId?: string) {
+    const alerts = await getAllAlerts(branchId, organizationId);
 
     return {
         total: alerts.length,

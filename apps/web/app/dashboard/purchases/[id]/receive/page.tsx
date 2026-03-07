@@ -22,11 +22,13 @@ export default function ReceivePurchasePage({ params }: { params: { id: string }
                 setPurchase(data);
                 // Initialize form with default Item quantities
                 const initial: any = {};
-                data.items.forEach((item: any) => {
+                const todayStr = format(new Date(), 'yyyyMMdd');
+
+                data.items.forEach((item: any, index: number) => {
                     initial[item.id] = {
                         quantity: item.quantity,
                         expiryDate: format(new Date(new Date().setFullYear(new Date().getFullYear() + 1)), 'yyyy-MM-dd'), // Default 1 year expiry
-                        batchNumber: ''
+                        batchNumber: `BAT-${todayStr}-${index + 1}`
                     };
                 });
                 setReceivedItems(initial);
@@ -55,7 +57,24 @@ export default function ReceivePurchasePage({ params }: { params: { id: string }
         }
     };
 
-    if (loading) return <div>جاري التحميل...</div>;
+    if (loading) return (
+        <div className="p-6 space-y-6" dir="rtl">
+            <div className="h-8 w-1/3 bg-muted animate-pulse rounded-md"></div>
+            <div className="bg-card rounded-lg shadow overflow-hidden border">
+                <div className="h-12 bg-muted/50 border-b animate-pulse"></div>
+                <div className="p-4 space-y-4">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex gap-4">
+                            <div className="h-10 w-1/4 bg-muted animate-pulse rounded-md"></div>
+                            <div className="h-10 w-1/4 bg-muted animate-pulse rounded-md"></div>
+                            <div className="h-10 w-1/4 bg-muted animate-pulse rounded-md"></div>
+                            <div className="h-10 w-1/4 bg-muted animate-pulse rounded-md"></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
     if (!purchase) return <div>الطلب غير موجود</div>;
     if (purchase.status !== 'PENDING') return <div>هذا الطلب تم استلامه مسبقاً</div>;
 

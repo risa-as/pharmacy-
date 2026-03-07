@@ -15,6 +15,7 @@ async function getUser(email: string) {
     try {
         const user = await prisma.user.findUnique({
             where: { email },
+            include: { branch: true },
         });
         return user;
     } catch (error) {

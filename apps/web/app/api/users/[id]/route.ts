@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 // PATCH: Update user (permissions, role, etc.)
 export async function PATCH(
@@ -8,8 +8,9 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user || session.user.role !== 'ADMIN') {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (tenantCtx.user.role !== 'ADMIN' && tenantCtx.user.role !== 'SUPER_ADMIN') {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -57,8 +58,8 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
 
         const { id } = await params;
 

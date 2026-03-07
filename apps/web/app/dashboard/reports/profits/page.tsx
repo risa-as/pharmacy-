@@ -2,19 +2,25 @@ import { prisma } from "@/app/lib/prisma";
 import { TrendingUp, TrendingDown, DollarSign, Calendar, Receipt } from "lucide-react";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from "next/server";
 
 export default async function ProfitsReportPage({
     searchParams,
 }: {
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     // === 1. Last 30 Days Data (Primary View) ===
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const branchWhere = branchId ? { branchId } : {};
+    const branchWhere = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
     const sales = await prisma.sale.findMany({
         where: { createdAt: { gte: thirtyDaysAgo }, ...branchWhere },
@@ -30,7 +36,7 @@ export default async function ProfitsReportPage({
     let totalInventoryValue = 0;
 
     const allInventory = await prisma.inventory.findMany({
-        where: branchId ? { branchId } : {},
+        where: branchWhere,
         include: { batches: true },
     });
 
@@ -42,7 +48,7 @@ export default async function ProfitsReportPage({
 
     // Pending purchases
     const pendingPurchases = await prisma.purchase.findMany({
-        where: { status: "PENDING", ...(branchId ? { branchId } : {}) },
+        where: { status: "PENDING", ...branchWhere },
     });
     const totalPendingPurchases = pendingPurchases.reduce((s, p) => s + p.total, 0);
 

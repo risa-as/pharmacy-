@@ -1,9 +1,13 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 // POST: Redeem loyalty points for a discount
 // Body: { patientId, points }
 export async function POST(request: Request) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+
     try {
         const { patientId, points } = await request.json();
 
@@ -11,8 +15,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "patientId and points are required" }, { status: 400 });
         }
 
+        if (!tenantCtx.organizationId) {
+            return NextResponse.json({ error: "No organization assigned" }, { status: 400 });
+        }
+
         // 1. Get settings
-        const settings = await prisma.companySettings.findFirst();
+        const settings = await prisma.organization.findUnique({
+            where: { id: tenantCtx.organizationId },
+            select: { loyaltyEnabled: true, loyaltyMinRedemption: true, loyaltyRedemptionValue: true }
+        });
+
         if (!settings?.loyaltyEnabled) {
             return NextResponse.json({ error: "Loyalty program is disabled" }, { status: 400 });
         }

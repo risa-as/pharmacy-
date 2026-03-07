@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from "@/auth";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        const fromBranchId = session?.user?.branchId;
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const fromBranchId = tenantCtx.user.branchId;
 
         if (!fromBranchId) {
-            return NextResponse.json({ error: "Unauthorized or missing branch" }, { status: 401 });
+            return NextResponse.json({ error: "Branch not assigned to user" }, { status: 400 });
         }
 
         const data = await req.json();
@@ -84,11 +85,12 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     try {
-        const session = await auth();
-        const branchId = session?.user?.branchId;
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const branchId = tenantCtx.user.branchId;
 
         if (!branchId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json({ error: "Branch not assigned to user" }, { status: 400 });
         }
 
         const { searchParams } = new URL(req.url);

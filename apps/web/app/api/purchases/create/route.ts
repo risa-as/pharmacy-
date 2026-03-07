@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
-
-const prisma = new PrismaClient();
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function POST(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
         const body = await req.json();
         const { branchId, supplierId, items } = body;
 

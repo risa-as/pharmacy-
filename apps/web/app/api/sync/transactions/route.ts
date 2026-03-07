@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { z } from "zod";
 
-const prisma = new PrismaClient();
 
 const SyncTransactionSchema = z.object({
     id: z.string(),

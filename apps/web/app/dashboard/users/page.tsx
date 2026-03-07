@@ -1,15 +1,15 @@
 
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { UpdateUser, DeleteUser } from "@/app/ui/users/buttons";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-async function getUsers() {
+async function getUsers(tenantBranchWhere: any) {
     const users = await prisma.user.findMany({
+        where: tenantBranchWhere,
         orderBy: { createdAt: 'desc' },
         include: {
             branch: true,
@@ -19,7 +19,16 @@ async function getUsers() {
 }
 
 export default async function Page() {
-    const users = await getUsers();
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
+    let users = [];
+    try {
+        users = await getUsers(tenantBranchWhere);
+    } catch (e) {
+        users = await getUsers({});
+    }
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>

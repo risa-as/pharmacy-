@@ -2,6 +2,8 @@ import { prisma } from "@/app/lib/prisma";
 import { CreditCard, DollarSign, Smartphone, Building2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 const methodLabels: Record<string, string> = {
     CASH: "نقداً",
@@ -42,8 +44,15 @@ export default async function PaymentsPage({
 }) {
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
+    // Use branchId if provided, else use the default tenantBranchWhere scopes on sale
+    const saleWhere = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
+
     const payments = await prisma.payment.findMany({
-        where: branchId ? { sale: { branchId } } : {},
+        where: { sale: saleWhere },
         orderBy: { createdAt: "desc" },
         include: {
             sale: {

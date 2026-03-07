@@ -1,9 +1,10 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 export async function fetchReportData(
     type: "sales" | "purchases" | "inventory" | "expenses",
@@ -12,6 +13,10 @@ export async function fetchReportData(
 ) {
     console.log("Fetching report data:", { type, startDate, endDate });
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return [];
+        const { tenantBranchWhere } = tenantCtx;
+
         const start = startDate ? startOfDay(new Date(startDate)) : undefined;
         const end = endDate ? endOfDay(new Date(endDate)) : undefined;
 
@@ -32,7 +37,7 @@ export async function fetchReportData(
 
         if (type === "sales") {
             const data = await prisma.sale.findMany({
-                where: salesDateFilter,
+                where: { ...salesDateFilter, ...tenantBranchWhere },
                 include: {
                     user: { select: { name: true } },
                     patient: { select: { name: true } },
@@ -64,7 +69,7 @@ export async function fetchReportData(
 
         if (type === "purchases") {
             const data = await prisma.purchase.findMany({
-                where: purchasesDateFilter,
+                where: { ...purchasesDateFilter, ...tenantBranchWhere },
                 include: {
                     supplier: { select: { name: true } },
                     items: {
@@ -105,6 +110,7 @@ export async function fetchReportData(
 
         if (type === "inventory") {
             const data = await prisma.inventory.findMany({
+                where: tenantBranchWhere,
                 include: {
                     drug: { select: { tradeName: true, barcode: true } },
                     branch: { select: { name: true } },
@@ -140,7 +146,7 @@ export async function fetchReportData(
 
         if (type === "expenses") {
             const data = await prisma.expense.findMany({
-                where: expensesDateFilter,
+                where: { ...expensesDateFilter, ...tenantBranchWhere },
                 include: {
                     branch: { select: { name: true } },
                 },

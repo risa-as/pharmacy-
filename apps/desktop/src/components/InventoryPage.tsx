@@ -71,11 +71,20 @@ export default function InventoryPage({ user }: { user: any }) {
 
     // Form States for Add Batch
     const [batchData, setBatchData] = useState({
-        batchNumber: "",
         quantity: 0,
         costPrice: 0,
-        expiryDate: ""
+        expiryDate: "",
+        supplierId: "" as string,
     });
+
+    // Local supplier cache for offline dropdown
+    const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
+
+    useEffect(() => {
+        window.ipcRenderer.invoke('get-local-suppliers')
+            .then((result: any) => { if (Array.isArray(result)) setSuppliers(result); })
+            .catch(() => {});
+    }, []);
 
     const formatIQD = (amount: number) => {
         return new Intl.NumberFormat('ar-IQ', {
@@ -331,7 +340,7 @@ export default function InventoryPage({ user }: { user: any }) {
                 ...batchData
             });
             setShowBatchModal(null);
-            setBatchData({ batchNumber: "", quantity: 0, costPrice: 0, expiryDate: "" });
+            setBatchData({ quantity: 0, costPrice: 0, expiryDate: "", supplierId: "" });
             fetchInventory();
             setUploadToast({ type: "success", message: "تمت إضافة الدفعة بنجاح ✓" });
         } catch (error) {
@@ -914,10 +923,6 @@ export default function InventoryPage({ user }: { user: any }) {
 
                             <form onSubmit={handleAddBatch} className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">رقم الدفعة</label>
-                                    <input type="text" placeholder="LOT-2024-001" value={batchData.batchNumber} onChange={(e) => setBatchData({ ...batchData, batchNumber: e.target.value })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">الكمية</label>
                                     <input type="number" placeholder="0" value={batchData.quantity || ""} onChange={(e) => setBatchData({ ...batchData, quantity: parseInt(e.target.value) || 0 })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                 </div>
@@ -928,6 +933,15 @@ export default function InventoryPage({ user }: { user: any }) {
                                 <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">تاريخ انتهاء الصلاحية</label>
                                     <input type="date" value={batchData.expiryDate} onChange={(e) => setBatchData({ ...batchData, expiryDate: e.target.value })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">المورد (اختياري)</label>
+                                    <select value={batchData.supplierId} onChange={(e) => setBatchData({ ...batchData, supplierId: e.target.value })} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring">
+                                        <option value="">اختر مورداً...</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="flex gap-3 pt-3">
                                     <button type="submit" className="flex-1 bg-success text-success-foreground py-2.5 rounded-xl font-bold hover:bg-success/90 transition-colors text-sm shadow-lg shadow-success/20">إضافة الدفعة</button>

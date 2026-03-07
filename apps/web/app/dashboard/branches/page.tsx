@@ -1,23 +1,22 @@
 import { Button } from "@faramace/ui";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { UpdateBranch, DeleteBranch } from "@/app/ui/branches/buttons";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export default async function Page() {
+  const tenantCtx = await getTenantContext();
+  if (tenantCtx instanceof NextResponse) redirect("/login");
+  const { tenantWhere } = tenantCtx;
 
-async function getBranches() {
   const branches = await prisma.branch.findMany({
+    where: tenantWhere,
     orderBy: { createdAt: 'desc' },
     include: { organization: true }
   });
-  return branches;
-}
-
-export default async function Page() {
-  const branches = await getBranches();
 
   return (
     <div className="glass-card w-full p-6" suppressHydrationWarning>

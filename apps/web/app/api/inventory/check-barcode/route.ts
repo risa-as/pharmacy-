@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/app/lib/prisma";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function POST(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { barcode, branchId } = await req.json();
 
         if (!barcode) {
@@ -18,6 +21,7 @@ export async function POST(req: Request) {
                 id: true,
                 barcode: true,
                 tradeName: true,
+                scientificName: true,
             },
         });
 
@@ -30,24 +34,40 @@ export async function POST(req: Request) {
         }
 
         // 2. Check if inventory exists for this drug
-        const inventoryWhere: any = { drugId: drug.id };
+        const inventoryWhere: any = { drugId: drug.id, ...tenantBranchWhere };
         if (branchId) {
             inventoryWhere.branchId = branchId;
         }
 
-        const inventory = await prisma.inventory.findFirst({
+        const inventoryRaw = await prisma.inventory.findFirst({
             where: inventoryWhere,
             select: {
                 id: true,
                 branchId: true,
+                price: true,
                 branch: {
                     select: {
                         id: true,
                         name: true,
                     },
                 },
-            }, // distinct? just first one for now
+                batches: {
+                    select: { quantity: true },
+                    where: { quantity: { gt: 0 } },
+                },
+            },
         });
+
+        // Compute total available quantity from batches
+        const inventory = inventoryRaw
+            ? {
+                id: inventoryRaw.id,
+                branchId: inventoryRaw.branchId,
+                price: inventoryRaw.price,
+                quantity: inventoryRaw.batches.reduce((sum, b) => sum + b.quantity, 0),
+                branch: inventoryRaw.branch,
+              }
+            : null;
 
         return NextResponse.json({
             success: true,

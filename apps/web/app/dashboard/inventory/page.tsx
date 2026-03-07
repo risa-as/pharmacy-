@@ -1,20 +1,19 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { Package, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import InventoryTable from "@/app/ui/inventory/inventory-table";
 import QuickBarcodeEntry from "@/app/ui/inventory/quick-barcode-entry";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from "next/server";
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 const ITEMS_PER_PAGE = 50;
 
-async function getInventory(page: number, query: string) {
+async function getInventory(page: number, query: string, tenantBranchWhere: any, branchId?: string) {
     const skip = (page - 1) * ITEMS_PER_PAGE;
 
-    // Basic search if query exists (can be improved)
-    const where = query ? {
+    const baseWhere = query ? {
         drug: {
             OR: [
                 { tradeName: { contains: query, mode: 'insensitive' as const } },
@@ -22,6 +21,9 @@ async function getInventory(page: number, query: string) {
             ]
         }
     } : {};
+
+    const branchFilter = branchId ? { branchId } : {};
+    const where = { ...baseWhere, ...tenantBranchWhere, ...branchFilter };
 
     const [total, inventory] = await Promise.all([
         prisma.inventory.count({ where }),
@@ -48,8 +50,9 @@ async function getInventory(page: number, query: string) {
     };
 }
 
-async function getBranches() {
+async function getBranches(tenantWhere: any) {
     return await prisma.branch.findMany({
+        where: tenantWhere,
         select: { id: true, name: true }
     });
 }
@@ -60,13 +63,27 @@ export default async function Page({
     searchParams?: {
         query?: string;
         page?: string;
+        branch?: string;
     };
 }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
     const query = searchParams?.query || "";
     const currentPage = Number(searchParams?.page) || 1;
+    const branchId = searchParams?.branch;
 
-    const { items, totalPages } = await getInventory(currentPage, query);
-    const branches = await getBranches();
+    const { items, totalPages } = await getInventory(currentPage, query, tenantBranchWhere, branchId);
+    const branches = await getBranches(tenantWhere);
+
+    const buildPageUrl = (page: number) => {
+        const params = new URLSearchParams();
+        params.set("page", String(page));
+        if (query) params.set("query", query);
+        if (branchId) params.set("branch", branchId);
+        return `/dashboard/inventory?${params.toString()}`;
+    };
 
     return (
         <div className="glass-card w-full p-6">
@@ -84,6 +101,15 @@ export default async function Page({
                 </Link>
             </div>
 
+            {/* Branch Filter */}
+            <div className="mb-4">
+                <BranchFilter
+                    currentBranch={branchId}
+                    baseUrl="/dashboard/inventory"
+                    extraParams={query ? `query=${query}` : undefined}
+                />
+            </div>
+
             <QuickBarcodeEntry branches={branches} />
 
             <div className="mt-4 flow-root">
@@ -93,7 +119,7 @@ export default async function Page({
                     {/* Pagination Controls */}
                     <div className="flex justify-center items-center gap-4 mt-6">
                         <Link
-                            href={`/dashboard/inventory?page=${Math.max(1, currentPage - 1)}&query=${query}`}
+                            href={buildPageUrl(Math.max(1, currentPage - 1))}
                             className={`p-2 rounded-lg border border-border ${currentPage <= 1 ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
                         >
                             <ChevronRight className="w-5 h-5" />
@@ -102,7 +128,7 @@ export default async function Page({
                             صفحة {currentPage} من {totalPages}
                         </span>
                         <Link
-                            href={`/dashboard/inventory?page=${Math.min(totalPages, currentPage + 1)}&query=${query}`}
+                            href={buildPageUrl(Math.min(totalPages, currentPage + 1))}
                             className={`p-2 rounded-lg border border-border ${currentPage >= totalPages ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
                         >
                             <ChevronLeft className="w-5 h-5" />

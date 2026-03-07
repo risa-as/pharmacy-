@@ -3,6 +3,7 @@ import { prisma } from "@/app/lib/prisma";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { BILINGUAL_HEADERS, STATUS_LABELS, formatDateArabic, sanitizeForPdf } from "@/app/lib/utils/pdf-arabic";
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 declare module "jspdf" {
     interface jsPDF {
@@ -23,9 +24,14 @@ export async function GET() {
         const ninetyDaysFromNow = new Date();
         ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const batches = await prisma.batch.findMany({
             where: {
-                expiryDate: { lte: ninetyDaysFromNow }
+                expiryDate: { lte: ninetyDaysFromNow },
+                inventory: tenantBranchWhere
             },
             include: {
                 inventory: {

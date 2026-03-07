@@ -1,25 +1,18 @@
 import Form from "@/app/ui/branches/create-form";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { Store } from "lucide-react";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-async function getOrganizations() {
-  return await prisma.organization.findMany({
-    select: {
-      id: true,
-      name: true,
-    },
-    orderBy: {
-      name: 'asc',
-    },
-  });
-}
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 export default async function Page() {
-  const organizations = await getOrganizations();
+  const tenantCtx = await getTenantContext();
+  if (tenantCtx instanceof NextResponse) redirect("/login");
+
+  const organizations = await prisma.organization.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
 
   return (
     <main className="mx-auto max-w-2xl" suppressHydrationWarning>

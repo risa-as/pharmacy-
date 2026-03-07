@@ -104,8 +104,36 @@ export default function SalesScreen() {
     const [patientResults, setPatientResults] = useState<Patient[]>([]);
     const [searchingPatient, setSearchingPatient] = useState(false);
 
+    // Discount & loyalty
+    const [manualDiscount, setManualDiscount] = useState(0);
+    const [manualDiscountInput, setManualDiscountInput] = useState('');
+    const [loyaltySettings, setLoyaltySettings] = useState<{
+        loyaltyEnabled: boolean;
+        loyaltyPointsPerDinar: number;
+        loyaltyRedemptionValue: number;
+        loyaltyMinRedemption: number;
+    } | null>(null);
+    const [loyaltyAccount, setLoyaltyAccount] = useState<{
+        totalPoints: number;
+        tier: string;
+    } | null>(null);
+    const [pointsToRedeem, setPointsToRedeem] = useState(0);
+
     // Recently sold quick-add (last 5 cart items from session)
     const [recentItems, setRecentItems] = useState<CartItem[]>([]);
+
+    // Fetch loyalty settings once on mount
+    useEffect(() => {
+        apiService.getLoyaltySettings().then(setLoyaltySettings).catch(() => {});
+    }, []);
+
+    // Fetch loyalty account whenever patient changes
+    useEffect(() => {
+        setLoyaltyAccount(null);
+        setPointsToRedeem(0);
+        if (!selectedPatient) return;
+        apiService.getLoyaltyAccount(selectedPatient.id).then(setLoyaltyAccount).catch(() => {});
+    }, [selectedPatient]);
 
     // Handle barcode passed back from scan.tsx
     useEffect(() => {
@@ -183,8 +211,19 @@ export default function SalesScreen() {
         }));
     }, []);
 
-    const total = useMemo(() => cart.reduce((acc, i) => acc + i.price * i.quantity, 0), [cart]);
+    const subTotal = useMemo(() => cart.reduce((acc, i) => acc + i.price * i.quantity, 0), [cart]);
     const itemCount = useMemo(() => cart.reduce((acc, i) => acc + i.quantity, 0), [cart]);
+
+    const redemptionValue = loyaltySettings?.loyaltyRedemptionValue ?? 2.5;
+    const minRedemption   = loyaltySettings?.loyaltyMinRedemption  ?? 500;
+    const loyaltyDiscount = Math.floor(pointsToRedeem * redemptionValue);
+    const totalDiscount   = manualDiscount + loyaltyDiscount;
+    const total           = Math.max(0, subTotal - totalDiscount);
+
+    const resetCart = useCallback(() => {
+        setCart([]); setSelectedPatient(null); setInteractions([]); setAllergyWarnings([]);
+        setManualDiscount(0); setManualDiscountInput(''); setPointsToRedeem(0); setLoyaltyAccount(null);
+    }, []);
 
     const handleCheckout = useCallback((method: 'CASH' | 'CREDIT') => {
         if (cart.length === 0) { Alert.alert('تنبيه', 'السلة فارغة'); return; }
@@ -195,21 +234,35 @@ export default function SalesScreen() {
             ]);
             return;
         }
+        const discountLine = totalDiscount > 0 ? `\nخصم: ${totalDiscount.toLocaleString()} د.ع` : '';
         Alert.alert(
             'تأكيد البيع',
-            `المجموع: ${total.toLocaleString()} د.ع\nطريقة الدفع: ${method === 'CASH' ? 'نقدي' : 'آجل'}${selectedPatient ? `\nالعميل: ${selectedPatient.name}` : ''}`,
+            `الإجمالي: ${total.toLocaleString()} د.ع${discountLine}\nطريقة الدفع: ${method === 'CASH' ? 'نقدي' : 'آجل'}${selectedPatient ? `\nالعميل: ${selectedPatient.name}` : ''}`,
             [{ text: 'إلغاء', style: 'cancel' }, { text: 'تأكيد', onPress: () => processSale(method) }],
         );
-    }, [cart, selectedPatient, total]);
+    }, [cart, selectedPatient, total, totalDiscount]);
 
     const processSale = async (method: 'CASH' | 'CREDIT') => {
         setLoading(true);
+
+        // 1. Redeem loyalty points first (online — must succeed before sale)
+        if (pointsToRedeem > 0 && selectedPatient) {
+            try {
+                await apiService.redeemLoyaltyPoints(selectedPatient.id, pointsToRedeem);
+            } catch {
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                Alert.alert('خطأ', 'فشل استبدال نقاط الولاء. تحقق من الاتصال.');
+                setLoading(false);
+                return;
+            }
+        }
+
         const saleData = {
             items: cart.map(i => ({ drugId: i.id, quantity: i.quantity, price: i.price })),
             totalAmount: total,
             patientId: selectedPatient?.id,
             paymentMethod: method,
-            discount: 0,
+            discount: totalDiscount,
         };
 
         // CREDIT sales are always online-only (creates patient debt record on server)
@@ -221,10 +274,15 @@ export default function SalesScreen() {
                 return;
             }
             try {
-                await apiService.createSale(saleData);
+                const result: any = await apiService.createSale(saleData);
                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                setRecentItems(prev => [...cart.slice(0, 5), ...prev].slice(0, 5));
-                setCart([]); setSelectedPatient(null); setInteractions([]); setAllergyWarnings([]);
+                setRecentItems(prev => {
+                    const seen = new Set<string>();
+                    return [...cart.slice(0, 5), ...prev]
+                        .filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; })
+                        .slice(0, 5);
+                });
+                resetCart();
                 Alert.alert('تمت العملية', 'تمت عملية البيع', [
                     { text: 'طباعة', onPress: printReceipt },
                     { text: 'موافق' },
@@ -246,18 +304,29 @@ export default function SalesScreen() {
             return;
         }
 
-        // Optimistic success — clear cart and show confirmation immediately
+        // Optimistic success — clear cart immediately
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setRecentItems(prev => [...cart.slice(0, 5), ...prev].slice(0, 5));
-        setCart([]); setSelectedPatient(null); setInteractions([]); setAllergyWarnings([]);
+        const cartSnapshot = [...cart];
+        const patientSnapshot = selectedPatient;
+        const finalSnapshot  = total;
+        setRecentItems(prev => {
+            const seen = new Set<string>();
+            return [...cartSnapshot.slice(0, 5), ...prev]
+                .filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; })
+                .slice(0, 5);
+        });
+        resetCart();
         setLoading(false);
         Alert.alert('تمت العملية', 'تمت عملية البيع', [
             { text: 'طباعة', onPress: printReceipt },
             { text: 'موافق' },
         ]);
 
-        // Background: upload to server via syncService (handles upload + delete from SQLite)
+        // Background: sync + earn loyalty points
         void syncService.syncData();
+        if (patientSnapshot && loyaltySettings?.loyaltyEnabled && finalSnapshot > 0) {
+            void apiService.earnLoyaltyPoints(patientSnapshot.id, null, finalSnapshot);
+        }
     };
 
     const printReceipt = async () => {
@@ -396,36 +465,137 @@ export default function SalesScreen() {
                 }
             />
 
-            {/* ── Footer: total + checkout ── */}
-            <View style={{ backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border, padding: 16, paddingBottom: Platform.OS === 'ios' ? 32 : 16 }}>
+            {/* ── Footer: discount + loyalty + total + checkout ── */}
+            <View style={{ backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border, padding: 14, paddingBottom: Platform.OS === 'ios' ? 28 : 14 }}>
+
+                {/* Discount row */}
+                {cart.length > 0 && (
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <Ionicons name="pricetag-outline" size={15} color={C.mutedForeground} />
+                        <Text style={{ color: C.mutedForeground, fontSize: 12, flex: 1, textAlign: 'right' }}>خصم يدوي</Text>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 10, height: 36, gap: 4, minWidth: 110 }}>
+                            <TextInput
+                                style={{ color: C.foreground, fontSize: 14, fontWeight: '700', textAlign: 'right', flex: 1 }}
+                                placeholder="0"
+                                placeholderTextColor={C.mutedForeground}
+                                keyboardType="numeric"
+                                value={manualDiscountInput}
+                                onChangeText={v => {
+                                    setManualDiscountInput(v);
+                                    const n = parseFloat(v) || 0;
+                                    setManualDiscount(Math.min(n, subTotal));
+                                }}
+                            />
+                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>د.ع</Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* Loyalty row */}
+                {cart.length > 0 && selectedPatient && loyaltySettings?.loyaltyEnabled && loyaltyAccount && (
+                    <View style={{ backgroundColor: C.primaryMuted, borderRadius: 8, padding: 10, marginBottom: 10 }}>
+                        {/* Header: tier + balance */}
+                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                                <Ionicons name="star" size={14} color={C.primary} />
+                                <Text style={{ color: C.primary, fontWeight: '700', fontSize: 12 }}>
+                                    {loyaltyAccount.tier === 'GOLD' ? 'ذهبي' : loyaltyAccount.tier === 'SILVER' ? 'فضي' : 'برونزي'}
+                                </Text>
+                            </View>
+                            <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>
+                                {loyaltyAccount.totalPoints.toLocaleString()} نقطة
+                            </Text>
+                        </View>
+                        {/* Points redemption controls */}
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                            <TouchableOpacity
+                                onPress={() => setPointsToRedeem(p => Math.max(0, p - 100))}
+                                style={{ backgroundColor: C.card, borderRadius: 4, padding: 6, borderWidth: 1, borderColor: C.border }}
+                            >
+                                <Ionicons name="remove" size={14} color={C.danger} />
+                            </TouchableOpacity>
+                            <View style={{ flex: 1, alignItems: 'center' }}>
+                                <Text style={{ color: C.primary, fontWeight: '800', fontSize: 13 }}>
+                                    {pointsToRedeem} نقطة
+                                </Text>
+                                {pointsToRedeem > 0 && (
+                                    <Text style={{ color: C.success, fontSize: 11, marginTop: 2 }}>
+                                        ← خصم {loyaltyDiscount.toLocaleString()} د.ع
+                                    </Text>
+                                )}
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    const maxByBalance = Math.floor(loyaltyAccount.totalPoints / 100) * 100;
+                                    const maxByBill    = Math.floor(Math.max(0, subTotal - manualDiscount) / redemptionValue / 100) * 100;
+                                    const cap = Math.min(maxByBalance, maxByBill);
+                                    setPointsToRedeem(p => Math.min(p + 100, cap));
+                                }}
+                                style={{ backgroundColor: C.card, borderRadius: 4, padding: 6, borderWidth: 1, borderColor: C.border }}
+                            >
+                                <Ionicons name="add" size={14} color={C.success} />
+                            </TouchableOpacity>
+                        </View>
+                        {loyaltyAccount.totalPoints < minRedemption && (
+                            <Text style={{ color: C.mutedForeground, fontSize: 10, textAlign: 'center', marginTop: 6 }}>
+                                الحد الأدنى للاستبدال {minRedemption} نقطة
+                            </Text>
+                        )}
+                    </View>
+                )}
+
+                {/* Total row */}
                 <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <View>
-                        <Text style={{ color: C.mutedForeground, fontSize: 12 }}>المجموع الكلي</Text>
-                        <Text style={{ color: C.foreground, fontSize: 24, fontWeight: '900' }}>
-                            {total.toLocaleString()} <Text style={{ fontSize: 14, color: C.mutedForeground }}>د.ع</Text>
-                        </Text>
+                        {totalDiscount > 0 ? (
+                            <>
+                                <Text style={{ color: C.mutedForeground, fontSize: 11, textDecorationLine: 'line-through' }}>
+                                    {subTotal.toLocaleString()} د.ع
+                                </Text>
+                                <Text style={{ color: C.foreground, fontSize: 22, fontWeight: '900' }}>
+                                    {total.toLocaleString()} <Text style={{ fontSize: 13, color: C.mutedForeground }}>د.ع</Text>
+                                </Text>
+                                <Text style={{ color: C.success, fontSize: 11 }}>وفرت {totalDiscount.toLocaleString()} د.ع</Text>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12 }}>المجموع الكلي</Text>
+                                <Text style={{ color: C.foreground, fontSize: 24, fontWeight: '900' }}>
+                                    {total.toLocaleString()} <Text style={{ fontSize: 14, color: C.mutedForeground }}>د.ع</Text>
+                                </Text>
+                            </>
+                        )}
                     </View>
                     <Badge label={`${itemCount} صنف`} variant={itemCount > 0 ? 'info' : 'default'} />
                 </View>
                 <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                    <TouchableOpacity
-                        onPress={() => handleCheckout('CREDIT')}
-                        disabled={cart.length === 0 || loading}
-                        style={{ flex: 1, backgroundColor: cart.length === 0 ? C.border : C.warning, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
-                    >
-                        <Ionicons name="time-outline" size={18} color="#FFFFFF" />
-                        <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15 }}>آجل</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => handleCheckout('CASH')}
-                        disabled={cart.length === 0 || loading}
-                        style={{ flex: 2, backgroundColor: cart.length === 0 ? C.border : C.success, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
-                    >
-                        {loading
-                            ? <ActivityIndicator size="small" color="#FFFFFF" />
-                            : <><Ionicons name="cash-outline" size={18} color="#FFFFFF" /><Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15 }}>نقدي</Text></>
-                        }
-                    </TouchableOpacity>
+                    {(() => {
+                        const btnText = isDarkMode ? '#FFFFFF' : '#18120F';
+                        const creditBg = cart.length === 0 ? C.border : C.warning;
+                        const cashBg   = cart.length === 0 ? C.border : C.success;
+                        return (
+                            <>
+                                <TouchableOpacity
+                                    onPress={() => handleCheckout('CREDIT')}
+                                    disabled={cart.length === 0 || loading}
+                                    style={{ flex: 1, backgroundColor: creditBg, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
+                                >
+                                    <Ionicons name="time-outline" size={18} color={btnText} />
+                                    <Text style={{ color: btnText, fontWeight: '700', fontSize: 15 }}>آجل</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => handleCheckout('CASH')}
+                                    disabled={cart.length === 0 || loading}
+                                    style={{ flex: 2, backgroundColor: cashBg, borderRadius: 6, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: cart.length === 0 ? 0.5 : 1 }}
+                                >
+                                    {loading
+                                        ? <ActivityIndicator size="small" color={btnText} />
+                                        : <><Ionicons name="cash-outline" size={18} color={btnText} /><Text style={{ color: btnText, fontWeight: '700', fontSize: 15 }}>نقدي</Text></>
+                                    }
+                                </TouchableOpacity>
+                            </>
+                        );
+                    })()}
                 </View>
             </View>
 

@@ -1,14 +1,14 @@
 import EditForm from "@/app/ui/organizations/edit-form";
 import Breadcrumbs from "@/app/ui/dashboard/breadcrumbs";
-import { PrismaClient } from "@prisma/client";
-import { notFound } from "next/navigation";
-
-// Use a global prisma client or create one if not exists
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { prisma } from "@/app/lib/prisma";
+import { notFound, redirect } from "next/navigation";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
 export default async function Page({ params }: { params: { id: string } }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+
     const id = params.id;
     const organization = await prisma.organization.findUnique({
         where: { id },

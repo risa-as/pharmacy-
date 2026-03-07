@@ -6,7 +6,11 @@ import SettingsPage from './components/SettingsPage';
 import InventoryPage from './components/InventoryPage';
 import LoginScreen from './components/LoginScreen';
 import LicenseScreen from './components/LicenseScreen';
+
 import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, Pill, BookOpen, Moon, Sun, Loader2 } from 'lucide-react';
+
+
+
 
 type Page = 'dashboard' | 'pos' | 'settings' | 'inventory' | 'debts';
 
@@ -42,6 +46,12 @@ declare global {
 
 type LicenseStatus = 'checking' | 'valid' | 'invalid' | 'no-key';
 
+
+
+
+
+
+
 function App() {
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -51,39 +61,25 @@ function App() {
     const [licenseStatus, setLicenseStatus] = useState<LicenseStatus>('checking');
     const [licenseError, setLicenseError] = useState<string | null>(null);
 
-    // Verify license on app startup
     useEffect(() => {
         const verifyLicense = async () => {
             const savedKey = localStorage.getItem('faramace_license_key');
-
-            if (!savedKey) {
-                setLicenseStatus('no-key');
-                return;
-            }
-
+            if (!savedKey) { setLicenseStatus('no-key'); return; }
             try {
-                // Get hardware identity
                 const identity = await window.electronLicense?.getHardwareId();
                 if (!identity?.success || !identity.hardwareId) {
                     setLicenseStatus('invalid');
                     setLicenseError('فشل في قراءة معرّف الجهاز. الرجاء إعادة تشغيل التطبيق.');
                     return;
                 }
-
-                // Verify with cloud via IPC (main process handles the network call)
                 const result = await window.electronLicense?.verify({
                     licenseKey: savedKey,
                     hardwareId: identity.hardwareId,
                 });
-
                 if (!result || result.data?.error === 'SERVER_UNREACHABLE') {
-                    // If server is unreachable, allow offline usage with existing key
-                    // This is important for the hybrid model
-                    console.warn('[License] Cannot reach server, allowing offline mode with saved key.');
-                    setLicenseStatus('valid');
-                    return;
+                    console.warn('[License] Server unreachable, allowing offline mode.');
+                    setLicenseStatus('valid'); return;
                 }
-
                 if (result.ok && result.data?.success && result.data?.valid) {
                     setLicenseStatus('valid');
                 } else {
@@ -98,12 +94,10 @@ function App() {
                     localStorage.removeItem('faramace_license_key');
                 }
             } catch {
-                // IPC failure — allow offline mode gracefully
-                console.warn('[License] IPC error, allowing offline mode with saved key.');
+                console.warn('[License] IPC error, allowing offline mode.');
                 setLicenseStatus('valid');
             }
         };
-
         verifyLicense();
     }, []);
 
@@ -112,6 +106,7 @@ function App() {
         setLicenseError(null);
     };
     // ==================== End License Guard ====================
+
 
     // Theme initialisation — read persisted preference from electron-store on mount
     useEffect(() => {
@@ -175,7 +170,6 @@ function App() {
     }, []);
 
     // ==================== License Guard Render ====================
-    // Show loading spinner while checking license
     if (licenseStatus === 'checking') {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 gap-4">
@@ -184,12 +178,11 @@ function App() {
             </div>
         );
     }
-
-    // Show activation screen if no key or invalid
     if (licenseStatus === 'no-key' || licenseStatus === 'invalid') {
         return <LicenseScreen onActivated={handleLicenseActivated} errorMessage={licenseError} />;
     }
     // ==================== End License Guard Render ====================
+
 
     if (!currentUser) {
         return <LoginScreen onLogin={setCurrentUser} />;

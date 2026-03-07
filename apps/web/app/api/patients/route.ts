@@ -1,14 +1,18 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { searchParams } = new URL(req.url);
         const query = searchParams.get('query');
-        const branchId = searchParams.get('branchId');
 
-        const where: any = {};
+        const where: any = { ...tenantBranchWhere };
 
         if (query) {
             where.OR = [
@@ -17,9 +21,7 @@ export async function GET(req: Request) {
             ];
         }
 
-        if (branchId) {
-            where.branchId = branchId;
-        }
+
 
         const patients = await prisma.patient.findMany({
             where,
@@ -39,8 +41,16 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { user } = tenantCtx;
+
+        if (!user || (!user.branchId && user.role !== 'SUPER_ADMIN')) {
+            return NextResponse.json({ message: 'Unauthorized or No Branch Assigned' }, { status: 401 });
+        }
+
         const body = await req.json();
-        const { id, name, phone, dateOfBirth, gender, allergies, chronicDiseases, notes, branchId } = body;
+        const { id, name, phone, dateOfBirth, gender, allergies, chronicDiseases, notes } = body;
 
         if (!name || !phone) {
             return NextResponse.json(
@@ -49,8 +59,8 @@ export async function POST(req: Request) {
             );
         }
 
-        const existingPatient = await prisma.patient.findUnique({
-            where: { phone },
+        const existingPatient = await prisma.patient.findFirst({
+            where: { phone, branchId: user.branchId! },
         });
 
         if (existingPatient) {
@@ -70,7 +80,7 @@ export async function POST(req: Request) {
                 allergies: allergies || [],
                 chronicDiseases: chronicDiseases || [],
                 notes,
-                branchId: branchId || null,
+                branchId: user.branchId!,
             },
         });
 

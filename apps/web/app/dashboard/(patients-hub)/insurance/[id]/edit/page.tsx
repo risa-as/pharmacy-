@@ -1,22 +1,19 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import EditForm from "@/app/ui/insurance/edit-form";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 
 import Link from "next/link";
 import { ArrowRight, Building2 } from "lucide-react";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-async function getInsuranceCompanyById(id: string) {
-    return await prisma.insuranceCompany.findUnique({
-        where: { id },
-    });
-}
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
 export default async function Page({ params }: { params: { id: string } }) {
-    const company = await getInsuranceCompanyById(params.id);
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+
+    const company = await prisma.insuranceCompany.findUnique({
+        where: { id: params.id },
+    });
 
     if (!company) {
         notFound();

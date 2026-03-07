@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
@@ -12,7 +13,11 @@ export async function GET(req: Request) {
         const dateFrom = fromDate ? new Date(fromDate) : new Date(new Date().setDate(new Date().getDate() - 30));
         const dateTo = toDate ? new Date(toDate) : new Date();
 
-        const branchFilter = branchId ? { branchId } : {};
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
+        const branchFilter = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
         // 1. Profit Margin per Product
         const saleItems = await prisma.saleItem.findMany({

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { recordSupplierPayment } from "@/app/lib/actions/supplier-ledger-actions";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,9 @@ export async function GET(
     { params }: { params: { id: string } }
 ) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
         const payments = await prisma.supplierPayment.findMany({
             where: { supplierId: params.id },
             include: { branch: { select: { name: true } } },
@@ -26,6 +30,9 @@ export async function POST(
     { params }: { params: { id: string } }
 ) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
         const body = await req.json();
         const result = await recordSupplierPayment({
             supplierId: params.id,

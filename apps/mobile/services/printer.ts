@@ -59,9 +59,11 @@ export const printerService = {
     // Print Receipt
     async printReceipt(shopName: string, items: any[], total: number) {
         try {
+            const invoiceNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
             const date = new Date().toLocaleString();
             let receipt = `<C>${shopName}</C>\n`;
             receipt += `<C>--------------------------------</C>\n`;
+            receipt += `<C>Invoice #${invoiceNumber}</C>\n`;
             receipt += `<C>Date: ${date}</C>\n`;
             receipt += `<C>--------------------------------</C>\n`;
 

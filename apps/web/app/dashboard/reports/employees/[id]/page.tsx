@@ -1,8 +1,10 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { User, DollarSign, Calendar, TrendingUp, ShoppingBag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 // Keep this component clean, chart will be client-side if needed, 
 // or simpler: just use server generated data for chart
@@ -11,13 +13,14 @@ import { ar } from "date-fns/locale";
 import EmployeeSalesChart from "./chart";
 import RecentSalesTable from "@/app/ui/dashboard/reports/recent-sales-table";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export default async function EmployeeDetailPage({ params }: { params: { id: string } }) {
-    const employee = await prisma.user.findUnique({
-        where: { id: params.id },
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
+    const employee = await prisma.user.findFirst({
+        where: { id: params.id, ...tenantBranchWhere },
         include: {
             branch: true,
             _count: {
@@ -34,6 +37,7 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
 
     const sales = await prisma.sale.findMany({
         where: {
+            ...tenantBranchWhere,
             userId: params.id,
             createdAt: { gte: thirtyDaysAgo }
         },

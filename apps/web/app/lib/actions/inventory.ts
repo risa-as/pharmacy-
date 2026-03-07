@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 const InventorySchema = z.object({
     id: z.string(),
@@ -20,6 +21,9 @@ const InventorySchema = z.object({
 const CreateInventory = InventorySchema.omit({ id: true });
 
 export async function createInventory(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = CreateInventory.safeParse({
         branchId: formData.get("branchId"),
         drugId: formData.get("drugId"),
@@ -72,6 +76,9 @@ export async function updateInventory(
     prevState: any,
     formData: FormData,
 ) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = InventorySchema.safeParse({
         id: id,
         branchId: formData.get("branchId"),
@@ -106,6 +113,9 @@ export async function updateInventory(
 }
 
 export async function deleteInventory(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         // حذف الدفعات أولاً
         await prisma.batch.deleteMany({
@@ -122,15 +132,24 @@ export async function deleteInventory(id: string) {
     }
 }
 
+function generateBatchNumber(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 // إضافة دفعة جديدة
 export async function addBatch(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const inventoryId = formData.get("inventoryId") as string;
-    const batchNumber = formData.get("batchNumber") as string;
+    const batchNumber = generateBatchNumber();
     const quantity = parseInt(formData.get("quantity") as string);
     const costPrice = parseFloat(formData.get("costPrice") as string) || 0;
     const expiryDate = new Date(formData.get("expiryDate") as string);
+    const supplierId = (formData.get("supplierId") as string) || null;
 
-    if (!inventoryId || !batchNumber || !quantity || !expiryDate) {
+    if (!inventoryId || !quantity || !expiryDate) {
         return { message: "جميع الحقول مطلوبة." };
     }
 
@@ -142,6 +161,7 @@ export async function addBatch(prevState: any, formData: FormData) {
                 quantity,
                 costPrice,
                 expiryDate,
+                supplierId,
             },
         });
     } catch (error) {
@@ -155,6 +175,9 @@ export async function addBatch(prevState: any, formData: FormData) {
 
 // تحديث كمية دفعة
 export async function updateBatchQuantity(batchId: string, newQuantity: number) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         await prisma.batch.update({
             where: { id: batchId },
@@ -169,6 +192,9 @@ export async function updateBatchQuantity(batchId: string, newQuantity: number) 
 
 // حذف دفعة
 export async function deleteBatch(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         await prisma.batch.delete({ where: { id } });
         revalidatePath("/dashboard/inventory");
