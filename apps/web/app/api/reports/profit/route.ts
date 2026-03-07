@@ -128,7 +128,7 @@ export async function GET(req: Request) {
                 dailyData[dateKey] = { revenue: 0, cogs: 0, expenses: 0, returns: 0 };
             }
             dailyData[dateKey].revenue += sale.total;
-            dailyData[dateKey].cogs += sale.items.reduce((sum, item) => sum + (item.cost * item.quantity), 0);
+            dailyData[dateKey].cogs += sale.items.reduce((sum: any, item: any) => sum + (item.cost * item.quantity), 0);
         }
 
         // Add expenses to daily breakdown

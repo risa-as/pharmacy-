@@ -125,7 +125,7 @@ export async function POST(req: Request) {
                     where: { inventoryId: result.inventory.id },
                     select: { quantity: true },
                 });
-                const totalQty = batches.reduce((s, b) => s + b.quantity, 0);
+                const totalQty = batches.reduce((s: any, b: any) => s + b.quantity, 0);
                 if (totalQty <= result.inventory.minStock) {
                     const drug = await prisma.inventory.findUnique({
                         where: { id: result.inventory.id },

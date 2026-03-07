@@ -21,9 +21,9 @@ export async function GET(req: Request) {
         });
 
         const drugs = inventories
-            .filter((inv) => inv.drug?.isActive)
-            .map((inv) => {
-                const totalStock = inv.batches.reduce((sum, batch) => sum + batch.quantity, 0);
+            .filter((inv: any) => inv.drug?.isActive)
+            .map((inv: any) => {
+                const totalStock = inv.batches.reduce((sum: any, batch: any) => sum + batch.quantity, 0);
                 return {
                     id: inv.drug.id,
                     inventoryId: inv.id,
@@ -50,8 +50,8 @@ export async function GET(req: Request) {
             meta: {
                 branchId,
                 snapshotAt: new Date().toISOString(),
-                inventoryIds: inventories.map((inv) => inv.id),
-                drugIds: drugs.map((d) => d.id),
+                inventoryIds: inventories.map((inv: any) => inv.id),
+                drugIds: drugs.map((d: any) => d.id),
             },
         });
     } catch (error) {

@@ -56,7 +56,7 @@ export async function createPurchase(prevState: any, formData: FormData) {
     }
 
     const validItems = itemsValidation.data;
-    const total = validItems.reduce((acc, item) => acc + (item.quantity * item.cost), 0);
+    const total = validItems.reduce((acc: any, item: any) => acc + (item.quantity * item.cost), 0);
 
     try {
         await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

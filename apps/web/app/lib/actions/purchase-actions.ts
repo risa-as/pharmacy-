@@ -72,7 +72,7 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
 
         // Optionally enforce that branchId matches `tenantBranchWhere` if this is not admin...
 
-        const total = items.reduce((sum, item) => sum + (item.quantity * item.cost), 0);
+        const total = items.reduce((sum: any, item: any) => sum + (item.quantity * item.cost), 0);
 
         const purchase = await prisma.purchase.create({
             data: {

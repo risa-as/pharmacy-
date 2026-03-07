@@ -82,8 +82,8 @@ export async function GET(req: Request) {
         const profitReport = Array.from(profitByDrug.values()).sort((a: any, b: any) => b.profitMargin - a.profitMargin);
 
         // Summary totals
-        const totalRevenue = profitReport.reduce((sum, p) => sum + p.totalRevenue, 0);
-        const totalCost = profitReport.reduce((sum, p) => sum + p.totalCost, 0);
+        const totalRevenue = profitReport.reduce((sum: any, p: any) => sum + p.totalRevenue, 0);
+        const totalCost = profitReport.reduce((sum: any, p: any) => sum + p.totalCost, 0);
         const netProfit = totalRevenue - totalCost;
         const overallMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 10000) / 100 : 0;
 
@@ -127,7 +127,7 @@ export async function GET(req: Request) {
                 estimatedValue: inv.batches.reduce((sum: number, b: any) => sum + (b.quantity * (b.costPrice || inv.cost || 0)), 0),
             }));
 
-        const totalDeadStockValue = deadStock.reduce((sum, d) => sum + d.estimatedValue, 0);
+        const totalDeadStockValue = deadStock.reduce((sum: any, d: any) => sum + d.estimatedValue, 0);
 
         // 3. Near-Expiry Loss — batches expiring within 90 days
         const nearExpiryWindow = new Date();
@@ -163,7 +163,7 @@ export async function GET(req: Request) {
             estimatedLoss: batch.quantity * (batch.costPrice || batch.inventory?.cost || 0),
         }));
 
-        const totalNearExpiryLoss = nearExpiryLoss.reduce((sum, b) => sum + b.estimatedLoss, 0);
+        const totalNearExpiryLoss = nearExpiryLoss.reduce((sum: any, b: any) => sum + b.estimatedLoss, 0);
 
         return NextResponse.json({
             period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },

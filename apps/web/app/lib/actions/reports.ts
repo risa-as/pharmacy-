@@ -52,7 +52,7 @@ export async function fetchReportData(
 
             // Return flattened structure for detailed report
             const flattenedData = data.flatMap((sale) =>
-                sale.items.map((item) => ({
+                sale.items.map((item: any) => ({
                     "التاريخ": sale.createdAt.toISOString().split("T")[0],
                     "رقم الفاتورة": sale.id.substring(0, 8), // Shorten ID for display
                     "اسم البائع": sale.user?.name || "غير محدد",
@@ -82,7 +82,7 @@ export async function fetchReportData(
             });
 
             const flattenedData = data.flatMap((purchase) =>
-                purchase.items.length > 0 ? purchase.items.map((item) => ({
+                purchase.items.length > 0 ? purchase.items.map((item: any) => ({
                     "التاريخ": purchase.createdAt.toISOString().split("T")[0],
                     "رقم الفاتورة": purchase.invoiceNumber || purchase.id.substring(0, 8),
                     "المورد": purchase.supplier.name,
@@ -120,7 +120,7 @@ export async function fetchReportData(
 
             // Flatten inventory by batches to show detailed stock
             const flattenedData = data.flatMap((item) =>
-                item.batches.length > 0 ? item.batches.map((batch) => ({
+                item.batches.length > 0 ? item.batches.map((batch: any) => ({
                     "اسم الدواء": item.drug.tradeName,
                     "الباركود": item.drug.barcode,
                     "الفرع": item.branch.name,
@@ -153,7 +153,7 @@ export async function fetchReportData(
                 orderBy: { date: "desc" },
             });
 
-            return data.map((item) => ({
+            return data.map((item: any) => ({
                 "التاريخ": item.date.toISOString().split("T")[0],
                 "الفئة": item.category,
                 "المبلغ": item.amount,

@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         const lowStockCount = inventoryItems.filter((item: any) => {
             // @ts-ignore
             const min = item.minStock || 10; // Default threshold if missing
-            const totalQuantity = item.batches.reduce((sum, batch) => sum + batch.quantity, 0);
+            const totalQuantity = item.batches.reduce((sum: any, batch: any) => sum + batch.quantity, 0);
             return totalQuantity <= min;
         }).length;
         */
