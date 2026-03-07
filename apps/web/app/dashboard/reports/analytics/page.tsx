@@ -107,7 +107,7 @@ export default async function AnalyticsPage({
         },
         select: { drugId: true },
         distinct: ['drugId']
-    }).then(items => items.map((i: any) => i.drugId));
+    }).then((items: any[]) => items.map((i: any) => i.drugId));
 
     // Get Drugs that are NOT in soldDrugIds
     const stagnantDrugs = await prisma.globalDrug.findMany({
