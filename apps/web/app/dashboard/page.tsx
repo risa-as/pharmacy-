@@ -115,7 +115,7 @@ async function getDashboardData(isAdmin: boolean, organizationId?: string, branc
         const label = new Date(s.createdAt).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric' });
         if (label in dayMap) dayMap[label] += s.total || 0;
     }
-    const weeklySalesChart = Object.entries(dayMap).map(([day, amount]) => ({ day, amount }));
+    const weeklySalesChart = Object.entries(dayMap).map(([day, amount]: any) => ({ day, amount }));
 
     return {
         drugCount, inventoryCount, alerts, isAdmin: true,

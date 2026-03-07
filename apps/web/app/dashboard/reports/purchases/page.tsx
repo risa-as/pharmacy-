@@ -39,7 +39,7 @@ export default async function PurchasesReportPage() {
         spendingByDay.set(key, (spendingByDay.get(key) || 0) + p.total);
     });
 
-    const chartData = Array.from(spendingByDay.entries()).map(([day, amount]) => ({
+    const chartData = Array.from(spendingByDay.entries()).map(([day, amount]: any) => ({
         day: day.slice(0, 5),
         amount
     }));

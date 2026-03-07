@@ -112,7 +112,7 @@ export default function AuditLogClient({ users, branches }: AuditLogClientProps)
                         <select value={selectedEntity} onChange={(e) => { setSelectedEntity(e.target.value); setPage(1); }}
                             className="border rounded-lg px-3 py-2 text-sm bg-muted">
                             <option value="">الكل</option>
-                            {Object.entries(ENTITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                            {Object.entries(ENTITY_LABELS).map(([k, v]: any) => <option key={k} value={k}>{v}</option>)}
                         </select>
                     </div>
                     <div>
@@ -120,7 +120,7 @@ export default function AuditLogClient({ users, branches }: AuditLogClientProps)
                         <select value={selectedAction} onChange={(e) => { setSelectedAction(e.target.value); setPage(1); }}
                             className="border rounded-lg px-3 py-2 text-sm bg-muted">
                             <option value="">الكل</option>
-                            {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                            {Object.entries(ACTION_LABELS).map(([k, v]: any) => <option key={k} value={k}>{v.label}</option>)}
                         </select>
                     </div>
                     <div>

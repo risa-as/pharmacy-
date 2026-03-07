@@ -59,7 +59,7 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
 
     // Prepare Chart Data
     // Group by Date
-    const dailyData = sales.reduce((acc: any, sale) => {
+    const dailyData = sales.reduce((acc: any, sale: any) => {
         const date = format(sale.createdAt, 'yyyy-MM-dd');
         acc[date] = (acc[date] || 0) + sale.total;
         return acc;

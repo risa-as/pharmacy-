@@ -167,7 +167,7 @@ export async function GET(req: Request) {
 
         const chart = Object.entries(dailyData)
             .sort(([a]: any[], [b]: any[]) => a.localeCompare(b))
-            .map(([date, data]) => ({
+            .map(([date, data]: any) => ({
                 date,
                 revenue: Math.round(data.revenue),
                 cogs: Math.round(data.cogs),

@@ -51,7 +51,7 @@ export default async function SalesReportPage({
         salesByDay.set(dayName, current + sale.total);
     });
 
-    const chartData = Array.from(salesByDay.entries()).map(([day, amount]) => ({
+    const chartData = Array.from(salesByDay.entries()).map(([day, amount]: any) => ({
         day,
         amount,
     }));
@@ -123,7 +123,7 @@ export default async function SalesReportPage({
                         {Array.from(topBranches.entries())
                             .sort((a: any, b: any) => b[1] - a[1])
                             .slice(0, 5)
-                            .map(([branch, amount], index) => (
+                            .map(([branch, amount]: any, index: any) => (
                                 <div key={branch} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                     <div className="flex items-center gap-3">
                                         <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${index === 0 ? "bg-warning/20 text-warning" :

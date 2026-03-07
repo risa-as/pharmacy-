@@ -268,7 +268,7 @@ export default function ExportReports() {
                             <tbody ref={tableBodyRef}>
                                 {pdfData.map((row: any, idx: any) => (
                                     <tr key={idx} className="even:bg-muted">
-                                        {Object.values(row).map((val: any, i) => (
+                                        {Object.values(row).map((val: any, i: any) => (
                                             <td key={i} className="border border-border p-2 text-center">{val}</td>
                                         ))}
                                     </tr>

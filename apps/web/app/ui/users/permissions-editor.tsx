@@ -152,7 +152,7 @@ export default function PermissionsEditor({ users }: { users: User[] }) {
                         )}
 
                         <div className="space-y-2">
-                            {Object.entries(categories).map(([category, keys]) => (
+                            {Object.entries(categories).map(([category, keys]: any) => (
                                 <div key={category} className="border rounded-lg overflow-hidden">
                                     <button
                                         onClick={() => setExpandedCategory(expandedCategory === category ? null : category)}

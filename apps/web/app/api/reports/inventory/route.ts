@@ -70,7 +70,7 @@ export async function GET() {
         // جدول المخزون
         const tableData = inventory.map((item: any, index: any) => {
             const drug = drugMap.get(item.drugId);
-            const totalQty = item.batches.reduce((acc: number, b) => acc + b.quantity, 0);
+            const totalQty = item.batches.reduce((acc: number, b: any) => acc + b.quantity, 0);
             const status = totalQty <= item.minStock
                 ? STATUS_LABELS.LOW
                 : totalQty >= item.maxStock

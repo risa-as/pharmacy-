@@ -493,7 +493,7 @@ export default function PermissionsGuidePage() {
                 >
                     الكل
                 </button>
-                {Object.entries(roleLabels).map(([role, info]) => (
+                {Object.entries(roleLabels).map(([role, info]: any) => (
                     <button
                         key={role}
                         onClick={() => setSelectedRole(role)}
@@ -547,7 +547,7 @@ export default function PermissionsGuidePage() {
                                 {/* Role badges preview */}
                                 {selectedRole === "ALL" && !isExpanded && (
                                     <div className="hidden sm:flex gap-1.5">
-                                        {Object.entries(roleLabels).map(([role, info]) => {
+                                        {Object.entries(roleLabels).map(([role, info]: any) => {
                                             const enabled = cat.permissions.filter(p => roleDefaults[role]?.[p.key]).length;
                                             return (
                                                 <span key={role} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${info.bg} ${info.color}`}>
@@ -628,7 +628,7 @@ export default function PermissionsGuidePage() {
                                                         {/* Role access matrix */}
                                                         {selectedRole === "ALL" && (
                                                             <div className="flex gap-2 mt-2">
-                                                                {Object.entries(roleLabels).map(([role, info]) => {
+                                                                {Object.entries(roleLabels).map(([role, info]: any) => {
                                                                     const enabled = roleDefaults[role]?.[perm.key];
                                                                     return (
                                                                         <div

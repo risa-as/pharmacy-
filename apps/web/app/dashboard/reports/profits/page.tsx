@@ -95,7 +95,7 @@ export default async function ProfitsReportPage({
         }
     });
 
-    const chartData = Array.from(profitByDay.entries()).map(([date, amount]) => ({
+    const chartData = Array.from(profitByDay.entries()).map(([date, amount]: any) => ({
         day: date,
         amount,
     }));
@@ -215,7 +215,7 @@ export default async function ProfitsReportPage({
                         </span>
                     </div>
                     <div className="border-t pt-2 space-y-1">
-                        {Object.entries(expensesByCategory).map(([cat, amount]) => (
+                        {Object.entries(expensesByCategory).map(([cat, amount]: any) => (
                             <div key={cat} className="flex justify-between py-1 text-sm text-muted-foreground">
                                 <span>(-) {cat}</span>
                                 <span>{amount.toLocaleString()} د.ع</span>
@@ -297,7 +297,7 @@ export default async function ProfitsReportPage({
                     <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                         {Object.entries(expensesByCategory)
                             .sort((a: any, b: any) => b[1] - a[1])
-                            .map(([cat, amount]) => {
+                            .map(([cat, amount]: any) => {
                                 const percent = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
                                 return (
                                     <div key={cat} className="bg-muted p-4 rounded-xl">
