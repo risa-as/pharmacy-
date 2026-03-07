@@ -6,9 +6,12 @@
             "es2019",
             "dom"
         ],
+        "outDir": "dist",
+        "rootDir": "src",
         "declaration": true,
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true
-    }
+    },
+    "include": ["src"]
 }

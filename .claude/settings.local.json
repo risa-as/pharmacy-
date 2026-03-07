@@ -54,7 +54,8 @@
       "Bash(pwsh:*)",
       "Bash(pnpm:*)",
       "Bash(xargs sh:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

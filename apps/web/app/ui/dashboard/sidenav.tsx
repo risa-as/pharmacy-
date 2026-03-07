@@ -128,6 +128,7 @@ const sections: NavSection[] = [
           // Inventory sub-tools (Stocktakes, etc) → accessible inside the Inventory page
           { name: "المبيعات", href: "/dashboard/sales" },
           // Invoices, Returns, Payments → tabs inside Sales page
+          { name: "نقطة البيع (مؤقت)", href: "/dashboard/pos-temp" },
           { name: "دفتر الديون", href: "/dashboard/debts" },
         ],
       },
