@@ -52,7 +52,7 @@ export async function GET() {
             where: { id: { in: uniqueDrugIds } },
             select: { id: true, tradeName: true, barcode: true }
         });
-        const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
+        const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
         // إنشاء PDF
         const doc = new jsPDF();

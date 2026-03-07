@@ -53,8 +53,8 @@ export async function GET(req: NextRequest) {
             include: { batches: true }
         });
 
-        const inventoryMap = new Map(inventories.map((i: any) => [i.drugId, i]));
-        const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
+        const inventoryMap = new Map<string, any>(inventories.map((i: any) => [i.drugId, i]));
+        const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
         // Moving Average Forecast algorithm
         const forecasts = salesData.map((sale: any) => {

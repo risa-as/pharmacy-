@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
         // Fetch all drugs to map names
         const drugs = await prisma.globalDrug.findMany();
-        const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
+        const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
         const mappedInventory = inventory.map((item: any) => {
             const drug = drugMap.get(item.drugId);
