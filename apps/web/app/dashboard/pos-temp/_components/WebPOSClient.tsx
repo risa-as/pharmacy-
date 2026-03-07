@@ -69,17 +69,17 @@ export default function WebPOSClient() {
     const addToCart = (product: any) => {
         if (product.stock <= 0) return;
         setCart(prev => {
-            const existing = prev.find(p => p.id === product.id);
+            const existing = prev.find((p: any) => p.id === product.id);
             if (existing) {
                 if (existing.quantity >= product.stock) return prev;
-                return prev.map(p => p.id === product.id ? { ...p, quantity: p.quantity + 1 } : p);
+                return prev.map((p: any) => p.id === product.id ? { ...p, quantity: p.quantity + 1 } : p);
             }
             return [...prev, { ...product, quantity: 1 }];
         });
     };
 
     const updateQuantity = (id: string, delta: number) => {
-        setCart(prev => prev.map(item => {
+        setCart(prev => prev.map((item: any) => {
             if (item.id === id) {
                 const newQuantity = item.quantity + delta;
                 if (newQuantity > 0 && newQuantity <= item.stock) {
@@ -91,7 +91,7 @@ export default function WebPOSClient() {
     };
 
     const removeFromCart = (id: string) => {
-        setCart(prev => prev.filter(item => item.id !== id));
+        setCart(prev => prev.filter((item: any) => item.id !== id));
     };
 
     // Derived State
@@ -176,7 +176,7 @@ export default function WebPOSClient() {
                                 />
                             </div>
                             <div className="mt-2 bg-card border border-border shadow-lg rounded-xl overflow-hidden max-h-60 overflow-y-auto">
-                                {patients.map(p => (
+                                {patients.map((p: any) => (
                                     <button
                                         key={p.id}
                                         onClick={() => { setSelectedPatient(p); setShowPatientModal(false); }}
@@ -257,7 +257,7 @@ export default function WebPOSClient() {
                 <div className="flex-1 overflow-y-auto px-5 pb-5">
                     <div className="grid grid-cols-2 gap-3 pt-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                         {products.map((product) => {
-                            const cartItem = cart.find(c => c.id === product.id);
+                            const cartItem = cart.find((c: any) => c.id === product.id);
                             const isOutOfStock = product.stock <= 0;
 
                             return (

@@ -25,8 +25,8 @@ export async function getWebProducts(searchTerm: string = "") {
             }
         });
 
-        const products = inventories.map(inv => {
-            const stock = inv.batches.reduce((sum, b) => sum + b.quantity, 0);
+        const products = inventories.map((inv: any) => {
+            const stock = inv.batches.reduce((sum: number, b: any) => sum + b.quantity, 0);
             return {
                 id: inv.drug.id,
                 inventoryId: inv.id, // Keep track for deduction later
@@ -44,7 +44,7 @@ export async function getWebProducts(searchTerm: string = "") {
         }
 
         const lowerSearch = searchTerm.toLowerCase();
-        return products.filter(p =>
+        return products.filter((p: any) =>
             p.name.toLowerCase().includes(lowerSearch) ||
             (p.barcode && p.barcode.includes(searchTerm)) ||
             (p.scientificName && p.scientificName.toLowerCase().includes(lowerSearch))

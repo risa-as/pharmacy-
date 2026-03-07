@@ -19,7 +19,7 @@ export async function GET(req: Request) {
         });
 
         // Map to format expected by UI
-        const formattedBackups = backups.map(b => ({
+        const formattedBackups = backups.map((b: any) => ({
             id: b.id,
             name: b.name,
             size: b.size,

@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
                 }
             }
         });
-        const lowStockCount = inventoryItems.filter(item => {
+        const lowStockCount = inventoryItems.filter((item: any) => {
             // @ts-ignore
             const min = item.minStock || 10; // Default threshold if missing
             const totalQuantity = item.batches.reduce((sum, batch) => sum + batch.quantity, 0);

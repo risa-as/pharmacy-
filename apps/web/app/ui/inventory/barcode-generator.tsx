@@ -51,7 +51,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                     gap: 1px;
                     margin: 8px 0;
                 ">
-                    ${pattern.map(bar => `
+                    ${pattern.map((bar: any) => `
                         <div style="
                             width: ${bar === "thick" ? "3px" : "1px"};
                             height: 40px;
@@ -151,13 +151,13 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
 
                     {/* أزرار الطباعة الشائعة */}
                     <div className="flex gap-2 mt-4">
-                        {[1, 5, 10, 20].map(num => (
+                        {[1, 5, 10, 20].map((num: any) => (
                             <button
                                 key={num}
                                 onClick={() => setQuantity(num)}
                                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${quantity === num
-                                        ? "bg-primary/10 text-primary border border-primary/30"
-                                        : "bg-muted text-muted-foreground hover:bg-muted"
+                                    ? "bg-primary/10 text-primary border border-primary/30"
+                                    : "bg-muted text-muted-foreground hover:bg-muted"
                                     }`}
                             >
                                 {num}

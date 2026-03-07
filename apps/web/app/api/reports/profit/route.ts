@@ -201,7 +201,7 @@ export async function GET(req: Request) {
                 returnsCount: returnsAgg._count,
             },
             chart,
-            expensesByCategory: expensesByCategory.map(e => ({
+            expensesByCategory: expensesByCategory.map((e: any) => ({
                 category: e.category,
                 amount: Math.round(e._sum.amount || 0)
             }))

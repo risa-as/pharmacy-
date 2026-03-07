@@ -63,8 +63,8 @@ export async function GET(req: Request) {
 
         // 3. Get User Details
         const userIds = Array.from(new Set([
-            ...salesByUser.map(s => s.userId).filter(Boolean),
-            ...shiftsByUser.map(s => s.userId).filter(Boolean)
+            ...salesByUser.map((s: any) => s.userId).filter(Boolean),
+            ...shiftsByUser.map((s: any) => s.userId).filter(Boolean)
         ])) as string[];
 
         const users = await prisma.user.findMany({
@@ -73,9 +73,9 @@ export async function GET(req: Request) {
         });
 
         // 4. Combine Data
-        const report = users.map(user => {
-            const saleStats = salesByUser.find(s => s.userId === user.id);
-            const shiftStats = shiftsByUser.find(s => s.userId === user.id);
+        const report = users.map((user: any) => {
+            const saleStats = salesByUser.find((s: any) => s.userId === user.id);
+            const shiftStats = shiftsByUser.find((s: any) => s.userId === user.id);
 
             const totalSales = saleStats?._sum.total || 0;
             const transactionCount = saleStats?._count.id || 0;

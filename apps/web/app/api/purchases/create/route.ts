@@ -51,7 +51,7 @@ export async function POST(req: Request) {
                         type: 'NEW_PURCHASE',
                         title: 'طلب شراء جديد',
                         body: `تم إنشاء طلب شراء جديد بقيمة ${total.toLocaleString('ar-IQ')} د.ع`,
-                        targetUserIds: managers.map(m => m.id),
+                        targetUserIds: managers.map((m: any) => m.id),
                         branchId,
                         data: { purchaseId: purchase.id },
                     });

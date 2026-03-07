@@ -68,7 +68,7 @@ export async function createPurchase(prevState: any, formData: FormData) {
                     status: "COMPLETED",
                     // invoiceNumber: invoiceNumber // Needs schema update if we want to store external Inv#
                     items: {
-                        create: validItems.map(item => ({
+                        create: validItems.map((item: any) => ({
                             drugId: item.drugId,
                             quantity: item.quantity,
                             cost: item.cost,

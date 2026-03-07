@@ -108,7 +108,7 @@ export async function GET(req: Request) {
         });
 
         const warnings = inventories
-            .map(inv => {
+            .map((inv: any) => {
                 const margin = inv.cost > 0 ? ((inv.price - inv.cost) / inv.cost * 100) : 100;
                 return {
                     drugId: inv.drugId,
@@ -121,7 +121,7 @@ export async function GET(req: Request) {
                     isBelowMin: margin < minMargin
                 };
             })
-            .filter(w => w.isBelowMin)
+            .filter((w: any) => w.isBelowMin)
             .sort((a, b) => a.margin - b.margin);
 
         return NextResponse.json({

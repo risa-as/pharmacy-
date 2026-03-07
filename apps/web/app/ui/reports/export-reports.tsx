@@ -67,7 +67,7 @@ export default function ExportReports() {
 
             // 5. Calculate Page Breaks based on Row Heights
             const rows = Array.from(tableBodyRef.current.children) as HTMLElement[];
-            const rowHeights = rows.map(row => {
+            const rowHeights = rows.map((row: any) => {
                 // Scale DOM height to PDF height
                 // Ratio: pdfBodyTotalHeight / domBodyHeight matches bodyCanvas.height / domBodyHeight approx
                 const domBodyHeight = tableBodyRef.current!.scrollHeight;

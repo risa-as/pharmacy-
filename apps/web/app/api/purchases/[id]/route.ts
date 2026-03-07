@@ -28,14 +28,14 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         }
 
         // Fetch drug names
-        const drugIds = purchase.items.map(i => i.drugId);
+        const drugIds = purchase.items.map((i: any) => i.drugId);
         const drugs = await prisma.globalDrug.findMany({
             where: { id: { in: drugIds } },
             select: { id: true, tradeName: true, scientificName: true }
         });
-        const drugMap = new Map(drugs.map(d => [d.id, d]));
+        const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
 
-        const itemsWithNames = purchase.items.map(item => {
+        const itemsWithNames = purchase.items.map((item: any) => {
             const drug = drugMap.get(item.drugId);
             return {
                 ...item,

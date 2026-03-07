@@ -45,7 +45,7 @@ export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber 
             return;
         }
 
-        const drug = drugs.find(d => d.id === selectedDrug);
+        const drug = drugs.find((d: any) => d.id === selectedDrug);
 
         setItems([...items, {
             drugId: selectedDrug,
@@ -100,7 +100,7 @@ export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber 
                             required
                         >
                             <option value="" disabled>اختر المورد</option>
-                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                     </div>
                     <div>
@@ -115,7 +115,7 @@ export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber 
                             required
                         >
                             <option value="" disabled>اختر الفرع</option>
-                            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            {branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
                         </select>
                     </div>
                     <div>
@@ -147,7 +147,7 @@ export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber 
                             className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
                         >
                             <option value="">اختر الدواء...</option>
-                            {drugs.map(d => <option key={d.id} value={d.id}>{d.tradeName} ({d.barcode})</option>)}
+                            {drugs.map((d: any) => <option key={d.id} value={d.id}>{d.tradeName} ({d.barcode})</option>)}
                         </select>
                     </div>
                     <div>

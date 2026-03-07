@@ -195,7 +195,7 @@ export async function applyDiscount(code: string, subtotal: number, drugIds: str
 
     // Check if discount applies to the selected drugs
     if (!discount.applyToAll && discount.drugIds.length > 0) {
-        const applicable = drugIds.some(id => discount.drugIds.includes(id));
+        const applicable = drugIds.some((id: any) => discount.drugIds.includes(id));
         if (!applicable) {
             return { error: "الخصم لا ينطبق على هذه المنتجات" };
         }

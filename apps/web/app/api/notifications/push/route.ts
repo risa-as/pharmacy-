@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
         });
 
         const tokens = users
-            .map(u => u.expoPushToken)
+            .map((u: any) => u.expoPushToken)
             .filter((t): t is string => t !== null && t.length > 0);
 
         if (tokens.length === 0) {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Send via Expo Push API
-        const messages = tokens.map(token => ({
+        const messages = tokens.map((token: any) => ({
             to: token,
             title,
             body: messageBody,

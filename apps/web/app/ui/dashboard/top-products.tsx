@@ -14,7 +14,7 @@ interface TopProductsProps {
 }
 
 export default function TopProducts({ products, title = "أفضل المنتجات مبيعاً" }: TopProductsProps) {
-    const maxQuantity = Math.max(...products.map(p => p.quantity), 1);
+    const maxQuantity = Math.max(...products.map((p: any) => p.quantity), 1);
 
     return (
         <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
@@ -39,9 +39,9 @@ export default function TopProducts({ products, title = "أفضل المنتجا
                                 <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-2">
                                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${index === 0 ? "bg-warning/10 text-warning" :
-                                                index === 1 ? "bg-muted text-foreground" :
-                                                    index === 2 ? "bg-warning/10 text-warning" :
-                                                        "bg-primary/10 text-primary"
+                                            index === 1 ? "bg-muted text-foreground" :
+                                                index === 2 ? "bg-warning/10 text-warning" :
+                                                    "bg-primary/10 text-primary"
                                             }`}>
                                             {index + 1}
                                         </span>
@@ -57,9 +57,9 @@ export default function TopProducts({ products, title = "أفضل المنتجا
                                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                                     <div
                                         className={`h-full rounded-full transition-all ${index === 0 ? "bg-gradient-to-r from-yellow-400 to-yellow-500" :
-                                                index === 1 ? "bg-gradient-to-r from-gray-400 to-gray-500" :
-                                                    index === 2 ? "bg-gradient-to-r from-orange-400 to-orange-500" :
-                                                        "bg-gradient-to-r from-primary to-primary/80"
+                                            index === 1 ? "bg-gradient-to-r from-gray-400 to-gray-500" :
+                                                index === 2 ? "bg-gradient-to-r from-orange-400 to-orange-500" :
+                                                    "bg-gradient-to-r from-primary to-primary/80"
                                             }`}
                                         style={{ width: `${widthPercent}%` }}
                                     />

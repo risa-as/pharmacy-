@@ -110,15 +110,15 @@ export async function GET(req: Request) {
                 },
                 select: { drugId: true },
                 distinct: ['drugId']
-            })).map(i => i.drugId)
+            })).map((i: any) => i.drugId)
         );
 
         const deadStock = allInventory
-            .filter(inv => {
-                const stock = inv.batches.reduce((s, b) => s + b.quantity, 0);
+            .filter((inv: any) => {
+                const stock = inv.batches.reduce((s: number, b: any) => s + b.quantity, 0);
                 return stock > 0 && !soldDrugIds.has(inv.drugId);
             })
-            .map(inv => ({
+            .map((inv: any) => ({
                 drugId: inv.drugId,
                 tradeName: inv.drug?.tradeName || 'Unknown',
                 barcode: inv.drug?.barcode || '',
@@ -150,7 +150,7 @@ export async function GET(req: Request) {
             orderBy: { expiryDate: 'asc' }
         });
 
-        const nearExpiryLoss = expiringBatches.map(batch => ({
+        const nearExpiryLoss = expiringBatches.map((batch: any) => ({
             drugId: batch.inventory?.drugId,
             tradeName: batch.inventory?.drug?.tradeName || 'Unknown',
             barcode: batch.inventory?.drug?.barcode || '',

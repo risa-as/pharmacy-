@@ -107,7 +107,7 @@ export default async function AnalyticsPage({
         },
         select: { drugId: true },
         distinct: ['drugId']
-    }).then(items => items.map(i => i.drugId));
+    }).then(items => items.map((i: any) => i.drugId));
 
     // Get Drugs that are NOT in soldDrugIds
     const stagnantDrugs = await prisma.globalDrug.findMany({
@@ -139,10 +139,10 @@ export default async function AnalyticsPage({
         take: 50 // Limit to 50 for performance
     });
 
-    const stagnantItemsMapped = stagnantDrugs.map(drug => {
+    const stagnantItemsMapped = stagnantDrugs.map((drug: any) => {
         // Calculate total stock across all branches
-        const totalStock = drug.inventories.reduce((acc, inv) => {
-            return acc + inv.batches.reduce((bAcc, batch) => bAcc + batch.quantity, 0);
+        const totalStock = drug.inventories.reduce((acc: number, inv: any) => {
+            return acc + inv.batches.reduce((bAcc: number, batch: any) => bAcc + batch.quantity, 0);
         }, 0);
 
         // Last Sale Date (ever)
@@ -162,7 +162,7 @@ export default async function AnalyticsPage({
             lastSaleDate: lastSale,
             daysSinceLastSale: diffDays
         };
-    }).filter(item => item.stock > 0); // Double check stock > 0
+    }).filter((item: any) => item.stock > 0); // Double check stock > 0
 
     return (
         <div className="glass-card space-y-8 w-full p-6" dir="rtl">

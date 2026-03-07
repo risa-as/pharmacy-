@@ -51,7 +51,7 @@ export async function GET(req: Request) {
         });
 
         // Format for mobile
-        const alerts = batches.map(batch => {
+        const alerts = batches.map((batch: any) => {
             const isExpired = new Date(batch.expiryDate) < today;
             const daysDiff = Math.ceil((new Date(batch.expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 

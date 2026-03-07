@@ -162,7 +162,7 @@ export function TransferModal({ safes }: { safes: any[] }) {
                                     <Select required value={fromSafeId} onValueChange={setFromSafeId}>
                                         <SelectTrigger><SelectValue placeholder="اختر صندوق" /></SelectTrigger>
                                         <SelectContent>
-                                            {safes.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.balance.toLocaleString()})</SelectItem>)}
+                                            {safes.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.balance.toLocaleString()})</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -171,7 +171,7 @@ export function TransferModal({ safes }: { safes: any[] }) {
                                     <Select required value={toSafeId} onValueChange={setToSafeId}>
                                         <SelectTrigger><SelectValue placeholder="اختر صندوق" /></SelectTrigger>
                                         <SelectContent>
-                                            {safes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                            {safes.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -261,7 +261,7 @@ export function VoucherModal({ safes, type }: { safes: any[], type: 'IN' | 'OUT'
                                 <Select required value={safeId} onValueChange={setSafeId}>
                                     <SelectTrigger><SelectValue placeholder="اختر صندوق" /></SelectTrigger>
                                     <SelectContent>
-                                        {safes.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.balance.toLocaleString()})</SelectItem>)}
+                                        {safes.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.balance.toLocaleString()})</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>

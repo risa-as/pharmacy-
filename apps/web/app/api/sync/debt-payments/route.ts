@@ -27,7 +27,7 @@ export async function GET(request: Request) {
         });
 
         // Map to return just the necessary info
-        const payload = payments.map(p => ({
+        const payload = payments.map((p: any) => ({
             id: p.id,
             saleId: p.saleId,
             amount: p.amount,

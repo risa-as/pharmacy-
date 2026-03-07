@@ -86,14 +86,14 @@ async function getDashboardData(isAdmin: boolean, organizationId?: string, branc
         }),
     ]);
 
-    const topDrugIds = topDrugs.map(d => d.drugId);
+    const topDrugIds = topDrugs.map((d: any) => d.drugId);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: topDrugIds } },
         select: { id: true, tradeName: true }
     });
-    const topDrugsWithNames = topDrugs.map(d => ({
+    const topDrugsWithNames = topDrugs.map((d: any) => ({
         ...d,
-        name: drugs.find(dr => dr.id === d.drugId)?.tradeName || 'غير معروف'
+        name: drugs.find((dr: any) => dr.id === d.drugId)?.tradeName || 'غير معروف'
     }));
 
     // 7-day sales chart data

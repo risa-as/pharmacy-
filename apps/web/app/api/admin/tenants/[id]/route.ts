@@ -84,7 +84,7 @@ export async function DELETE(
         // Delete associated records in a transaction to maintain referential integrity.
         await prisma.$transaction(async (tx: any) => {
             // Find all branches for this organization
-            const branchIds = organization.branches.map(b => b.id);
+            const branchIds = organization.branches.map((b: any) => b.id);
 
             // 1. Delete associated device licenses
             if (branchIds.length > 0) {

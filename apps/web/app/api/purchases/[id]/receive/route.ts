@@ -35,7 +35,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         // Transaction to update inventory and purchase status
         await prisma.$transaction(async (tx) => {
             for (const receivedItem of items) {
-                const purchaseItem = purchase.items.find(i => i.id === receivedItem.itemId);
+                const purchaseItem = purchase.items.find((i: any) => i.id === receivedItem.itemId);
                 if (!purchaseItem) continue;
 
                 // Find or Create Inventory? 

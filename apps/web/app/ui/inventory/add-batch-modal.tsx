@@ -79,7 +79,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                             className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                         >
                             <option value="">اختر مورداً...</option>
-                            {suppliers.map(s => (
+                            {suppliers.map((s: any) => (
                                 <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
                         </select>

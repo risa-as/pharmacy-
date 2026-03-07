@@ -36,8 +36,8 @@ export default async function PrescriptionsPage() {
         CANCELLED: "ملغاة",
     };
 
-    const pending = prescriptions.filter(p => p.status === "PENDING").length;
-    const dispensed = prescriptions.filter(p => p.status === "DISPENSED").length;
+    const pending = prescriptions.filter((p: any) => p.status === "PENDING").length;
+    const dispensed = prescriptions.filter((p: any) => p.status === "DISPENSED").length;
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>

@@ -55,7 +55,7 @@ export async function createPrescription(prevState: any, formData: FormData) {
                 clinicName: clinicName || null,
                 notes: notes || null,
                 items: {
-                    create: items.map(item => ({
+                    create: items.map((item: any) => ({
                         drugId: item.drugId,
                         quantity: item.quantity,
                         dosage: item.dosage || null,
@@ -89,8 +89,8 @@ export async function dispensePrescription(prescriptionId: string, itemIds: stri
         });
 
         if (prescription) {
-            const allDispensed = prescription.items.every(item => item.isDispensed);
-            const someDispensed = prescription.items.some(item => item.isDispensed);
+            const allDispensed = prescription.items.every((item: any) => item.isDispensed);
+            const someDispensed = prescription.items.some((item: any) => item.isDispensed);
 
             let newStatus: "PENDING" | "PARTIALLY_DISPENSED" | "DISPENSED" = "PENDING";
             if (allDispensed) {

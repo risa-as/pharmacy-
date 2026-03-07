@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 2. Calculate new prices
-        const updates = inventories.map(inv => {
+        const updates = inventories.map((inv: any) => {
             let newPrice = inv.price;
 
             if (adjustmentType === "PERCENTAGE") {
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            updatedCount: updates.filter(u => u.oldPrice !== u.newPrice).length
+            updatedCount: updates.filter((u: any) => u.oldPrice !== u.newPrice).length
         });
 
     } catch (error: any) {

@@ -77,7 +77,7 @@ export async function POST(req: Request) {
             const results = fuse.search(word);
 
             // Take top 2 matches for each word if score is good enough
-            const topMatches = results.filter(r => r.score && r.score < 0.4).slice(0, 2);
+            const topMatches = results.filter((r: any) => r.score && r.score < 0.4).slice(0, 2);
 
             for (const match of topMatches) {
                 const item = match.item as any;

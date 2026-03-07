@@ -101,7 +101,7 @@ export default function PermissionsEditor({ users }: { users: User[] }) {
                     <Shield className="w-4 h-4" /> اختر مستخدم
                 </h2>
                 <div className="space-y-2 max-h-[70vh] overflow-y-auto">
-                    {users.map(user => (
+                    {users.map((user: any) => (
                         <button
                             key={user.id}
                             onClick={() => selectUser(user)}
@@ -161,14 +161,14 @@ export default function PermissionsEditor({ users }: { users: User[] }) {
                                         <span className="font-medium text-foreground">{category}</span>
                                         <div className="flex items-center gap-2">
                                             <span className="text-xs text-muted-foreground">
-                                                {keys.filter(k => perms[k]).length}/{keys.length}
+                                                {keys.filter((k: keyof UserPermissions) => perms[k]).length}/{keys.length}
                                             </span>
                                             {expandedCategory === category ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                         </div>
                                     </button>
                                     {expandedCategory === category && (
                                         <div className="p-3 space-y-2">
-                                            {keys.map(key => (
+                                            {keys.map((key: keyof UserPermissions) => (
                                                 <label key={key}
                                                     className="flex items-center justify-between p-2 rounded-lg hover:bg-muted cursor-pointer">
                                                     <span className="text-sm text-foreground">{PERMISSION_LABELS[key].label}</span>

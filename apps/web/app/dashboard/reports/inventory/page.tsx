@@ -32,14 +32,14 @@ export default async function InventoryReportPage({
 
     // Calculate stats
     const totalItems = inventory.length;
-    const inventoryWithQuantity = inventory.map(item => ({
+    const inventoryWithQuantity = inventory.map((item: any) => ({
         ...item,
         currentQuantity: calculateQuantity(item)
     }));
 
-    const lowStock = inventoryWithQuantity.filter(i => i.currentQuantity <= i.minStock).length;
-    const outOfStock = inventoryWithQuantity.filter(i => i.currentQuantity === 0).length;
-    const healthyStock = inventoryWithQuantity.filter(i => i.currentQuantity > i.minStock).length;
+    const lowStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity <= i.minStock).length;
+    const outOfStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity === 0).length;
+    const healthyStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity > i.minStock).length;
     const totalValue = inventoryWithQuantity.reduce((acc, item) => acc + (item.currentQuantity * item.price), 0);
 
     // Check for expiring batches
@@ -47,7 +47,7 @@ export default async function InventoryReportPage({
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
     const expiringBatches = inventory.flatMap(item =>
-        item.batches.filter(batch => new Date(batch.expiryDate) <= thirtyDaysFromNow)
+        item.batches.filter((batch: any) => new Date(batch.expiryDate) <= thirtyDaysFromNow)
     ).length;
 
     return (

@@ -36,13 +36,13 @@ export async function GET() {
         });
 
         // جلب الأدوية
-        const drugIds = inventory.map(i => i.drugId);
+        const drugIds = inventory.map((i: any) => i.drugId);
         const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
         const drugs = await prisma.globalDrug.findMany({
             where: { id: { in: uniqueDrugIds } },
             select: { id: true, tradeName: true, barcode: true }
         });
-        const drugMap = new Map(drugs.map(d => [d.id, d]));
+        const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
 
         // إنشاء PDF
         const doc = new jsPDF();
@@ -58,8 +58,8 @@ export async function GET() {
 
         // إحصائيات
         const totalItems = inventory.length;
-        const lowStockItems = inventory.filter(i => {
-            const totalQty = i.batches.reduce((acc: number, b) => acc + b.quantity, 0);
+        const lowStockItems = inventory.filter((i: any) => {
+            const totalQty = i.batches.reduce((acc: number, b: any) => acc + b.quantity, 0);
             return totalQty <= i.minStock;
         }).length;
 

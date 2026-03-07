@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
                             createdAt: new Date(ret.createdAt),
                             notes: ret.notes || null,
                             items: {
-                                create: ret.items.map(item => ({
+                                create: ret.items.map((item: any) => ({
                                     drugId: item.drugId,
                                     quantity: item.quantity,
                                     price: item.price

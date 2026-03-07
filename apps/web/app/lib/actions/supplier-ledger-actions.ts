@@ -22,7 +22,7 @@ export async function getSuppliersWithBalances() {
         orderBy: { name: 'asc' }
     });
 
-    return suppliers.map(s => ({
+    return suppliers.map((s: any) => ({
         id: s.id,
         name: s.name,
         phone: s.phone,
@@ -112,7 +112,7 @@ export async function getSupplierLedger(supplierId: string) {
     };
 
     const entries: LedgerEntry[] = [
-        ...purchases.map(p => ({
+        ...purchases.map((p: any) => ({
             id: p.id,
             type: 'purchase' as const,
             date: p.createdAt,
@@ -121,7 +121,7 @@ export async function getSupplierLedger(supplierId: string) {
             branch: p.branch?.name || '',
             reference: p.invoiceNumber,
         })),
-        ...payments.map(p => ({
+        ...payments.map((p: any) => ({
             id: p.id,
             type: 'payment' as const,
             date: p.date,

@@ -35,7 +35,7 @@ export async function GET(req: Request) {
                     minStock: inv.minStock || 0,
                     maxStock: inv.maxStock || 100,
                     stock: totalStock,
-                    batches: inv.batches.map(b => ({
+                    batches: inv.batches.map((b: any) => ({
                         id: b.id,
                         batchNumber: b.batchNumber,
                         quantity: b.quantity,

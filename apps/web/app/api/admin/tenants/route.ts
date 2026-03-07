@@ -24,7 +24,7 @@ export async function GET() {
             orderBy: { createdAt: 'desc' }
         });
 
-        const tenants = organizations.map(org => {
+        const tenants = organizations.map((org: any) => {
             // Find the main owner/admin from the first branch
             const owner = org.branches[0]?.users[0];
             return {

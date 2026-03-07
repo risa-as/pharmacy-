@@ -23,11 +23,11 @@ export default async function ShortagesPage() {
     });
 
     const shortages = inventory
-        .map(item => ({
+        .map((item: any) => ({
             ...item,
-            currentStock: item.batches.reduce((sum, b) => sum + b.quantity, 0),
+            currentStock: item.batches.reduce((sum: number, b: any) => sum + b.quantity, 0),
         }))
-        .filter(item => item.currentStock <= item.minStock);
+        .filter((item: any) => item.currentStock <= item.minStock);
 
     return (
         <div className="glass-card w-full p-6">
@@ -46,13 +46,13 @@ export default async function ShortagesPage() {
                 </div>
                 <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
                     <div className="text-3xl font-bold text-destructive">
-                        {shortages.filter(s => s.currentStock === 0).length}
+                        {shortages.filter((s: any) => s.currentStock === 0).length}
                     </div>
                     <div className="text-sm text-destructive">نفدت بالكامل</div>
                 </div>
                 <div className="bg-warning/10 rounded-xl border border-orange-200 p-4">
                     <div className="text-3xl font-bold text-warning">
-                        {shortages.filter(s => s.currentStock > 0 && s.currentStock <= s.minStock).length}
+                        {shortages.filter((s: any) => s.currentStock > 0 && s.currentStock <= s.minStock).length}
                     </div>
                     <div className="text-sm text-warning">أقل من الحد الأدنى</div>
                 </div>
