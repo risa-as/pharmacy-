@@ -113,7 +113,7 @@ export async function GET(req: Request) {
                 !pendingDrugIds.has(item.drugId) &&
                 (item.currentQuantity <= item.minStock || item.daysUntilStockout <= (LEAD_TIME_DAYS + SAFETY_STOCK_DAYS))
             )
-            .sort((a, b) => a.daysUntilStockout - b.daysUntilStockout);
+            .sort((a: any, b: any) => a.daysUntilStockout - b.daysUntilStockout);
 
         return NextResponse.json(needsReorder);
     } catch (error) {

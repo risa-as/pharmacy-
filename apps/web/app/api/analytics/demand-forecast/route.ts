@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
         });
 
         // Sort by urgency
-        forecasts.sort((a, b) => {
+        forecasts.sort((a: any, b: any) => {
             const urgencyOrder = { critical: 0, warning: 1, normal: 2 };
             return (urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 2) - (urgencyOrder[b.urgency as keyof typeof urgencyOrder] || 2);
         });

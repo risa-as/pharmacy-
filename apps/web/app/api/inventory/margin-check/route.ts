@@ -122,7 +122,7 @@ export async function GET(req: Request) {
                 };
             })
             .filter((w: any) => w.isBelowMin)
-            .sort((a, b) => a.margin - b.margin);
+            .sort((a: any, b: any) => a.margin - b.margin);
 
         return NextResponse.json({
             warnings,

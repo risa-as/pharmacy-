@@ -135,7 +135,7 @@ export async function getSupplierLedger(supplierId: string) {
     ];
 
     // ترتيب بالتاريخ (الأقدم أولاً لحساب الرصيد التراكمي)
-    entries.sort((a, b) => {
+    entries.sort((a: any, b: any) => {
         const dayA = a.date.toISOString().split('T')[0];
         const dayB = b.date.toISOString().split('T')[0];
 

@@ -90,7 +90,7 @@ export async function GET(req: Request) {
         }));
 
         // Sort by revenue descending
-        comparison.sort((a, b) => b.revenue - a.revenue);
+        comparison.sort((a: any, b: any) => b.revenue - a.revenue);
 
         return NextResponse.json({ comparison, period, startDate, endDate });
     } catch (error: any) {

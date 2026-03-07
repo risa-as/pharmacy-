@@ -79,7 +79,7 @@ export async function GET(req: Request) {
             }
         }
 
-        const profitReport = Array.from(profitByDrug.values()).sort((a, b) => b.profitMargin - a.profitMargin);
+        const profitReport = Array.from(profitByDrug.values()).sort((a: any, b: any) => b.profitMargin - a.profitMargin);
 
         // Summary totals
         const totalRevenue = profitReport.reduce((sum, p) => sum + p.totalRevenue, 0);
