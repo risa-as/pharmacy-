@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -8,7 +8,7 @@ function createPrismaClient(): PrismaClient {
     });
 
     // Retry middleware: handles Neon cold-start (P1001) transparently
-    client.$use(async (params: Prisma.MiddlewareParams, next: (params: Prisma.MiddlewareParams) => Promise<any>) => {
+    client.$use(async (params: any, next: (params: any) => Promise<any>) => {
         const MAX_RETRIES = 3;
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {
