@@ -41,7 +41,7 @@ async function getInventory(page: number, query: string, tenantBranchWhere: any,
     ]);
 
     return {
-        items: inventory.map(item => ({
+        items: inventory.map((item: any) => ({
             ...item,
             currentStock: item.batches.reduce((acc: any, b: any) => acc + b.quantity, 0)
         })),

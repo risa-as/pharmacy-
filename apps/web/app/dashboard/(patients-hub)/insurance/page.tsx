@@ -41,7 +41,7 @@ export default async function InsurancePage() {
                 </div>
                 <div className="bg-success/10 rounded-xl border border-green-200 p-4">
                     <div className="text-3xl font-bold text-success">
-                        {companies.filter(c => c.isActive).length}
+                        {companies.filter((c: any) => c.isActive).length}
                     </div>
                     <div className="text-sm text-success">نشطة</div>
                 </div>

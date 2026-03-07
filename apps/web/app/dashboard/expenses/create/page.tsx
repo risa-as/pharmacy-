@@ -73,7 +73,7 @@ export default function CreateExpensePage() {
                             <SelectValue placeholder="اختر الفئة" />
                         </SelectTrigger>
                         <SelectContent>
-                            {CATEGORIES.map(c => (
+                            {CATEGORIES.map((c: any) => (
                                 <SelectItem key={c} value={c}>{c}</SelectItem>
                             ))}
                         </SelectContent>

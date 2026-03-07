@@ -19,8 +19,8 @@ export default async function InsurancePoliciesPage() {
         },
     });
 
-    const active = policies.filter(p => new Date(p.expiryDate) > new Date()).length;
-    const expired = policies.filter(p => new Date(p.expiryDate) <= new Date()).length;
+    const active = policies.filter((p: any) => new Date(p.expiryDate) > new Date()).length;
+    const expired = policies.filter((p: any) => new Date(p.expiryDate) <= new Date()).length;
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>

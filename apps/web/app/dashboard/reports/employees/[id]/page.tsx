@@ -65,7 +65,7 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
         return acc;
     }, {});
 
-    const chartData = Object.keys(dailyData).map(date => ({
+    const chartData = Object.keys(dailyData).map((date: any) => ({
         date,
         total: dailyData[date]
     })).sort((a: any, b: any) => a.date.localeCompare(b.date));

@@ -37,12 +37,12 @@ export default async function SalesPage({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const todaySales = sales.filter(s => new Date(s.createdAt) >= today);
+    const todaySales = sales.filter((s: any) => new Date(s.createdAt) >= today);
     const todayTotal = todaySales.reduce((acc: any, s: any) => acc + s.total, 0);
     const totalItems = todaySales.reduce((acc: any, s: any) => acc + s.items.length, 0);
 
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthSales = sales.filter(s => new Date(s.createdAt) >= thisMonth);
+    const monthSales = sales.filter((s: any) => new Date(s.createdAt) >= thisMonth);
     const monthTotal = monthSales.reduce((acc: any, s: any) => acc + s.total, 0);
 
     return (

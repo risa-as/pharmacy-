@@ -14,8 +14,8 @@ export default async function DiscountsPage() {
     });
 
     const now = new Date();
-    const active = discounts.filter(d => d.isActive && new Date(d.endDate) > now).length;
-    const expired = discounts.filter(d => new Date(d.endDate) <= now).length;
+    const active = discounts.filter((d: any) => d.isActive && new Date(d.endDate) > now).length;
+    const expired = discounts.filter((d: any) => new Date(d.endDate) <= now).length;
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>

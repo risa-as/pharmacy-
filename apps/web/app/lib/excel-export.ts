@@ -22,9 +22,9 @@ export function exportToExcel(
     sheetName: string = 'Sheet1'
 ) {
     // Prepare headers and rows
-    const headers = columns.map(c => c.header);
-    const rows = data.map(row =>
-        columns.map(col => {
+    const headers = columns.map((c: any) => c.header);
+    const rows = data.map((row: any) =>
+        columns.map((col: any) => {
             const value = row[col.key];
             // Format dates
             if (value instanceof Date) {
@@ -38,7 +38,7 @@ export function exportToExcel(
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
     // Set column widths
-    ws['!cols'] = columns.map(col => ({
+    ws['!cols'] = columns.map((col: any) => ({
         wch: col.width || Math.max(col.header.length * 2, 12)
     }));
 
@@ -67,9 +67,9 @@ export function exportToExcelMultiSheet(
     const wb = XLSX.utils.book_new();
 
     for (const sheet of sheets) {
-        const headers = sheet.columns.map(c => c.header);
-        const rows = sheet.data.map(row =>
-            sheet.columns.map(col => {
+        const headers = sheet.columns.map((c: any) => c.header);
+        const rows = sheet.data.map((row: any) =>
+            sheet.columns.map((col: any) => {
                 const value = row[col.key];
                 if (value instanceof Date) {
                     return value.toLocaleDateString('ar-IQ');
@@ -79,7 +79,7 @@ export function exportToExcelMultiSheet(
         );
 
         const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-        ws['!cols'] = sheet.columns.map(col => ({
+        ws['!cols'] = sheet.columns.map((col: any) => ({
             wch: col.width || Math.max(col.header.length * 2, 12)
         }));
         ws['!dir'] = 'rtl' as any;

@@ -46,7 +46,7 @@ export default async function InventoryReportPage({
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-    const expiringBatches = inventory.flatMap(item =>
+    const expiringBatches = inventory.flatMap((item: any) =>
         item.batches.filter((batch: any) => new Date(batch.expiryDate) <= thirtyDaysFromNow)
     ).length;
 

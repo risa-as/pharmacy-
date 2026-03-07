@@ -120,7 +120,7 @@ export default function NotificationsPage() {
                             <select value={branchId} onChange={(e) => setBranchId(e.target.value)}
                                 className="mt-2 border rounded-lg px-3 py-2 text-sm bg-muted w-full">
                                 <option value="">اختر فرع</option>
-                                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                {branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
                             </select>
                         )}
                     </div>

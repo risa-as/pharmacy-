@@ -159,7 +159,7 @@ export default function AdminLicensesPage() {
             });
             if (res.ok) {
                 const updated = await res.json();
-                setLicenses(licenses.map(l => l.id === updated.id ? updated : l));
+                setLicenses(licenses.map((l: any) => l.id === updated.id ? updated : l));
             }
         } catch (e) {
             console.error('Failed to toggle license:', e);
@@ -180,7 +180,7 @@ export default function AdminLicensesPage() {
             });
             if (res.ok) {
                 const updated = await res.json();
-                setLicenses(licenses.map(l => l.id === updated.id ? updated : l));
+                setLicenses(licenses.map((l: any) => l.id === updated.id ? updated : l));
             }
         } catch (e) {
             console.error('Failed to unbind hardware:', e);
@@ -196,7 +196,7 @@ export default function AdminLicensesPage() {
         try {
             const res = await fetch(`/api/admin/licenses/${license.id}`, { method: 'DELETE' });
             if (res.ok) {
-                setLicenses(licenses.filter(l => l.id !== license.id));
+                setLicenses(licenses.filter((l: any) => l.id !== license.id));
             }
         } catch (e) {
             console.error('Failed to delete license:', e);
@@ -225,9 +225,9 @@ export default function AdminLicensesPage() {
     };
 
     // Stats
-    const totalActive = licenses.filter(l => l.isActive && !isExpired(l.expiresAt)).length;
-    const totalBound = licenses.filter(l => l.hardwareId).length;
-    const totalExpired = licenses.filter(l => isExpired(l.expiresAt)).length;
+    const totalActive = licenses.filter((l: any) => l.isActive && !isExpired(l.expiresAt)).length;
+    const totalBound = licenses.filter((l: any) => l.hardwareId).length;
+    const totalExpired = licenses.filter((l: any) => isExpired(l.expiresAt)).length;
 
     const inputClass = "w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary/50 outline-none transition-all";
 
@@ -349,7 +349,7 @@ export default function AdminLicensesPage() {
                                             className={inputClass}
                                         >
                                             <option value="">اختر المؤسسة...</option>
-                                            {organizations.map(org => (
+                                            {organizations.map((org: any) => (
                                                 <option key={org.id} value={org.id}>{org.name}</option>
                                             ))}
                                         </select>
@@ -377,7 +377,7 @@ export default function AdminLicensesPage() {
                                             onChange={e => setSelectedDuration(Number(e.target.value))}
                                             className={inputClass}
                                         >
-                                            {durationOptions.map(opt => (
+                                            {durationOptions.map((opt: any) => (
                                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                                             ))}
                                         </select>
@@ -428,7 +428,7 @@ export default function AdminLicensesPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {licenses.map(license => {
+                            {licenses.map((license: any) => {
                                 const expired = isExpired(license.expiresAt);
                                 const isLoading = actionLoading === license.id;
 

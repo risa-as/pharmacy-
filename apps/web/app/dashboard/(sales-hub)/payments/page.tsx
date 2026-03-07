@@ -67,11 +67,11 @@ export default async function PaymentsPage({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const todayPayments = payments.filter(p => new Date(p.createdAt) >= today);
+    const todayPayments = payments.filter((p: any) => new Date(p.createdAt) >= today);
     const totalToday = todayPayments.reduce((acc: any, p: any) => acc + p.amount, 0);
-    const cashToday = todayPayments.filter(p => p.method === "CASH").reduce((acc: any, p: any) => acc + p.amount, 0);
-    const cardToday = todayPayments.filter(p => p.method === "CARD").reduce((acc: any, p: any) => acc + p.amount, 0);
-    const zainCashToday = todayPayments.filter(p => p.method === "ZAIN_CASH").reduce((acc: any, p: any) => acc + p.amount, 0);
+    const cashToday = todayPayments.filter((p: any) => p.method === "CASH").reduce((acc: any, p: any) => acc + p.amount, 0);
+    const cardToday = todayPayments.filter((p: any) => p.method === "CARD").reduce((acc: any, p: any) => acc + p.amount, 0);
+    const zainCashToday = todayPayments.filter((p: any) => p.method === "ZAIN_CASH").reduce((acc: any, p: any) => acc + p.amount, 0);
 
     return (
         <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>

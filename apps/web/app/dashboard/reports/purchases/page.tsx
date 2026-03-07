@@ -34,7 +34,7 @@ export default async function PurchasesReportPage() {
         spendingByDay.set(d.toLocaleDateString('en-GB'), 0);
     }
 
-    purchases.forEach(p => {
+    purchases.forEach((p: any) => {
         const key = new Date(p.createdAt).toLocaleDateString('en-GB');
         spendingByDay.set(key, (spendingByDay.get(key) || 0) + p.total);
     });

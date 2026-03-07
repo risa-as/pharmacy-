@@ -44,7 +44,7 @@ export default function TenantsPage() {
 
     const handlePlanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const planId = e.target.value;
-        const selectedPlan = plans.find(p => p.id === planId);
+        const selectedPlan = plans.find((p: any) => p.id === planId);
 
         setForm(prev => ({
             ...prev,
@@ -132,7 +132,7 @@ export default function TenantsPage() {
 
     const handleEditClick = (tenant: any) => {
         setEditingId(tenant.id);
-        const plan = plans.find(p => p.id === tenant.planId) || plans[0];
+        const plan = plans.find((p: any) => p.id === tenant.planId) || plans[0];
         setForm({
             name: tenant.name,
             ownerName: '', // Not editable
@@ -154,7 +154,7 @@ export default function TenantsPage() {
         try {
             const res = await fetch(`/api/admin/tenants/${tenant.id}`, { method: 'DELETE' });
             if (res.ok) {
-                setTenants(tenants.filter(t => t.id !== tenant.id));
+                setTenants(tenants.filter((t: any) => t.id !== tenant.id));
             } else {
                 const data = await res.json();
                 alert(data.error || 'حدث خطأ أثناء الحذف');
@@ -217,7 +217,7 @@ export default function TenantsPage() {
                             className="border rounded-lg px-3 py-2 text-sm bg-muted" />
                         <select value={form.plan} onChange={handlePlanChange}
                             className="border rounded-lg px-3 py-2 text-sm bg-muted col-span-1 md:col-span-1">
-                            {plans.map(p => (
+                            {plans.map((p: any) => (
                                 <option key={p.id} value={p.id}>
                                     {p.name} - {p.price === 0 ? 'مجاني' : `$${p.price}/شهر`}
                                 </option>
@@ -272,8 +272,8 @@ export default function TenantsPage() {
 
             {/* Plans Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                {plans.map(plan => {
-                    const count = tenants.filter(t => t.planId === plan.id).length;
+                {plans.map((plan: any) => {
+                    const count = tenants.filter((t: any) => t.planId === plan.id).length;
                     return (
                         <div key={plan.id} className={`rounded-xl border p-4 bg-muted/30`}>
                             <div className="text-lg mb-1">{plan.price === 0 ? '🆓' : plan.price > 100 ? '🏢' : '🔹'}</div>
@@ -304,8 +304,8 @@ export default function TenantsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {tenants.map(t => {
-                                const plan = t.plan || plans.find(p => p.id === t.planId) || { name: 'غير محدد', price: 0 };
+                            {tenants.map((t: any) => {
+                                const plan = t.plan || plans.find((p: any) => p.id === t.planId) || { name: 'غير محدد', price: 0 };
                                 return (
                                     <tr key={t.id} className="border-b hover:bg-muted/50">
                                         <td className="py-3 px-4">

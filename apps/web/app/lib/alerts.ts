@@ -28,13 +28,13 @@ export async function getLowStockAlerts(branchId?: string, organizationId?: stri
     });
 
     // جلب الأدوية
-    const drugIds = inventory.map(i => i.drugId);
+    const drugIds = inventory.map((i: any) => i.drugId);
     const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map(d => [d.id, d]));
+    const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
 
     const alerts: AlertItem[] = [];
 
@@ -85,13 +85,13 @@ export async function getExpiryAlerts(branchId?: string, organizationId?: string
     });
 
     // جلب الأدوية
-    const drugIds = batches.map(b => b.inventory.drugId);
+    const drugIds = batches.map((b: any) => b.inventory.drugId);
     const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map(d => [d.id, d]));
+    const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
 
     const alerts: AlertItem[] = [];
 
@@ -132,10 +132,10 @@ export async function getAlertStats(branchId?: string, organizationId?: string) 
 
     return {
         total: alerts.length,
-        lowStock: alerts.filter(a => a.type === 'low_stock').length,
-        expired: alerts.filter(a => a.type === 'expired').length,
-        expiring: alerts.filter(a => a.type === 'expiring').length,
-        danger: alerts.filter(a => a.severity === 'danger').length,
-        warning: alerts.filter(a => a.severity === 'warning').length
+        lowStock: alerts.filter((a: any) => a.type === 'low_stock').length,
+        expired: alerts.filter((a: any) => a.type === 'expired').length,
+        expiring: alerts.filter((a: any) => a.type === 'expiring').length,
+        danger: alerts.filter((a: any) => a.severity === 'danger').length,
+        warning: alerts.filter((a: any) => a.severity === 'warning').length
     };
 }

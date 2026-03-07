@@ -74,7 +74,7 @@ export default function MarketplacePage() {
                 </div>
             ) : listings.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {listings.map(listing => (
+                    {listings.map((listing: any) => (
                         <div key={listing.id} className="bg-card rounded-xl border shadow-sm p-5 hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="font-bold text-foreground">{listing.drug?.tradeName}</h3>

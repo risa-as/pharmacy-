@@ -31,19 +31,19 @@ export default async function ExpiredDamagedPage() {
     });
 
     // Categorize
-    const expired = batches.filter(b => new Date(b.expiryDate) < now);
-    const expiringSoon = batches.filter(b => {
+    const expired = batches.filter((b: any) => new Date(b.expiryDate) < now);
+    const expiringSoon = batches.filter((b: any) => {
         const exp = new Date(b.expiryDate);
         return exp >= now && exp <= thirtyDaysFromNow;
     });
-    const safe = batches.filter(b => new Date(b.expiryDate) > thirtyDaysFromNow);
+    const safe = batches.filter((b: any) => new Date(b.expiryDate) > thirtyDaysFromNow);
 
     const expiredValue = expired.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
     const expiringSoonValue = expiringSoon.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
 
     const fmt = (v: number) => new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 0 }).format(v);
 
-    const allAlerts = [...expired.map(b => ({ ...b, status: "expired" as const })), ...expiringSoon.map(b => ({ ...b, status: "expiring" as const }))];
+    const allAlerts = [...expired.map((b: any) => ({ ...b, status: "expired" as const })), ...expiringSoon.map((b: any) => ({ ...b, status: "expiring" as const }))];
 
     return (
         <div className="glass-card w-full p-6">

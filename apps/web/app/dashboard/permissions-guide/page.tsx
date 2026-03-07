@@ -360,7 +360,7 @@ const categories: Category[] = [
 
 /* ═══════ Role defaults (mirrors permissions.ts) ═══════ */
 const roleDefaults: Record<string, Record<string, boolean>> = {
-    ADMIN: Object.fromEntries(categories.flatMap(c => c.permissions.map(p => [p.key, true]))),
+    ADMIN: Object.fromEntries(categories.flatMap((c: any) => c.permissions.map((p: any) => [p.key, true]))),
     PHARMACIST: {
         canSell: true, canApplyDiscount: true, canViewSales: true, canDeleteSale: false,
         canProcessReturn: true, canViewReturns: true,
@@ -410,7 +410,7 @@ export default function PermissionsGuidePage() {
 
     const totalPerms = categories.reduce((sum: any, c: any) => sum + c.permissions.length, 0);
     const pagePerms = categories.reduce(
-        (sum, c) => sum + c.permissions.filter(p => !p.actionOnly).length, 0
+        (sum, c) => sum + c.permissions.filter((p: any) => !p.actionOnly).length, 0
     );
 
     if (!mounted) return null;
@@ -513,7 +513,7 @@ export default function PermissionsGuidePage() {
                     const CatIcon = cat.icon;
                     const isExpanded = expandedCategory === cat.id;
                     const enabledCount = selectedRole !== "ALL"
-                        ? cat.permissions.filter(p => roleDefaults[selectedRole]?.[p.key]).length
+                        ? cat.permissions.filter((p: any) => roleDefaults[selectedRole]?.[p.key]).length
                         : cat.permissions.length;
 
                     return (
@@ -548,7 +548,7 @@ export default function PermissionsGuidePage() {
                                 {selectedRole === "ALL" && !isExpanded && (
                                     <div className="hidden sm:flex gap-1.5">
                                         {Object.entries(roleLabels).map(([role, info]: any) => {
-                                            const enabled = cat.permissions.filter(p => roleDefaults[role]?.[p.key]).length;
+                                            const enabled = cat.permissions.filter((p: any) => roleDefaults[role]?.[p.key]).length;
                                             return (
                                                 <span key={role} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${info.bg} ${info.color}`}>
                                                     {info.name}: {enabled}/{cat.permissions.length}

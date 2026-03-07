@@ -58,7 +58,7 @@ function parseCSV(text: string): ImportRow[] {
 
     if (nameIdx === -1) return [];
 
-    return lines.slice(1).filter(line => line.trim()).map((line: any) => {
+    return lines.slice(1).filter((line: any) => line.trim()).map((line: any) => {
         const values = line.split(",").map((v: any) => v.trim().replace(/^"|"$/g, ""));
         return {
             name: values[nameIdx] || "",

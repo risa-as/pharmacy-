@@ -65,8 +65,8 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
         }
 
         const orderItems = items
-            .filter(item => selectedItems.has(item.inventoryId))
-            .map(item => ({
+            .filter((item: any) => selectedItems.has(item.inventoryId))
+            .map((item: any) => ({
                 drugId: item.drugId,
                 quantity: item.suggestedQty,
                 cost: item.cost
@@ -122,7 +122,7 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="ALL">كل الفروع</SelectItem>
-                                    {branches.map(b => (
+                                    {branches.map((b: any) => (
                                         <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                                     ))}
                                 </SelectContent>
@@ -137,7 +137,7 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
                                 <SelectValue placeholder="اختر المورد" />
                             </SelectTrigger>
                             <SelectContent>
-                                {suppliers.map(s => (
+                                {suppliers.map((s: any) => (
                                     <SelectItem key={s.id} value={s.id}>{s.name || 'مورد بدون اسم'}</SelectItem>
                                 ))}
                             </SelectContent>
@@ -179,7 +179,7 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
                                     className="rounded border-border text-primary focus:ring-blue-500"
                                     disabled={currentBranchId === "ALL"}
                                     onChange={(e) => {
-                                        if (e.target.checked) setSelectedItems(new Set(items.map(i => i.inventoryId)));
+                                        if (e.target.checked) setSelectedItems(new Set(items.map((i: any) => i.inventoryId)));
                                         else setSelectedItems(new Set());
                                     }}
                                 />

@@ -46,9 +46,9 @@ export default function BarcodePrintPage() {
 
     const addItem = (drug: Drug) => {
         setItems(prev => {
-            const existing = prev.find(i => i.drug.barcode === drug.barcode);
+            const existing = prev.find((i: any) => i.drug.barcode === drug.barcode);
             if (existing) {
-                return prev.map(i => i.drug.barcode === drug.barcode ? { ...i, copies: i.copies + 1 } : i);
+                return prev.map((i: any) => i.drug.barcode === drug.barcode ? { ...i, copies: i.copies + 1 } : i);
             }
             return [...prev, { drug, copies: 1 }];
         });
@@ -57,13 +57,13 @@ export default function BarcodePrintPage() {
     };
 
     const updateCopies = (barcode: string, delta: number) => {
-        setItems(prev => prev.map(i =>
+        setItems(prev => prev.map((i: any) =>
             i.drug.barcode === barcode ? { ...i, copies: Math.max(1, i.copies + delta) } : i
         ));
     };
 
     const removeItem = (barcode: string) => {
-        setItems(prev => prev.filter(i => i.drug.barcode !== barcode));
+        setItems(prev => prev.filter((i: any) => i.drug.barcode !== barcode));
     };
 
     const handlePrint = () => {
@@ -109,7 +109,7 @@ export default function BarcodePrintPage() {
             <body>
                 ${labelsHTML}
                 <script>
-                    document.querySelectorAll('.barcode').forEach(svg => {
+                    document.querySelectorAll('.barcode').forEach((svg: any) => {
                         try {
                             JsBarcode(svg, svg.dataset.barcode, {
                                 format: "CODE128",

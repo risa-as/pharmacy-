@@ -45,7 +45,7 @@ export default async function SalesReportPage({
         salesByDay.set(dayName, 0);
     }
 
-    sales.forEach(sale => {
+    sales.forEach((sale: any) => {
         const dayName = dayNames[new Date(sale.createdAt).getDay()];
         const current = salesByDay.get(dayName) || 0;
         salesByDay.set(dayName, current + sale.total);
@@ -60,7 +60,7 @@ export default async function SalesReportPage({
     const totalSales = sales.reduce((acc: any, s: any) => acc + s.total, 0);
     const averageSale = sales.length > 0 ? totalSales / sales.length : 0;
     const topBranches = new Map<string, number>();
-    sales.forEach(sale => {
+    sales.forEach((sale: any) => {
         const branchName = sale.branch.name;
         const current = topBranches.get(branchName) || 0;
         topBranches.set(branchName, current + sale.total);
