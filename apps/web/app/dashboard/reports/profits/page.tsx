@@ -40,9 +40,9 @@ export default async function ProfitsReportPage({
         include: { batches: true },
     });
 
-    allInventory.forEach((inv) => {
+    allInventory.forEach((inv: any) => {
         costMap.set(`${inv.branchId}_${inv.drugId}`, inv.cost);
-        const qty = inv.batches.reduce((s, b) => s + b.quantity, 0);
+        const qty = inv.batches.reduce((s: any, b: any) => s + b.quantity, 0);
         totalInventoryValue += inv.cost * qty;
     });
 
@@ -50,11 +50,11 @@ export default async function ProfitsReportPage({
     const pendingPurchases = await prisma.purchase.findMany({
         where: { status: "PENDING", ...branchWhere },
     });
-    const totalPendingPurchases = pendingPurchases.reduce((s, p) => s + p.total, 0);
+    const totalPendingPurchases = pendingPurchases.reduce((s: any, p: any) => s + p.total, 0);
 
     // Expense Breakdown
     const expensesByCategory: { [key: string]: number } = {};
-    expenses.forEach((e) => {
+    expenses.forEach((e: any) => {
         expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + e.amount;
     });
 
@@ -62,15 +62,15 @@ export default async function ProfitsReportPage({
     let totalRevenue = 0;
     let totalCOGS = 0;
 
-    sales.forEach((sale) => {
+    sales.forEach((sale: any) => {
         totalRevenue += sale.total;
-        sale.items.forEach((item) => {
+        sale.items.forEach((item: any) => {
             const cost = costMap.get(`${sale.branchId}_${item.drugId}`) || 0;
             totalCOGS += cost * item.quantity;
         });
     });
 
-    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+    const totalExpenses = expenses.reduce((s: any, e: any) => s + e.amount, 0);
     const grossProfit = totalRevenue - totalCOGS;
     const netProfit = grossProfit - totalExpenses;
     const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
@@ -84,11 +84,11 @@ export default async function ProfitsReportPage({
         profitByDay.set(d.toLocaleDateString("en-GB"), 0);
     }
 
-    sales.forEach((sale) => {
+    sales.forEach((sale: any) => {
         const key = new Date(sale.createdAt).toLocaleDateString("en-GB");
         if (profitByDay.has(key)) {
             let saleCost = 0;
-            sale.items.forEach((item) => {
+            sale.items.forEach((item: any) => {
                 saleCost += (costMap.get(`${sale.branchId}_${item.drugId}`) || 0) * item.quantity;
             });
             profitByDay.set(key, (profitByDay.get(key) || 0) + (sale.total - saleCost));
@@ -133,8 +133,8 @@ export default async function ProfitsReportPage({
             }
         );
 
-        const rev = mSales.reduce((s, sale) => s + sale.total, 0);
-        const exp = mExpenses.reduce((s, e) => s + e.amount, 0);
+        const rev = mSales.reduce((s: any, sale: any) => s + sale.total, 0);
+        const exp = mExpenses.reduce((s: any, e: any) => s + e.amount, 0);
 
         monthlyData.push({
             month: monthLabel,
@@ -274,7 +274,7 @@ export default async function ProfitsReportPage({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {monthlyData.map((m) => (
+                        {monthlyData.map((m: any) => (
                             <tr key={m.month} className="hover:bg-muted">
                                 <td className="px-4 py-3 font-bold">{m.month}</td>
                                 <td className="px-4 py-3 text-primary">{m.revenue.toLocaleString()} د.ع</td>
@@ -296,7 +296,7 @@ export default async function ProfitsReportPage({
                     </div>
                     <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                         {Object.entries(expensesByCategory)
-                            .sort((a, b) => b[1] - a[1])
+                            .sort((a: any, b: any) => b[1] - a[1])
                             .map(([cat, amount]) => {
                                 const percent = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
                                 return (

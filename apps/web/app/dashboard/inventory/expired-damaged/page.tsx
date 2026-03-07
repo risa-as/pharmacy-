@@ -38,8 +38,8 @@ export default async function ExpiredDamagedPage() {
     });
     const safe = batches.filter(b => new Date(b.expiryDate) > thirtyDaysFromNow);
 
-    const expiredValue = expired.reduce((sum, b) => sum + b.quantity * b.costPrice, 0);
-    const expiringSoonValue = expiringSoon.reduce((sum, b) => sum + b.quantity * b.costPrice, 0);
+    const expiredValue = expired.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
+    const expiringSoonValue = expiringSoon.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
 
     const fmt = (v: number) => new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 0 }).format(v);
 
@@ -97,7 +97,7 @@ export default async function ExpiredDamagedPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {allAlerts.map((batch, idx) => {
+                            {allAlerts.map((batch: any, idx: any) => {
                                 const daysLeft = Math.ceil(
                                     (new Date(batch.expiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
                                 );

@@ -162,7 +162,7 @@ export default function CreateTransferForm({
                     {searchQuery.length > 1 && (
                         <div className="absolute z-10 w-full mt-1 bg-card rounded-md shadow-lg border border-border max-h-60 overflow-auto">
                             {filteredStock.length > 0 ? (
-                                filteredStock.map((item, idx) => (
+                                filteredStock.map((item: any, idx: any) => (
                                     <button
                                         key={idx}
                                         type="button"
@@ -198,7 +198,7 @@ export default function CreateTransferForm({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {selectedItems.map((item, idx) => (
+                                {selectedItems.map((item: any, idx: any) => (
                                     <tr key={idx} className="bg-card">
                                         <td className="px-4 py-3 font-bold">{item.tradeName}</td>
                                         <td className="px-4 py-3">

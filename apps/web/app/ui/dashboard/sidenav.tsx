@@ -224,11 +224,11 @@ export default function SideNav({
   // Auto-open accordion if active route is a child
   useEffect(() => {
     const activeParents: string[] = [];
-    sections.forEach((sec) => {
-      sec.links.forEach((l) => {
+    sections.forEach((sec: any) => {
+      sec.links.forEach((l: any) => {
         if (
           l.subLinks &&
-          l.subLinks.some((sub) => pathname.startsWith(sub.href))
+          l.subLinks.some((sub: any) => pathname.startsWith(sub.href))
         ) {
           activeParents.push(l.name);
         }
@@ -243,7 +243,7 @@ export default function SideNav({
 
   const toggleAccordion = (name: string) => {
     setOpenAccordions((prev) =>
-      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+      prev.includes(name) ? prev.filter((n: any) => n !== name) : [...prev, name],
     );
   };
 
@@ -261,11 +261,11 @@ export default function SideNav({
   }, [mobileOpen]);
 
   const filteredSections = sections
-    .map((section) => {
+    .map((section: any) => {
       const visibleLinks = section.links
-        .map((link) => {
+        .map((link: any) => {
           if (link.subLinks) {
-            const visibleSubLinks = link.subLinks.filter((sub) => {
+            const visibleSubLinks = link.subLinks.filter((sub: any) => {
               if (!userPermissions) return true;
               if (userRole === "ADMIN" || userRole === "SUPER_ADMIN")
                 return true;
@@ -279,7 +279,7 @@ export default function SideNav({
           }
           return link;
         })
-        .filter((link) => {
+        .filter((link: any) => {
           if (link.subLinks) {
             return link.subLinks.length > 0;
           }
@@ -291,7 +291,7 @@ export default function SideNav({
         });
       return { ...section, links: visibleLinks };
     })
-    .filter((s) => s.links.length > 0);
+    .filter((s: any) => s.links.length > 0);
 
   // SUPER_ADMIN sees the Control Tower nav; all other roles see the pharmacy nav.
   const activeSections =
@@ -306,7 +306,7 @@ export default function SideNav({
         <div className="hidden md:flex h-full flex-col px-3 py-4 bg-background border-l border-border/80">
           <div className="mb-4 h-32 rounded-2xl bg-gradient-to-tr from-primary to-primary/80 animate-pulse" />
           <div className="flex grow flex-col space-y-2">
-            {Array.from({ length: 8 }).map((_, i) => (
+            {Array.from({ length: 8 }).map((_: any, i: any) => (
               <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
@@ -347,7 +347,7 @@ export default function SideNav({
         className="flex grow flex-col overflow-y-auto space-y-1 px-0.5 pb-4"
         style={{ scrollbarWidth: "thin" }}
       >
-        {activeSections.map((section, sIdx) => (
+        {activeSections.map((section: any, sIdx: any) => (
           <div key={sIdx} className="mb-2">
             {section.label && (
               <div className="px-3 pt-4 pb-1.5 first:pt-0">
@@ -357,14 +357,14 @@ export default function SideNav({
               </div>
             )}
             <div className="space-y-1 mt-1">
-              {section.links.map((link) => {
+              {section.links.map((link: any) => {
                 const LinkIcon = link.icon;
                 // Exact match for flat links, startsWith or exact for subLinks
                 const isExactActive =
                   pathname === link.href ||
                   (link.href !== "#" && pathname.startsWith(link.href + "/"));
                 const isChildActive =
-                  link.subLinks?.some((sub) => pathname.startsWith(sub.href)) ||
+                  link.subLinks?.some((sub: any) => pathname.startsWith(sub.href)) ||
                   false;
                 const isActive = isExactActive || isChildActive;
                 const isExpanded = openAccordions.includes(link.name);
@@ -410,7 +410,7 @@ export default function SideNav({
                       >
                         <div className="overflow-hidden">
                           <div className="flex flex-col gap-1 pr-9 pl-3 pt-1">
-                            {link.subLinks.map((subLink) => {
+                            {link.subLinks.map((subLink: any) => {
                               const isSubActive =
                                 pathname === subLink.href ||
                                 pathname.startsWith(subLink.href + "/");

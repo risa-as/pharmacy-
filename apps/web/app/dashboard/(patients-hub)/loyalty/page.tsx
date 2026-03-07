@@ -33,13 +33,13 @@ export default async function LoyaltyDashboardPage() {
         take: 20,
     });
 
-    const totalPointsOutstanding = accounts.reduce((s, a) => s + a.totalPoints, 0);
-    const totalLifetimePoints = accounts.reduce((s, a) => s + a.lifetimePoints, 0);
+    const totalPointsOutstanding = accounts.reduce((s: any, a: any) => s + a.totalPoints, 0);
+    const totalLifetimePoints = accounts.reduce((s: any, a: any) => s + a.lifetimePoints, 0);
 
     const tierCounts = {
-        BRONZE: accounts.filter((a) => a.tier === "BRONZE").length,
-        SILVER: accounts.filter((a) => a.tier === "SILVER").length,
-        GOLD: accounts.filter((a) => a.tier === "GOLD").length,
+        BRONZE: accounts.filter((a: any) => a.tier === "BRONZE").length,
+        SILVER: accounts.filter((a: any) => a.tier === "SILVER").length,
+        GOLD: accounts.filter((a: any) => a.tier === "GOLD").length,
     };
 
     const tierInfo: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
@@ -175,7 +175,7 @@ export default async function LoyaltyDashboardPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {accounts.map((acc, index) => {
+                            {accounts.map((acc: any, index: any) => {
                                 const tier = tierInfo[acc.tier] || tierInfo.BRONZE;
                                 const lastTx = acc.transactions[0];
                                 const rankEmojis = ["🥇", "🥈", "🥉"];

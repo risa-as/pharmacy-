@@ -47,7 +47,7 @@ export default function BestSellingChart({ data }: BestSellingChartProps) {
                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     />
                     <Bar dataKey="quantity" name="الكمية" radius={[0, 4, 4, 0]} barSize={20}>
-                        {data.map((entry, index) => (
+                        {data.map((entry: any, index: any) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                     </Bar>

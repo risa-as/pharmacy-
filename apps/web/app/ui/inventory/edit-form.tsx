@@ -65,7 +65,7 @@ export default function EditForm({
                     className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
-                    {branches.map((branch) => (
+                    {branches.map((branch: any) => (
                         <option key={branch.id} value={branch.id}>
                             {branch.name}
                         </option>
@@ -85,7 +85,7 @@ export default function EditForm({
                     className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
-                    {drugs.map((drug) => (
+                    {drugs.map((drug: any) => (
                         <option key={drug.id} value={drug.id}>
                             {drug.tradeName}
                         </option>

@@ -116,7 +116,7 @@ export default async function ReportsPage() {
 
             {/* التقارير المتاحة */}
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
-                {reports.map((report) => {
+                {reports.map((report: any) => {
                     const Icon = report.icon;
                     const colors = colorClasses[report.color] || colorClasses.blue;
                     return (

@@ -112,7 +112,7 @@ export default async function DebtsPage({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {recentPayments.map((payment) => (
+                                {recentPayments.map((payment: any) => (
                                     <tr key={payment.id} className="hover:bg-accent transition-colors">
                                         <td className="p-3">
                                             <Link

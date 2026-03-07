@@ -74,7 +74,7 @@ export default async function InsurancePoliciesPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {policies.map((policy) => {
+                            {policies.map((policy: any) => {
                                 const isExpired = new Date(policy.expiryDate) <= new Date();
                                 return (
                                     <tr key={policy.id} className="hover:bg-muted">

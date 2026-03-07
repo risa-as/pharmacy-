@@ -71,7 +71,7 @@ export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber 
         setItems(newItems);
     };
 
-    const totalAmount = items.reduce((acc, item) => acc + (item.quantity * item.cost), 0);
+    const totalAmount = items.reduce((acc: any, item: any) => acc + (item.quantity * item.cost), 0);
 
     if (!mounted) {
         return (
@@ -219,7 +219,7 @@ export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber 
                         </tr>
                     </thead>
                     <tbody>
-                        {items.map((item, idx) => (
+                        {items.map((item: any, idx: any) => (
                             <tr key={idx} className="border-b hover:bg-muted">
                                 <td className="px-4 py-3 font-medium">{item.drugName}</td>
                                 <td className="px-4 py-3 font-mono text-xs">{item.batchNumber}</td>

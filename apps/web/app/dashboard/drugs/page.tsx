@@ -116,7 +116,7 @@ export default async function Page({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-card">
-                                {drugs.map((drug, index) => (
+                                {drugs.map((drug: any, index: any) => (
                                     <tr
                                         key={drug.id}
                                         className="w-full border-b text-sm last-of-type:border-none hover:bg-muted transition-colors"

@@ -68,10 +68,10 @@ export default async function PaymentsPage({
     today.setHours(0, 0, 0, 0);
 
     const todayPayments = payments.filter(p => new Date(p.createdAt) >= today);
-    const totalToday = todayPayments.reduce((acc, p) => acc + p.amount, 0);
-    const cashToday = todayPayments.filter(p => p.method === "CASH").reduce((acc, p) => acc + p.amount, 0);
-    const cardToday = todayPayments.filter(p => p.method === "CARD").reduce((acc, p) => acc + p.amount, 0);
-    const zainCashToday = todayPayments.filter(p => p.method === "ZAIN_CASH").reduce((acc, p) => acc + p.amount, 0);
+    const totalToday = todayPayments.reduce((acc: any, p: any) => acc + p.amount, 0);
+    const cashToday = todayPayments.filter(p => p.method === "CASH").reduce((acc: any, p: any) => acc + p.amount, 0);
+    const cardToday = todayPayments.filter(p => p.method === "CARD").reduce((acc: any, p: any) => acc + p.amount, 0);
+    const zainCashToday = todayPayments.filter(p => p.method === "ZAIN_CASH").reduce((acc: any, p: any) => acc + p.amount, 0);
 
     return (
         <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>
@@ -134,7 +134,7 @@ export default async function PaymentsPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {payments.map((payment) => {
+                            {payments.map((payment: any) => {
                                 const Icon = methodIcons[payment.method] || CreditCard;
                                 return (
                                     <tr key={payment.id} className="hover:bg-muted">

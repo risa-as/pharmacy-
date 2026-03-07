@@ -29,7 +29,7 @@ export async function getLowStockAlerts(branchId?: string, organizationId?: stri
 
     // جلب الأدوية
     const drugIds = inventory.map(i => i.drugId);
-    const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
+    const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }
@@ -86,7 +86,7 @@ export async function getExpiryAlerts(branchId?: string, organizationId?: string
 
     // جلب الأدوية
     const drugIds = batches.map(b => b.inventory.drugId);
-    const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
+    const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }

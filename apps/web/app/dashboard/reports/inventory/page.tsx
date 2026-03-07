@@ -40,7 +40,7 @@ export default async function InventoryReportPage({
     const lowStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity <= i.minStock).length;
     const outOfStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity === 0).length;
     const healthyStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity > i.minStock).length;
-    const totalValue = inventoryWithQuantity.reduce((acc, item) => acc + (item.currentQuantity * item.price), 0);
+    const totalValue = inventoryWithQuantity.reduce((acc: any, item: any) => acc + (item.currentQuantity * item.price), 0);
 
     // Check for expiring batches
     const thirtyDaysFromNow = new Date();
@@ -147,7 +147,7 @@ export default async function InventoryReportPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {inventoryWithQuantity.map((item) => {
+                            {inventoryWithQuantity.map((item: any) => {
                                 const isLow = item.currentQuantity <= item.minStock;
                                 const isOut = item.currentQuantity === 0;
                                 return (

@@ -79,7 +79,7 @@ export default function DebtorsTable({ debtors }: { debtors: Debtor[] }) {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {filtered.map((debtor) => {
+                            {filtered.map((debtor: any) => {
                                 const days = debtAgeDays(debtor.oldestUnpaidDate);
                                 const phone = debtor.phone || "";
                                 const whatsappUrl = phone

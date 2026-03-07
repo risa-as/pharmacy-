@@ -61,12 +61,12 @@ export default function StocktakeForm({ stocktakeId, initialData, isCompleted }:
         }
     };
 
-    const totalLoss = items.reduce((sum, item) => {
+    const totalLoss = items.reduce((sum: any, item: any) => {
         const diff = item.actualQuantity - item.systemQuantity;
         return diff < 0 ? sum + Math.abs(diff * item.costPrice) : sum;
     }, 0);
 
-    const totalGain = items.reduce((sum, item) => {
+    const totalGain = items.reduce((sum: any, item: any) => {
         const diff = item.actualQuantity - item.systemQuantity;
         return diff > 0 ? sum + (diff * item.costPrice) : sum;
     }, 0);

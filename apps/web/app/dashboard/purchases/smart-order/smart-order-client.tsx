@@ -214,7 +214,7 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            items.map((item) => (
+                            items.map((item: any) => (
                                 <TableRow key={item.inventoryId} className="hover:bg-muted transition-colors">
                                     <TableCell>
                                         <input

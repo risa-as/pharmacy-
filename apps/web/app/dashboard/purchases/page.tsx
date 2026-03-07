@@ -63,7 +63,7 @@ export default async function PurchasesPage({
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            purchases.map((purchase) => (
+                            purchases.map((purchase: any) => (
                                 <TableRow key={purchase.id}>
                                     <TableCell className="font-mono text-xs">{purchase.id.slice(0, 8)}</TableCell>
                                     <TableCell className="text-sm">{purchase.branch?.name || 'غير معروف'}</TableCell>

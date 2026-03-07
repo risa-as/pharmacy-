@@ -70,7 +70,7 @@ export default async function AnalyticsPage({
             select: { quantity: true, price: true }
         });
 
-        const totalRevenue = revenueAgg.reduce((acc, curr) => acc + (curr.quantity * curr.price), 0);
+        const totalRevenue = revenueAgg.reduce((acc: any, curr: any) => acc + (curr.quantity * curr.price), 0);
 
         return {
             name: drug?.tradeName || 'Unknown',
@@ -187,7 +187,7 @@ export default async function AnalyticsPage({
                 <div className="lg:col-span-1 bg-card p-6 rounded-xl border border-border shadow-sm">
                     <h3 className="text-lg font-bold text-foreground mb-4">ملخص الأداء</h3>
                     <div className="space-y-4">
-                        {bestSellingItems.slice(0, 5).map((item, idx) => (
+                        {bestSellingItems.slice(0, 5).map((item: any, idx: any) => (
                             <div key={idx} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                 <span className="text-foreground font-medium text-sm truncate max-w-[120px]" title={item.name}>
                                     {idx + 1}. {item.name}

@@ -51,7 +51,7 @@ export async function fetchReportData(
             });
 
             // Return flattened structure for detailed report
-            const flattenedData = data.flatMap((sale) =>
+            const flattenedData = data.flatMap((sale: any) =>
                 sale.items.map((item: any) => ({
                     "التاريخ": sale.createdAt.toISOString().split("T")[0],
                     "رقم الفاتورة": sale.id.substring(0, 8), // Shorten ID for display
@@ -81,7 +81,7 @@ export async function fetchReportData(
                 orderBy: { createdAt: "desc" },
             });
 
-            const flattenedData = data.flatMap((purchase) =>
+            const flattenedData = data.flatMap((purchase: any) =>
                 purchase.items.length > 0 ? purchase.items.map((item: any) => ({
                     "التاريخ": purchase.createdAt.toISOString().split("T")[0],
                     "رقم الفاتورة": purchase.invoiceNumber || purchase.id.substring(0, 8),
@@ -119,7 +119,7 @@ export async function fetchReportData(
             });
 
             // Flatten inventory by batches to show detailed stock
-            const flattenedData = data.flatMap((item) =>
+            const flattenedData = data.flatMap((item: any) =>
                 item.batches.length > 0 ? item.batches.map((batch: any) => ({
                     "اسم الدواء": item.drug.tradeName,
                     "الباركود": item.drug.barcode,

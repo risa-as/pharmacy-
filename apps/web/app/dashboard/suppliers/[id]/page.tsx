@@ -113,7 +113,7 @@ export default async function SupplierLedgerPage({ params }: { params: { id: str
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {ledger.map((entry) => (
+                        {ledger.map((entry: any) => (
                             <tr key={entry.id} className="hover:bg-muted transition-colors">
                                 <td className="px-6 py-3 text-sm text-muted-foreground whitespace-nowrap">
                                     {new Date(entry.date).toLocaleDateString('ar-IQ')}

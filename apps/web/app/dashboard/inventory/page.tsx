@@ -43,7 +43,7 @@ async function getInventory(page: number, query: string, tenantBranchWhere: any,
     return {
         items: inventory.map(item => ({
             ...item,
-            currentStock: item.batches.reduce((acc, b) => acc + b.quantity, 0)
+            currentStock: item.batches.reduce((acc: any, b: any) => acc + b.quantity, 0)
         })),
         total,
         totalPages: Math.ceil(total / ITEMS_PER_PAGE)

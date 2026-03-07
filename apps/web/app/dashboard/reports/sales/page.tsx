@@ -57,7 +57,7 @@ export default async function SalesReportPage({
     }));
 
     // Calculate stats
-    const totalSales = sales.reduce((acc, s) => acc + s.total, 0);
+    const totalSales = sales.reduce((acc: any, s: any) => acc + s.total, 0);
     const averageSale = sales.length > 0 ? totalSales / sales.length : 0;
     const topBranches = new Map<string, number>();
     sales.forEach(sale => {
@@ -121,7 +121,7 @@ export default async function SalesReportPage({
                     </h3>
                     <div className="space-y-3">
                         {Array.from(topBranches.entries())
-                            .sort((a, b) => b[1] - a[1])
+                            .sort((a: any, b: any) => b[1] - a[1])
                             .slice(0, 5)
                             .map(([branch, amount], index) => (
                                 <div key={branch} className="flex items-center justify-between p-3 bg-muted rounded-lg">
@@ -166,7 +166,7 @@ export default async function SalesReportPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {sales.slice(-10).reverse().map((sale) => (
+                            {sales.slice(-10).reverse().map((sale: any) => (
                                 <tr key={sale.id} className="hover:bg-muted">
                                     <td className="px-4 py-3 text-muted-foreground">{sale.branch.name}</td>
                                     <td className="px-4 py-3 text-muted-foreground">{sale.items.length}</td>

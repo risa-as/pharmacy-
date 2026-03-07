@@ -47,7 +47,7 @@ export async function GET() {
 
         // جلب الأدوية
         const drugIds = batches.map((b: any) => b.inventory.drugId);
-        const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
+        const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
         const drugs = await prisma.globalDrug.findMany({
             where: { id: { in: uniqueDrugIds } },
             select: { id: true, tradeName: true, barcode: true }
@@ -79,7 +79,7 @@ export async function GET() {
         doc.setTextColor(0, 0, 0);
 
         // جدول
-        const tableData = batches.map((batch, index) => {
+        const tableData = batches.map((batch: any, index: any) => {
             const drug = drugMap.get(batch.inventory.drugId);
             const expiryDate = new Date(batch.expiryDate);
             const isExpired = expiryDate < now;

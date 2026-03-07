@@ -99,7 +99,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                         required
                         className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
                     >
-                        {safes.map((safe) => (
+                        {safes.map((safe: any) => (
                             <option key={safe.id} value={safe.id}>
                                 {safe.name}
                             </option>

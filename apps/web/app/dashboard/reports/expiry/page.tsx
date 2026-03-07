@@ -47,7 +47,7 @@ export default async function ExpiryReportPage({
     const warning: typeof batches = [];
     const safe: typeof batches = [];
 
-    batches.forEach((batch) => {
+    batches.forEach((batch: any) => {
         const expiry = new Date(batch.expiryDate);
         if (expiry < now) expired.push(batch);
         else if (expiry < in30Days) critical.push(batch);
@@ -55,8 +55,8 @@ export default async function ExpiryReportPage({
         else safe.push(batch);
     });
 
-    const expiredValue = expired.reduce((s, b) => s + b.quantity * b.inventory.cost, 0);
-    const criticalValue = critical.reduce((s, b) => s + b.quantity * b.inventory.cost, 0);
+    const expiredValue = expired.reduce((s: any, b: any) => s + b.quantity * b.inventory.cost, 0);
+    const criticalValue = critical.reduce((s: any, b: any) => s + b.quantity * b.inventory.cost, 0);
 
     const categories = [
         {
@@ -93,7 +93,7 @@ export default async function ExpiryReportPage({
             borderColor: "border-warning/30",
             iconColor: "text-warning",
             textColor: "text-warning",
-            value: warning.reduce((s, b) => s + b.quantity * b.inventory.cost, 0),
+            value: warning.reduce((s: any, b: any) => s + b.quantity * b.inventory.cost, 0),
         },
         {
             title: "آمنة (أكثر من 90 يوم)",
@@ -126,7 +126,7 @@ export default async function ExpiryReportPage({
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {categories.map((cat) => {
+                {categories.map((cat: any) => {
                     const Icon = cat.icon;
                     return (
                         <div
@@ -151,7 +151,7 @@ export default async function ExpiryReportPage({
             </div>
 
             {/* Expired + Critical Tables */}
-            {categories.slice(0, 3).map((cat) => {
+            {categories.slice(0, 3).map((cat: any) => {
                 if (cat.items.length === 0) return null;
                 const Icon = cat.icon;
                 return (
@@ -174,7 +174,7 @@ export default async function ExpiryReportPage({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {cat.items.map((batch) => {
+                                {cat.items.map((batch: any) => {
                                     const days = getDaysRemaining(batch.expiryDate);
                                     return (
                                         <tr key={batch.id} className="hover:bg-muted">

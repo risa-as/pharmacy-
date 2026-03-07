@@ -32,7 +32,7 @@ export default function TopProducts({ products, title = "أفضل المنتجا
                         <p>لا توجد مبيعات</p>
                     </div>
                 ) : (
-                    products.map((product, index) => {
+                    products.map((product: any, index: any) => {
                         const widthPercent = (product.quantity / maxQuantity) * 100;
                         return (
                             <div key={index} className="relative">

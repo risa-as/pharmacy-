@@ -73,7 +73,7 @@ export default async function DiscountsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {discounts.map((discount) => {
+                            {discounts.map((discount: any) => {
                                 const isExpired = new Date(discount.endDate) <= now;
                                 const isActive = discount.isActive && !isExpired;
                                 return (

@@ -110,7 +110,7 @@ export default function BarcodeGenerator({ barcode, drugName, price, isOpen, onC
                     <div className="bg-muted rounded-xl p-6 border-2 border-dashed border-border text-center">
                         <div className="font-bold text-foreground mb-3">{drugName}</div>
                         <div className="flex justify-center gap-px mb-2">
-                            {pattern.map((bar, index) => (
+                            {pattern.map((bar: any, index: any) => (
                                 <div
                                     key={index}
                                     className={`h-12 bg-black ${bar === "thick" ? "w-1" : "w-px"}`}

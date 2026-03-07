@@ -64,13 +64,13 @@ export default function EmployeeReportsPage() {
                         <h3 className="text-sm font-medium text-emerald-800">الأكثر مبيعاً</h3>
                     </div>
                     <div>
-                        {stats.length > 0 && stats.sort((a, b) => b.totalSales - a.totalSales)[0] ? (
+                        {stats.length > 0 && stats.sort((a: any, b: any) => b.totalSales - a.totalSales)[0] ? (
                             <div>
                                 <div className="text-2xl font-bold text-emerald-600">
-                                    {stats.sort((a, b) => b.totalSales - a.totalSales)[0].name}
+                                    {stats.sort((a: any, b: any) => b.totalSales - a.totalSales)[0].name}
                                 </div>
                                 <p className="text-sm text-emerald-600 mt-1">
-                                    {new Intl.NumberFormat('ar-IQ').format(stats.sort((a, b) => b.totalSales - a.totalSales)[0].totalSales)} د.ع
+                                    {new Intl.NumberFormat('ar-IQ').format(stats.sort((a: any, b: any) => b.totalSales - a.totalSales)[0].totalSales)} د.ع
                                 </p>
                             </div>
                         ) : <p>-</p>}
@@ -82,13 +82,13 @@ export default function EmployeeReportsPage() {
                         <h3 className="text-sm font-medium text-blue-800">الأكثر نشاطاً (معاملات)</h3>
                     </div>
                     <div>
-                        {stats.length > 0 && stats.sort((a, b) => b.transactionCount - a.transactionCount)[0] ? (
+                        {stats.length > 0 && stats.sort((a: any, b: any) => b.transactionCount - a.transactionCount)[0] ? (
                             <div>
                                 <div className="text-2xl font-bold text-blue-600">
-                                    {stats.sort((a, b) => b.transactionCount - a.transactionCount)[0].name}
+                                    {stats.sort((a: any, b: any) => b.transactionCount - a.transactionCount)[0].name}
                                 </div>
                                 <p className="text-sm text-blue-600 mt-1">
-                                    {stats.sort((a, b) => b.transactionCount - a.transactionCount)[0].transactionCount} فاتورة
+                                    {stats.sort((a: any, b: any) => b.transactionCount - a.transactionCount)[0].transactionCount} فاتورة
                                 </p>
                             </div>
                         ) : <p>-</p>}
@@ -100,13 +100,13 @@ export default function EmployeeReportsPage() {
                         <h3 className="text-sm font-medium text-purple-800">أداء الساعات</h3>
                     </div>
                     <div>
-                        {stats.length > 0 && stats.sort((a, b) => b.salesPerHour - a.salesPerHour)[0] ? (
+                        {stats.length > 0 && stats.sort((a: any, b: any) => b.salesPerHour - a.salesPerHour)[0] ? (
                             <div>
                                 <div className="text-2xl font-bold text-purple-600">
-                                    {stats.sort((a, b) => b.salesPerHour - a.salesPerHour)[0].name}
+                                    {stats.sort((a: any, b: any) => b.salesPerHour - a.salesPerHour)[0].name}
                                 </div>
                                 <p className="text-sm text-purple-600 mt-1">
-                                    {new Intl.NumberFormat('ar-IQ').format(stats.sort((a, b) => b.salesPerHour - a.salesPerHour)[0].salesPerHour)} د.ع / ساعة
+                                    {new Intl.NumberFormat('ar-IQ').format(stats.sort((a: any, b: any) => b.salesPerHour - a.salesPerHour)[0].salesPerHour)} د.ع / ساعة
                                 </p>
                             </div>
                         ) : <p>-</p>}
@@ -153,7 +153,7 @@ export default function EmployeeReportsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {stats.map((user) => (
+                                {stats.map((user: any) => (
                                     <tr key={user.id} className="hover:bg-muted">
                                         <td className="p-3 font-medium">{user.name}</td>
                                         <td className="p-3 text-muted-foreground text-xs">{user.role}</td>

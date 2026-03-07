@@ -194,7 +194,7 @@ export default function ExportReports() {
             }
 
             // Transform Data: Add Sequence ID
-            const processedData = fetchedData.map((item, index) => ({
+            const processedData = fetchedData.map((item: any, index: any) => ({
                 "#": index + 1,
                 ...item
             }));
@@ -260,13 +260,13 @@ export default function ExportReports() {
                         <table className="w-full border-collapse border border-border text-sm">
                             <thead ref={tableHeadRef}>
                                 <tr className="bg-muted">
-                                    {Object.keys(pdfData[0]).map((key) => (
+                                    {Object.keys(pdfData[0]).map((key: any) => (
                                         <th key={key} className="border border-border p-2 font-bold whitespace-nowrap">{key}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody ref={tableBodyRef}>
-                                {pdfData.map((row, idx) => (
+                                {pdfData.map((row: any, idx: any) => (
                                     <tr key={idx} className="even:bg-muted">
                                         {Object.values(row).map((val: any, i) => (
                                             <td key={i} className="border border-border p-2 text-center">{val}</td>

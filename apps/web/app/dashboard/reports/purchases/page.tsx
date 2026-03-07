@@ -24,7 +24,7 @@ export default async function PurchasesReportPage() {
         orderBy: { createdAt: 'asc' }
     });
 
-    const totalPurchases = purchases.reduce((sum, p) => sum + p.total, 0);
+    const totalPurchases = purchases.reduce((sum: any, p: any) => sum + p.total, 0);
 
     // Chart Data
     const spendingByDay = new Map<string, number>();

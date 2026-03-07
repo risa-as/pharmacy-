@@ -37,7 +37,7 @@ export async function GET() {
 
         // جلب الأدوية
         const drugIds = inventory.map((i: any) => i.drugId);
-        const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
+        const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
         const drugs = await prisma.globalDrug.findMany({
             where: { id: { in: uniqueDrugIds } },
             select: { id: true, tradeName: true, barcode: true }
@@ -68,7 +68,7 @@ export async function GET() {
         doc.text(`Low Stock Items: ${lowStockItems}`, 20, 58);
 
         // جدول المخزون
-        const tableData = inventory.map((item, index) => {
+        const tableData = inventory.map((item: any, index: any) => {
             const drug = drugMap.get(item.drugId);
             const totalQty = item.batches.reduce((acc: number, b) => acc + b.quantity, 0);
             const status = totalQty <= item.minStock

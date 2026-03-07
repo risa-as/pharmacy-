@@ -75,7 +75,7 @@ export default async function Page({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-card">
-                                {invoices.map((invoice) => (
+                                {invoices.map((invoice: any) => (
                                     <tr
                                         key={invoice.id}
                                         className="hover:bg-muted transition-colors"

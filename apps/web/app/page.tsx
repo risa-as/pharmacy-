@@ -42,7 +42,7 @@ export default async function Home() {
             { icon: Zap, text: "سريع وخفيف" },
             { icon: BarChart3, text: "تقارير متقدمة" },
             { icon: Globe, text: "يعمل من أي مكان" },
-          ].map((item, i) => (
+          ].map((item: any, i: any) => (
             <div
               key={i}
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/50 text-sm font-medium"

@@ -136,7 +136,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                                 <option value="" disabled>
                                     اختر الفرع...
                                 </option>
-                                {branches.map((branch) => (
+                                {branches.map((branch: any) => (
                                     <option key={branch.id} value={branch.id}>
                                         {branch.name}
                                     </option>

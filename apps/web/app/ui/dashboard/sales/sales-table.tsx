@@ -27,7 +27,7 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                        {sales.map((sale, index) => (
+                        {sales.map((sale: any, index: any) => (
                             <tr
                                 key={sale.id}
                                 className="hover:bg-muted/50 cursor-pointer transition-colors group"

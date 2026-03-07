@@ -89,7 +89,7 @@ export default async function PatientsPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {patients.map((patient) => (
+                            {patients.map((patient: any) => (
                                 <tr key={patient.id} className="hover:bg-muted">
                                     <td className="px-4 py-3">
                                         <Link

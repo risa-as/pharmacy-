@@ -43,7 +43,7 @@ export default async function Page() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-card">
-                                {organizations.map((org) => (
+                                {organizations.map((org: any) => (
                                     <tr
                                         key={org.id}
                                         className="hover:bg-muted transition-colors"

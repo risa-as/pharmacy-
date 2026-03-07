@@ -42,7 +42,7 @@ export default async function Page() {
             barcode: inv.drug.barcode,
             cost: inv.cost,
             price: inv.price,
-            stock: inv.batches.reduce((sum, b) => sum + b.quantity, 0)
+            stock: inv.batches.reduce((sum: any, b: any) => sum + b.quantity, 0)
         };
     });
 

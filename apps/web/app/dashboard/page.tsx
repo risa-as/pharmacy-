@@ -266,7 +266,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                             { label: "الأدوية", value: data.drugCount, icon: Pill, href: "/dashboard/drugs" },
                             { label: "المخزون", value: data.inventoryCount, icon: Package, href: "/dashboard/inventory" },
                             { label: "المستخدمين", value: data.userCount, icon: Users, href: "/dashboard/users" },
-                        ].map((card) => {
+                        ].map((card: any) => {
                             const Icon = card.icon;
                             return (
                                 <Link key={card.label} href={card.href}
@@ -344,7 +344,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                                 { href: "/dashboard/reports/branch-comparison", icon: Store, label: "مقارنة الفروع", desc: "مقارنة أداء كل الفروع" },
                                 { href: "/dashboard/inventory/margin-warnings", icon: AlertTriangle, label: "تحذيرات الهامش", desc: "أدوية تحت الحد الأدنى" },
                                 { href: "/dashboard/reports", icon: BarChart3, label: "التقارير", desc: "جميع التقارير" },
-                            ].map((link) => {
+                            ].map((link: any) => {
                                 const Icon = link.icon;
                                 return (
                                     <Link key={link.href} href={link.href}
@@ -381,7 +381,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                                 { href: "/dashboard/returns", icon: Undo2, label: "المرتجعات", desc: "إرجاع فواتير", gradient: "from-info to-info/80" },
                                 { href: "/dashboard/patients", icon: Stethoscope, label: "المرضى", desc: "بحث عن مريض", gradient: "from-warning to-warning/80" },
                             ]),
-                        ].map((action) => {
+                        ].map((action: any) => {
                             const Icon = action.icon;
                             return (
                                 <Link key={action.href} href={action.href}

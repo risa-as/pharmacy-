@@ -408,7 +408,7 @@ export default function PermissionsGuidePage() {
         setExpandedCategory(prev => (prev === id ? null : id));
     };
 
-    const totalPerms = categories.reduce((sum, c) => sum + c.permissions.length, 0);
+    const totalPerms = categories.reduce((sum: any, c: any) => sum + c.permissions.length, 0);
     const pagePerms = categories.reduce(
         (sum, c) => sum + c.permissions.filter(p => !p.actionOnly).length, 0
     );
@@ -509,7 +509,7 @@ export default function PermissionsGuidePage() {
 
             {/* Categories Accordion */}
             <div className="space-y-3">
-                {categories.map((cat) => {
+                {categories.map((cat: any) => {
                     const CatIcon = cat.icon;
                     const isExpanded = expandedCategory === cat.id;
                     const enabledCount = selectedRole !== "ALL"
@@ -567,7 +567,7 @@ export default function PermissionsGuidePage() {
                             {/* Expanded Content */}
                             {isExpanded && (
                                 <div className="bg-card divide-y divide-gray-100">
-                                    {cat.permissions.map((perm) => {
+                                    {cat.permissions.map((perm: any) => {
                                         const isEnabled = selectedRole === "ALL" || roleDefaults[selectedRole]?.[perm.key];
 
                                         return (
@@ -607,7 +607,7 @@ export default function PermissionsGuidePage() {
                                                         {/* Pages */}
                                                         {perm.pages.length > 0 && (
                                                             <div className="flex flex-wrap gap-1.5 mt-2">
-                                                                {perm.pages.map((page) => (
+                                                                {perm.pages.map((page: any) => (
                                                                     <span
                                                                         key={page.path}
                                                                         className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border ${cat.bgColor} ${cat.borderColor} ${cat.color} font-medium`}

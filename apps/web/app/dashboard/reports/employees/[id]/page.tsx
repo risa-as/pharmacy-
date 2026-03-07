@@ -53,7 +53,7 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
     });
 
     // Stats
-    const totalSales = sales.reduce((acc, sale) => acc + sale.total, 0);
+    const totalSales = sales.reduce((acc: any, sale: any) => acc + sale.total, 0);
     const saleCount = sales.length;
     const averageSale = saleCount > 0 ? totalSales / saleCount : 0;
 
@@ -68,7 +68,7 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
     const chartData = Object.keys(dailyData).map(date => ({
         date,
         total: dailyData[date]
-    })).sort((a, b) => a.date.localeCompare(b.date));
+    })).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
     // Recent Activity (Top 20)
     const recentActivity = sales.slice(0, 20);

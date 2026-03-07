@@ -28,38 +28,38 @@ function parseCSV(text: string): ImportRow[] {
 
     // Remove BOM if present
     const header = lines[0].replace(/^\uFEFF/, "").toLowerCase();
-    const cols = header.split(",").map((c) => c.trim());
+    const cols = header.split(",").map((c: any) => c.trim());
 
     // Map column names (Arabic + English)
-    const nameIdx = cols.findIndex((c) =>
-        ["name", "اسم الدواء", "الاسم", "اسم", "trade_name", "tradename", "drug"].some((k) => c.includes(k))
+    const nameIdx = cols.findIndex((c: any) =>
+        ["name", "اسم الدواء", "الاسم", "اسم", "trade_name", "tradename", "drug"].some((k: any) => c.includes(k))
     );
-    const barcodeIdx = cols.findIndex((c) =>
-        ["barcode", "باركود", "الباركود", "code"].some((k) => c.includes(k))
+    const barcodeIdx = cols.findIndex((c: any) =>
+        ["barcode", "باركود", "الباركود", "code"].some((k: any) => c.includes(k))
     );
-    const priceIdx = cols.findIndex((c) =>
-        ["price", "السعر", "سعر البيع", "sell", "سعر"].some((k) => c.includes(k))
+    const priceIdx = cols.findIndex((c: any) =>
+        ["price", "السعر", "سعر البيع", "sell", "سعر"].some((k: any) => c.includes(k))
     );
-    const costIdx = cols.findIndex((c) =>
-        ["cost", "سعر الشراء", "التكلفة", "شراء", "purchase"].some((k) => c.includes(k))
+    const costIdx = cols.findIndex((c: any) =>
+        ["cost", "سعر الشراء", "التكلفة", "شراء", "purchase"].some((k: any) => c.includes(k))
     );
-    const qtyIdx = cols.findIndex((c) =>
-        ["quantity", "الكمية", "كمية", "qty", "stock"].some((k) => c.includes(k))
+    const qtyIdx = cols.findIndex((c: any) =>
+        ["quantity", "الكمية", "كمية", "qty", "stock"].some((k: any) => c.includes(k))
     );
-    const expiryIdx = cols.findIndex((c) =>
-        ["expiry", "انتهاء", "الصلاحية", "تاريخ الانتهاء", "expiry_date"].some((k) => c.includes(k))
+    const expiryIdx = cols.findIndex((c: any) =>
+        ["expiry", "انتهاء", "الصلاحية", "تاريخ الانتهاء", "expiry_date"].some((k: any) => c.includes(k))
     );
-    const sciIdx = cols.findIndex((c) =>
-        ["scientific", "الاسم العلمي", "علمي"].some((k) => c.includes(k))
+    const sciIdx = cols.findIndex((c: any) =>
+        ["scientific", "الاسم العلمي", "علمي"].some((k: any) => c.includes(k))
     );
-    const mfgIdx = cols.findIndex((c) =>
-        ["manufacturer", "الشركة", "المصنع", "شركة"].some((k) => c.includes(k))
+    const mfgIdx = cols.findIndex((c: any) =>
+        ["manufacturer", "الشركة", "المصنع", "شركة"].some((k: any) => c.includes(k))
     );
 
     if (nameIdx === -1) return [];
 
-    return lines.slice(1).filter(line => line.trim()).map((line) => {
-        const values = line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
+    return lines.slice(1).filter(line => line.trim()).map((line: any) => {
+        const values = line.split(",").map((v: any) => v.trim().replace(/^"|"$/g, ""));
         return {
             name: values[nameIdx] || "",
             barcode: barcodeIdx >= 0 ? values[barcodeIdx] : undefined,
@@ -70,7 +70,7 @@ function parseCSV(text: string): ImportRow[] {
             scientificName: sciIdx >= 0 ? values[sciIdx] : undefined,
             manufacturer: mfgIdx >= 0 ? values[mfgIdx] : undefined,
         };
-    }).filter((r) => r.name);
+    }).filter((r: any) => r.name);
 }
 
 function formatIQD(n: number) {
@@ -208,7 +208,7 @@ export default function DrugImportPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {rows.map((row, i) => (
+                                {rows.map((row: any, i: any) => (
                                     <tr key={i} className="hover:bg-primary/10/30">
                                         <td className="p-3 text-muted-foreground">{i + 1}</td>
                                         <td className="p-3 font-medium text-foreground">{row.name}</td>
@@ -255,7 +255,7 @@ export default function DrugImportPage() {
                     {result.errors.length > 0 && (
                         <div className="bg-card rounded-xl p-3">
                             <p className="text-xs font-bold text-destructive mb-2">أخطاء:</p>
-                            {result.errors.map((e, i) => (
+                            {result.errors.map((e: any, i: any) => (
                                 <p key={i} className="text-xs text-destructive/70">{e}</p>
                             ))}
                         </div>

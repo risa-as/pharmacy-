@@ -95,7 +95,7 @@ export default function WebPOSClient() {
     };
 
     // Derived State
-    const subTotal = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+    const subTotal = cart.reduce((total: any, item: any) => total + (item.price * item.quantity), 0);
     const finalTotal = Math.max(0, subTotal - manualDiscount);
 
     // Checkout
@@ -256,7 +256,7 @@ export default function WebPOSClient() {
                 {/* Grid */}
                 <div className="flex-1 overflow-y-auto px-5 pb-5">
                     <div className="grid grid-cols-2 gap-3 pt-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                        {products.map((product) => {
+                        {products.map((product: any) => {
                             const cartItem = cart.find((c: any) => c.id === product.id);
                             const isOutOfStock = product.stock <= 0;
 
@@ -323,7 +323,7 @@ export default function WebPOSClient() {
                             <p className="text-sm">السلة فارغة</p>
                         </div>
                     ) : (
-                        cart.map((item) => (
+                        cart.map((item: any) => (
                             <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5">
                                 <div className="flex-1 min-w-0">
                                     <h4 className="font-bold text-foreground text-[13px] truncate">{item.name}</h4>

@@ -80,7 +80,7 @@ export default async function ShortagesPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {shortages.map((item, idx) => (
+                            {shortages.map((item: any, idx: any) => (
                                 <tr key={item.id} className="hover:bg-muted">
                                     <td className="px-4 py-3 text-muted-foreground font-mono text-sm">{idx + 1}</td>
                                     <td className="px-4 py-3">

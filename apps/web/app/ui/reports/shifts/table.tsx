@@ -56,7 +56,7 @@ export default async function ShiftsTable({
                 <div className="rounded-lg bg-transparent p-2 md:pt-0 border border-border shadow-sm overflow-hidden">
                     <div className="md:hidden">
                         {/* Mobile View */}
-                        {shifts?.map((shift) => {
+                        {shifts?.map((shift: any) => {
                             const expected = shift.expectedCash || 0;
                             const actual = shift.actualCash || 0;
                             const variance = actual - expected;
@@ -111,7 +111,7 @@ export default async function ShiftsTable({
                             </tr>
                         </thead>
                         <tbody className="bg-transparent">
-                            {shifts?.map((shift) => {
+                            {shifts?.map((shift: any) => {
                                 const expected = shift.expectedCash || 0;
                                 const actual = shift.actualCash || 0;
                                 const variance = actual - expected;

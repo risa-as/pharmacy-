@@ -30,7 +30,7 @@ export default async function SlowMoversPage({
             select: { drugId: true },
             distinct: ["drugId"],
         })
-        .then((items) => items.map((i) => i.drugId));
+        .then((items) => items.map((i: any) => i.drugId));
 
     // 2. Find drugs NOT sold, but WITH stock > 0
     const inventoryFilter = branchId
@@ -59,15 +59,15 @@ export default async function SlowMoversPage({
     const now = new Date();
 
     const items = stagnantDrugs
-        .map((drug) => {
+        .map((drug: any) => {
             const totalStock = drug.inventories.reduce(
-                (acc, inv) => acc + inv.batches.reduce((bAcc, b) => bAcc + b.quantity, 0),
+                (acc, inv) => acc + inv.batches.reduce((bAcc: any, b: any) => bAcc + b.quantity, 0),
                 0
             );
 
             const avgCost =
                 drug.inventories.length > 0
-                    ? drug.inventories.reduce((s, inv) => s + inv.cost, 0) / drug.inventories.length
+                    ? drug.inventories.reduce((s: any, inv: any) => s + inv.cost, 0) / drug.inventories.length
                     : 0;
 
             const valueAtRisk = avgCost * totalStock;
@@ -79,8 +79,8 @@ export default async function SlowMoversPage({
             );
 
             const branches = drug.inventories
-                .filter((inv) => inv.batches.some((b) => b.quantity > 0))
-                .map((inv) => inv.branch.name);
+                .filter((inv: any) => inv.batches.some((b: any) => b.quantity > 0))
+                .map((inv: any) => inv.branch.name);
 
             return {
                 id: drug.id,
@@ -94,11 +94,11 @@ export default async function SlowMoversPage({
                 neverSold: !lastSale,
             };
         })
-        .filter((i) => i.stock > 0)
-        .sort((a, b) => b.valueAtRisk - a.valueAtRisk);
+        .filter((i: any) => i.stock > 0)
+        .sort((a: any, b: any) => b.valueAtRisk - a.valueAtRisk);
 
-    const totalValueAtRisk = items.reduce((s, i) => s + i.valueAtRisk, 0);
-    const neverSoldCount = items.filter((i) => i.neverSold).length;
+    const totalValueAtRisk = items.reduce((s: any, i: any) => s + i.valueAtRisk, 0);
+    const neverSoldCount = items.filter((i: any) => i.neverSold).length;
 
     const periods = [
         { label: "30 يوم", value: 30 },
@@ -124,7 +124,7 @@ export default async function SlowMoversPage({
                     ⚠️ تقرير الأدوية الراكدة
                 </h1>
                 <div className="flex gap-2">
-                    {periods.map((p) => (
+                    {periods.map((p: any) => (
                         <a
                             key={p.value}
                             href={buildPeriodUrl(p.value)}
@@ -189,7 +189,7 @@ export default async function SlowMoversPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {items.map((item) => (
+                            {items.map((item: any) => (
                                 <tr key={item.id} className="hover:bg-muted transition-colors">
                                     <td className="px-4 py-3">
                                         <div className="font-bold text-foreground">{item.name}</div>

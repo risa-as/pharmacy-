@@ -64,7 +64,7 @@ export default async function Page() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-card">
-                                {users.map((user) => (
+                                {users.map((user: any) => (
                                     <tr
                                         key={user.id}
                                         className="hover:bg-muted transition-colors"

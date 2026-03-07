@@ -77,7 +77,7 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {itemsWithNames.map((item) => (
+                        {itemsWithNames.map((item: any) => (
                             <TableRow key={item.id}>
                                 <TableCell className="font-medium">{item.drugName}</TableCell>
                                 <TableCell>{item.quantity}</TableCell>

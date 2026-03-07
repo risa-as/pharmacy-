@@ -35,7 +35,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                     required
                 >
                     <option value="">اختر الفرع</option>
-                    {branches.map((branch) => (
+                    {branches.map((branch: any) => (
                         <option key={branch.id} value={branch.id}>
                             {branch.name}
                         </option>
@@ -58,7 +58,7 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                     required
                 >
                     <option value="">اختر الدواء</option>
-                    {drugs.map((drug) => (
+                    {drugs.map((drug: any) => (
                         <option key={drug.id} value={drug.id}>
                             {drug.tradeName} ({drug.barcode})
                         </option>

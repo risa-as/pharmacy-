@@ -127,7 +127,7 @@ export default function BarcodePrintPage() {
         `);
     };
 
-    const totalLabels = items.reduce((sum, i) => sum + i.copies, 0);
+    const totalLabels = items.reduce((sum: any, i: any) => sum + i.copies, 0);
 
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">
@@ -150,7 +150,7 @@ export default function BarcodePrintPage() {
                 {/* Search Results */}
                 {results.length > 0 && (
                     <div className="mt-2 bg-card border rounded-lg shadow-md max-h-60 overflow-y-auto">
-                        {results.map((drug) => (
+                        {results.map((drug: any) => (
                             <button
                                 key={drug.barcode}
                                 onClick={() => addItem(drug)}
@@ -193,7 +193,7 @@ export default function BarcodePrintPage() {
                     </div>
 
                     <div className="space-y-2">
-                        {items.map((item) => (
+                        {items.map((item: any) => (
                             <div key={item.drug.barcode} className="flex items-center justify-between p-3 bg-muted rounded-lg border">
                                 <div>
                                     <div className="font-medium text-foreground">{item.drug.tradeName}</div>
