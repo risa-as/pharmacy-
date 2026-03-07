@@ -75,7 +75,7 @@ export default function PaymentHistoryTable({ transactions }: PaymentHistoryTabl
                                         <span className="text-xs text-muted-foreground">{txn.currency}</span>
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground">
-                                        {GATEWAY_LABELS[txn.gateway]}
+                                        {(GATEWAY_LABELS as any)[txn.gateway]}
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground">
                                         {txn.renewalMonths}{" "}
