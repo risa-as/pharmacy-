@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
         for (const txData of transactions) {
             try {
-                await prisma.$transaction(async (prismaTx) => {
+                await prisma.$transaction(async (prismaTx: any) => {
                     // 1. Ensure Loyalty Account exists for Patient
                     let account = await prismaTx.loyaltyAccount.findUnique({
                         where: { patientId: txData.patientId }
