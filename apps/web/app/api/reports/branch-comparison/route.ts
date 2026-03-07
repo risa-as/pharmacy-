@@ -41,7 +41,7 @@ export async function GET(req: Request) {
             select: { id: true, name: true }
         });
 
-        const comparison = await Promise.all(branches.map(async (branch) => {
+        const comparison = await Promise.all(branches.map(async (branch: any) => {
             const branchFilter = { branchId: branch.id };
             const dateFilter = { gte: startDate, lte: endDate };
 

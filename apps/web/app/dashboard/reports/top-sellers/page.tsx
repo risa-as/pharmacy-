@@ -37,7 +37,7 @@ export default async function TopSellersPage({
 
     // 3. Populate drug names and revenue
     const items = await Promise.all(
-        grouped.map(async (g, idx) => {
+        grouped.map(async (g: any, idx: any) => {
             const drug = await prisma.globalDrug.findUnique({
                 where: { id: g.drugId },
                 select: { tradeName: true, barcode: true },

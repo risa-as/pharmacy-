@@ -46,7 +46,7 @@ export default async function AnalyticsPage({
     });
 
     // Populate Drug Names & Calculate Totals
-    const bestSellingItems = await Promise.all(bestSellingData.map(async (item) => {
+    const bestSellingItems = await Promise.all(bestSellingData.map(async (item: any) => {
         const drug = await prisma.globalDrug.findUnique({
             where: { id: item.drugId },
             select: { tradeName: true }
