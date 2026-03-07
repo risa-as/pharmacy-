@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
         const tokens = users
             .map((u: any) => u.expoPushToken)
-            .filter((t): t is string => t !== null && t.length > 0);
+            .filter((t: string | null | undefined): t is string => t !== null && t !== undefined && t.length > 0);
 
         if (tokens.length === 0) {
             return NextResponse.json({

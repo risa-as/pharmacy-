@@ -39,7 +39,7 @@ export async function getLowStockAlerts(branchId?: string, organizationId?: stri
     const alerts: AlertItem[] = [];
 
     for (const item of inventory) {
-        const totalQty = item.batches.reduce((acc, b) => acc + b.quantity, 0);
+        const totalQty = item.batches.reduce((acc: any, b: any) => acc + b.quantity, 0);
 
         if (totalQty <= item.minStock) {
             const drug = drugMap.get(item.drugId);
@@ -113,7 +113,7 @@ export async function getExpiryAlerts(branchId?: string, organizationId?: string
         });
     }
 
-    return alerts.sort((a, b) => (a.daysLeft || 0) - (b.daysLeft || 0));
+    return alerts.sort((a: any, b: any) => (a.daysLeft || 0) - (b.daysLeft || 0));
 }
 
 // جلب جميع الإشعارات

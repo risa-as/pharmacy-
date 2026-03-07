@@ -70,7 +70,7 @@ export async function sendAndPersistNotification({
 
         const tokens = users
             .map(u => u.expoPushToken)
-            .filter((t): t is string => !!t);
+            .filter((t: string | null | undefined): t is string => !!t);
 
         if (tokens.length === 0) return;
 
