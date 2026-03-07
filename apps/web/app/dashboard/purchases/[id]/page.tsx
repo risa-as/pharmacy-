@@ -22,7 +22,7 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: drugIds } }
     });
-    const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     const itemsWithNames = purchase.items.map((item: any) => ({
         ...item,

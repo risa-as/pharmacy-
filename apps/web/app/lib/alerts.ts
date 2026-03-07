@@ -34,7 +34,7 @@ export async function getLowStockAlerts(branchId?: string, organizationId?: stri
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     const alerts: AlertItem[] = [];
 
@@ -91,7 +91,7 @@ export async function getExpiryAlerts(branchId?: string, organizationId?: string
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     const alerts: AlertItem[] = [];
 

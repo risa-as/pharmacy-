@@ -27,7 +27,7 @@ export async function getLowStockInventory(branchId?: string) {
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: drugIds } }
     });
-    const drugMap = new Map(drugs.map((d: any) => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     // 3. Filter for Low Stock
     const lowStockItems = inventories.map((inv: any) => {
@@ -147,7 +147,7 @@ export async function getPurchaseDetails(id: string) {
         where: { id: { in: drugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map((d: any) => [d.id, d.tradeName]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d.tradeName]));
 
     return {
         ...purchase,
