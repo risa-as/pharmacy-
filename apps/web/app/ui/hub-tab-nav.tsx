@@ -89,7 +89,7 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
                      * highlight on an exact pathname match — not on every sub-page.
                      */
                     const isRootTab = tabs.some(
-                        (other) =>
+                        (other: any) =>
                             other.href !== tab.href &&
                             other.href.startsWith(tab.href + "/"),
                     );

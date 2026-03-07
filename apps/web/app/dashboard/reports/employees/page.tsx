@@ -29,7 +29,7 @@ export default async function EmployeesReportPage({
 
     // 2. Calculate total revenue across all employees
     const totalRevenueAll = users.reduce(
-        (sum, u) => sum + u.sales.reduce((s: any, sale: any) => s + sale.total, 0), 0
+        (sum: any, u: any) => sum + u.sales.reduce((s: any, sale: any) => s + sale.total, 0), 0
     );
 
     // 3. Calculate Stats per user

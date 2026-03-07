@@ -61,7 +61,7 @@ export default async function SlowMoversPage({
     const items = stagnantDrugs
         .map((drug: any) => {
             const totalStock = drug.inventories.reduce(
-                (acc, inv) => acc + inv.batches.reduce((bAcc: any, b: any) => bAcc + b.quantity, 0),
+                (acc: any, inv: any) => acc + inv.batches.reduce((bAcc: any, b: any) => bAcc + b.quantity, 0),
                 0
             );
 

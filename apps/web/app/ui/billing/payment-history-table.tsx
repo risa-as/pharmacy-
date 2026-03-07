@@ -64,7 +64,7 @@ export default function PaymentHistoryTable({ transactions }: PaymentHistoryTabl
                     </thead>
                     <tbody className="divide-y divide-border">
                         {transactions.map((txn: any) => {
-                            const statusCfg = STATUS_CONFIG[txn.status];
+                            const statusCfg = (STATUS_CONFIG as any)[txn.status];
                             return (
                                 <tr key={txn.id} className="hover:bg-muted/30 transition-colors">
                                     <td className="px-4 py-3 text-foreground">

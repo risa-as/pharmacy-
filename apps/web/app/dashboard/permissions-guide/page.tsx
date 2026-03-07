@@ -410,7 +410,7 @@ export default function PermissionsGuidePage() {
 
     const totalPerms = categories.reduce((sum: any, c: any) => sum + c.permissions.length, 0);
     const pagePerms = categories.reduce(
-        (sum, c) => sum + c.permissions.filter((p: any) => !p.actionOnly).length, 0
+        (sum: any, c: any) => sum + c.permissions.filter((p: any) => !p.actionOnly).length, 0
     );
 
     if (!mounted) return null;

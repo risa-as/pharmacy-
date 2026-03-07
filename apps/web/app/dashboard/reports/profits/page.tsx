@@ -121,13 +121,13 @@ export default async function ProfitsReportPage({
         const monthLabel = d.toLocaleDateString("ar-IQ", { month: "long", year: "numeric" });
 
         const mSales = monthlySales.filter(
-            (s) => {
+            (s: any) => {
                 const sd = new Date(s.createdAt);
                 return `${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, "0")}` === monthKey;
             }
         );
         const mExpenses = monthlyExpenses.filter(
-            (e) => {
+            (e: any) => {
                 const ed = new Date(e.date);
                 return `${ed.getFullYear()}-${String(ed.getMonth() + 1).padStart(2, "0")}` === monthKey;
             }

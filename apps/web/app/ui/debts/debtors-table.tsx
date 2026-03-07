@@ -39,7 +39,7 @@ export default function DebtorsTable({ debtors }: { debtors: Debtor[] }) {
         const q = query.trim().toLowerCase();
         if (!q) return debtors;
         return debtors.filter(
-            (d) =>
+            (d: any) =>
                 d.name.toLowerCase().includes(q) ||
                 (d.phone || "").includes(q)
         );

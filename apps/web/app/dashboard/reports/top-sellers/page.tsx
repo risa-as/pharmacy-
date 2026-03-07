@@ -52,7 +52,7 @@ export default async function TopSellersPage({
             });
 
             const totalRevenue = saleItems.reduce(
-                (acc, si) => acc + si.quantity * si.price,
+                (acc: any, si: any) => acc + si.quantity * si.price,
                 0
             );
 
