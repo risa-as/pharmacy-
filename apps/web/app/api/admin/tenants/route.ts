@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { auth } from '@/auth';
 import bcrypt from 'bcryptjs';
 import { generateLicenseKey } from '@/app/lib/license-utils';
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
         const hashedPassword = await bcrypt.hash(ownerPassword, 10);
 
         // Run everything in a single transaction
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. Create Organization
             const organization = await tx.organization.create({
                 data: {

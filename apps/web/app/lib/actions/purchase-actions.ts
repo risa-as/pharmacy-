@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 'use server';
 
 import { prisma } from '@/app/lib/prisma';
@@ -167,7 +168,7 @@ export async function receivePurchase(purchaseId: string, items: { itemId: strin
     if (!purchase) throw new Error("لم يتم العثور على طلب الشراء");
     if (purchase.status !== 'PENDING') throw new Error("تمت معالجة هذا الطلب مسبقاً");
 
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // 2. Process each item
         for (const receivedItem of items) {
             const purchaseItem = purchase.items.find((i: any) => i.id === receivedItem.itemId);

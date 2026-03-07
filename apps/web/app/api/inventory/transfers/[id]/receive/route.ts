@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
@@ -34,7 +35,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         }
 
         // 1. Transaction to Atomically receive goods
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // Update Transfer Status
             await tx.transfer.update({
                 where: { id: transferId },

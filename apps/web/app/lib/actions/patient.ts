@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 "use server";
 
 import { prisma } from "@/app/lib/prisma";
@@ -166,7 +167,7 @@ export async function deletePatient(id: string) {
         }
 
         // حذف آمن — لا توجد ارتباطات حرجة
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // حذف الوصفات إن وُجدت
             const prescriptions = await tx.prescription.findMany({ where: { patientId: id }, select: { id: true } });
             if (prescriptions.length > 0) {

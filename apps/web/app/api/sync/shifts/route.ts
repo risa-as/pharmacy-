@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { z } from "zod";
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
 
         const processedIds: string[] = [];
 
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             for (const shift of shifts) {
                 const existing = await tx.shift.findUnique({ where: { id: shift.id } });
 

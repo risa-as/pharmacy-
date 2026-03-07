@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 'use server';
 
 import { prisma } from '@/app/lib/prisma';
@@ -193,7 +194,7 @@ export async function recordSupplierPayment(data: {
             return { success: false, error: 'المورد غير موجود أو ليس لديك صلاحية' };
         }
 
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. تسجيل الدفعة
             await tx.supplierPayment.create({
                 data: {

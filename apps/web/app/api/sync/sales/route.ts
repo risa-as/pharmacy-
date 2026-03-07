@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { z } from "zod";
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
         // Process each sale in a separate transaction to avoid timeouts
         for (const sale of sales) {
             try {
-                await prisma.$transaction(async (tx) => {
+                await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                     const existing = await tx.sale.findUnique({ where: { id: sale.id } });
                     if (existing) {
                         return; // Already synced

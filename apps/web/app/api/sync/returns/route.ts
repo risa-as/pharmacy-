@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { z } from "zod";
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
 
         for (const ret of returns) {
             try {
-                await prisma.$transaction(async (tx) => {
+                await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                     const existing = await tx.saleReturn.findUnique({ where: { id: ret.id } });
                     if (existing) return; // Already synced — idempotent
 

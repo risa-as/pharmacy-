@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 1. Transaction to ensure Atomicity (Either it all succeeds, or none)
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
 
             // Generate the transfer record
             const transfer = await tx.transfer.create({

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 "use server";
 
 import { z } from "zod";
@@ -92,7 +93,7 @@ export async function deleteDrug(id: string) {
             return { message: "لا يمكن حذف الدواء لأنه مرتبط بعمليات بيع سابقة. يمكنك إلغاء تفعيله بدلاً من ذلك." };
         }
 
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // Delete associated inventory items first
             await tx.inventory.deleteMany({
                 where: { drugId: id }

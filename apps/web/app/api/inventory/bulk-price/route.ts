@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
         });
 
         // 3. Process database updates in a transaction
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             for (const update of updates) {
                 // Skip if price didn't change
                 if (update.oldPrice === update.newPrice) continue;

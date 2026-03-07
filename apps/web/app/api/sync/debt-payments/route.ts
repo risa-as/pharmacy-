@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            await prisma.$transaction(async (tx) => {
+            await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                 await tx.debtPayment.create({
                     data: {
                         id: payment.id,

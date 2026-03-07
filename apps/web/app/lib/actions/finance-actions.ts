@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 'use server';
 
 import { prisma } from '@/app/lib/prisma';
@@ -82,7 +83,7 @@ export async function getBranchTransactions(branchId: string) {
 
 export async function createTransaction(data: { safeId: string, type: 'IN' | 'OUT', amount: number, referenceType: string, description?: string }) {
     try {
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const safe = await tx.safe.findUnique({ where: { id: data.safeId } });
             if (!safe) throw new Error('Safe not found');
 
@@ -121,7 +122,7 @@ export async function createTransaction(data: { safeId: string, type: 'IN' | 'OU
 
 export async function transferFunds(data: { fromSafeId: string, toSafeId: string, amount: number, description?: string }) {
     try {
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const fromSafe = await tx.safe.findUnique({ where: { id: data.fromSafeId } });
             const toSafe = await tx.safe.findUnique({ where: { id: data.toSafeId } });
 

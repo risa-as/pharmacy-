@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
@@ -30,7 +31,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
         let updatedStocktake;
 
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. Delete all existing items for this stocktake (since we send the full current state of the count)
             await tx.stocktakeItem.deleteMany({
                 where: { stocktakeId: id }

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 'use server';
 
 import { prisma } from '@/app/lib/prisma';
@@ -109,7 +110,7 @@ export async function processWebSale(data: {
     if (!user || !user.id || !branchId) return { success: false, error: "جلسة المستخدم غير صالحة" };
 
     try {
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const validPatient = data.patientId
                 ? await tx.patient.findUnique({ where: { id: data.patientId } })
                 : null;

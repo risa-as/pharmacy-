@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
         const parsedMin = Number.parseInt(String(minStock ?? 0), 10) || 0;
         const parsedMax = Number.parseInt(String(maxStock ?? 100), 10) || 100;
 
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             let drug = await tx.globalDrug.findFirst({
                 where: id ? { id } : { barcode }
             });
