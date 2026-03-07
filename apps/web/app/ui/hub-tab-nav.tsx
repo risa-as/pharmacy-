@@ -41,7 +41,7 @@ interface HubTabNavProps {
 }
 
 export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavProps) {
-    const pathname = usePathname();
+    const pathname = usePathname() ?? '';
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);

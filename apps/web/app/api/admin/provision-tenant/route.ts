@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
         const hashedPassword = await bcrypt.hash(ownerPassword, 10);
 
         // ===== Run everything in a single transaction =====
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             // 1. Create Organization
             const organization = await tx.organization.create({
                 data: { name: pharmacyName },

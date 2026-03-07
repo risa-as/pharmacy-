@@ -212,7 +212,7 @@ export default function SideNav({
   userPermissions?: UserPermissions | null;
   userRole?: string;
 }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openAccordions, setOpenAccordions] = useState<string[]>([]);

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";

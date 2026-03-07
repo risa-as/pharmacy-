@@ -21,7 +21,7 @@ export default function OverlayManager({ isSuspended }: OverlayManagerProps) {
 
     if (!isSuspended) return null;
 
-    const isWhitelisted = SUSPENSION_WHITELIST.some(
+    const isWhitelisted = !!pathname && SUSPENSION_WHITELIST.some(
         (route) => pathname === route || pathname.startsWith(route + "/")
     );
 
