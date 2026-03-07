@@ -1,11 +1,12 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 // Schema للتحقق
 const PrescriptionSchema = z.object({
@@ -127,7 +128,12 @@ export async function cancelPrescription(id: string) {
 
 // جلب جميع الوصفات
 export async function getPrescriptions() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantBranchWhere } = tenantCtx;
+
     return await prisma.prescription.findMany({
+        where: { patient: tenantBranchWhere },
         orderBy: { createdAt: "desc" },
         include: {
             patient: true,
@@ -149,9 +155,14 @@ export async function getPrescriptionById(id: string) {
 
 // جلب الوصفات المعلقة
 export async function getPendingPrescriptions() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantBranchWhere } = tenantCtx;
+
     return await prisma.prescription.findMany({
         where: {
             status: { in: ["PENDING", "PARTIALLY_DISPENSED"] },
+            patient: tenantBranchWhere,
         },
         orderBy: { createdAt: "desc" },
         include: {

@@ -1,10 +1,9 @@
 "use server";
 
 import Stripe from "stripe";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-const prisma = new PrismaClient();
 
 // Initialize Stripe with secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {

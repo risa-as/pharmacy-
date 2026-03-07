@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { z } from "zod";
 
-const prisma = new PrismaClient();
 
 const SyncSaleSchema = z.object({
     id: z.string(),
@@ -16,7 +15,14 @@ const SyncSaleSchema = z.object({
         drugId: z.string(),
         quantity: z.number(),
         price: z.number()
-    }))
+    })),
+    // Patient snapshot sent by desktop for credit sales so cloud can upsert before FK check
+    patient: z.object({
+        id: z.string(),
+        name: z.string(),
+        phone: z.string().nullable().optional(),
+        branchId: z.string().nullable().optional(),
+    }).nullable().optional(),
 });
 
 const SyncPayloadSchema = z.object({
@@ -100,6 +106,41 @@ export async function POST(req: NextRequest) {
                         });
                     }
 
+                    // For credit sales: ensure patient exists in cloud before FK constraint fires
+                    let resolvedPatientId = sale.patientId || null;
+                    if (resolvedPatientId && sale.patient) {
+                        const existingPatient = await tx.patient.findUnique({
+                            where: { id: resolvedPatientId },
+                            select: { id: true },
+                        });
+                        if (!existingPatient) {
+                            try {
+                                await tx.patient.create({
+                                    data: {
+                                        id: resolvedPatientId,
+                                        name: sale.patient.name,
+                                        phone: sale.patient.phone ?? '',
+                                        branchId: sale.patient.branchId ?? branchId,
+                                    },
+                                });
+                            } catch (patientErr: any) {
+                                if (patientErr.code === 'P2002') {
+                                    // phone+branchId already taken — find existing patient and remap
+                                    const byPhone = await tx.patient.findFirst({
+                                        where: {
+                                            phone: sale.patient.phone ?? '',
+                                            branchId: sale.patient.branchId ?? branchId,
+                                        },
+                                        select: { id: true },
+                                    });
+                                    resolvedPatientId = byPhone?.id ?? null;
+                                } else {
+                                    throw patientErr;
+                                }
+                            }
+                        }
+                    }
+
                     await tx.sale.create({
                         data: {
                             id: sale.id,
@@ -108,7 +149,7 @@ export async function POST(req: NextRequest) {
                             discount: sale.discount || 0,
                             createdAt: new Date(sale.createdAt),
                             userId: sale.userId,
-                            patientId: sale.patientId || null,
+                            patientId: resolvedPatientId,
                             items: {
                                 create: saleItemsData
                             }
@@ -125,10 +166,10 @@ export async function POST(req: NextRequest) {
                         }
                     });
 
-                    // For credit sales: update patient balance (updateMany avoids P2025 if patient missing)
-                    if (isCredit && sale.patientId) {
+                    // For credit sales: update patient balance
+                    if (isCredit && resolvedPatientId) {
                         await tx.patient.updateMany({
-                            where: { id: sale.patientId },
+                            where: { id: resolvedPatientId },
                             data: { balance: { increment: sale.total - (sale.discount || 0) } }
                         });
                     }

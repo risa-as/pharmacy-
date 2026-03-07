@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 // GET: Generate demand forecasts for a branch
 export async function GET(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
 
         const { searchParams } = new URL(req.url);
-        const branchId = searchParams.get('branchId') || session.user.branchId;
+        const branchId = searchParams.get('branchId') || tenantCtx.user.branchId;
         const days = Number(searchParams.get('days') || 30);
 
         if (!branchId) return NextResponse.json({ error: "branchId required" }, { status: 400 });

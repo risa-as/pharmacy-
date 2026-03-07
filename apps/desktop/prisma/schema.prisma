@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/desktop-client"
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/desktop-client"
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {
@@ -60,6 +61,7 @@ model GlobalDrug {
   origin         String?
   price          Float       @default(0) // Local override or cached price
   isActive       Boolean     @default(true)
+  organizationId String?
   inventory      Inventory[]
   saleItems      SaleItem[]
   saleReturnItems SaleReturnItem[]
@@ -93,10 +95,11 @@ model Batch {
 }
 
 model Supplier {
-  id      String  @id
-  name    String
-  phone   String?
-  batches Batch[]
+  id             String  @id
+  name           String
+  phone          String?
+  organizationId String?
+  batches        Batch[]
 }
 
 model Sale {

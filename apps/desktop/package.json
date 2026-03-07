@@ -9,6 +9,60 @@
         "lint": "eslint .",
         "prisma:seed-interactions": "node prisma/seed-interactions.js"
     },
+    "build": {
+        "appId": "com.faramace.desktop",
+        "productName": "Faramace POS",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "dist/**/*",
+            "dist-electron/**/*",
+            "node_modules/.prisma/**/*",
+            "node_modules/@prisma/client/**/*",
+            "node_modules/prisma/**/*",
+            "prisma/**/*",
+            "!node_modules/**/node_modules",
+            "!node_modules/**/*.md",
+            "!node_modules/**/*.map"
+        ],
+        "extraResources": [
+            {
+                "from": "prisma",
+                "to": "prisma",
+                "filter": [
+                    "**/*"
+                ]
+            }
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                },
+                {
+                    "target": "portable",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "public/electron-vite.svg"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "Faramace POS"
+        },
+        "portable": {
+            "splashImage": null
+        }
+    },
     "dependencies": {
         "@faramace/shared": "workspace:*",
         "@faramace/ui": "workspace:*",

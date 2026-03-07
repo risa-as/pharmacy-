@@ -3,14 +3,31 @@ import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { ArrowLeft, DollarSign, TrendingDown, TrendingUp, FileText, CreditCard } from "lucide-react";
 import { PaymentFormWrapper } from "@/app/ui/suppliers/payment-form";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
 export default async function SupplierLedgerPage({ params }: { params: { id: string } }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return redirect('/login');
+    const { tenantWhere } = tenantCtx;
+
     const summary = await getSupplierSummary(params.id);
     if (!summary) notFound();
 
     const ledger = await getSupplierLedger(params.id);
-    const branches = await prisma.branch.findMany({ select: { id: true, name: true } });
+
+    let branchWhere = {};
+    if (tenantWhere.organizationId) {
+        branchWhere = { organizationId: tenantWhere.organizationId };
+    } else if (tenantWhere.branchId) {
+        branchWhere = { id: tenantWhere.branchId };
+    }
+
+    const branches = await prisma.branch.findMany({
+        where: branchWhere,
+        select: { id: true, name: true }
+    });
 
     const { supplier, totalPurchased, totalPayments, balance } = summary;
 
@@ -90,8 +107,8 @@ export default async function SupplierLedgerPage({ params }: { params: { id: str
                             <th className="px-6 py-3 font-cairo">النوع</th>
                             <th className="px-6 py-3 font-cairo">الوصف</th>
                             <th className="px-6 py-3 font-cairo">الفرع</th>
-                            <th className="px-6 py-3 font-cairo">مدين</th>
-                            <th className="px-6 py-3 font-cairo">دائن</th>
+                            <th className="px-6 py-3 font-cairo">دائن (مشتريات)</th>
+                            <th className="px-6 py-3 font-cairo">مدين (دفعات)</th>
                             <th className="px-6 py-3 font-cairo">الرصيد</th>
                         </tr>
                     </thead>
@@ -120,7 +137,7 @@ export default async function SupplierLedgerPage({ params }: { params: { id: str
                                 <td className="px-6 py-3 text-sm font-bold text-success whitespace-nowrap">
                                     {entry.type === 'payment' ? entry.amount.toLocaleString('en-US') : '—'}
                                 </td>
-                                <td className="px-6 py-3 text-sm font-bold text-foreground whitespace-nowrap">
+                                <td className="px-6 py-3 text-sm font-bold text-foreground whitespace-nowrap" dir="ltr">
                                     {(entry.runningBalance ?? 0).toLocaleString('en-US')}
                                 </td>
                             </tr>

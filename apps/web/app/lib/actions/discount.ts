@@ -1,11 +1,13 @@
 "use server";
 
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 // Schema for discount validation
 const DiscountSchema = z.object({
@@ -23,6 +25,9 @@ const DiscountSchema = z.object({
 
 // Create a new discount
 export async function createDiscount(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = DiscountSchema.safeParse({
         name: formData.get("name"),
         code: formData.get("code") || undefined,
@@ -76,6 +81,9 @@ export async function createDiscount(prevState: any, formData: FormData) {
 
 // Update discount
 export async function updateDiscount(id: string, prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = DiscountSchema.safeParse({
         name: formData.get("name"),
         code: formData.get("code") || undefined,
@@ -127,6 +135,9 @@ export async function updateDiscount(id: string, prevState: any, formData: FormD
 
 // Delete discount
 export async function deleteDiscount(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         await prisma.discount.delete({
             where: { id },

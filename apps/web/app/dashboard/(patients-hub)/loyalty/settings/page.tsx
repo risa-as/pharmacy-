@@ -29,11 +29,14 @@ export default function LoyaltySettingsPage() {
         setSaving(true);
         setSaved(false);
         try {
-            await fetch("/api/loyalty", {
+            const res = await fetch("/api/loyalty", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(settings),
             });
+            if (!res.ok) throw new Error("server error");
+            const updated = await res.json();
+            setSettings(updated);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
         } catch (error) {

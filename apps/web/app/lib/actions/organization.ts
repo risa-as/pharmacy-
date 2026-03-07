@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 const OrganizationSchema = z.object({
     id: z.string(),
@@ -16,6 +17,9 @@ const CreateOrganization = OrganizationSchema.omit({ id: true });
 const UpdateOrganization = OrganizationSchema;
 
 export async function createOrganization(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = CreateOrganization.safeParse({
         name: formData.get("name"),
     });
@@ -50,6 +54,9 @@ export async function updateOrganization(
     prevState: any,
     formData: FormData,
 ) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = UpdateOrganization.safeParse({
         id: id,
         name: formData.get("name"),
@@ -78,6 +85,9 @@ export async function updateOrganization(
 }
 
 export async function deleteOrganization(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     try {
         await prisma.organization.delete({
             where: { id },

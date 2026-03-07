@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from "@/auth";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function GET(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
 
         const { searchParams } = new URL(req.url);
-        const branchId = searchParams.get("branchId") || session.user.branchId;
+        const branchId = searchParams.get("branchId") || tenantCtx.user.branchId;
 
         if (!branchId) {
             return NextResponse.json({ error: "Branch ID required" }, { status: 400 });
@@ -34,13 +32,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
 
         const body = await req.json();
-        const branchId = body.branchId || session.user.branchId;
+        const branchId = body.branchId || tenantCtx.user.branchId;
 
         if (!branchId) {
             return NextResponse.json({ error: "Branch ID required" }, { status: 400 });
@@ -58,7 +54,7 @@ export async function POST(req: NextRequest) {
         const stocktake = await prisma.stocktake.create({
             data: {
                 branchId,
-                userId: session.user.id,
+                userId: tenantCtx.user.id,
                 status: "PENDING",
                 notes: body.notes || null,
             }

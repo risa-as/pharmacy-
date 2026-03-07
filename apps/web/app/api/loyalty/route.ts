@@ -1,18 +1,29 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 // GET: Fetch loyalty settings
 export async function GET() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+    if (!tenantCtx.organizationId) {
+        return NextResponse.json({ error: "No organization assigned" }, { status: 400 });
+    }
+
     try {
-        let settings = await prisma.companySettings.findFirst();
-        if (!settings) {
-            settings = await prisma.companySettings.create({ data: {} });
+        let organization = await prisma.organization.findUnique({
+            where: { id: tenantCtx.organizationId }
+        });
+
+        if (!organization) {
+            return NextResponse.json({ error: "Organization not found" }, { status: 404 });
         }
+
         return NextResponse.json({
-            loyaltyEnabled: settings.loyaltyEnabled,
-            loyaltyPointsPerDinar: settings.loyaltyPointsPerDinar,
-            loyaltyRedemptionValue: settings.loyaltyRedemptionValue,
-            loyaltyMinRedemption: settings.loyaltyMinRedemption,
+            loyaltyEnabled: organization.loyaltyEnabled,
+            loyaltyPointsPerDinar: organization.loyaltyPointsPerDinar,
+            loyaltyRedemptionValue: organization.loyaltyRedemptionValue,
+            loyaltyMinRedemption: organization.loyaltyMinRedemption,
         });
     } catch (error) {
         return NextResponse.json({ error: "Failed to fetch settings" }, { status: 500 });
@@ -21,20 +32,23 @@ export async function GET() {
 
 // PUT: Update loyalty settings
 export async function PUT(request: Request) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+    if (!tenantCtx.organizationId) {
+        return NextResponse.json({ error: "No organization assigned" }, { status: 400 });
+    }
+
     try {
         const body = await request.json();
-        let settings = await prisma.companySettings.findFirst();
-        if (!settings) {
-            settings = await prisma.companySettings.create({ data: {} });
-        }
+        const organizationId = tenantCtx.organizationId;
 
-        const updated = await prisma.companySettings.update({
-            where: { id: settings.id },
+        const updated = await prisma.organization.update({
+            where: { id: organizationId },
             data: {
-                loyaltyEnabled: body.loyaltyEnabled ?? settings.loyaltyEnabled,
-                loyaltyPointsPerDinar: body.loyaltyPointsPerDinar ?? settings.loyaltyPointsPerDinar,
-                loyaltyRedemptionValue: body.loyaltyRedemptionValue ?? settings.loyaltyRedemptionValue,
-                loyaltyMinRedemption: body.loyaltyMinRedemption ?? settings.loyaltyMinRedemption,
+                loyaltyEnabled: body.loyaltyEnabled,
+                loyaltyPointsPerDinar: body.loyaltyPointsPerDinar !== undefined ? Number(body.loyaltyPointsPerDinar) : undefined,
+                loyaltyRedemptionValue: body.loyaltyRedemptionValue !== undefined ? Number(body.loyaltyRedemptionValue) : undefined,
+                loyaltyMinRedemption: body.loyaltyMinRedemption !== undefined ? Number(body.loyaltyMinRedemption) : undefined,
             },
         });
 
@@ -45,6 +59,7 @@ export async function PUT(request: Request) {
             loyaltyMinRedemption: updated.loyaltyMinRedemption,
         });
     } catch (error) {
+        console.error("Loyalty update error:", error);
         return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
     }
 }

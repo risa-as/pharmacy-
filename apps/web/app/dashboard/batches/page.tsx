@@ -1,11 +1,10 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { Box, AlertTriangle, Calendar, Plus } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency } from "@/app/lib/utils/currency";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 export default async function BatchesPage() {
     const tenantCtx = await getTenantContext();

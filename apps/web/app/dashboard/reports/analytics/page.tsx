@@ -1,13 +1,10 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { BarChart3, TrendingUp, AlertOctagon } from "lucide-react";
 import BestSellingChart from "@/app/ui/dashboard/reports/best-selling-chart";
 import StagnantItemsTable from "@/app/ui/dashboard/reports/stagnant-items-table";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export default async function AnalyticsPage({
     searchParams,

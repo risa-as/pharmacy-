@@ -1,23 +1,34 @@
 import { PlusIcon, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { UpdateDrug, DeleteDrug } from "@/app/ui/drugs/buttons";
 import GlobalDrugSearch from "@/app/ui/drugs/global-search";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 const ITEMS_PER_PAGE = 50;
 
-async function getDrugs(query: string, currentPage: number) {
-    const where = query ? {
+async function getDrugs(query: string, currentPage: number, organizationId: string | undefined) {
+    const searchFilter = query ? {
         OR: [
             { tradeName: { contains: query } },
             { scientificName: { contains: query } },
             { barcode: { contains: query } },
         ],
-    } : undefined;
+    } : {};
+
+    const where = {
+        AND: [
+            {
+                OR: [
+                    { organizationId: null },
+                    ...(organizationId ? [{ organizationId }] : [])
+                ]
+            },
+            searchFilter
+        ]
+    };
 
     const [drugs, total] = await Promise.all([
         prisma.globalDrug.findMany({
@@ -40,10 +51,16 @@ export default async function Page({
         page?: string;
     };
 }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+
+    const organizationId = tenantCtx.organizationId;
     const query = searchParams?.query || "";
     const currentPage = Number(searchParams?.page) || 1;
-    const { drugs, total } = await getDrugs(query, currentPage);
+    const { drugs, total } = await getDrugs(query, currentPage, organizationId);
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
+
+
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>

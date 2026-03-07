@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/app/lib/prisma";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function POST(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { barcode, branchId } = await req.json();
 
         if (!barcode) {
@@ -31,7 +34,7 @@ export async function POST(req: Request) {
         }
 
         // 2. Check if inventory exists for this drug
-        const inventoryWhere: any = { drugId: drug.id };
+        const inventoryWhere: any = { drugId: drug.id, ...tenantBranchWhere };
         if (branchId) {
             inventoryWhere.branchId = branchId;
         }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { auth } from "@/auth";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 import { randomUUID } from "crypto";
 
 // Helper function to round to nearest 250 IQD (ceiling)
@@ -11,13 +11,11 @@ function roundToNearest250Ceil(num: number): number {
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
 
         const body = await req.json();
-        const branchId = body.branchId || session.user.branchId;
+        const branchId = body.branchId || tenantCtx.user.branchId;
 
         if (!branchId) {
             return NextResponse.json({ error: "Branch ID required" }, { status: 400 });

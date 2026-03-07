@@ -5,15 +5,16 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
 export default async function LoyaltyDashboardPage() {
-    // 1. Get settings
-    let settings = await prisma.companySettings.findFirst();
-    if (!settings) {
-        settings = await prisma.companySettings.create({ data: {} });
-    }
-
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+    const { tenantBranchWhere, organizationId } = tenantCtx;
+
+    // 1. Get settings from Organization
+    const organization = await prisma.organization.findUnique({
+        where: { id: organizationId || '' },
+        select: { loyaltyEnabled: true, loyaltyPointsPerDinar: true, loyaltyRedemptionValue: true, loyaltyMinRedemption: true }
+    });
+    const settings = organization || {};
 
     // 2. Get loyalty stats
     const totalAccounts = await prisma.loyaltyAccount.count({

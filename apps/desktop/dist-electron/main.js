@@ -9,16 +9,16 @@ const require$$0$1 = require("child_process");
 const require$$1 = require("crypto");
 const require$$0$2 = require("os");
 const node_crypto = require("node:crypto");
-const require$$1$2 = require("tty");
+const path$2 = require("path");
 const fs$3 = require("fs");
-const require$$3 = require("path");
+const require$$1$2 = require("tty");
 const require$$5 = require("fs/promises");
 const require$$1$1 = require("util");
 const require$$7 = require("async_hooks");
 const require$$8 = require("events");
 const Store = require("electron-store");
 const require$$0$3 = require("stream");
-const require$$3$1 = require("http");
+const require$$3 = require("http");
 const require$$4 = require("https");
 const require$$5$1 = require("url");
 const fetch$1 = require("node-fetch");
@@ -2186,7 +2186,7 @@ var Xo = Z((Gf, Yu) => {
   Yu.exports = { name: "dotenv", version: "16.0.3", description: "Loads environment variables from .env file", main: "lib/main.js", types: "lib/main.d.ts", exports: { ".": { require: "./lib/main.js", types: "./lib/main.d.ts", default: "./lib/main.js" }, "./config": "./config.js", "./config.js": "./config.js", "./lib/env-options": "./lib/env-options.js", "./lib/env-options.js": "./lib/env-options.js", "./lib/cli-options": "./lib/cli-options.js", "./lib/cli-options.js": "./lib/cli-options.js", "./package.json": "./package.json" }, scripts: { "dts-check": "tsc --project tests/types/tsconfig.json", lint: "standard", "lint-readme": "standard-markdown", pretest: "npm run lint && npm run dts-check", test: "tap tests/*.js --100 -Rspec", prerelease: "npm test", release: "standard-version" }, repository: { type: "git", url: "git://github.com/motdotla/dotenv.git" }, keywords: ["dotenv", "env", ".env", "environment", "variables", "config", "settings"], readmeFilename: "README.md", license: "BSD-2-Clause", devDependencies: { "@types/node": "^17.0.9", decache: "^4.6.1", dtslint: "^3.7.0", sinon: "^12.0.1", standard: "^16.0.4", "standard-markdown": "^7.1.0", "standard-version": "^9.3.2", tap: "^15.1.6", tar: "^6.1.11", typescript: "^4.5.4" }, engines: { node: ">=12" } };
 });
 var ts = Z((Qf, Kr) => {
-  var Zu = fs$3, es = require$$3, Xu = require$$0$2, ec = Xo(), tc = ec.version, rc = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
+  var Zu = fs$3, es = path$2, Xu = require$$0$2, ec = Xo(), tc = ec.version, rc = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
   function nc(e10) {
     let t = {}, r = e10.toString();
     r = r.replace(/\r\n?/mg, `
@@ -2704,7 +2704,7 @@ function ii(e10) {
   return (0, zo.default)(e10, e10, { fallback: X });
 }
 k(si());
-var $ = k(require$$3);
+var $ = k(path$2);
 k(si());
 L("prisma:engines");
 function Yo() {
@@ -2747,7 +2747,7 @@ ${s}
 Details: ${t.message}`;
 }
 var di = k(ts()), zr = k(fs$3);
-var ht = k(require$$3);
+var ht = k(path$2);
 function rs(e10) {
   let t = e10.ignoreProcessEnv ? {} : process.env, r = (n) => {
     var _a2;
@@ -2831,7 +2831,7 @@ var Je;
 ((t) => {
   ((E) => (E.findUnique = "findUnique", E.findUniqueOrThrow = "findUniqueOrThrow", E.findFirst = "findFirst", E.findFirstOrThrow = "findFirstOrThrow", E.findMany = "findMany", E.create = "create", E.createMany = "createMany", E.createManyAndReturn = "createManyAndReturn", E.update = "update", E.updateMany = "updateMany", E.upsert = "upsert", E.delete = "delete", E.deleteMany = "deleteMany", E.groupBy = "groupBy", E.count = "count", E.aggregate = "aggregate", E.findRaw = "findRaw", E.aggregateRaw = "aggregateRaw"))(t.ModelAction || (t.ModelAction = {}));
 })(Je || (Je = {}));
-var Zt = k(require$$3);
+var Zt = k(path$2);
 function mi(e10) {
   return Zt.default.sep === Zt.default.posix.sep ? e10 : e10.split(Zt.default.sep).join(Zt.default.posix.sep);
 }
@@ -5202,7 +5202,7 @@ function pd(e10, t) {
   };
 }
 var Wl = k(oi());
-var Hl = require$$7, Kl = require$$8, zl = k(fs$3), Fr = k(require$$3);
+var Hl = require$$7, Kl = require$$8, zl = k(fs$3), Fr = k(path$2);
 var oe = class e9 {
   constructor(t, r) {
     if (t.length - 1 !== r.length) throw t.length === 0 ? new TypeError("Expected at least 1 string") : new TypeError(`Expected ${t.length} strings to have ${t.length - 1} values`);
@@ -5693,7 +5693,7 @@ function In() {
   let e10 = Ga();
   return { id: e10, prettyName: Hd[e10] || e10, isEdge: ["workerd", "deno", "netlify", "edge-light"].includes(e10) };
 }
-var Ka = k(fs$3), Er = k(require$$3);
+var Ka = k(fs$3), Er = k(path$2);
 function On(e10) {
   let { runtimeBinaryTarget: t } = e10;
   return `Add "${t}" to \`binaryTargets\` in the "schema.prisma" file and run \`prisma generate\` after saving it:
@@ -6339,7 +6339,7 @@ var cl = 3, no = L("prisma:client:dataproxyEngine"), io = class {
 function pl(e10) {
   if ((e10 == null ? void 0 : e10.kind) === "itx") return e10.options.id;
 }
-var so = k(require$$0$2), dl = k(require$$3);
+var so = k(require$$0$2), dl = k(path$2);
 var oo = Symbol("PrismaLibraryEngineCache");
 function pm() {
   let e10 = globalThis;
@@ -7370,7 +7370,7 @@ function Xl(e10) {
     JsonNull: objectEnumValues.classes.JsonNull,
     AnyNull: objectEnumValues.classes.AnyNull
   };
-  const path2 = require$$3;
+  const path2 = path$2;
   exports$1.Prisma.TransactionIsolationLevel = makeStrictEnum({
     Serializable: "Serializable"
   });
@@ -7723,6 +7723,10 @@ function Xl(e10) {
           "fromEnvVar": null,
           "value": "windows",
           "native": true
+        },
+        {
+          "fromEnvVar": null,
+          "value": "windows"
         }
       ],
       "previewFeatures": [],
@@ -7740,6 +7744,7 @@ function Xl(e10) {
       "db"
     ],
     "activeProvider": "sqlite",
+    "postinstall": false,
     "inlineDatasources": {
       "db": {
         "url": {
@@ -7749,8 +7754,9 @@ function Xl(e10) {
       }
     },
     "inlineSchema": `generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/desktop-client"
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/desktop-client"
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {
@@ -8176,7 +8182,7 @@ model LocalLicense {
   synced      Boolean   @default(true)
 }
 `,
-    "inlineSchemaHash": "420e54f539f3c02289952bfe27b95d78d1ab0c52965c69458b2992e07393db19",
+    "inlineSchemaHash": "17869c765ff21cfb1f674497ee7b5dce8adb20b7d8585859234acbf2320141c2",
     "copyEngine": true
   };
   const fs2 = fs$3;
@@ -8208,10 +8214,30 @@ model LocalLicense {
   path2.join(__dirname, "schema.prisma");
   path2.join(process.cwd(), "node_modules/.prisma/desktop-client/schema.prisma");
 })(desktopClient);
+function getDbPath$1() {
+  if (electron.app.isPackaged) {
+    const userDataPath = electron.app.getPath("userData");
+    const dbPath = path$2.join(userDataPath, "local.db");
+    if (!fs$3.existsSync(dbPath)) {
+      const seedDbPath = path$2.join(process.resourcesPath, "prisma", "local.db");
+      if (fs$3.existsSync(seedDbPath)) {
+        fs$3.mkdirSync(path$2.dirname(dbPath), { recursive: true });
+        fs$3.copyFileSync(seedDbPath, dbPath);
+        console.log("[DB] Copied initial database to userData:", dbPath);
+      } else {
+        console.warn("[DB] No seed database found at:", seedDbPath);
+      }
+    }
+    return dbPath;
+  } else {
+    return path$2.join(__dirname, "../prisma/local.db");
+  }
+}
+const dbUrl = `file:${getDbPath$1()}`;
 const prisma = new desktopClient.PrismaClient({
   datasources: {
     db: {
-      url: `file:${require$$3.join(__dirname, "../prisma/local.db")}`
+      url: dbUrl
     }
   }
 });
@@ -10120,7 +10146,7 @@ async function syncSales() {
     }
     const unsyncedSales = await prisma.sale.findMany({
       where: { synced: false },
-      include: { items: true, payment: true },
+      include: { items: true, payment: true, patient: true },
       take: 10
     });
     if (unsyncedSales.length === 0) return;
@@ -10144,7 +10170,14 @@ async function syncSales() {
           drugId: item.drugId,
           quantity: item.quantity,
           price: item.price
-        }))
+        })),
+        // Include patient snapshot so cloud can upsert before FK check
+        patient: sale.patient ? {
+          id: sale.patient.id,
+          name: sale.patient.name,
+          phone: sale.patient.phone ?? null,
+          branchId: sale.patient.branchId ?? branchId
+        } : null
       };
     });
     const salesIdempotencyKey = buildIdempotencyKey("sync-sales", `${branchId}-${Date.now()}`);
@@ -10592,7 +10625,7 @@ async function syncCurrentBranch() {
       return;
     }
     console.log(`[Sync] Verifying local branch record for ID: ${branchId}...`);
-    const response = await fetchWithRetry(buildApiUrl(`/branches`));
+    const response = await fetchWithRetry(buildApiUrl(`/branches?branchId=${encodeURIComponent(branchId)}`));
     if (!response.ok) throw new Error("Failed to fetch branches");
     const branches = await response.json();
     const myBranch = branches.find((b2) => b2.id === branchId);
@@ -10668,8 +10701,10 @@ async function syncSuppliers() {
   if (!beginSyncTask(taskName)) return;
   try {
     if (!await checkConnection()) return;
+    const branchId = getBranchId();
+    if (!branchId) return;
     console.log("[Sync] Syncing suppliers list...");
-    const response = await fetchWithRetry(buildApiUrl("/suppliers"));
+    const response = await fetchWithRetry(buildApiUrl(`/suppliers?branchId=${encodeURIComponent(branchId)}`));
     if (!response.ok) throw new Error("Suppliers fetch failed");
     const suppliers = await response.json();
     if (Array.isArray(suppliers)) {
@@ -11367,10 +11402,10 @@ async function pushUpdateInventoryToCloud(data, options) {
   }
 }
 const getDbPath = () => {
-  return require$$3.join(electron.app.getPath("userData"), "prisma", "local.db");
+  return path$2.join(electron.app.getPath("userData"), "prisma", "local.db");
 };
 const getBackupDir = () => {
-  const backupDir = require$$3.join(electron.app.getPath("documents"), "Faramace Backups");
+  const backupDir = path$2.join(electron.app.getPath("documents"), "Faramace Backups");
   if (!fs$3.existsSync(backupDir)) {
     fs$3.mkdirSync(backupDir, { recursive: true });
   }
@@ -11380,14 +11415,14 @@ const createBackup = async () => {
   try {
     const dbPath = getDbPath();
     const backupDir = getBackupDir();
-    const devDbPath = require$$3.join(process.cwd(), "prisma", "local.db");
+    const devDbPath = path$2.join(process.cwd(), "prisma", "local.db");
     const sourcePath = fs$3.existsSync(dbPath) ? dbPath : devDbPath;
     if (!fs$3.existsSync(sourcePath)) {
       return { success: false, error: "قاعدة البيانات غير موجودة" };
     }
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
     const backupFileName = `backup-${timestamp}.db`;
-    const backupPath = require$$3.join(backupDir, backupFileName);
+    const backupPath = path$2.join(backupDir, backupFileName);
     fs$3.copyFileSync(sourcePath, backupPath);
     console.log(`Backup created: ${backupPath}`);
     return { success: true, path: backupPath };
@@ -11399,7 +11434,7 @@ const createBackup = async () => {
 const restoreBackup = async (backupPath) => {
   try {
     const dbPath = getDbPath();
-    const devDbPath = require$$3.join(process.cwd(), "prisma", "local.db");
+    const devDbPath = path$2.join(process.cwd(), "prisma", "local.db");
     const targetPath = fs$3.existsSync(dbPath) ? dbPath : devDbPath;
     if (!fs$3.existsSync(backupPath)) {
       return { success: false, error: "ملف النسخة الاحتياطية غير موجود" };
@@ -11417,7 +11452,7 @@ const getBackupList = () => {
     const backupDir = getBackupDir();
     const files = fs$3.readdirSync(backupDir);
     return files.filter((file) => file.endsWith(".db")).map((file) => {
-      const filePath = require$$3.join(backupDir, file);
+      const filePath = path$2.join(backupDir, file);
       const stats = fs$3.statSync(filePath);
       return {
         name: file,
@@ -22411,7 +22446,7 @@ var mimeDb = require$$0;
  */
 (function(exports$1) {
   var db = mimeDb;
-  var extname = require$$3.extname;
+  var extname = path$2.extname;
   var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/;
   var TEXT_TYPE_REGEXP = /^text\//i;
   exports$1.charset = charset;
@@ -23324,8 +23359,8 @@ var populate$1 = function(dst, src) {
 };
 var CombinedStream = combined_stream;
 var util = require$$1$1;
-var path = require$$3;
-var http = require$$3$1;
+var path = path$2;
+var http = require$$3;
 var https = require$$4;
 var parseUrl = require$$5$1.parse;
 var fs = fs$3;
@@ -25124,9 +25159,11 @@ electron.ipcMain.handle("delete-inventory-item", async (_, id2) => {
 });
 electron.ipcMain.handle(
   "add-inventory-batch",
-  async (_event, { inventoryId, batchNumber, quantity, costPrice, expiryDate, supplierId }) => {
+  async (_event, { inventoryId, quantity, costPrice, expiryDate, supplierId }) => {
     try {
       const qty = parseInt(quantity, 10);
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      const batchNumber = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
       await prisma.$transaction([
         prisma.batch.create({
           data: {

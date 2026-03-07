@@ -1,8 +1,12 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 // GET: Fetch a patient's loyalty account + recent transactions
 export async function GET(request: NextRequest) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+
     try {
         const patientId = request.nextUrl.searchParams.get("patientId");
         if (!patientId) {
@@ -32,6 +36,9 @@ export async function GET(request: NextRequest) {
 
 // POST: Create a loyalty account for a patient
 export async function POST(request: Request) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+
     try {
         const { patientId } = await request.json();
         if (!patientId) {

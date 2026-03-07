@@ -173,10 +173,10 @@ export async function syncSales() {
             return;
         }
 
-        // 1. Get unsynced sales
+        // 1. Get unsynced sales (include patient for credit sales)
         const unsyncedSales = await prisma.sale.findMany({
             where: { synced: false },
-            include: { items: true, payment: true },
+            include: { items: true, payment: true, patient: true },
             take: 10
         });
 
@@ -191,7 +191,7 @@ export async function syncSales() {
             return;
         }
 
-        // Map sales to include payment and patient data
+        // Map sales to include payment and patient data (patient data needed for credit sales)
         const salesPayload = unsyncedSales.map(sale => ({
             id: sale.id,
             total: sale.total,
@@ -204,7 +204,14 @@ export async function syncSales() {
                 drugId: item.drugId,
                 quantity: item.quantity,
                 price: item.price
-            }))
+            })),
+            // Include patient snapshot so cloud can upsert before FK check
+            patient: sale.patient ? {
+                id: sale.patient.id,
+                name: sale.patient.name,
+                phone: (sale.patient as any).phone ?? null,
+                branchId: (sale.patient as any).branchId ?? branchId,
+            } : null,
         }));
 
         const salesIdempotencyKey = buildIdempotencyKey('sync-sales', `${branchId}-${Date.now()}`);
@@ -780,8 +787,8 @@ export async function syncCurrentBranch() {
 
         console.log(`[Sync] Verifying local branch record for ID: ${branchId}...`);
 
-        // Fetch branches from API
-        const response = await fetchWithRetry(buildApiUrl(`/branches`));
+        // Fetch branches from API (pass branchId so server can resolve org without session)
+        const response = await fetchWithRetry(buildApiUrl(`/branches?branchId=${encodeURIComponent(branchId)}`));
         if (!response.ok) throw new Error("Failed to fetch branches");
 
         const branches = await response.json();
@@ -874,8 +881,10 @@ export async function syncSuppliers() {
     if (!beginSyncTask(taskName)) return;
     try {
         if (!await checkConnection()) return;
+        const branchId = getBranchId();
+        if (!branchId) return;
         console.log('[Sync] Syncing suppliers list...');
-        const response = await fetchWithRetry(buildApiUrl('/suppliers'));
+        const response = await fetchWithRetry(buildApiUrl(`/suppliers?branchId=${encodeURIComponent(branchId)}`));
         if (!response.ok) throw new Error('Suppliers fetch failed');
         const suppliers = await response.json() as Array<{ id: string; name: string; phone?: string }>;
         if (Array.isArray(suppliers)) {

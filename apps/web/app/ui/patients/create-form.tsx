@@ -5,6 +5,32 @@ import { useFormState } from "react-dom";
 import { createPatient } from "@/app/lib/actions/patient";
 import { Users, ArrowRight } from "lucide-react";
 
+import { useFormStatus } from "react-dom";
+
+function SubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <button
+            type="submit"
+            disabled={pending}
+            className={`flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground transition-all duration-300 ${pending ? "opacity-70 cursor-not-allowed transform scale-95" : "hover:bg-primary/90 hover:scale-105 shadow-md hover:shadow-lg"
+                }`}
+        >
+            {pending ? (
+                <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
+                    جاري الحفظ...
+                </div>
+            ) : (
+                <>
+                    <Users className="h-5 w-5" />
+                    حفظ المريض
+                </>
+            )}
+        </button>
+    );
+}
+
 export default function CreatePatientForm() {
     const initialState: any = { message: "", errors: {} };
     const [state, dispatch] = useFormState(createPatient, initialState);
@@ -128,16 +154,10 @@ export default function CreatePatientForm() {
 
             {/* الأزرار */}
             <div className="flex gap-4">
-                <button
-                    type="submit"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                    <Users className="h-5 w-5" />
-                    حفظ المريض
-                </button>
+                <SubmitButton />
                 <Link
                     href="/dashboard/patients"
-                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-colors hover:bg-muted"
+                    className="flex items-center gap-2 rounded-lg bg-muted px-6 py-3 font-bold text-muted-foreground transition-all duration-300 hover:bg-muted/80 hover:scale-105"
                 >
                     <ArrowRight className="h-5 w-5" />
                     إلغاء

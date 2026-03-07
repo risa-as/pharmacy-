@@ -2,6 +2,8 @@
 
 import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 // ===================== كشف حساب المورد =====================
 
@@ -9,7 +11,11 @@ import { revalidatePath } from 'next/cache';
  * جلب قائمة الموردين مع الأرصدة
  */
 export async function getSuppliersWithBalances() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+
     const suppliers = await prisma.supplier.findMany({
+        where: tenantCtx.organizationId ? { organizationId: tenantCtx.organizationId } : {},
         include: {
             _count: { select: { purchases: true, payments: true } },
         },
@@ -32,8 +38,11 @@ export async function getSuppliersWithBalances() {
  * ملخص مورد واحد
  */
 export async function getSupplierSummary(supplierId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+
     const supplier = await prisma.supplier.findUnique({
-        where: { id: supplierId },
+        where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined },
     });
 
     if (!supplier) return null;
@@ -67,6 +76,14 @@ export async function getSupplierSummary(supplierId: string) {
  * كشف حساب كامل (حركات مرتبة بالتاريخ)
  */
 export async function getSupplierLedger(supplierId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+
+    const supplier = await prisma.supplier.findUnique({
+        where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined },
+    });
+    if (!supplier) return [];
+
     // مشتريات مكتملة
     const purchases = await prisma.purchase.findMany({
         where: { supplierId, status: 'COMPLETED' },
@@ -117,7 +134,17 @@ export async function getSupplierLedger(supplierId: string) {
     ];
 
     // ترتيب بالتاريخ (الأقدم أولاً لحساب الرصيد التراكمي)
-    entries.sort((a, b) => a.date.getTime() - b.date.getTime());
+    entries.sort((a, b) => {
+        const dayA = a.date.toISOString().split('T')[0];
+        const dayB = b.date.toISOString().split('T')[0];
+
+        if (dayA === dayB) {
+            // في نفس اليوم: نضع المشتريات قبل الدفعات لتجنب ظهور رصيد بالسالب
+            if (a.type === 'purchase' && b.type === 'payment') return -1;
+            if (a.type === 'payment' && b.type === 'purchase') return 1;
+        }
+        return a.date.getTime() - b.date.getTime();
+    });
 
     // حساب الرصيد التراكمي
     let running = 0;
@@ -148,6 +175,9 @@ export async function recordSupplierPayment(data: {
     notes?: string;
     date?: string;
 }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+
     try {
         const { supplierId, branchId, amount, method, reference, notes, date } = data;
 
@@ -155,10 +185,12 @@ export async function recordSupplierPayment(data: {
             return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
         }
 
-        // التأكد من وجود المورد
-        const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
+        // التأكد من وجود المورد وملكيته للمؤسسة
+        const supplier = await prisma.supplier.findUnique({
+            where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined }
+        });
         if (!supplier) {
-            return { success: false, error: 'المورد غير موجود' };
+            return { success: false, error: 'المورد غير موجود أو ليس لديك صلاحية' };
         }
 
         await prisma.$transaction(async (tx) => {
@@ -195,6 +227,14 @@ export async function recordSupplierPayment(data: {
  * إعادة حساب رصيد المورد (في حالة عدم التطابق)
  */
 export async function recalculateSupplierBalance(supplierId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return 0;
+
+    const supplier = await prisma.supplier.findUnique({
+        where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined }
+    });
+    if (!supplier) return 0;
+
     const purchases = await prisma.purchase.aggregate({
         where: { supplierId, status: 'COMPLETED' },
         _sum: { total: true },

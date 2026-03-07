@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 const LEAD_TIME_DAYS = 14; // Average lead time for orders in Iraq
 const SAFETY_STOCK_DAYS = 7; // Safety buffer
@@ -7,10 +8,14 @@ const VELOCITY_WINDOW_DAYS = 30; // Days to look back for sales data
 
 export async function GET(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId');
 
-        const whereClause: any = {};
+        const whereClause: any = { ...tenantBranchWhere };
         if (branchId) {
             whereClause.branchId = branchId;
         }
@@ -37,7 +42,7 @@ export async function GET(req: Request) {
 
         // Fetch pending purchases to exclude items already ordered
         const pendingPurchases = await prisma.purchase.findMany({
-            where: { status: 'PENDING' },
+            where: { status: 'PENDING', ...tenantBranchWhere },
             include: { items: true }
         });
 

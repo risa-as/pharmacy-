@@ -1,12 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { FileSpreadsheet, TrendingUp } from "lucide-react";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export default async function PurchasesReportPage() {
     const tenantCtx = await getTenantContext();

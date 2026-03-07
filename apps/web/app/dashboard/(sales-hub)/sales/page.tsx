@@ -1,21 +1,25 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { ShoppingCart, TrendingUp, Calendar, Package } from "lucide-react";
 import Link from "next/link";
 import SalesTable from "@/app/ui/dashboard/sales/sales-table";
 
-const prisma = new PrismaClient();
-
 import { getCompanySettings } from "@/app/lib/actions/settings";
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
-export default async function SalesPage() {
+export default async function SalesPage({
+    searchParams,
+}: {
+    searchParams: { [key: string]: string | string[] | undefined };
+}) {
     const tenantCtx = await getTenantContext();
     const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+    const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const settings = await getCompanySettings();
     // جلب المبيعات
     const sales = await prisma.sale.findMany({
-        where: tenantBranchWhere,
+        where: branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere,
         orderBy: { createdAt: "desc" },
         include: {
             items: {
@@ -49,6 +53,10 @@ export default async function SalesPage() {
                     <ShoppingCart className="w-7 h-7 text-primary" />
                     المبيعات
                 </h1>
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={branchId} baseUrl="/dashboard/sales" />
             </div>
 
             {/* Stats */}

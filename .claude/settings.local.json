@@ -52,7 +52,9 @@
       "Bash(npx prisma:*)",
       "Bash(git:*)",
       "Bash(pwsh:*)",
-      "Bash(pnpm:*)"
+      "Bash(pnpm:*)",
+      "Bash(xargs sh:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

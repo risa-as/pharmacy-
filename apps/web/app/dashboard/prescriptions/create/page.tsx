@@ -1,29 +1,28 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import CreatePrescriptionForm from "@/app/ui/prescriptions/create-form";
 import { FileText } from "lucide-react";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-async function getPatients() {
-    return await prisma.patient.findMany({
-        select: { id: true, name: true, phone: true },
-        orderBy: { name: "asc" },
-    });
-}
-
-async function getDrugs() {
-    return await prisma.globalDrug.findMany({
-        select: { id: true, tradeName: true, barcode: true },
-        where: { isActive: true },
-        orderBy: { tradeName: "asc" },
-        take: 100,
-    });
-}
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 export default async function CreatePrescriptionPage() {
-    const [patients, drugs] = await Promise.all([getPatients(), getDrugs()]);
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+    const { tenantBranchWhere } = tenantCtx;
+
+    const [patients, drugs] = await Promise.all([
+        prisma.patient.findMany({
+            where: tenantBranchWhere,
+            select: { id: true, name: true, phone: true },
+            orderBy: { name: "asc" },
+        }),
+        prisma.globalDrug.findMany({
+            select: { id: true, tradeName: true, barcode: true },
+            where: { isActive: true },
+            orderBy: { tradeName: "asc" },
+            take: 100,
+        }),
+    ]);
 
     return (
         <main className="mx-auto max-w-3xl" suppressHydrationWarning>

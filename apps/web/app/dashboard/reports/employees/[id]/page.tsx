@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { User, DollarSign, Calendar, TrendingUp, ShoppingBag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
@@ -13,9 +13,6 @@ import { NextResponse } from 'next/server';
 import EmployeeSalesChart from "./chart";
 import RecentSalesTable from "@/app/ui/dashboard/reports/recent-sales-table";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export default async function EmployeeDetailPage({ params }: { params: { id: string } }) {
     const tenantCtx = await getTenantContext();

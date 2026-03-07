@@ -7,8 +7,13 @@ import { Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { auth } from "@/auth";
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
-export default async function PurchasesPage() {
+export default async function PurchasesPage({
+    searchParams,
+}: {
+    searchParams: { [key: string]: string | string[] | undefined };
+}) {
     const session = await auth();
     const branchId = session?.user?.branchId;
     const isAdmin = session?.user?.role === "ADMIN";
@@ -17,7 +22,8 @@ export default async function PurchasesPage() {
         return <div className="p-8 text-center text-destructive">يرجى تسجيل الدخول لعرض المشتريات.</div>;
     }
 
-    const purchases = await getPurchases();
+    const filterBranchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
+    const purchases = await getPurchases(filterBranchId);
 
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">
@@ -29,6 +35,10 @@ export default async function PurchasesPage() {
                         طلب ذكي جديد
                     </Button>
                 </Link>
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={filterBranchId} baseUrl="/dashboard/purchases" />
             </div>
 
             <div className="bg-card rounded-lg shadow border">

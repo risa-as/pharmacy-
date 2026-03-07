@@ -9,22 +9,29 @@ import { NextResponse } from 'next/server';
 export async function getAllDebtors(branchId?: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return [];
-    const { tenantBranchWhere } = tenantCtx;
+    const { user, organizationId } = tenantCtx;
 
-    let whereClause: any = { balance: { gt: 0 }, ...tenantBranchWhere };
-
+    // Filter by the SALE's branch, not the patient's registration branch.
+    // A patient may have branchId=null (created before tenant isolation) but still owe
+    // money via a credit sale that IS scoped to this org/branch.
+    const saleFilter: any = { payment: { method: "CREDIT" } };
     if (branchId) {
-        whereClause.branchId = branchId;
+        saleFilter.branchId = branchId;
+    } else if (user.role === 'ADMIN' && organizationId) {
+        saleFilter.branch = { organizationId };
+    } else if (user.branchId) {
+        saleFilter.branchId = user.branchId;
     }
 
     const patients = await prisma.patient.findMany({
-        where: whereClause,
+        where: {
+            balance: { gt: 0 },
+            sales: { some: saleFilter },
+        },
         orderBy: { balance: "desc" },
         include: {
             sales: {
-                where: {
-                    payment: { method: "CREDIT" },
-                },
+                where: { payment: { method: "CREDIT" } },
                 include: {
                     payment: true,
                     debtPayments: true,
@@ -39,6 +46,10 @@ export async function getAllDebtors(branchId?: string) {
             const paid = s.debtPayments.reduce((sum, dp) => sum + dp.amount, 0);
             return paid < s.total - s.discount;
         });
+        // sales are ordered desc, so oldest unpaid is last in the filtered array
+        const oldestUnpaidDate = unpaidSales.length > 0
+            ? unpaidSales[unpaidSales.length - 1].createdAt
+            : null;
         return {
             id: p.id,
             name: p.name,
@@ -46,6 +57,7 @@ export async function getAllDebtors(branchId?: string) {
             balance: p.balance,
             unpaidSalesCount: unpaidSales.length,
             lastSaleDate: p.sales[0]?.createdAt || null,
+            oldestUnpaidDate,
         };
     });
 }
@@ -58,24 +70,37 @@ export async function getDebtStats(branchId?: string) {
     if (tenantCtx instanceof NextResponse) {
         return { totalDebt: 0, debtorCount: 0, todayPaymentsAmount: 0, todayPaymentsCount: 0 };
     }
-    const { tenantBranchWhere } = tenantCtx;
+    const { user, organizationId } = tenantCtx;
 
-    let wherePatients: any = { balance: { gt: 0 }, ...tenantBranchWhere };
-    let wherePayments: any = {
-        createdAt: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-        },
-        sale: {
-            patient: {
-                ...tenantBranchWhere
-            }
-        }
+    // Filter patients by SALE branch (not patient.branchId) to include null-branchId patients
+    const saleFilter: any = { payment: { method: 'CREDIT' } };
+    if (branchId) {
+        saleFilter.branchId = branchId;
+    } else if (user.role === 'ADMIN' && organizationId) {
+        saleFilter.branch = { organizationId };
+    } else if (user.branchId) {
+        saleFilter.branchId = user.branchId;
+    }
+
+    const wherePatients: any = {
+        balance: { gt: 0 },
+        sales: { some: saleFilter },
     };
 
+    // For today's payments: scope via the sale's branch
+    const saleBranchFilter: any = {};
     if (branchId) {
-        wherePatients.branchId = branchId;
-        wherePayments.sale.patient.branchId = branchId;
+        saleBranchFilter.branchId = branchId;
+    } else if (user.role === 'ADMIN' && organizationId) {
+        saleBranchFilter.branch = { organizationId };
+    } else if (user.branchId) {
+        saleBranchFilter.branchId = user.branchId;
     }
+
+    const wherePayments: any = {
+        createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        sale: saleBranchFilter,
+    };
 
     const [totalDebt, debtorCount, todayPayments] = await Promise.all([
         prisma.patient.aggregate({
@@ -158,6 +183,47 @@ export async function getPatientDebts(patientId: string) {
     };
 }
 
+// سجل التسديدات الأخيرة
+export async function getRecentDebtPayments(branchId?: string, limit = 30) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return [];
+    const { tenantBranchWhere } = tenantCtx;
+
+    const wherePayments: any = {
+        sale: {
+            patient: { ...tenantBranchWhere },
+        },
+    };
+
+    if (branchId) {
+        wherePayments.sale.patient.branchId = branchId;
+    }
+
+    const payments = await prisma.debtPayment.findMany({
+        where: wherePayments,
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        include: {
+            sale: {
+                include: {
+                    patient: { select: { id: true, name: true, phone: true } },
+                },
+            },
+        },
+    });
+
+    return payments.map((p) => ({
+        id: p.id,
+        amount: p.amount,
+        method: p.method,
+        note: p.note,
+        createdAt: p.createdAt,
+        patientId: p.sale.patient?.id,
+        patientName: p.sale.patient?.name || "—",
+        patientPhone: p.sale.patient?.phone || "",
+    }));
+}
+
 // تسجيل دفعة على دين
 export async function makeDebtPayment(
     saleId: string,
@@ -168,8 +234,11 @@ export async function makeDebtPayment(
     safeId?: string
 ) {
     try {
-        const sale = await prisma.sale.findUnique({
-            where: { id: saleId },
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
+
+        const sale = await prisma.sale.findFirst({
+            where: { id: saleId, patient: { id: patientId, ...tenantCtx.tenantBranchWhere } },
             include: { payment: true, debtPayments: true, patient: true },
         });
 

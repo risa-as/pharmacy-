@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export async function GET(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId');
 
@@ -16,11 +21,10 @@ export async function GET(req: Request) {
             quantity: { gt: 0 }
         };
 
-        if (branchId) {
-            whereClause.inventory = {
-                branchId: branchId
-            };
-        }
+        whereClause.inventory = {
+            ...tenantBranchWhere,
+            ...(branchId ? { branchId } : {})
+        };
 
         const batches = await prisma.batch.findMany({
             where: whereClause,

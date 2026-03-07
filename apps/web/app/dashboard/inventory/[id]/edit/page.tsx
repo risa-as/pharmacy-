@@ -1,39 +1,38 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import EditForm from "@/app/ui/inventory/edit-form";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 
 import Link from "next/link";
 import { ArrowRight, Package } from "lucide-react";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export default async function Page({ params }: { params: { id: string } }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+    const { tenantWhere, tenantBranchWhere } = tenantCtx;
 
-async function getInventoryById(id: string) {
-    const inventory = await prisma.inventory.findUnique({
-        where: { id },
+    const inventory = await prisma.inventory.findFirst({
+        where: { id: params.id, ...tenantBranchWhere },
         include: {
             branch: { select: { name: true } },
         },
     });
 
-    if (!inventory) return null;
+    if (!inventory) notFound();
 
-    // Get drug info
     const drug = await prisma.globalDrug.findUnique({
         where: { id: inventory.drugId },
         select: { id: true, tradeName: true },
     });
 
-    return {
+    const inventoryWithDrug = {
         ...inventory,
         drug: drug || { id: inventory.drugId, tradeName: "دواء غير معروف" },
     };
-}
 
-export default async function Page({ params }: { params: { id: string } }) {
-    const inventory = await getInventoryById(params.id);
     const branches = await prisma.branch.findMany({
+        where: tenantWhere,
         select: { id: true, name: true },
         orderBy: { name: "asc" },
     });
@@ -41,10 +40,6 @@ export default async function Page({ params }: { params: { id: string } }) {
         select: { id: true, tradeName: true },
         orderBy: { tradeName: "asc" },
     });
-
-    if (!inventory) {
-        notFound();
-    }
 
     return (
         <div className="w-full max-w-2xl mx-auto" suppressHydrationWarning>
@@ -58,13 +53,13 @@ export default async function Page({ params }: { params: { id: string } }) {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-foreground">تعديل المخزون</h1>
-                        <p className="text-sm text-muted-foreground">{inventory.drug.tradeName}</p>
+                        <p className="text-sm text-muted-foreground">{inventoryWithDrug.drug.tradeName}</p>
                     </div>
                 </div>
             </div>
 
             <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-                <EditForm inventory={inventory} branches={branches} drugs={drugs} />
+                <EditForm inventory={inventoryWithDrug} branches={branches} drugs={drugs} />
             </div>
         </div>
     );

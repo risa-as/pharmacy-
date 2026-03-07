@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 // POST: Check if a sale price is below minimum profit margin
 // Body: { drugId, salePrice, branchId? }
@@ -11,6 +12,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
         const body = await req.json();
         const { drugId, salePrice, branchId } = body;
 
@@ -18,14 +22,23 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "drugId and salePrice are required" }, { status: 400 });
         }
 
-        // Get company min margin setting
-        const settings = await prisma.companySettings.findFirst();
-        const minMargin = settings?.minProfitMargin ?? 5;
+        // Get tenant min margin setting
+        if (!tenantCtx.organizationId) {
+            return NextResponse.json({ error: "Organization required" }, { status: 403 });
+        }
+        const org = await prisma.organization.findUnique({ where: { id: tenantCtx.organizationId } });
+        const minMargin = org?.minProfitMargin ?? 5;
 
-        // Get drug cost from inventory
         const bFilter = branchId || session.user.branchId;
+
+        const { tenantBranchWhere } = tenantCtx;
+
         const inventory = await prisma.inventory.findFirst({
-            where: { drugId, ...(bFilter ? { branchId: bFilter } : {}) },
+            where: {
+                drugId,
+                ...tenantBranchWhere,
+                ...(bFilter ? { branchId: bFilter } : {})
+            },
             select: { cost: true }
         });
 
@@ -72,11 +85,23 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId') || session.user.branchId;
 
-        const settings = await prisma.companySettings.findFirst();
-        const minMargin = settings?.minProfitMargin ?? 5;
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
+        if (!tenantCtx.organizationId) {
+            return NextResponse.json({ error: "Organization required" }, { status: 403 });
+        }
+
+        const org = await prisma.organization.findUnique({ where: { id: tenantCtx.organizationId } });
+        const minMargin = org?.minProfitMargin ?? 5;
+
+        const { tenantBranchWhere } = tenantCtx;
 
         const inventories = await prisma.inventory.findMany({
-            where: branchId ? { branchId } : {},
+            where: {
+                ...tenantBranchWhere,
+                ...(branchId ? { branchId } : {})
+            },
             include: { drug: { select: { tradeName: true, barcode: true } } }
         });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { addBatch } from "@/app/lib/actions/inventory";
@@ -24,7 +25,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
         fetch("/api/suppliers")
             .then(r => r.ok ? r.json() : [])
             .then(setSuppliers)
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -53,7 +54,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
         }
     };
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
             <div
                 className="bg-card rounded-xl p-6 w-full max-w-md shadow-xl"
@@ -141,6 +142,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

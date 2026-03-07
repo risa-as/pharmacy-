@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,9 @@ export const dynamic = 'force-dynamic';
 // Mobile sends a patient-level payment; we distribute it oldest-sale-first.
 export async function POST(request: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
         const { patientId, amount, note } = await request.json();
 
         if (!patientId || typeof amount !== 'number' || amount <= 0) {

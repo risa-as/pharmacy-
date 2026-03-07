@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
-
-const prisma = new PrismaClient();
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { id } = params;
         const body = await req.json();
         const { items } = body; // Array of { itemId, quantity, expiryDate, batchNumber }
@@ -14,8 +17,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             return NextResponse.json({ message: "Invalid items data" }, { status: 400 });
         }
 
-        const purchase = await prisma.purchase.findUnique({
-            where: { id },
+        const purchase = await prisma.purchase.findFirst({
+            where: { id, ...tenantBranchWhere },
             include: { items: true, supplier: { select: { id: true } } }
         });
 

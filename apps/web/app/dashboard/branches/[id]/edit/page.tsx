@@ -1,20 +1,21 @@
 import EditForm from "@/app/ui/branches/edit-form";
-import { PrismaClient } from "@prisma/client";
-import { notFound } from "next/navigation";
+import { prisma } from "@/app/lib/prisma";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
 export default async function Page({ params }: { params: { id: string } }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+    const { tenantWhere } = tenantCtx;
+
     const id = params.id;
 
     const [branch, organizations] = await Promise.all([
-        prisma.branch.findUnique({
-            where: { id },
+        prisma.branch.findFirst({
+            where: { id, ...tenantWhere },
         }),
         prisma.organization.findMany({
             orderBy: { name: 'asc' },

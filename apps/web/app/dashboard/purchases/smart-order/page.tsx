@@ -1,10 +1,9 @@
 import { auth } from "@/auth";
 import SmartOrderClient from "./smart-order-client";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 export default async function SmartOrderPage() {
     const session = await auth();

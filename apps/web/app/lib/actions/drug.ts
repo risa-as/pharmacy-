@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 const DrugSchema = z.object({
     id: z.string(),
@@ -36,6 +37,11 @@ export async function createDrug(prevState: any, formData: FormData) {
         };
     }
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) {
+        return { message: "غير مصرح لك بإضافة دواء." };
+    }
+
     const { barcode, tradeName, scientificName, origin, isActive } = validatedFields.data;
 
     try {
@@ -45,7 +51,8 @@ export async function createDrug(prevState: any, formData: FormData) {
                 tradeName,
                 scientificName,
                 origin: origin || null,
-                isActive: isActive || true,
+                isActive: isActive ?? true,
+                organizationId: tenantCtx.organizationId,
             },
         });
     } catch (error: any) {
@@ -62,14 +69,26 @@ export async function createDrug(prevState: any, formData: FormData) {
 }
 
 export async function deleteDrug(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) {
+        return { message: "غير مصرح لك بحذف الأدوية." };
+    }
+
     try {
-        // Check if drug has sales
-        const drugWithSales = await prisma.globalDrug.findUnique({
-            where: { id },
+        // Enforce tenant isolation and check if drug has sales
+        const drug = await prisma.globalDrug.findFirst({
+            where: {
+                id,
+                organizationId: tenantCtx.organizationId
+            },
             include: { _count: { select: { saleItems: true } } }
         });
 
-        if (drugWithSales && drugWithSales._count.saleItems > 0) {
+        if (!drug) {
+            return { message: "لا يمكنك حذف هذا الدواء (عالمي أو لا يخص مؤسستك)." };
+        }
+
+        if (drug._count.saleItems > 0) {
             return { message: "لا يمكن حذف الدواء لأنه مرتبط بعمليات بيع سابقة. يمكنك إلغاء تفعيله بدلاً من ذلك." };
         }
 
@@ -114,9 +133,23 @@ export async function updateDrug(
         };
     }
 
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) {
+        return { message: "غير مصرح لك بتحديث دواء." };
+    }
+
     const { barcode, tradeName, scientificName, origin, isActive } = validatedFields.data;
 
     try {
+        // Only allow updating if it belongs to the organization
+        const existingDrug = await prisma.globalDrug.findFirst({
+            where: { id, organizationId: tenantCtx.organizationId }
+        });
+
+        if (!existingDrug) {
+            return { message: "لا يمكنك تعديل هذا الدواء لأنه دواء عالمي أو لا يخص مؤسستك." };
+        }
+
         await prisma.globalDrug.update({
             where: { id },
             data: {

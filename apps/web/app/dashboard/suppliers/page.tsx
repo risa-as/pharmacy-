@@ -1,24 +1,24 @@
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
-import { Plus, Users, Mail, Phone, MapPin, FileText, DollarSign } from "lucide-react";
+import { Plus, Users, Mail, Phone, MapPin, FileText } from "lucide-react";
 import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
-async function getSuppliers(tenantBranchWhere?: any) {
+async function getSuppliers(organizationId?: string) {
     const suppliers = await prisma.supplier.findMany({
-        where: tenantBranchWhere && Object.keys(tenantBranchWhere).length > 0 ? {
-            purchases: {
-                some: tenantBranchWhere
-            }
-        } : {},
+        where: organizationId ? { organizationId } : {},
         orderBy: { createdAt: 'desc' },
         include: {
-            _count: { select: { purchases: true } }
+            _count: { select: { purchases: true } },
+            purchases: { select: { total: true, paidAmount: true } },
         }
     });
-    return suppliers;
+    return suppliers.map((s: any) => ({
+        ...s,
+        computedBalance: s.purchases.reduce((acc: number, p: any) => acc + (p.total - p.paidAmount), 0),
+    }));
 }
 
 export default async function Page() {
@@ -26,12 +26,12 @@ export default async function Page() {
     if (tenantCtx instanceof NextResponse) return null;
     const { tenantBranchWhere, user } = tenantCtx;
 
-    // Super Admin sees everything. Others see only suppliers they interacted with.
+    // Super Admin sees everything. Others see only suppliers for their organization.
     let suppliers = [];
     try {
-        suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? {} : tenantBranchWhere);
+        suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? undefined : tenantCtx.organizationId);
     } catch (e) {
-        suppliers = await getSuppliers({});
+        suppliers = await getSuppliers();
     }
 
     return (
@@ -115,11 +115,10 @@ export default async function Page() {
                                             </div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            {supplier.balance > 0 ? (
+                                            {supplier.computedBalance > 0 ? (
                                                 <div className="flex items-center gap-1">
-                                                    <DollarSign className="w-4 h-4 text-warning" />
                                                     <span className="font-bold text-warning">
-                                                        {supplier.balance.toLocaleString('en-US')}
+                                                        {supplier.computedBalance.toLocaleString('ar-IQ')}
                                                     </span>
                                                     <span className="text-xs text-muted-foreground">د.ع</span>
                                                 </div>

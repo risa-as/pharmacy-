@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 interface ImportRow {
     name: string;
@@ -13,6 +14,9 @@ interface ImportRow {
 }
 
 export async function POST(req: NextRequest) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+
     try {
         const { rows, branchId } = (await req.json()) as {
             rows: ImportRow[];

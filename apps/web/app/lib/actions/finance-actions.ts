@@ -12,6 +12,13 @@ export async function getSafes(branchId: string) {
     });
 }
 
+export async function getSafesForOrg(organizationId: string) {
+    return await prisma.safe.findMany({
+        where: { branch: { organizationId } },
+        orderBy: { name: 'asc' }
+    });
+}
+
 export async function createSafe(branchId: string, data: { name: string, type: string, initialBalance?: number }) {
     try {
         const safe = await prisma.safe.create({

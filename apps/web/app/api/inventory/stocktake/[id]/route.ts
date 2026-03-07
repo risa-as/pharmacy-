@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from "@/auth";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
     try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
 
         const { id } = params;
         const body = await req.json();
@@ -116,10 +114,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
 
         const { id } = params;
 

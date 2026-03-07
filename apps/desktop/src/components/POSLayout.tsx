@@ -47,12 +47,7 @@ function formatIQD(amount: number) {
 
 // توليد رقم فاتورة
 function generateInvoiceNumber() {
-    const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
-    const month = (now.getMonth() + 1).toString().padStart(2, "0");
-    const day = now.getDate().toString().padStart(2, "0");
-    const random = Math.floor(Math.random() * 9999).toString().padStart(4, "0");
-    return `INV-${year}${month}${day}-${random}`;
+    return Math.floor(10000000 + Math.random() * 90000000).toString();
 }
 
 export default function POSLayout({ user }: { user: any }) {

@@ -1,18 +1,17 @@
 
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
-import { PrismaClient } from "@prisma/client";
-import { DeleteInvoice } from "@/app/ui/invoices/buttons";
+import { prisma } from "@/app/lib/prisma";
+import { DeleteInvoice, ViewInvoice } from "@/app/ui/invoices/buttons";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-async function getInvoices(tenantBranchWhere: any) {
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
+
+async function getInvoices(tenantBranchWhere: any, branchId?: string) {
     const invoices = await prisma.purchase.findMany({
-        where: tenantBranchWhere,
+        where: branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere,
         orderBy: { createdAt: 'desc' },
         include: {
             supplier: true,
@@ -23,12 +22,17 @@ async function getInvoices(tenantBranchWhere: any) {
     return invoices;
 }
 
-export default async function Page() {
+export default async function Page({
+    searchParams,
+}: {
+    searchParams: { [key: string]: string | string[] | undefined };
+}) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
     const { tenantBranchWhere } = tenantCtx;
+    const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
-    const invoices = await getInvoices(tenantBranchWhere);
+    const invoices = await getInvoices(tenantBranchWhere, branchId);
 
     return (
         <div className="w-full">
@@ -38,6 +42,10 @@ export default async function Page() {
                     <PlusIcon className="h-4 w-4" />
                     <span className="hidden md:block">إنشاء فاتورة</span>
                 </Link>
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={branchId} baseUrl="/dashboard/invoices" />
             </div>
 
             <div className="mt-4 flow-root">
@@ -91,7 +99,8 @@ export default async function Page() {
                                             {new Date(invoice.createdAt).toLocaleDateString('ar-EG')}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="flex justify-end gap-3">
+                                            <div className="flex justify-end gap-2">
+                                                <ViewInvoice id={invoice.id} />
                                                 <DeleteInvoice id={invoice.id} />
                                             </div>
                                         </td>

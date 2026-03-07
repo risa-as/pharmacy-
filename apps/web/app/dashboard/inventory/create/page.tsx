@@ -1,11 +1,17 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 import CreateInventoryForm from "@/app/ui/inventory/create-form";
 import { Package } from "lucide-react";
-
-const prisma = new PrismaClient();
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 export default async function CreateInventoryPage() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+    const { tenantWhere } = tenantCtx;
+
     const branches = await prisma.branch.findMany({
+        where: tenantWhere,
         orderBy: { name: "asc" },
     });
 

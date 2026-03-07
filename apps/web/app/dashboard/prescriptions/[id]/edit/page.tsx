@@ -1,18 +1,21 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import EditForm from "@/app/ui/prescriptions/edit-form";
 import { getPrescriptionById } from "@/app/lib/actions/prescription";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/app/lib/prisma";
 
 import Link from "next/link";
 import { ArrowRight, FileText } from "lucide-react";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
 export default async function Page({ params }: { params: { id: string } }) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect("/login");
+    const { tenantBranchWhere } = tenantCtx;
+
     const prescription = await getPrescriptionById(params.id);
     const patients = await prisma.patient.findMany({
+        where: tenantBranchWhere,
         select: { id: true, name: true, phone: true },
         orderBy: { name: "asc" },
     });

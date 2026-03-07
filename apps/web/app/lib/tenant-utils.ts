@@ -8,6 +8,7 @@ export interface TenantContext {
         branchId?: string;
         organizationId?: string;
     };
+    organizationId?: string;
     // Helper to inject into Prisma "where" clauses to automatically filter by tenant/branch
     tenantWhere: Record<string, any>;
     // Same as above but used when the target table relates to branch (e.g., target -> branch -> organization)
@@ -63,6 +64,7 @@ export async function getTenantContext(): Promise<TenantContext | NextResponse> 
             branchId,
             organizationId
         },
+        organizationId,
         tenantWhere,
         tenantBranchWhere
     };

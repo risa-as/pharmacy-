@@ -18,8 +18,16 @@ model Organization {
   subscriptionEndsAt DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  minProfitMargin    Float     @default(5)
+  loyaltyEnabled         Boolean  @default(false)
+  loyaltyPointsPerDinar  Float    @default(0.01)
+  loyaltyRedemptionValue Float    @default(2.5)
+  loyaltyMinRedemption   Int      @default(500)
+
   branches           Branch[]
   paymentTransactions PaymentTransaction[]
+  customDrugs        GlobalDrug[] @relation("OrganizationCustomDrugs")
+  suppliers          Supplier[]   @relation("OrganizationSuppliers")
 
   plan               SubscriptionPlan? @relation(fields: [planId], references: [id])
 }
@@ -142,6 +150,9 @@ model GlobalDrug {
   marketplaceListings  MarketplaceListing[]
   patientAppOrderItems PatientAppOrderItem[]
   demandForecasts      DemandForecast[]
+
+  organizationId       String?
+  organization         Organization? @relation("OrganizationCustomDrugs", fields: [organizationId], references: [id])
 
   @@index([tradeName])
   @@index([barcode])
@@ -284,6 +295,10 @@ model Supplier {
   balance   Float             @default(0)
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
+  
+  organizationId String?
+  organization   Organization? @relation("OrganizationSuppliers", fields: [organizationId], references: [id])
+
   purchases Purchase[]
   payments  SupplierPayment[]
   batches   Batch[]
@@ -339,7 +354,7 @@ model SupplierPayment {
 model Patient {
   id                String            @id @default(uuid())
   name              String
-  phone             String            @unique
+  phone             String
   dateOfBirth       DateTime?
   gender            String?
   allergies         String[]
@@ -354,6 +369,8 @@ model Patient {
   loyaltyAccount    LoyaltyAccount?
   branchId          String?
   branch            Branch?           @relation(fields: [branchId], references: [id])
+
+  @@unique([phone, branchId])
 }
 
 // الوصفات الطبية

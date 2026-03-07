@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/app/lib/prisma";
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
         const { id } = params;
 
-        const purchase = await prisma.purchase.findUnique({
-            where: { id },
+        const purchase = await prisma.purchase.findFirst({
+            where: { id, ...tenantBranchWhere },
             include: {
                 supplier: true,
                 items: true,
