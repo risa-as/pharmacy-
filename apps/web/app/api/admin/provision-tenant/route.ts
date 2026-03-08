@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { generateLicenseKey } from "@/app/lib/license-utils";
 import bcrypt from "bcryptjs";
