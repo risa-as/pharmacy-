@@ -26,9 +26,23 @@ export async function GET(req: NextRequest) {
 
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
-        const { tenantBranchWhere } = tenantCtx;
+        const { user, organizationId } = tenantCtx;
 
-        const where: any = { ...tenantBranchWhere };
+        // AuditLog has branchId directly (no branch relation), so build custom scope
+        let auditScope: any = {};
+        if (user.role !== 'SUPER_ADMIN') {
+            if (organizationId) {
+                const branches = await prisma.branch.findMany({
+                    where: { organizationId },
+                    select: { id: true },
+                });
+                auditScope = { branchId: { in: branches.map((b: any) => b.id) } };
+            } else if (user.branchId) {
+                auditScope = { branchId: user.branchId };
+            }
+        }
+
+        const where: any = { ...auditScope };
         if (userId) where.userId = userId;
         if (entity) where.entity = entity;
         if (action) where.action = action;
