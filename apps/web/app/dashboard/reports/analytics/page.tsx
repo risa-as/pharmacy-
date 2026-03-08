@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { BarChart3, TrendingUp, AlertOctagon } from "lucide-react";
 import BestSellingChart from "@/app/ui/dashboard/reports/best-selling-chart";

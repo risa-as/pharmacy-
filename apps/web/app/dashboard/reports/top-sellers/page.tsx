@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { TrendingUp, Award, Package, DollarSign } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";

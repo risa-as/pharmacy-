@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Button } from "@faramace/ui";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";

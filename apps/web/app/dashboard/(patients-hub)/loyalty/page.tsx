@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { Gift, Award, Users, TrendingUp, Star, Crown, Medal } from "lucide-react";

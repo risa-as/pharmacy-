@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getSupplierSummary, getSupplierLedger } from "@/app/lib/actions/supplier-ledger-actions";
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";

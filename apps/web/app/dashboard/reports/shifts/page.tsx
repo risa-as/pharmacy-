@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 import ShiftsTable from '@/app/ui/reports/shifts/table';

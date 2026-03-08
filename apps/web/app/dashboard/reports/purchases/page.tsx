@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { FileSpreadsheet, TrendingUp } from "lucide-react";
 import SalesChart from "@/app/ui/dashboard/sales-chart";

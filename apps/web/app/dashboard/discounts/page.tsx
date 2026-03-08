@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Tag, Plus, Percent, Calendar, ChevronLeft } from "lucide-react";
 import Link from "next/link";

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Building2, Plus } from "lucide-react";
 import Link from "next/link";

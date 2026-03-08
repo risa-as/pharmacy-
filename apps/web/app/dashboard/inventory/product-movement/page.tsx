@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Activity, ArrowUpDown, Search } from "lucide-react";
 

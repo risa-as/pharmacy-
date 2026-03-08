@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getPurchaseDetails } from '@/app/lib/actions/purchase-actions';
 import { prisma } from '@/app/lib/prisma';
 import { Button } from '@/components/ui/button';

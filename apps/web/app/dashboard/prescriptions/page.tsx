@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { FileText, Plus, Clock, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";

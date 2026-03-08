@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";

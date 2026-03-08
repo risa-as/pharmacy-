@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { PackageMinus, Trash2, AlertTriangle, Clock } from "lucide-react";
 import { getTenantContext } from '@/app/lib/tenant-utils';

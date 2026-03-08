@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { Plus, Users, Mail, Phone, MapPin, FileText } from "lucide-react";

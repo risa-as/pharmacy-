@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { auth } from "@/auth";
 import SmartOrderClient from "./smart-order-client";
 import { prisma } from "@/app/lib/prisma";

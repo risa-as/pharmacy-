@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { User, DollarSign, Calendar, TrendingUp, ShoppingBag } from "lucide-react";
 import { notFound } from "next/navigation";

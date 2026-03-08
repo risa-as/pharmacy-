@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import CreateInventoryForm from "@/app/ui/inventory/create-form";
 import { Package } from "lucide-react";

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import CreatePolicyForm from "@/app/ui/insurance/create-policy-form";
 import { prisma } from "@/app/lib/prisma";
 

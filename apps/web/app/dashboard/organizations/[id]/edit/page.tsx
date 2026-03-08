@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import EditForm from "@/app/ui/organizations/edit-form";
 import Breadcrumbs from "@/app/ui/dashboard/breadcrumbs";
 import { prisma } from "@/app/lib/prisma";

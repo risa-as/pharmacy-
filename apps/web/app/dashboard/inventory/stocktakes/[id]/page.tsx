@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Metadata } from 'next';
 import StocktakeForm from '@/app/ui/inventory/stocktakes/stocktake-form';
 import { prisma } from '@/app/lib/prisma';
