@@ -1,15 +1,9 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient }
-
-const prisma = globalForPrisma.prisma || new PrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+import { prisma } from "@/app/lib/prisma";
 
 async function getUser(email: string) {
     try {
