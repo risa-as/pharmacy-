@@ -28,7 +28,7 @@ export default async function ForecastPage() {
     });
 
     // Single batch query: sum sold quantity per drug across all inventory branches in the period
-    const inventoryBranchIds = [...new Set(allInventory.map((i: any) => i.branchId))];
+    const inventoryBranchIds = Array.from(new Set(allInventory.map((i: any) => i.branchId)));
     const soldData = await prisma.saleItem.groupBy({
         by: ['drugId'],
         where: {
