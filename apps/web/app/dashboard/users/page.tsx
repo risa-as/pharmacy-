@@ -26,7 +26,7 @@ export default async function Page() {
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere } = tenantCtx;
 
-    let users = [];
+    let users: Awaited<ReturnType<typeof getUsers>> = [];
     try {
         users = await getUsers(tenantBranchWhere);
     } catch (e) {

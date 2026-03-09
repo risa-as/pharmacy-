@@ -30,7 +30,7 @@ export default async function Page() {
     const { tenantBranchWhere, user } = tenantCtx;
 
     // Super Admin sees everything. Others see only suppliers for their organization.
-    let suppliers = [];
+    let suppliers: Awaited<ReturnType<typeof getSuppliers>> = [];
     try {
         suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? undefined : tenantCtx.organizationId);
     } catch (e) {
