@@ -1,6 +1,6 @@
 'use client';
 
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -44,6 +44,43 @@ export function StartStocktakeButton() {
         >
             <span className="hidden md:block">{loading ? 'جاري التحضير...' : 'بدء جرد جديد'}</span>
             <PlusIcon className="h-5 w-5 md:ml-4" />
+        </button>
+    );
+}
+
+export function CancelStocktakeButton({ stocktakeId }: { stocktakeId: string }) {
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+
+    const handleCancel = async () => {
+        if (!confirm('هل أنت متأكد من إلغاء هذا الجرد؟ سيتم حذف جميع البيانات المُدخلة.')) return;
+
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/inventory/stocktake/${stocktakeId}`, {
+                method: 'DELETE',
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'فشل الإلغاء');
+
+            toast.success('تم إلغاء الجرد بنجاح');
+            router.refresh();
+        } catch (error: any) {
+            toast.error(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleCancel}
+            disabled={loading}
+            title="إلغاء الجرد"
+            className={`rounded-md border border-destructive/20 bg-destructive/10 p-2 text-destructive hover:bg-destructive/20 transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+            <XMarkIcon className="w-5 h-5" />
         </button>
     );
 }
