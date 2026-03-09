@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 export interface TenantContext {
     user: {
         id: string;
+        name?: string;
+        email?: string;
         role: string;
         branchId?: string;
         organizationId?: string;
@@ -60,6 +62,8 @@ export async function getTenantContext(): Promise<TenantContext | NextResponse> 
     return {
         user: {
             id: session.user.id!,
+            name: session.user.name ?? undefined,
+            email: session.user.email ?? undefined,
             role,
             branchId,
             organizationId

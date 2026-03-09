@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { auth } from '@/auth';
 import bcrypt from 'bcryptjs';
 import { generateLicenseKey } from '@/app/lib/license-utils';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
     try {
         const session = await auth();
-        if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
+        if (!session?.user || (session.user.role !== 'SUPER_ADMIN')) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -24,7 +25,7 @@ export async function GET() {
             orderBy: { createdAt: 'desc' }
         });
 
-        const tenants = organizations.map(org => {
+        const tenants = organizations.map((org: any) => {
             // Find the main owner/admin from the first branch
             const owner = org.branches[0]?.users[0];
             return {
@@ -53,7 +54,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
     try {
         const session = await auth();
-        if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
+        if (!session?.user || (session.user.role !== 'SUPER_ADMIN')) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
         const hashedPassword = await bcrypt.hash(ownerPassword, 10);
 
         // Run everything in a single transaction
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. Create Organization
             const organization = await tx.organization.create({
                 data: {

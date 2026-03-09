@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Package, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -41,9 +43,9 @@ async function getInventory(page: number, query: string, tenantBranchWhere: any,
     ]);
 
     return {
-        items: inventory.map(item => ({
+        items: inventory.map((item: any) => ({
             ...item,
-            currentStock: item.batches.reduce((acc, b) => acc + b.quantity, 0)
+            currentStock: item.batches.reduce((acc: any, b: any) => acc + b.quantity, 0)
         })),
         total,
         totalPages: Math.ceil(total / ITEMS_PER_PAGE)

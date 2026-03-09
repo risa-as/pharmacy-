@@ -1,3 +1,6 @@
+import { Prisma } from '@prisma/client';
+export const dynamic = 'force-dynamic';
+
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
@@ -74,7 +77,7 @@ export async function POST(request: Request) {
             }
         }
 
-        const sale = await prisma.$transaction(async (tx) => {
+        const sale = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const saleItemsData = [];
 
             // 3. Decrement Stock (FIFO / FEFO) and Calculate Cost

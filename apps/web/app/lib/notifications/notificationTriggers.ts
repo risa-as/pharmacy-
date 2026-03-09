@@ -41,14 +41,14 @@ export async function sendAndPersistNotification({
                 where: { branchId },
                 select: { id: true },
             });
-            userIds = branchUsers.map(u => u.id);
+            userIds = branchUsers.map((u: any) => u.id);
         }
 
         if (userIds.length === 0) return;
 
         // Persist Notification rows
         await prisma.notification.createMany({
-            data: userIds.map(userId => ({
+            data: userIds.map((userId: any) => ({
                 userId,
                 branchId: branchId ?? null,
                 title,
@@ -69,13 +69,13 @@ export async function sendAndPersistNotification({
         });
 
         const tokens = users
-            .map(u => u.expoPushToken)
-            .filter((t): t is string => !!t);
+            .map((u: any) => u.expoPushToken)
+            .filter((t: string | null | undefined): t is string => !!t);
 
         if (tokens.length === 0) return;
 
         // Send to Expo Push API in batches of 100
-        const messages = tokens.map(token => ({
+        const messages = tokens.map((token: any) => ({
             to: token,
             title,
             body,

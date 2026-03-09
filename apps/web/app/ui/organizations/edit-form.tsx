@@ -4,7 +4,7 @@ import Link from "next/link";
 import { SubmitButton } from "@/app/ui/submit-button";
 import { useFormState } from "react-dom";
 import { updateOrganization } from "@/app/lib/actions/organization";
-import type { Organization } from "@prisma/client";
+interface Organization { id: string; name: string; }
 
 export default function EditForm({ organization }: { organization: Organization }) {
     const initialState: any = { message: "", errors: {} };

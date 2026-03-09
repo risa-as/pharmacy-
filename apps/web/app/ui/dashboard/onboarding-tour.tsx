@@ -342,7 +342,7 @@ export default function OnboardingTour() {
                         {/* Features Grid */}
                         {slide.features && (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 max-w-3xl mx-auto">
-                                {slide.features.map((feature, i) => {
+                                {slide.features.map((feature: any, i: any) => {
                                     const FeatureIcon = feature.icon;
                                     return (
                                         <div
@@ -366,7 +366,7 @@ export default function OnboardingTour() {
                         {/* Stats */}
                         {slide.stats && (
                             <div className="flex justify-center gap-16 md:gap-28 mb-10">
-                                {slide.stats.map((stat, i) => (
+                                {slide.stats.map((stat: any, i: any) => (
                                     <div key={i} className={`text-center transition-all duration-500 ${countersVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`} style={{ transitionDelay: `${i * 150}ms` }}>
                                         <div className="text-3xl md:text-4xl font-black mb-3" style={{ color: slide.accentColor }}>
                                             {stat.value}
@@ -409,7 +409,7 @@ export default function OnboardingTour() {
 
                         {/* Dots */}
                         <div className="flex items-center gap-2">
-                            {slides.map((_, i) => (
+                            {slides.map((_: any, i: any) => (
                                 <button
                                     key={i}
                                     onClick={() => goToSlide(i, i > currentSlide ? "next" : "prev")}

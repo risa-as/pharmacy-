@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Box, AlertTriangle, Calendar, Plus } from "lucide-react";
 import Link from "next/link";
@@ -29,13 +31,13 @@ export default async function BatchesPage() {
     });
 
     // جلب الأدوية
-    const drugIds = batches.map((b) => b.inventory.drugId);
-    const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
+    const drugIds = batches.map((b: any) => b.inventory.drugId);
+    const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true },
     });
-    const drugMap = new Map(drugs.map((d) => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     const now = new Date();
     const thirtyDaysFromNow = new Date();
@@ -59,13 +61,13 @@ export default async function BatchesPage() {
                 </div>
                 <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
                     <div className="text-3xl font-bold text-destructive">
-                        {batches.filter((b) => new Date(b.expiryDate) < now).length}
+                        {batches.filter((b: any) => new Date(b.expiryDate) < now).length}
                     </div>
                     <div className="text-sm text-destructive">منتهية الصلاحية</div>
                 </div>
                 <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
                     <div className="text-3xl font-bold text-warning">
-                        {batches.filter((b) => {
+                        {batches.filter((b: any) => {
                             const exp = new Date(b.expiryDate);
                             return exp >= now && exp <= thirtyDaysFromNow;
                         }).length}
@@ -96,7 +98,7 @@ export default async function BatchesPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {batches.map((batch) => {
+                            {batches.map((batch: any) => {
                                 const drug = drugMap.get(batch.inventory.drugId);
                                 const expiryDate = new Date(batch.expiryDate);
                                 const isExpired = expiryDate < now;

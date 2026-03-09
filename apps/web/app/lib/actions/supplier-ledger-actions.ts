@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 'use server';
 
 import { prisma } from '@/app/lib/prisma';
@@ -22,7 +23,7 @@ export async function getSuppliersWithBalances() {
         orderBy: { name: 'asc' }
     });
 
-    return suppliers.map(s => ({
+    return suppliers.map((s: any) => ({
         id: s.id,
         name: s.name,
         phone: s.phone,
@@ -112,7 +113,7 @@ export async function getSupplierLedger(supplierId: string) {
     };
 
     const entries: LedgerEntry[] = [
-        ...purchases.map(p => ({
+        ...purchases.map((p: any) => ({
             id: p.id,
             type: 'purchase' as const,
             date: p.createdAt,
@@ -121,7 +122,7 @@ export async function getSupplierLedger(supplierId: string) {
             branch: p.branch?.name || '',
             reference: p.invoiceNumber,
         })),
-        ...payments.map(p => ({
+        ...payments.map((p: any) => ({
             id: p.id,
             type: 'payment' as const,
             date: p.date,
@@ -134,7 +135,7 @@ export async function getSupplierLedger(supplierId: string) {
     ];
 
     // ترتيب بالتاريخ (الأقدم أولاً لحساب الرصيد التراكمي)
-    entries.sort((a, b) => {
+    entries.sort((a: any, b: any) => {
         const dayA = a.date.toISOString().split('T')[0];
         const dayB = b.date.toISOString().split('T')[0];
 
@@ -193,7 +194,7 @@ export async function recordSupplierPayment(data: {
             return { success: false, error: 'المورد غير موجود أو ليس لديك صلاحية' };
         }
 
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. تسجيل الدفعة
             await tx.supplierPayment.create({
                 data: {

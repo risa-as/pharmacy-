@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic';
+
+import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
@@ -35,7 +38,7 @@ export async function POST(req: Request) {
             );
         }
 
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // Find the inventory record
             let inventory;
             if (inventoryId) {

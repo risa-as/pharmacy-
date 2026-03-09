@@ -41,14 +41,14 @@ interface HubTabNavProps {
 }
 
 export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavProps) {
-    const pathname = usePathname();
+    const pathname = usePathname() ?? '';
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
     // Suppress on deep sub-routes (create / edit forms).
     // pathname is consistent between SSR and client for structural decisions.
-    if (skipOnPatterns?.some((p) => pathname.includes(p))) {
+    if (skipOnPatterns?.some((p: any) => pathname.includes(p))) {
         return null;
     }
 
@@ -57,7 +57,7 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
             {/* ── Action buttons row (optional) ─────────────────────────── */}
             {actions && actions.length > 0 && (
                 <div className="flex flex-wrap justify-end gap-2 px-4 pt-3 pb-1 border-b border-border/40">
-                    {actions.map((action) => (
+                    {actions.map((action: any) => (
                         <Link
                             key={action.href}
                             href={action.href}
@@ -81,7 +81,7 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" } as React.CSSProperties}
                 dir="rtl"
             >
-                {tabs.map((tab) => {
+                {tabs.map((tab: any) => {
                     /**
                      * Root-tab detection:
                      * If another tab's href starts with `tab.href + "/"`, this tab
@@ -89,7 +89,7 @@ export default function HubTabNav({ tabs, actions, skipOnPatterns }: HubTabNavPr
                      * highlight on an exact pathname match — not on every sub-page.
                      */
                     const isRootTab = tabs.some(
-                        (other) =>
+                        (other: any) =>
                             other.href !== tab.href &&
                             other.href.startsWith(tab.href + "/"),
                     );

@@ -64,7 +64,7 @@ export default async function TransfersTable({
                             </tr>
                         </thead>
                         <tbody className="bg-transparent">
-                            {transfers.map((transfer) => {
+                            {transfers.map((transfer: any) => {
                                 const isIncoming = transfer.toBranchId === branchId;
                                 const isPendingReceive = isIncoming && transfer.status === 'IN_TRANSIT';
 
@@ -88,7 +88,7 @@ export default async function TransfersTable({
                                         </td>
                                         <td className="px-3 py-3 text-xs text-muted-foreground">
                                             <ul className="list-disc list-inside max-h-16 overflow-y-auto">
-                                                {transfer.items.map((item, idx) => (
+                                                {transfer.items.map((item: any, idx: any) => (
                                                     <li key={idx} className="truncate" title={`${item.quantity}x ${item.drug.tradeName}`}>
                                                         <span className="font-bold text-foreground">{item.quantity}x</span> {item.drug.tradeName} <span className="text-muted-foreground/60 font-mono">(دفعة: {item.batchNumber})</span>
                                                     </li>
@@ -96,7 +96,7 @@ export default async function TransfersTable({
                                             </ul>
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-3 font-bold text-foreground">
-                                            {transfer.items.reduce((acc, item) => acc + item.quantity, 0)} عبوة
+                                            {transfer.items.reduce((acc: any, item: any) => acc + item.quantity, 0)} عبوة
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-3">
                                             <TransferStatus status={transfer.status} />

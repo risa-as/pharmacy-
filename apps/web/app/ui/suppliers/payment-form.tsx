@@ -133,7 +133,7 @@ function PaymentModal({
                                 onChange={(e) => setForm({ ...form, branchId: e.target.value })}
                                 className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
                             >
-                                {branches.map(b => (
+                                {branches.map((b: any) => (
                                     <option key={b.id} value={b.id}>{b.name}</option>
                                 ))}
                             </select>

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { User, Award, TrendingUp, DollarSign, BarChart3 } from "lucide-react";
@@ -29,13 +31,13 @@ export default async function EmployeesReportPage({
 
     // 2. Calculate total revenue across all employees
     const totalRevenueAll = users.reduce(
-        (sum, u) => sum + u.sales.reduce((s, sale) => s + sale.total, 0), 0
+        (sum: any, u: any) => sum + u.sales.reduce((s: any, sale: any) => s + sale.total, 0), 0
     );
 
     // 3. Calculate Stats per user
     const stats = users
-        .map((user) => {
-            const totalSales = user.sales.reduce((sum, s) => sum + s.total, 0);
+        .map((user: any) => {
+            const totalSales = user.sales.reduce((sum: any, s: any) => sum + s.total, 0);
             const salesCount = user.sales.length;
             const averageSale = salesCount > 0 ? totalSales / salesCount : 0;
             const revenueShare = totalRevenueAll > 0 ? (totalSales / totalRevenueAll) * 100 : 0;
@@ -50,11 +52,11 @@ export default async function EmployeesReportPage({
                 revenueShare,
             };
         })
-        .sort((a, b) => b.totalSales - a.totalSales);
+        .sort((a: any, b: any) => b.totalSales - a.totalSales);
 
     // 4. Team averages
     const teamAvgSale = stats.length > 0
-        ? stats.reduce((s, st) => s + st.averageSale, 0) / stats.length
+        ? stats.reduce((s: any, st: any) => s + st.averageSale, 0) / stats.length
         : 0;
 
     const rankEmojis = ["🥇", "🥈", "🥉"];
@@ -91,7 +93,7 @@ export default async function EmployeesReportPage({
                         إجمالي العمليات
                     </div>
                     <div className="text-3xl font-bold text-info">
-                        {stats.reduce((s, st) => s + st.salesCount, 0)}
+                        {stats.reduce((s: any, st: any) => s + st.salesCount, 0)}
                     </div>
                 </div>
                 <div className="bg-card p-5 rounded-xl border shadow-sm">
@@ -105,7 +107,7 @@ export default async function EmployeesReportPage({
 
             {/* Employee Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {stats.map((stat, index) => {
+                {stats.map((stat: any, index: any) => {
                     const aboveAvg = stat.averageSale > teamAvgSale;
                     return (
                         <Link

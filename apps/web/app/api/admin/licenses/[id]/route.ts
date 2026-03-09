@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
@@ -10,7 +12,7 @@ export async function PATCH(
     try {
         const session = await auth();
         const user = session?.user as { role?: string } | undefined;
-        if (user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN") {
+        if (user?.role !== "SUPER_ADMIN") {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
@@ -65,7 +67,7 @@ export async function DELETE(
     try {
         const session = await auth();
         const user = session?.user as { role?: string } | undefined;
-        if (user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN") {
+        if (user?.role !== "SUPER_ADMIN") {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 

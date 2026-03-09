@@ -1,3 +1,6 @@
+import { Prisma } from '@prisma/client';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -85,7 +88,7 @@ export async function POST(
             });
         }
 
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. Create SaleReturn record
             const saleReturn = await tx.saleReturn.create({
                 data: {

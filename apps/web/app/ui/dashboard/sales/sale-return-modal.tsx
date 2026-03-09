@@ -48,7 +48,7 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
         return acc + (returnQty * item.price);
     }, 0);
 
-    const hasItemsToReturn = Object.values(returnQuantities).some(qty => qty > 0);
+    const hasItemsToReturn = Object.values(returnQuantities).some((qty: any) => qty > 0);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -61,8 +61,8 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
         setIsLoading(true);
         try {
             const itemsToReturn = Object.keys(returnQuantities)
-                .filter(drugId => returnQuantities[drugId] > 0)
-                .map(drugId => ({
+                .filter((drugId: any) => returnQuantities[drugId] > 0)
+                .map((drugId: any) => ({
                     drugId,
                     quantity: returnQuantities[drugId],
                     price: sale.items.find((i: any) => i.drugId === drugId)?.price || 0

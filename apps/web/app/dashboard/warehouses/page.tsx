@@ -72,7 +72,7 @@ export default function WarehousesPage() {
                 </div>
             ) : warehouses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {warehouses.map(wh => (
+                    {warehouses.map((wh: any) => (
                         <div key={wh.id} className="bg-card rounded-xl border shadow-sm p-5">
                             <div className="flex items-center gap-3 mb-3">
                                 <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">

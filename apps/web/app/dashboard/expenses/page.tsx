@@ -43,7 +43,7 @@ export default async function ExpensesPage() {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            expenses.map((expense) => (
+                            expenses.map((expense: any) => (
                                 <TableRow key={expense.id}>
                                     <TableCell>{format(new Date(expense.date), 'PPP', { locale: ar })}</TableCell>
                                     <TableCell className="font-medium">{expense.category}</TableCell>

@@ -1,5 +1,8 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { generateLicenseKey } from "@/app/lib/license-utils";
 import bcrypt from "bcryptjs";
@@ -16,7 +19,7 @@ export async function POST(req: Request) {
     try {
         const session = await auth();
         const user = session?.user as { role?: string } | undefined;
-        if (user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN") {
+        if (user?.role !== "SUPER_ADMIN") {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
         const hashedPassword = await bcrypt.hash(ownerPassword, 10);
 
         // ===== Run everything in a single transaction =====
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             // 1. Create Organization
             const organization = await tx.organization.create({
                 data: { name: pharmacyName },

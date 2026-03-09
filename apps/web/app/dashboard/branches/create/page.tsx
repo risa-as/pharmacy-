@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Form from "@/app/ui/branches/create-form";
 import { prisma } from "@/app/lib/prisma";
 import { Store } from "lucide-react";

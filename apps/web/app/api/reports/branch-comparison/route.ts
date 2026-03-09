@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -39,7 +41,7 @@ export async function GET(req: Request) {
             select: { id: true, name: true }
         });
 
-        const comparison = await Promise.all(branches.map(async (branch) => {
+        const comparison = await Promise.all(branches.map(async (branch: any) => {
             const branchFilter = { branchId: branch.id };
             const dateFilter = { gte: startDate, lte: endDate };
 
@@ -88,7 +90,7 @@ export async function GET(req: Request) {
         }));
 
         // Sort by revenue descending
-        comparison.sort((a, b) => b.revenue - a.revenue);
+        comparison.sort((a: any, b: any) => b.revenue - a.revenue);
 
         return NextResponse.json({ comparison, period, startDate, endDate });
     } catch (error: any) {

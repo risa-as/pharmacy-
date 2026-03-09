@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Form from "@/app/ui/invoices/create-form";
 import { prisma } from "@/app/lib/prisma";
 import { FileText } from "lucide-react";

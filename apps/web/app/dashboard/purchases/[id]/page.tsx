@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getPurchaseDetails } from '@/app/lib/actions/purchase-actions';
 import { prisma } from '@/app/lib/prisma';
 import { Button } from '@/components/ui/button';
@@ -18,20 +20,20 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
     }
 
     // Manual Fetch for Drug Names
-    const drugIds = purchase.items.map(i => i.drugId);
+    const drugIds = purchase.items.map((i: any) => i.drugId);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: drugIds } }
     });
-    const drugMap = new Map(drugs.map(d => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
-    const itemsWithNames = purchase.items.map(item => ({
+    const itemsWithNames = purchase.items.map((item: any) => ({
         ...item,
         drugName: drugMap.get(item.drugId)?.tradeName || 'Unknown'
     }));
 
     // WhatsApp Message
     const header = `*طلب شراء جديد من صيدلية فاراماس*`;
-    const body = itemsWithNames.map(i => `- ${i.drugName}: ${i.quantity} قطعة`).join('\n');
+    const body = itemsWithNames.map((i: any) => `- ${i.drugName}: ${i.quantity} قطعة`).join('\n');
     const msg = encodeURIComponent(`${header}\n\n${body}`);
 
     // Format phone number: remove non-digits, replace leading 0 with 964
@@ -77,7 +79,7 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {itemsWithNames.map((item) => (
+                        {itemsWithNames.map((item: any) => (
                             <TableRow key={item.id}>
                                 <TableCell className="font-medium">{item.drugName}</TableCell>
                                 <TableCell>{item.quantity}</TableCell>

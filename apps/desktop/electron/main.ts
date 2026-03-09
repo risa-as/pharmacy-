@@ -14,6 +14,7 @@ import {
   getConnectionStatus,
   syncSales,
   syncProducts,
+  syncDebtPayments,
   pushCreateDrugToCloud,
   pushAddToInventoryToCloud,
   pushDeleteInventoryFromCloud,
@@ -1371,6 +1372,17 @@ ipcMain.handle("trigger-sync", async () => {
     return { success: true };
   } catch (error: any) {
     console.error("trigger-sync failed:", error);
+    return { success: false, error: error.message || String(error) };
+  }
+});
+
+// Sync debts (debt payments) on demand from DebtsPage
+ipcMain.handle("sync-debts", async () => {
+  try {
+    await syncDebtPayments();
+    return { success: true };
+  } catch (error: any) {
+    console.error("sync-debts failed:", error);
     return { success: false, error: error.message || String(error) };
   }
 });

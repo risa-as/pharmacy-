@@ -87,7 +87,7 @@ export default function WhatsAppPage() {
                         <label className="block text-sm font-medium text-muted-foreground mb-1">اختر قالب</label>
                         <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}
                             className="w-full border rounded-lg px-3 py-2 text-sm bg-muted">
-                            {templates.map(t => <option key={t.id} value={t.name}>{t.name} ({t.type})</option>)}
+                            {templates.map((t: any) => <option key={t.id} value={t.name}>{t.name} ({t.type})</option>)}
                         </select>
                     </div>
                 )}

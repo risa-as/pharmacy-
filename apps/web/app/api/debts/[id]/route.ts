@@ -44,7 +44,7 @@ export async function GET(
 
         // Collect all debt payments from credit sales
         const allPayments: any[] = [];
-        const salesMapped = patient.sales.map((sale) => {
+        const salesMapped = patient.sales.map((sale: any) => {
             // Collect payments from each sale
             if (sale.debtPayments) {
                 sale.debtPayments.forEach((dp: any) => {
@@ -71,7 +71,7 @@ export async function GET(
         });
 
         // Sort payments by date
-        allPayments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        allPayments.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         return NextResponse.json({
             patient: {

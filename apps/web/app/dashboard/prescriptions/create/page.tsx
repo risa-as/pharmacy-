@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import CreatePrescriptionForm from "@/app/ui/prescriptions/create-form";
 import { FileText } from "lucide-react";

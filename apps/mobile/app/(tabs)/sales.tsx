@@ -263,6 +263,7 @@ export default function SalesScreen() {
             patientId: selectedPatient?.id,
             paymentMethod: method,
             discount: totalDiscount,
+            branchId: branchId ?? undefined,
         };
 
         // CREDIT sales are always online-only (creates patient debt record on server)

@@ -22,7 +22,7 @@ export default function StagnantItemsTable({ items, currentPeriod }: StagnantIte
     const searchParams = useSearchParams();
 
     const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const params = new URLSearchParams(searchParams.toString());
+        const params = new URLSearchParams(searchParams?.toString() ?? '');
         params.set("stagnantPeriod", e.target.value);
         router.push(`?${params.toString()}`, { scroll: false });
     };
@@ -70,7 +70,7 @@ export default function StagnantItemsTable({ items, currentPeriod }: StagnantIte
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                        {items.map((item) => (
+                        {items.map((item: any) => (
                             <tr key={item.id} className="hover:bg-muted/50 transition-colors">
                                 <td className="px-6 py-4 font-medium text-foreground">
                                     <div className="flex items-center gap-2">

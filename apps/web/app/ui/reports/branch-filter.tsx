@@ -28,7 +28,7 @@ export async function BranchFilter({ currentBranch, baseUrl, extraParams }: Bran
         if (branchId) params.set("branch", branchId);
         if (extraParams) {
             const extra = new URLSearchParams(extraParams);
-            extra.forEach((v, k) => {
+            extra.forEach((v: any, k: any) => {
                 if (k !== "branch") params.set(k, v);
             });
         }
@@ -51,7 +51,7 @@ export async function BranchFilter({ currentBranch, baseUrl, extraParams }: Bran
             >
                 كل الفروع
             </Link>
-            {branches.map((b) => (
+            {branches.map((b: any) => (
                 <Link
                     key={b.id}
                     href={buildUrl(b.id)}

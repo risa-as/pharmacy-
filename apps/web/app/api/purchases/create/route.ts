@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
@@ -13,6 +15,26 @@ export async function POST(req: Request) {
 
         if (!branchId || !supplierId || !items || !Array.isArray(items) || items.length === 0) {
             return NextResponse.json({ message: "Invalid request data" }, { status: 400 });
+        }
+
+        // Validate branchId belongs to the authenticated user's organization
+        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const branch = await prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { organizationId: true }
+            });
+            if (!branch) {
+                return NextResponse.json({ message: "Branch not found" }, { status: 404 });
+            }
+            if (tenantCtx.user.role === 'ADMIN') {
+                if (branch.organizationId !== tenantCtx.user.organizationId) {
+                    return NextResponse.json({ message: "Unauthorized: branch does not belong to your organization" }, { status: 403 });
+                }
+            } else {
+                if (branchId !== tenantCtx.user.branchId) {
+                    return NextResponse.json({ message: "Unauthorized: cannot create purchase for another branch" }, { status: 403 });
+                }
+            }
         }
 
         // Calculate total
@@ -49,7 +71,7 @@ export async function POST(req: Request) {
                         type: 'NEW_PURCHASE',
                         title: 'طلب شراء جديد',
                         body: `تم إنشاء طلب شراء جديد بقيمة ${total.toLocaleString('ar-IQ')} د.ع`,
-                        targetUserIds: managers.map(m => m.id),
+                        targetUserIds: managers.map((m: any) => m.id),
                         branchId,
                         data: { purchaseId: purchase.id },
                     });

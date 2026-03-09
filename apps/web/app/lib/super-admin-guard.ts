@@ -44,7 +44,7 @@ export const PHARMACY_ONLY_ROUTES = [
  */
 export function isSuperAdminRoute(pathname: string): boolean {
     return SUPER_ADMIN_ROUTES.some(
-        (route) => pathname === route || pathname.startsWith(route + "/")
+        (route: any) => pathname === route || pathname.startsWith(route + "/")
     );
 }
 
@@ -54,6 +54,6 @@ export function isSuperAdminRoute(pathname: string): boolean {
  */
 export function isPharmacyOnlyRoute(pathname: string): boolean {
     return PHARMACY_ONLY_ROUTES.some(
-        (route) => pathname === route || pathname.startsWith(route + "/")
+        (route: any) => pathname === route || pathname.startsWith(route + "/")
     );
 }

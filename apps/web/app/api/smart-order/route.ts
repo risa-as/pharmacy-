@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
@@ -47,8 +49,8 @@ export async function GET(req: Request) {
         });
 
         const pendingDrugIds = new Set<string>();
-        pendingPurchases.forEach(p => {
-            p.items.forEach(i => pendingDrugIds.add(i.drugId));
+        pendingPurchases.forEach((p: any) => {
+            p.items.forEach((i: any) => pendingDrugIds.add(i.drugId));
         });
 
         // Fetch sales data for the last VELOCITY_WINDOW_DAYS to calculate sales velocity
@@ -84,8 +86,8 @@ export async function GET(req: Request) {
             soldByDrug.set(item.drugId, (soldByDrug.get(item.drugId) || 0) + item.quantity);
         }
 
-        const enrichedItems = inventoryItems.map(item => {
-            const totalQuantity = item.batches.reduce((sum, batch) => sum + batch.quantity, 0);
+        const enrichedItems = inventoryItems.map((item: any) => {
+            const totalQuantity = item.batches.reduce((sum: number, batch: any) => sum + batch.quantity, 0);
             const totalSold = soldByDrug.get(item.drugId) || 0;
             const averageDailySales = totalSold / VELOCITY_WINDOW_DAYS;
             const daysUntilStockout = averageDailySales > 0
@@ -107,11 +109,11 @@ export async function GET(req: Request) {
 
         // Filter: low stock OR selling fast (will run out within lead time + safety)
         const needsReorder = enrichedItems
-            .filter(item =>
+            .filter((item: any) =>
                 !pendingDrugIds.has(item.drugId) &&
                 (item.currentQuantity <= item.minStock || item.daysUntilStockout <= (LEAD_TIME_DAYS + SAFETY_STOCK_DAYS))
             )
-            .sort((a, b) => a.daysUntilStockout - b.daysUntilStockout);
+            .sort((a: any, b: any) => a.daysUntilStockout - b.daysUntilStockout);
 
         return NextResponse.json(needsReorder);
     } catch (error) {

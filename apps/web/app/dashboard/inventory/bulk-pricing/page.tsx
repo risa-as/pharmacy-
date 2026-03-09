@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 import BulkPricingClient from '@/app/ui/inventory/bulk-pricing/client';
@@ -31,7 +33,7 @@ export default async function Page() {
     });
 
     // Map the flattened structure needed for the UI
-    const mappedInventory = inventoryData.map(inv => {
+    const mappedInventory = inventoryData.map((inv: any) => {
         // Collect supplier IDs from past purchases of this drug to allow filtering by Supplier
         // A robust way mapping is if purchases actually saved the supplier ID on the drug level
         // For now we'll just allow basic filtering or pass supplier data if available
@@ -42,7 +44,7 @@ export default async function Page() {
             barcode: inv.drug.barcode,
             cost: inv.cost,
             price: inv.price,
-            stock: inv.batches.reduce((sum, b) => sum + b.quantity, 0)
+            stock: inv.batches.reduce((sum: any, b: any) => sum + b.quantity, 0)
         };
     });
 

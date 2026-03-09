@@ -63,7 +63,7 @@ export default function ReceivePurchasePage({ params }: { params: { id: string }
             <div className="bg-card rounded-lg shadow overflow-hidden border">
                 <div className="h-12 bg-muted/50 border-b animate-pulse"></div>
                 <div className="p-4 space-y-4">
-                    {[1, 2, 3].map((i) => (
+                    {[1, 2, 3].map((i: any) => (
                         <div key={i} className="flex gap-4">
                             <div className="h-10 w-1/4 bg-muted animate-pulse rounded-md"></div>
                             <div className="h-10 w-1/4 bg-muted animate-pulse rounded-md"></div>

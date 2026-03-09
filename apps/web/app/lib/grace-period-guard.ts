@@ -33,7 +33,7 @@ export const GRACE_PERIOD_BLOCKED_OPERATIONS: BlockedPattern[] = [
  * @param method    The HTTP method (e.g. "POST")
  */
 export function isBlockedInGracePeriod(pathname: string, method: string): boolean {
-    return GRACE_PERIOD_BLOCKED_OPERATIONS.some((pattern) => {
+    return GRACE_PERIOD_BLOCKED_OPERATIONS.some((pattern: any) => {
         const pathMatches =
             pathname === pattern.path || pathname.startsWith(pattern.path + "/");
         if (!pathMatches) return false;

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { FileSpreadsheet, TrendingUp } from "lucide-react";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
@@ -24,7 +26,7 @@ export default async function PurchasesReportPage() {
         orderBy: { createdAt: 'asc' }
     });
 
-    const totalPurchases = purchases.reduce((sum, p) => sum + p.total, 0);
+    const totalPurchases = purchases.reduce((sum: any, p: any) => sum + p.total, 0);
 
     // Chart Data
     const spendingByDay = new Map<string, number>();
@@ -34,12 +36,12 @@ export default async function PurchasesReportPage() {
         spendingByDay.set(d.toLocaleDateString('en-GB'), 0);
     }
 
-    purchases.forEach(p => {
+    purchases.forEach((p: any) => {
         const key = new Date(p.createdAt).toLocaleDateString('en-GB');
         spendingByDay.set(key, (spendingByDay.get(key) || 0) + p.total);
     });
 
-    const chartData = Array.from(spendingByDay.entries()).map(([day, amount]) => ({
+    const chartData = Array.from(spendingByDay.entries()).map(([day, amount]: any) => ({
         day: day.slice(0, 5),
         amount
     }));

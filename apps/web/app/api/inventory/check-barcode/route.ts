@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
                 id: inventoryRaw.id,
                 branchId: inventoryRaw.branchId,
                 price: inventoryRaw.price,
-                quantity: inventoryRaw.batches.reduce((sum, b) => sum + b.quantity, 0),
+                quantity: inventoryRaw.batches.reduce((sum: any, b: any) => sum + b.quantity, 0),
                 branch: inventoryRaw.branch,
               }
             : null;

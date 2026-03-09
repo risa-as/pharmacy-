@@ -41,9 +41,9 @@ export async function getAllDebtors(branchId?: string) {
         },
     });
 
-    return patients.map((p) => {
-        const unpaidSales = p.sales.filter((s) => {
-            const paid = s.debtPayments.reduce((sum, dp) => sum + dp.amount, 0);
+    return patients.map((p: any) => {
+        const unpaidSales = p.sales.filter((s: any) => {
+            const paid = s.debtPayments.reduce((sum: any, dp: any) => sum + dp.amount, 0);
             return paid < s.total - s.discount;
         });
         // sales are ordered desc, so oldest unpaid is last in the filtered array
@@ -152,8 +152,8 @@ export async function getPatientDebts(patientId: string) {
 
     if (!patient) return null;
 
-    const sales = patient.sales.map((s) => {
-        const totalPaid = s.debtPayments.reduce((sum, dp) => sum + dp.amount, 0);
+    const sales = patient.sales.map((s: any) => {
+        const totalPaid = s.debtPayments.reduce((sum: any, dp: any) => sum + dp.amount, 0);
         const remaining = s.total - s.discount - totalPaid;
         return {
             id: s.id,
@@ -163,7 +163,7 @@ export async function getPatientDebts(patientId: string) {
             totalPaid,
             isPaid: remaining <= 0,
             createdAt: s.createdAt,
-            items: s.items.map((i) => ({
+            items: s.items.map((i: any) => ({
                 name: i.drug.tradeName,
                 quantity: i.quantity,
                 price: i.price,
@@ -212,7 +212,7 @@ export async function getRecentDebtPayments(branchId?: string, limit = 30) {
         },
     });
 
-    return payments.map((p) => ({
+    return payments.map((p: any) => ({
         id: p.id,
         amount: p.amount,
         method: p.method,
@@ -246,7 +246,7 @@ export async function makeDebtPayment(
             return { success: false, message: "الفاتورة غير موجودة أو لا تخص هذا العميل" };
         }
 
-        const totalPaid = sale.debtPayments.reduce((sum, dp) => sum + dp.amount, 0);
+        const totalPaid = sale.debtPayments.reduce((sum: any, dp: any) => sum + dp.amount, 0);
         const remaining = sale.total - sale.discount - totalPaid;
 
         if (amount > remaining + 1) {

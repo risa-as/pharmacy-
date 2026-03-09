@@ -1,7 +1,10 @@
+export const dynamic = 'force-dynamic';
+
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { logAudit } from '@/app/lib/audit';
 
 export async function GET(req: Request) {
     try {
@@ -82,6 +85,16 @@ export async function POST(req: Request) {
                 notes,
                 branchId: user.branchId!,
             },
+        });
+
+        await logAudit({
+            userId: user.id,
+            userName: user.name ?? user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'PATIENT',
+            entityId: patient.id,
+            details: JSON.stringify({ name: patient.name, phone: patient.phone }),
+            branchId: user.branchId ?? undefined,
         });
 
         return NextResponse.json(patient);

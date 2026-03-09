@@ -26,7 +26,7 @@ export default function RecentSalesTable({ sales }: RecentSalesTableProps) {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                    {sales.map((sale) => (
+                    {sales.map((sale: any) => (
                         <tr
                             key={sale.id}
                             className="hover:bg-muted/50 cursor-pointer group"

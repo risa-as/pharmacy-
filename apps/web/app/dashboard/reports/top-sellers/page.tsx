@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { TrendingUp, Award, Package, DollarSign } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
@@ -33,11 +35,11 @@ export default async function TopSellersPage({
     });
 
     // 2. Get total quantities sold to calculate share %
-    const totalQuantitySold = grouped.reduce((s, g) => s + (g._sum.quantity || 0), 0);
+    const totalQuantitySold = grouped.reduce((s: any, g: any) => s + (g._sum.quantity || 0), 0);
 
     // 3. Populate drug names and revenue
     const items = await Promise.all(
-        grouped.map(async (g, idx) => {
+        grouped.map(async (g: any, idx: any) => {
             const drug = await prisma.globalDrug.findUnique({
                 where: { id: g.drugId },
                 select: { tradeName: true, barcode: true },
@@ -52,7 +54,7 @@ export default async function TopSellersPage({
             });
 
             const totalRevenue = saleItems.reduce(
-                (acc, si) => acc + si.quantity * si.price,
+                (acc: any, si: any) => acc + si.quantity * si.price,
                 0
             );
 
@@ -70,7 +72,7 @@ export default async function TopSellersPage({
         })
     );
 
-    const totalRevenue = items.reduce((s, i) => s + i.revenue, 0);
+    const totalRevenue = items.reduce((s: any, i: any) => s + i.revenue, 0);
     const periods = [
         { label: "7 أيام", value: 7 },
         { label: "30 يوم", value: 30 },
@@ -95,7 +97,7 @@ export default async function TopSellersPage({
                     📊 أكثر الأدوية مبيعاً
                 </h1>
                 <div className="flex gap-2">
-                    {periods.map((p) => (
+                    {periods.map((p: any) => (
                         <a
                             key={p.value}
                             href={buildPeriodUrl(p.value)}
@@ -162,7 +164,7 @@ export default async function TopSellersPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {items.map((item) => (
+                            {items.map((item: any) => (
                                 <tr key={item.rank} className="hover:bg-muted transition-colors">
                                     <td className="px-4 py-3 text-center">
                                         {item.rank === 1 && <span className="text-2xl">🥇</span>}

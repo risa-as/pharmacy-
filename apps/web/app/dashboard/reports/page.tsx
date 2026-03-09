@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, FileSpreadsheet, FileText, User, AlertTriangle, DollarSign, Package, AlertOctagon } from "lucide-react";
 import Link from "next/link";
@@ -116,7 +118,7 @@ export default async function ReportsPage() {
 
             {/* التقارير المتاحة */}
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
-                {reports.map((report) => {
+                {reports.map((report: any) => {
                     const Icon = report.icon;
                     const colors = colorClasses[report.color] || colorClasses.blue;
                     return (

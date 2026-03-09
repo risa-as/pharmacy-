@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
@@ -32,8 +34,8 @@ export async function POST(req: NextRequest) {
         });
 
         const tokens = users
-            .map(u => u.expoPushToken)
-            .filter((t): t is string => t !== null && t.length > 0);
+            .map((u: any) => u.expoPushToken)
+            .filter((t: string | null | undefined): t is string => t !== null && t !== undefined && t.length > 0);
 
         if (tokens.length === 0) {
             return NextResponse.json({
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Send via Expo Push API
-        const messages = tokens.map(token => ({
+        const messages = tokens.map((token: any) => ({
             to: token,
             title,
             body: messageBody,

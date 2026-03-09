@@ -85,7 +85,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
  */
 export function getLinkPermission(href: string): keyof UserPermissions | null {
     // Sort by path length descending so more specific paths match first
-    const sorted = [...ROUTE_PERMISSIONS].sort((a, b) => b.path.length - a.path.length);
+    const sorted = [...ROUTE_PERMISSIONS].sort((a: any, b: any) => b.path.length - a.path.length);
 
     for (const rp of sorted) {
         if (href.startsWith(rp.path)) {

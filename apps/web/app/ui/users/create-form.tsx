@@ -107,7 +107,7 @@ export default function CreateUserForm({ branches }: { branches: Branch[] }) {
                         className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
                     >
                         <option value="">-- بدون فرع --</option>
-                        {branches.map((branch) => (
+                        {branches.map((branch: any) => (
                             <option key={branch.id} value={branch.id}>
                                 {branch.name}
                             </option>

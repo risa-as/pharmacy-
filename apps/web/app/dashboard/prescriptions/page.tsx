@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { FileText, Plus, Clock, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
@@ -36,8 +38,8 @@ export default async function PrescriptionsPage() {
         CANCELLED: "ملغاة",
     };
 
-    const pending = prescriptions.filter(p => p.status === "PENDING").length;
-    const dispensed = prescriptions.filter(p => p.status === "DISPENSED").length;
+    const pending = prescriptions.filter((p: any) => p.status === "PENDING").length;
+    const dispensed = prescriptions.filter((p: any) => p.status === "DISPENSED").length;
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>
@@ -71,7 +73,7 @@ export default async function PrescriptionsPage() {
                 </div>
                 <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">
-                        {prescriptions.reduce((acc, p) => acc + p.items.length, 0)}
+                        {prescriptions.reduce((acc: any, p: any) => acc + p.items.length, 0)}
                     </div>
                     <div className="text-sm text-primary">إجمالي الأصناف</div>
                 </div>
@@ -97,7 +99,7 @@ export default async function PrescriptionsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {prescriptions.map((prescription) => (
+                            {prescriptions.map((prescription: any) => (
                                 <tr key={prescription.id} className="hover:bg-muted">
                                     <td className="px-4 py-3">
                                         <Link

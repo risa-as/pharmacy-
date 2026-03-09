@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { BarChart3, TrendingUp, AlertOctagon } from "lucide-react";
 import BestSellingChart from "@/app/ui/dashboard/reports/best-selling-chart";
@@ -46,7 +48,7 @@ export default async function AnalyticsPage({
     });
 
     // Populate Drug Names & Calculate Totals
-    const bestSellingItems = await Promise.all(bestSellingData.map(async (item) => {
+    const bestSellingItems = await Promise.all(bestSellingData.map(async (item: any) => {
         const drug = await prisma.globalDrug.findUnique({
             where: { id: item.drugId },
             select: { tradeName: true }
@@ -70,7 +72,7 @@ export default async function AnalyticsPage({
             select: { quantity: true, price: true }
         });
 
-        const totalRevenue = revenueAgg.reduce((acc, curr) => acc + (curr.quantity * curr.price), 0);
+        const totalRevenue = revenueAgg.reduce((acc: any, curr: any) => acc + (curr.quantity * curr.price), 0);
 
         return {
             name: drug?.tradeName || 'Unknown',
@@ -107,7 +109,7 @@ export default async function AnalyticsPage({
         },
         select: { drugId: true },
         distinct: ['drugId']
-    }).then(items => items.map(i => i.drugId));
+    }).then((items: any[]) => items.map((i: any) => i.drugId));
 
     // Get Drugs that are NOT in soldDrugIds
     const stagnantDrugs = await prisma.globalDrug.findMany({
@@ -139,10 +141,10 @@ export default async function AnalyticsPage({
         take: 50 // Limit to 50 for performance
     });
 
-    const stagnantItemsMapped = stagnantDrugs.map(drug => {
+    const stagnantItemsMapped = stagnantDrugs.map((drug: any) => {
         // Calculate total stock across all branches
-        const totalStock = drug.inventories.reduce((acc, inv) => {
-            return acc + inv.batches.reduce((bAcc, batch) => bAcc + batch.quantity, 0);
+        const totalStock = drug.inventories.reduce((acc: number, inv: any) => {
+            return acc + inv.batches.reduce((bAcc: number, batch: any) => bAcc + batch.quantity, 0);
         }, 0);
 
         // Last Sale Date (ever)
@@ -162,7 +164,7 @@ export default async function AnalyticsPage({
             lastSaleDate: lastSale,
             daysSinceLastSale: diffDays
         };
-    }).filter(item => item.stock > 0); // Double check stock > 0
+    }).filter((item: any) => item.stock > 0); // Double check stock > 0
 
     return (
         <div className="glass-card space-y-8 w-full p-6" dir="rtl">
@@ -187,7 +189,7 @@ export default async function AnalyticsPage({
                 <div className="lg:col-span-1 bg-card p-6 rounded-xl border border-border shadow-sm">
                     <h3 className="text-lg font-bold text-foreground mb-4">ملخص الأداء</h3>
                     <div className="space-y-4">
-                        {bestSellingItems.slice(0, 5).map((item, idx) => (
+                        {bestSellingItems.slice(0, 5).map((item: any, idx: any) => (
                             <div key={idx} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                 <span className="text-foreground font-medium text-sm truncate max-w-[120px]" title={item.name}>
                                     {idx + 1}. {item.name}

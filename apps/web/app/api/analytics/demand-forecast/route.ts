@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
         }
 
         // Get drug details
-        const drugIds = salesData.map(s => s.drugId);
+        const drugIds = salesData.map((s: any) => s.drugId);
         const drugs = await prisma.globalDrug.findMany({
             where: { id: { in: drugIds } },
             select: { id: true, tradeName: true, barcode: true }
@@ -51,11 +53,11 @@ export async function GET(req: NextRequest) {
             include: { batches: true }
         });
 
-        const inventoryMap = new Map(inventories.map(i => [i.drugId, i]));
-        const drugMap = new Map(drugs.map(d => [d.id, d]));
+        const inventoryMap = new Map<string, any>(inventories.map((i: any) => [i.drugId, i]));
+        const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
         // Moving Average Forecast algorithm
-        const forecasts = salesData.map(sale => {
+        const forecasts = salesData.map((sale: any) => {
             const drug = drugMap.get(sale.drugId);
             const inv = inventoryMap.get(sale.drugId);
             const totalSold = sale._sum.quantity || 0;
@@ -85,7 +87,7 @@ export async function GET(req: NextRequest) {
         });
 
         // Sort by urgency
-        forecasts.sort((a, b) => {
+        forecasts.sort((a: any, b: any) => {
             const urgencyOrder = { critical: 0, warning: 1, normal: 2 };
             return (urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 2) - (urgencyOrder[b.urgency as keyof typeof urgencyOrder] || 2);
         });

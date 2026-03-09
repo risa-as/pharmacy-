@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
 import { notFound } from 'next/navigation';
@@ -93,7 +95,7 @@ export default async function ReturnInvoicePage({
                         </tr>
                     </thead>
                     <tbody>
-                        {returnData.items.map((item, i) => (
+                        {returnData.items.map((item: any, i: any) => (
                             <tr key={item.id} className="border-b border-border">
                                 <td className="py-2 text-muted-foreground">{i + 1}</td>
                                 <td className="py-2 font-medium">{item.drug.tradeName}</td>

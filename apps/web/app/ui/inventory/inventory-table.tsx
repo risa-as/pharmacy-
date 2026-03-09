@@ -35,7 +35,7 @@ export default function InventoryTable({ items }: { items: InventoryItem[] }) {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border bg-transparent">
-                        {items.map((item) => {
+                        {items.map((item: any) => {
                             const status = item.currentStock <= item.minStock
                                 ? "نقص في المخزون"
                                 : item.currentStock >= item.maxStock

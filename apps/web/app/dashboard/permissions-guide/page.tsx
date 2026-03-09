@@ -360,7 +360,7 @@ const categories: Category[] = [
 
 /* ═══════ Role defaults (mirrors permissions.ts) ═══════ */
 const roleDefaults: Record<string, Record<string, boolean>> = {
-    ADMIN: Object.fromEntries(categories.flatMap(c => c.permissions.map(p => [p.key, true]))),
+    ADMIN: Object.fromEntries(categories.flatMap((c: any) => c.permissions.map((p: any) => [p.key, true]))),
     PHARMACIST: {
         canSell: true, canApplyDiscount: true, canViewSales: true, canDeleteSale: false,
         canProcessReturn: true, canViewReturns: true,
@@ -408,9 +408,9 @@ export default function PermissionsGuidePage() {
         setExpandedCategory(prev => (prev === id ? null : id));
     };
 
-    const totalPerms = categories.reduce((sum, c) => sum + c.permissions.length, 0);
+    const totalPerms = categories.reduce((sum: any, c: any) => sum + c.permissions.length, 0);
     const pagePerms = categories.reduce(
-        (sum, c) => sum + c.permissions.filter(p => !p.actionOnly).length, 0
+        (sum: any, c: any) => sum + c.permissions.filter((p: any) => !p.actionOnly).length, 0
     );
 
     if (!mounted) return null;
@@ -493,7 +493,7 @@ export default function PermissionsGuidePage() {
                 >
                     الكل
                 </button>
-                {Object.entries(roleLabels).map(([role, info]) => (
+                {Object.entries(roleLabels).map(([role, info]: any) => (
                     <button
                         key={role}
                         onClick={() => setSelectedRole(role)}
@@ -509,11 +509,11 @@ export default function PermissionsGuidePage() {
 
             {/* Categories Accordion */}
             <div className="space-y-3">
-                {categories.map((cat) => {
+                {categories.map((cat: any) => {
                     const CatIcon = cat.icon;
                     const isExpanded = expandedCategory === cat.id;
                     const enabledCount = selectedRole !== "ALL"
-                        ? cat.permissions.filter(p => roleDefaults[selectedRole]?.[p.key]).length
+                        ? cat.permissions.filter((p: any) => roleDefaults[selectedRole]?.[p.key]).length
                         : cat.permissions.length;
 
                     return (
@@ -547,8 +547,8 @@ export default function PermissionsGuidePage() {
                                 {/* Role badges preview */}
                                 {selectedRole === "ALL" && !isExpanded && (
                                     <div className="hidden sm:flex gap-1.5">
-                                        {Object.entries(roleLabels).map(([role, info]) => {
-                                            const enabled = cat.permissions.filter(p => roleDefaults[role]?.[p.key]).length;
+                                        {Object.entries(roleLabels).map(([role, info]: any) => {
+                                            const enabled = cat.permissions.filter((p: any) => roleDefaults[role]?.[p.key]).length;
                                             return (
                                                 <span key={role} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${info.bg} ${info.color}`}>
                                                     {info.name}: {enabled}/{cat.permissions.length}
@@ -567,7 +567,7 @@ export default function PermissionsGuidePage() {
                             {/* Expanded Content */}
                             {isExpanded && (
                                 <div className="bg-card divide-y divide-gray-100">
-                                    {cat.permissions.map((perm) => {
+                                    {cat.permissions.map((perm: any) => {
                                         const isEnabled = selectedRole === "ALL" || roleDefaults[selectedRole]?.[perm.key];
 
                                         return (
@@ -607,7 +607,7 @@ export default function PermissionsGuidePage() {
                                                         {/* Pages */}
                                                         {perm.pages.length > 0 && (
                                                             <div className="flex flex-wrap gap-1.5 mt-2">
-                                                                {perm.pages.map((page) => (
+                                                                {perm.pages.map((page: any) => (
                                                                     <span
                                                                         key={page.path}
                                                                         className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border ${cat.bgColor} ${cat.borderColor} ${cat.color} font-medium`}
@@ -628,7 +628,7 @@ export default function PermissionsGuidePage() {
                                                         {/* Role access matrix */}
                                                         {selectedRole === "ALL" && (
                                                             <div className="flex gap-2 mt-2">
-                                                                {Object.entries(roleLabels).map(([role, info]) => {
+                                                                {Object.entries(roleLabels).map(([role, info]: any) => {
                                                                     const enabled = roleDefaults[role]?.[perm.key];
                                                                     return (
                                                                         <div

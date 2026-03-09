@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
@@ -84,7 +85,7 @@ export async function GET(req: Request) {
             orderBy: { createdAt: 'asc' },
         });
 
-        const chartData = recentSales.reduce((acc: any, sale) => {
+        const chartData = recentSales.reduce((acc: any, sale: any) => {
             const date = sale.createdAt.toISOString().split('T')[0];
             acc[date] = (acc[date] || 0) + sale.total;
             return acc;

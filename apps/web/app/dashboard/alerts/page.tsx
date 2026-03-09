@@ -80,7 +80,7 @@ export default async function AlertsPage() {
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {alerts.map((alert) => (
+                    {alerts.map((alert: any) => (
                         <div
                             key={alert.id}
                             className={`flex items-center gap-4 p-4 rounded-xl border ${getAlertColor(alert)}`}

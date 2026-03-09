@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { User, DollarSign, Calendar, TrendingUp, ShoppingBag } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -53,22 +55,22 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
     });
 
     // Stats
-    const totalSales = sales.reduce((acc, sale) => acc + sale.total, 0);
+    const totalSales = sales.reduce((acc: any, sale: any) => acc + sale.total, 0);
     const saleCount = sales.length;
     const averageSale = saleCount > 0 ? totalSales / saleCount : 0;
 
     // Prepare Chart Data
     // Group by Date
-    const dailyData = sales.reduce((acc: any, sale) => {
+    const dailyData = sales.reduce((acc: any, sale: any) => {
         const date = format(sale.createdAt, 'yyyy-MM-dd');
         acc[date] = (acc[date] || 0) + sale.total;
         return acc;
     }, {});
 
-    const chartData = Object.keys(dailyData).map(date => ({
+    const chartData = Object.keys(dailyData).map((date: any) => ({
         date,
         total: dailyData[date]
-    })).sort((a, b) => a.date.localeCompare(b.date));
+    })).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
     // Recent Activity (Top 20)
     const recentActivity = sales.slice(0, 20);

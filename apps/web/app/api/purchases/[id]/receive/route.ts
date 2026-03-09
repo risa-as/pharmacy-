@@ -1,3 +1,6 @@
+import { Prisma } from '@prisma/client';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
@@ -31,9 +34,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         }
 
         // Transaction to update inventory and purchase status
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             for (const receivedItem of items) {
-                const purchaseItem = purchase.items.find(i => i.id === receivedItem.itemId);
+                const purchaseItem = purchase.items.find((i: any) => i.id === receivedItem.itemId);
                 if (!purchaseItem) continue;
 
                 // Find or Create Inventory? 

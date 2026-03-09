@@ -5,10 +5,15 @@ import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 
-// Initialize Stripe with secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-01-28.clover",
-});
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe {
+    if (!_stripe) {
+        _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+            apiVersion: "2026-01-28.clover",
+        });
+    }
+    return _stripe;
+}
 
 export interface CreatePaymentIntentResult {
     clientSecret: string;
@@ -25,7 +30,7 @@ export async function createStripePaymentIntent(
         // Convert amount to cents (Stripe uses smallest currency unit)
         const amountInCents = Math.round(amount * 100);
 
-        const paymentIntent = await stripe.paymentIntents.create({
+        const paymentIntent = await getStripe().paymentIntents.create({
             amount: amountInCents,
             currency,
             metadata: {
@@ -52,7 +57,7 @@ export async function confirmStripePayment(
     saleId: string
 ) {
     try {
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
 
         if (paymentIntent.status === "succeeded") {
             // تسجيل الدفع في قاعدة البيانات
@@ -82,7 +87,7 @@ export async function confirmStripePayment(
 // استرجاع دفعة
 export async function refundStripePayment(paymentIntentId: string) {
     try {
-        const refund = await stripe.refunds.create({
+        const refund = await getStripe().refunds.create({
             payment_intent: paymentIntentId,
         });
 
@@ -104,7 +109,7 @@ export async function refundStripePayment(paymentIntentId: string) {
 // جلب تفاصيل دفعة
 export async function getStripePaymentDetails(paymentIntentId: string) {
     try {
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
         return { paymentIntent };
     } catch (error: any) {
         return { error: error.message };

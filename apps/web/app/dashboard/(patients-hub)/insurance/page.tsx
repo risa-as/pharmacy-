@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Building2, Plus } from "lucide-react";
 import Link from "next/link";
@@ -41,13 +43,13 @@ export default async function InsurancePage() {
                 </div>
                 <div className="bg-success/10 rounded-xl border border-green-200 p-4">
                     <div className="text-3xl font-bold text-success">
-                        {companies.filter(c => c.isActive).length}
+                        {companies.filter((c: any) => c.isActive).length}
                     </div>
                     <div className="text-sm text-success">نشطة</div>
                 </div>
                 <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">
-                        {companies.reduce((acc, c) => acc + c._count.policies, 0)}
+                        {companies.reduce((acc: any, c: any) => acc + c._count.policies, 0)}
                     </div>
                     <div className="text-sm text-primary">بوليصات مسجلة</div>
                 </div>
@@ -73,7 +75,7 @@ export default async function InsurancePage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {companies.map((company) => (
+                            {companies.map((company: any) => (
                                 <tr key={company.id} className="hover:bg-muted">
                                     <td className="px-4 py-3 font-bold text-foreground">
                                         {company.name}

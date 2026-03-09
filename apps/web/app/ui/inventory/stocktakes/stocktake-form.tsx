@@ -14,7 +14,7 @@ export default function StocktakeForm({ stocktakeId, initialData, isCompleted }:
         const num = parseInt(value, 10);
         if (isNaN(num)) return; // Don't crash on empty, just wait
 
-        setItems(items.map(item =>
+        setItems(items.map((item: any) =>
             item.batchId === batchId ? { ...item, actualQuantity: num, difference: num - item.systemQuantity } : item
         ));
     };
@@ -61,17 +61,17 @@ export default function StocktakeForm({ stocktakeId, initialData, isCompleted }:
         }
     };
 
-    const totalLoss = items.reduce((sum, item) => {
+    const totalLoss = items.reduce((sum: any, item: any) => {
         const diff = item.actualQuantity - item.systemQuantity;
         return diff < 0 ? sum + Math.abs(diff * item.costPrice) : sum;
     }, 0);
 
-    const totalGain = items.reduce((sum, item) => {
+    const totalGain = items.reduce((sum: any, item: any) => {
         const diff = item.actualQuantity - item.systemQuantity;
         return diff > 0 ? sum + (diff * item.costPrice) : sum;
     }, 0);
 
-    const filteredItems = items.filter(i =>
+    const filteredItems = items.filter((i: any) =>
         i.drugName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         i.barcode.includes(searchTerm) ||
         i.scientificName?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -123,7 +123,7 @@ export default function StocktakeForm({ stocktakeId, initialData, isCompleted }:
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredItems.map(item => {
+                            {filteredItems.map((item: any) => {
                                 const diff = (item.actualQuantity || 0) - item.systemQuantity;
                                 const impact = diff * item.costPrice;
 

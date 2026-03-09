@@ -56,7 +56,7 @@ export default function EditForm({
                     className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
-                    {patients.map((patient) => (
+                    {patients.map((patient: any) => (
                         <option key={patient.id} value={patient.id}>
                             {patient.name} - {patient.phone}
                         </option>

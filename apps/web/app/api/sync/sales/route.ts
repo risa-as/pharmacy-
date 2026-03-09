@@ -1,6 +1,11 @@
+export const dynamic = 'force-dynamic';
+
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { auth } from '@/auth';
 import { z } from "zod";
+import { logAudit } from '@/app/lib/audit';
 
 
 const SyncSaleSchema = z.object({
@@ -32,6 +37,11 @@ const SyncPayloadSchema = z.object({
 
 export async function POST(req: NextRequest) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await req.json();
         const result = SyncPayloadSchema.safeParse(body);
 
@@ -40,6 +50,20 @@ export async function POST(req: NextRequest) {
         }
 
         const { branchId, sales } = result.data;
+
+        // Validate branchId belongs to the authenticated user
+        const userRole = (session.user as any).role;
+        const userBranchId = (session.user as any).branchId;
+        const userOrgId = (session.user as any).organizationId;
+        if (userRole !== 'SUPER_ADMIN') {
+            const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
+            if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+            if (userRole === 'ADMIN') {
+                if (branch.organizationId !== userOrgId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            } else {
+                if (branchId !== userBranchId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+        }
 
         // Process Sales Transactionally
         // We iterate effectively, or use createMany if possible (but we have relations)
@@ -52,7 +76,7 @@ export async function POST(req: NextRequest) {
         // Process each sale in a separate transaction to avoid timeouts
         for (const sale of sales) {
             try {
-                await prisma.$transaction(async (tx) => {
+                await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                     const existing = await tx.sale.findUnique({ where: { id: sale.id } });
                     if (existing) {
                         return; // Already synced
@@ -178,6 +202,15 @@ export async function POST(req: NextRequest) {
                     timeout: 20000 // default: 5000
                 });
                 processedIds.push(sale.id);
+                await logAudit({
+                    userId: session.user.id,
+                    userName: (session.user as any).name ?? session.user.email ?? 'Desktop Sync',
+                    action: 'CREATE',
+                    entity: 'SALE',
+                    entityId: sale.id,
+                    details: JSON.stringify({ total: sale.total, source: 'desktop-sync' }),
+                    branchId: body.branchId,
+                });
             } catch (err) {
                 console.error(`Failed to sync sale ${sale.id}:`, err);
                 // Continue with other sales

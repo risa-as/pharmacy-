@@ -44,7 +44,7 @@ export default function EditForm({
                         <option value="" disabled>
                             اختر المنظمة
                         </option>
-                        {organizations.map((org) => (
+                        {organizations.map((org: any) => (
                             <option key={org.id} value={org.id}>
                                 {org.name}
                             </option>

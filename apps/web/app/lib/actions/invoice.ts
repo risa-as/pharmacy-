@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 "use server";
 
 import { z } from "zod";
@@ -55,10 +56,10 @@ export async function createPurchase(prevState: any, formData: FormData) {
     }
 
     const validItems = itemsValidation.data;
-    const total = validItems.reduce((acc, item) => acc + (item.quantity * item.cost), 0);
+    const total = validItems.reduce((acc: any, item: any) => acc + (item.quantity * item.cost), 0);
 
     try {
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. Create Purchase Record
             const purchase = await tx.purchase.create({
                 data: {
@@ -68,7 +69,7 @@ export async function createPurchase(prevState: any, formData: FormData) {
                     status: "COMPLETED",
                     // invoiceNumber: invoiceNumber // Needs schema update if we want to store external Inv#
                     items: {
-                        create: validItems.map(item => ({
+                        create: validItems.map((item: any) => ({
                             drugId: item.drugId,
                             quantity: item.quantity,
                             cost: item.cost,
@@ -138,7 +139,7 @@ export async function deletePurchase(id: string) {
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
 
     try {
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // حذف عناصر الفاتورة أولاً
             await tx.purchaseItem.deleteMany({
                 where: { purchaseId: id }

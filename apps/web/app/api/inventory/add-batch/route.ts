@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic';
+
+import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
@@ -66,7 +69,7 @@ export async function POST(req: Request) {
             );
         }
 
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // Find the inventory record
             let inventory;
             if (inventoryId) {
@@ -124,7 +127,7 @@ export async function POST(req: Request) {
                     where: { inventoryId: result.inventory.id },
                     select: { quantity: true },
                 });
-                const totalQty = batches.reduce((s, b) => s + b.quantity, 0);
+                const totalQty = batches.reduce((s: any, b: any) => s + b.quantity, 0);
                 if (totalQty <= result.inventory.minStock) {
                     const drug = await prisma.inventory.findUnique({
                         where: { id: result.inventory.id },

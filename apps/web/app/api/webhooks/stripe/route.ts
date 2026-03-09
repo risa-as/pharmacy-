@@ -1,12 +1,19 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/app/lib/prisma";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-01-28.clover",
-});
-
 export async function POST(request: NextRequest) {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+        console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET is not configured — rejecting all webhook requests");
+        return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: "2026-01-28.clover",
+    });
     const body = await request.text();
     const signature = request.headers.get("stripe-signature");
 
@@ -17,11 +24,7 @@ export async function POST(request: NextRequest) {
     let event: Stripe.Event;
 
     try {
-        event = stripe.webhooks.constructEvent(
-            body,
-            signature,
-            process.env.STRIPE_WEBHOOK_SECRET || ""
-        );
+        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (error: any) {
         console.error("Webhook signature verification failed:", error.message);
         return NextResponse.json({ error: error.message }, { status: 400 });
@@ -55,6 +58,26 @@ export async function POST(request: NextRequest) {
             const failedPayment = event.data.object as Stripe.PaymentIntent;
             console.error("Payment failed:", failedPayment.id);
             break;
+
+        // ── Subscription lifecycle events ──────────────────────────────────────
+        // NOTE: Full automation requires adding stripeCustomerId to Organization.
+        // Until that migration is applied, these events are logged for manual action.
+        case "customer.subscription.deleted": {
+            const sub = event.data.object as Stripe.Subscription;
+            console.error(`[Stripe] Subscription DELETED for customer ${sub.customer} — manual org suspension required until stripeCustomerId FK is added to Organization model.`);
+            break;
+        }
+        case "invoice.payment_failed": {
+            const inv = event.data.object as Stripe.Invoice;
+            console.error(`[Stripe] Invoice payment FAILED for customer ${inv.customer} subscription ${inv.subscription} — manual action required.`);
+            break;
+        }
+        case "customer.subscription.updated": {
+            const updatedSub = event.data.object as Stripe.Subscription;
+            console.log(`[Stripe] Subscription UPDATED for customer ${updatedSub.customer} — status: ${updatedSub.status}`);
+            break;
+        }
+        // ──────────────────────────────────────────────────────────────────────
 
         case "charge.refunded":
             const refund = event.data.object as Stripe.Charge;

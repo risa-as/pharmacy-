@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Users, Plus, Phone, Calendar, AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -56,13 +58,13 @@ export default async function PatientsPage({
                 </div>
                 <div className="bg-primary/10 rounded-xl border border-primary p-4">
                     <div className="text-3xl font-bold text-primary">
-                        {patients.filter(p => p.allergies.length > 0).length}
+                        {patients.filter((p: any) => p.allergies.length > 0).length}
                     </div>
                     <div className="text-sm text-primary">لديهم حساسية</div>
                 </div>
                 <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
                     <div className="text-3xl font-bold text-warning">
-                        {patients.filter(p => p.chronicDiseases.length > 0).length}
+                        {patients.filter((p: any) => p.chronicDiseases.length > 0).length}
                     </div>
                     <div className="text-sm text-warning">أمراض مزمنة</div>
                 </div>
@@ -89,7 +91,7 @@ export default async function PatientsPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {patients.map((patient) => (
+                            {patients.map((patient: any) => (
                                 <tr key={patient.id} className="hover:bg-muted">
                                     <td className="px-4 py-3">
                                         <Link

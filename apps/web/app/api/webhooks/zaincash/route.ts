@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Zain Cash Server-to-Server Webhook
  *

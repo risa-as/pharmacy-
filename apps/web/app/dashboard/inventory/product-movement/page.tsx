@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Activity, ArrowUpDown, Search } from "lucide-react";
 
@@ -81,7 +83,7 @@ export default async function ProductMovementPage({
                 totalIn += pi.quantity;
             }
 
-            movements.sort((a, b) => b.date.getTime() - a.date.getTime());
+            movements.sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
         }
     }
 
@@ -166,7 +168,7 @@ export default async function ProductMovementPage({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {movements.map((m, idx) => (
+                                    {movements.map((m: any, idx: any) => (
                                         <tr key={idx} className="hover:bg-muted">
                                             <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
                                                 {new Date(m.date).toLocaleDateString("ar-IQ", {

@@ -50,7 +50,7 @@ export function getCurrencyLabel(currency: CurrencyCode = 'IQD'): string {
  * Get all supported currencies for dropdown
  */
 export function getSupportedCurrencies() {
-    return Object.entries(CURRENCY_CONFIG).map(([code, config]) => ({
+    return Object.entries(CURRENCY_CONFIG).map(([code, config]: any) => ({
         code: code as CurrencyCode,
         symbol: config.symbol,
         label: config.label,

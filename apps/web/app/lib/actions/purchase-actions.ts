@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 'use server';
 
 import { prisma } from '@/app/lib/prisma';
@@ -22,15 +23,15 @@ export async function getLowStockInventory(branchId?: string) {
     });
 
     // 2. Fetch all Global Drugs to map names
-    const drugIds = inventories.map(i => i.drugId);
+    const drugIds = inventories.map((i: any) => i.drugId);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: drugIds } }
     });
-    const drugMap = new Map(drugs.map(d => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     // 3. Filter for Low Stock
-    const lowStockItems = inventories.map(inv => {
-        const currentStock = inv.batches.reduce((sum, b) => sum + b.quantity, 0);
+    const lowStockItems = inventories.map((inv: any) => {
+        const currentStock = inv.batches.reduce((sum: number, b: any) => sum + b.quantity, 0);
         const drug = drugMap.get(inv.drugId);
 
         return {
@@ -46,7 +47,7 @@ export async function getLowStockInventory(branchId?: string) {
             branchId: inv.branchId,
             branchName: inv.branch.name
         };
-    }).filter(item => item.currentStock <= item.minStock);
+    }).filter((item: any) => item.currentStock <= item.minStock);
 
     // 4. Exclude items already in PENDING purchases
     const pendingFinalWhere = branchId ? { ...tenantBranchWhere, branchId, status: 'PENDING' } : { ...tenantBranchWhere, status: 'PENDING' };
@@ -56,11 +57,11 @@ export async function getLowStockInventory(branchId?: string) {
     });
 
     const pendingDrugIds = new Set<string>();
-    pendingPurchases.forEach(p => {
-        p.items.forEach(i => pendingDrugIds.add(i.drugId));
+    pendingPurchases.forEach((p: any) => {
+        p.items.forEach((i: any) => pendingDrugIds.add(i.drugId));
     });
 
-    return lowStockItems.filter(item => !pendingDrugIds.has(item.drugId));
+    return lowStockItems.filter((item: any) => !pendingDrugIds.has(item.drugId));
 }
 
 export async function createSmartPurchase(branchId: string, supplierId: string, items: any[]) {
@@ -71,7 +72,7 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
 
         // Optionally enforce that branchId matches `tenantBranchWhere` if this is not admin...
 
-        const total = items.reduce((sum, item) => sum + (item.quantity * item.cost), 0);
+        const total = items.reduce((sum: any, item: any) => sum + (item.quantity * item.cost), 0);
 
         const purchase = await prisma.purchase.create({
             data: {
@@ -141,16 +142,16 @@ export async function getPurchaseDetails(id: string) {
     if (!purchase) return null;
 
     // Fetch drug names efficiently
-    const drugIds = purchase.items.map(i => i.drugId);
+    const drugIds = purchase.items.map((i: any) => i.drugId);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: drugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map(d => [d.id, d.tradeName]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d.tradeName]));
 
     return {
         ...purchase,
-        items: purchase.items.map(item => ({
+        items: purchase.items.map((item: any) => ({
             ...item,
             drugName: drugMap.get(item.drugId) || 'Unknown Drug'
         }))
@@ -167,10 +168,10 @@ export async function receivePurchase(purchaseId: string, items: { itemId: strin
     if (!purchase) throw new Error("لم يتم العثور على طلب الشراء");
     if (purchase.status !== 'PENDING') throw new Error("تمت معالجة هذا الطلب مسبقاً");
 
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // 2. Process each item
         for (const receivedItem of items) {
-            const purchaseItem = purchase.items.find(i => i.id === receivedItem.itemId);
+            const purchaseItem = purchase.items.find((i: any) => i.id === receivedItem.itemId);
             if (!purchaseItem) continue;
 
             // Find Inventory for this branch & drug

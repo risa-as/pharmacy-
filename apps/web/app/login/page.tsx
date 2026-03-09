@@ -43,7 +43,7 @@ export default function LoginPage() {
                             { icon: Shield, text: "أمان وتشفير عالي" },
                             { icon: BarChart3, text: "تقارير متقدمة" },
                             { icon: Zap, text: "سرعة فائقة" },
-                        ].map((item, i) => (
+                        ].map((item: any, i: any) => (
                             <div
                                 key={i}
                                 className="flex items-center gap-3 p-3 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10"

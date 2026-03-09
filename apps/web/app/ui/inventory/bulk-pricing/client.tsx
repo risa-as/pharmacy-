@@ -41,7 +41,7 @@ export default function BulkPricingClient({ inventory, suppliers }: { inventory:
 
         if (searchTerm) {
             const lowerSearch = searchTerm.toLowerCase();
-            items = items.filter(item =>
+            items = items.filter((item: any) =>
                 item.tradeName.toLowerCase().includes(lowerSearch) ||
                 item.barcode.includes(searchTerm)
             );
@@ -58,7 +58,7 @@ export default function BulkPricingClient({ inventory, suppliers }: { inventory:
         if (selectAll) {
             setSelectedItems(new Set());
         } else {
-            setSelectedItems(new Set(filteredInventory.map(i => i.id)));
+            setSelectedItems(new Set(filteredInventory.map((i: any) => i.id)));
         }
         setSelectAll(!selectAll);
     };
@@ -274,7 +274,7 @@ export default function BulkPricingClient({ inventory, suppliers }: { inventory:
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredInventory.map(item => {
+                            {filteredInventory.map((item: any) => {
                                 const isSelected = selectedItems.has(item.id);
                                 const newPrice = calculateNewPrice(item.price);
                                 const priceChanged = newPrice !== item.price;

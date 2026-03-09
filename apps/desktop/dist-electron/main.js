@@ -10061,6 +10061,7 @@ function getBranchId() {
   return store.get("branchId");
 }
 let isOnline = false;
+let wasOffline = true;
 const runningSyncTasks = /* @__PURE__ */ new Set();
 let syncServiceStarted = false;
 function getConnectionStatus() {
@@ -10092,10 +10093,15 @@ async function checkConnection() {
       if (response.ok) {
         console.log(`[Connection] Success! Connected to ${base}`);
         setApiBaseUrl(base);
+        const justReconnected = wasOffline;
         isOnline = true;
+        wasOffline = false;
         electron.BrowserWindow.getAllWindows().forEach((win2) => {
           win2.webContents.send("connection-status", true);
         });
+        if (justReconnected) {
+          setTimeout(() => void syncSettings(), 500);
+        }
         return true;
       } else {
         console.log(`[Connection] Failed. Status: ${response.status} ${response.statusText}`);
@@ -10106,6 +10112,7 @@ async function checkConnection() {
   }
   console.log("[Connection] All candidates failed. Setting Offline.");
   isOnline = false;
+  wasOffline = true;
   electron.BrowserWindow.getAllWindows().forEach((win2) => {
     win2.webContents.send("connection-status", false);
   });
@@ -10436,7 +10443,7 @@ function startSyncService() {
   setInterval(syncProducts, 5 * 60 * 1e3);
   setInterval(syncUsers, 5 * 60 * 1e3);
   setInterval(syncPatients, 2 * 60 * 1e3);
-  setInterval(syncSettings, 10 * 60 * 1e3);
+  setInterval(syncSettings, 2 * 60 * 1e3);
   setInterval(syncDebtPayments, 2 * 60 * 1e3);
   setInterval(syncLoyalty, 2 * 60 * 1e3);
   setInterval(syncShifts, 5 * 60 * 1e3);
@@ -10683,12 +10690,31 @@ async function syncLoyalty() {
     if (!response.ok) throw new Error("Loyalty sync failed");
     const result = await response.json();
     const syncedIds = result.syncedIds;
+    const accountBalances = result.accountBalances;
     if (syncedIds && syncedIds.length > 0) {
       await prisma.loyaltyTransaction.updateMany({
         where: { id: { in: syncedIds } },
         data: { synced: true }
       });
       console.log(`[Sync] Loyalty sync completed. Marked ${syncedIds.length} transaction(s) as synced.`);
+    }
+    if (accountBalances && accountBalances.length > 0) {
+      for (const wb of accountBalances) {
+        const localAccount = await prisma.loyaltyAccount.findUnique({
+          where: { patientId: wb.patientId }
+        });
+        if (localAccount) {
+          await prisma.loyaltyAccount.update({
+            where: { patientId: wb.patientId },
+            data: {
+              totalPoints: wb.totalPoints,
+              lifetimePoints: wb.lifetimePoints,
+              tier: wb.tier
+            }
+          });
+        }
+      }
+      console.log(`[Sync] Reconciled ${accountBalances.length} loyalty account(s) from web.`);
     }
   } catch (error) {
     console.error("[Sync] Loyalty sync error:", error);
@@ -11090,7 +11116,9 @@ async function syncSettings() {
   if (!beginSyncTask(taskName)) return;
   try {
     if (!await checkConnection()) return;
-    const response = await fetch(buildApiUrl("/sync/settings"));
+    const branchId = getBranchId();
+    const settingsUrl = branchId ? buildApiUrl(`/sync/settings?branchId=${encodeURIComponent(branchId)}`) : buildApiUrl("/sync/settings");
+    const response = await fetch(settingsUrl);
     if (!response.ok) throw new Error("Settings sync failed");
     const settings = await response.json();
     if (!settings || !settings.id) return;
@@ -24750,6 +24778,15 @@ electron.ipcMain.handle("trigger-sync", async () => {
     return { success: true };
   } catch (error) {
     console.error("trigger-sync failed:", error);
+    return { success: false, error: error.message || String(error) };
+  }
+});
+electron.ipcMain.handle("sync-debts", async () => {
+  try {
+    await syncDebtPayments();
+    return { success: true };
+  } catch (error) {
+    console.error("sync-debts failed:", error);
     return { success: false, error: error.message || String(error) };
   }
 });

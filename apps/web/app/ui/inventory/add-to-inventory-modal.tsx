@@ -91,7 +91,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                                 <option value="" disabled>
                                     اختر الفرع...
                                 </option>
-                                {branches.map((branch) => (
+                                {branches.map((branch: any) => (
                                     <option key={branch.id} value={branch.id}>
                                         {branch.name}
                                     </option>

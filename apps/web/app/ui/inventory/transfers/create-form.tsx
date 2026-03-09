@@ -28,14 +28,14 @@ export default function CreateTransferForm({
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Filter available stock based on search
-    const filteredStock = availableStock.filter(item =>
+    const filteredStock = availableStock.filter((item: any) =>
         item.tradeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.barcode.includes(searchQuery)
     ).slice(0, 10); // Show max 10 results at a time
 
     const handleAddItem = (stockItem: any) => {
         // Find if exists
-        const exists = selectedItems.find(i => i.drugId === stockItem.drugId && i.batchNumber === stockItem.batchNumber);
+        const exists = selectedItems.find((i: any) => i.drugId === stockItem.drugId && i.batchNumber === stockItem.batchNumber);
         if (exists) {
             toast.error('هذا المنتج بهذه الوجبة مضاف مسبقاً للقائمة');
             return;
@@ -82,7 +82,7 @@ export default function CreateTransferForm({
         const payload = {
             toBranchId,
             notes,
-            items: selectedItems.map(item => ({
+            items: selectedItems.map((item: any) => ({
                 drugId: item.drugId,
                 batchNumber: item.batchNumber,
                 expiryDate: item.expiryDate,
@@ -124,7 +124,7 @@ export default function CreateTransferForm({
                         required
                     >
                         <option value="" disabled>-- اختر الفرع المستلم --</option>
-                        {branches.map(b => (
+                        {branches.map((b: any) => (
                             <option key={b.id} value={b.id}>{b.name}</option>
                         ))}
                     </select>
@@ -162,7 +162,7 @@ export default function CreateTransferForm({
                     {searchQuery.length > 1 && (
                         <div className="absolute z-10 w-full mt-1 bg-card rounded-md shadow-lg border border-border max-h-60 overflow-auto">
                             {filteredStock.length > 0 ? (
-                                filteredStock.map((item, idx) => (
+                                filteredStock.map((item: any, idx: any) => (
                                     <button
                                         key={idx}
                                         type="button"
@@ -198,7 +198,7 @@ export default function CreateTransferForm({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {selectedItems.map((item, idx) => (
+                                {selectedItems.map((item: any, idx: any) => (
                                     <tr key={idx} className="bg-card">
                                         <td className="px-4 py-3 font-bold">{item.tradeName}</td>
                                         <td className="px-4 py-3">

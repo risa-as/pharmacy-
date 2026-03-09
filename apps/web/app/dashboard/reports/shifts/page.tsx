@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 import ShiftsTable from '@/app/ui/reports/shifts/table';
@@ -46,7 +48,7 @@ async function ShiftSummaryCards({ query, date, tenantBranchWhere }: { query: st
     let totalExpected = 0;
     let totalActual = 0;
 
-    shifts.forEach(shift => {
+    shifts.forEach((shift: any) => {
         const expected = shift.expectedCash || 0;
         const actual = shift.actualCash || 0;
         const variance = actual - expected;

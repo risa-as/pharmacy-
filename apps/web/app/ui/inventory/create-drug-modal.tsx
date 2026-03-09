@@ -22,7 +22,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
         fetch("/api/suppliers")
             .then(r => r.ok ? r.json() : [])
             .then(setSuppliers)
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -136,7 +136,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                                 <option value="" disabled>
                                     اختر الفرع...
                                 </option>
-                                {branches.map((branch) => (
+                                {branches.map((branch: any) => (
                                     <option key={branch.id} value={branch.id}>
                                         {branch.name}
                                     </option>
@@ -199,7 +199,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                                 className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
                             >
                                 <option value="">اختر مورداً...</option>
-                                {suppliers.map(s => (
+                                {suppliers.map((s: any) => (
                                     <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
                             </select>

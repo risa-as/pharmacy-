@@ -1,7 +1,16 @@
 "use server";
 
+import { auth } from "@/auth";
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
+
+async function requireSuperAdmin(): Promise<{ error: string } | null> {
+    const session = await auth();
+    if ((session?.user as any)?.role !== "SUPER_ADMIN") {
+        return { error: "Unauthorized" };
+    }
+    return null;
+}
 
 export async function createPlan(data: {
     name: string;
@@ -11,6 +20,9 @@ export async function createPlan(data: {
     features?: any;
     isActive?: boolean;
 }) {
+    const authError = await requireSuperAdmin();
+    if (authError) return { success: false, error: authError.error };
+
     try {
         await prisma.subscriptionPlan.create({
             data: {
@@ -38,6 +50,9 @@ export async function updatePlan(id: string, data: {
     features?: any;
     isActive: boolean;
 }) {
+    const authError = await requireSuperAdmin();
+    if (authError) return { success: false, error: authError.error };
+
     try {
         await prisma.subscriptionPlan.update({
             where: { id },

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, ArrowRight, BookOpen, Banknote, User, CheckCircle, AlertCircle, Printer, X } from 'lucide-react';
+import { Search, ArrowRight, BookOpen, Banknote, User, CheckCircle, AlertCircle, Printer, X, RefreshCw, CheckCircle2, Cloud, CloudOff } from 'lucide-react';
 
 interface Debtor {
     id: string;
@@ -37,6 +37,12 @@ interface DebtorDetails {
     payments: Payment[];
 }
 
+interface SyncHealth {
+    pendingCount: number;
+    failedCount: number;
+    inProgress: boolean;
+}
+
 export default function DebtsPage() {
     const [view, setView] = useState<'list' | 'detail'>('list');
     const [selectedDebtorId, setSelectedDebtorId] = useState<string | null>(null);
@@ -50,6 +56,63 @@ export default function DebtsPage() {
     const [repayAmount, setRepayAmount] = useState<string>('');
     const [repayNote, setRepayNote] = useState('');
     const [submittingRepay, setSubmittingRepay] = useState(false);
+
+    // Sync State
+    const [syncHealth, setSyncHealth] = useState<SyncHealth>({ pendingCount: 0, failedCount: 0, inProgress: false });
+    const [syncing, setSyncing] = useState(false);
+    const [syncToast, setSyncToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+    // Listen to sync health updates
+    useEffect(() => {
+        if (!window.ipcRenderer) return;
+        const handler = (_: any, health: any) => {
+            setSyncHealth({
+                pendingCount: health.pendingCount ?? 0,
+                failedCount: health.failedCount ?? 0,
+                inProgress: health.inProgress ?? false,
+            });
+        };
+        window.ipcRenderer.on('sync-health-updated', handler);
+        return () => { window.ipcRenderer.off('sync-health-updated', handler); };
+    }, []);
+
+    // Auto-dismiss toast
+    useEffect(() => {
+        if (!syncToast) return;
+        const t = setTimeout(() => setSyncToast(null), 3000);
+        return () => clearTimeout(t);
+    }, [syncToast]);
+
+    const handleSync = async () => {
+        if (!window.ipcRenderer || syncing) return;
+        setSyncing(true);
+        try {
+            const res = await window.ipcRenderer.invoke('sync-debts');
+            if (res?.success === false) throw new Error(res.error || 'فشلت المزامنة');
+            setSyncToast({ type: 'success', msg: 'تمت المزامنة بنجاح' });
+            await fetchDebtors();
+        } catch (err: any) {
+            setSyncToast({ type: 'error', msg: err?.message || 'فشلت المزامنة' });
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    // Sync status config
+    const getSyncStatusConfig = () => {
+        if (syncing || syncHealth.inProgress) {
+            return { label: 'جارٍ المزامنة...', icon: <RefreshCw className="w-3.5 h-3.5 animate-spin" />, className: 'bg-blue-500/10 text-blue-600 border-blue-500/30' };
+        }
+        if (syncHealth.failedCount > 0) {
+            return { label: `${syncHealth.failedCount} فشل`, icon: <CloudOff className="w-3.5 h-3.5" />, className: 'bg-destructive/10 text-destructive border-destructive/30' };
+        }
+        if (syncHealth.pendingCount > 0) {
+            return { label: `${syncHealth.pendingCount} معلّق`, icon: <Cloud className="w-3.5 h-3.5" />, className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' };
+        }
+        return { label: 'متزامن', icon: <CheckCircle2 className="w-3.5 h-3.5" />, className: 'bg-success/10 text-success border-success/30' };
+    };
+
+    const syncStatusConfig = getSyncStatusConfig();
 
     // Fetch Debtors List
     const fetchDebtors = async () => {
@@ -323,6 +386,22 @@ export default function DebtsPage() {
     // LIST VIEW
     return (
         <div className="p-6 h-full flex flex-col bg-background" dir="rtl">
+
+            {/* Sync Toast */}
+            {syncToast && (
+                <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-bold border transition-all ${
+                    syncToast.type === 'success'
+                        ? 'bg-success/10 text-success border-success/30'
+                        : 'bg-destructive/10 text-destructive border-destructive/30'
+                }`}>
+                    {syncToast.type === 'success'
+                        ? <CheckCircle2 className="w-4 h-4" />
+                        : <CloudOff className="w-4 h-4" />
+                    }
+                    {syncToast.msg}
+                </div>
+            )}
+
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-black text-foreground flex items-center gap-3">
@@ -330,6 +409,31 @@ export default function DebtsPage() {
                         دفتر الديون
                     </h1>
                     <p className="text-muted-foreground mt-1">إدارة الديون والأرصدة (يعمل بدون إنترنت)</p>
+                </div>
+
+                {/* Sync Controls */}
+                <div className="flex items-center gap-2">
+                    {/* Sync Status Badge */}
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border ${syncStatusConfig.className}`}>
+                        {syncStatusConfig.icon}
+                        <span>{syncStatusConfig.label}</span>
+                        {syncHealth.pendingCount > 0 && !syncing && !syncHealth.inProgress && (
+                            <span className="mr-0.5 bg-current/20 px-1.5 py-0.5 rounded-full text-[10px]">
+                                {syncHealth.pendingCount}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Re-sync Button */}
+                    <button
+                        onClick={handleSync}
+                        disabled={syncing || syncHealth.inProgress}
+                        title="إعادة المزامنة"
+                        className="flex items-center gap-2 px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-sm font-bold transition-all border border-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${syncing || syncHealth.inProgress ? 'animate-spin' : ''}`} />
+                        مزامنة
+                    </button>
                 </div>
             </div>
 

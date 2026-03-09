@@ -116,7 +116,7 @@ export default function AdminPlansPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {plans.map(plan => {
+                            {plans.map((plan: any) => {
                                 const isLoading = actionLoading === plan.id;
                                 return (
                                     <tr key={plan.id} className="border-b border-border hover:bg-muted/20 transition-colors">

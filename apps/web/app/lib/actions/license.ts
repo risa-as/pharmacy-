@@ -12,7 +12,7 @@ export async function suspendOrgLicenses(orgId: string): Promise<void> {
         where: { organizationId: orgId },
         select: { id: true },
     });
-    const branchIds = branches.map((b) => b.id);
+    const branchIds = branches.map((b: any) => b.id);
     if (branchIds.length === 0) return;
 
     await prisma.$transaction([
@@ -39,7 +39,7 @@ export async function reactivateOrgLicenses(orgId: string): Promise<void> {
         where: { organizationId: orgId },
         select: { id: true },
     });
-    const branchIds = branches.map((b) => b.id);
+    const branchIds = branches.map((b: any) => b.id);
     if (branchIds.length === 0) return;
 
     await prisma.$transaction([

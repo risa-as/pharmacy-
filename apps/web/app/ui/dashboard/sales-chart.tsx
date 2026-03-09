@@ -25,7 +25,7 @@ export default function SalesChart({ data, title = "المبيعات اليوم�
         return <div className="animate-pulse h-64 bg-muted rounded-xl" />;
     }
 
-    const total = data.reduce((acc, d) => acc + d.amount, 0);
+    const total = data.reduce((acc: any, d: any) => acc + d.amount, 0);
     const trend = data.length > 1
         ? ((data[data.length - 1].amount - data[0].amount) / (data[0].amount || 1)) * 100
         : 0;

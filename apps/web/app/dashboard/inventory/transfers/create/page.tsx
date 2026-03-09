@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Metadata } from 'next';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';

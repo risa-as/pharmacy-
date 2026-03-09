@@ -67,7 +67,7 @@ export default function ProfitReportClient({ branches, defaultBranchId, defaultP
                             className="border border-border rounded-lg px-3 py-2 text-sm bg-muted focus:ring-2 focus:ring-ring focus:border-transparent"
                         >
                             <option value="">كل الفروع</option>
-                            {branches.map(b => (
+                            {branches.map((b: any) => (
                                 <option key={b.id} value={b.id}>{b.name}</option>
                             ))}
                         </select>

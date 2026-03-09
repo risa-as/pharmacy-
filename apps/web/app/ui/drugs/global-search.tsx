@@ -10,7 +10,7 @@ export default function GlobalDrugSearch({ placeholder }: { placeholder: string 
     const { replace } = useRouter();
 
     const handleSearch = useDebouncedCallback((term) => {
-        const params = new URLSearchParams(searchParams.toString());
+        const params = new URLSearchParams(searchParams?.toString() ?? '');
         params.set('page', '1'); // Reset to page 1 on new search
 
         if (term) {
@@ -32,7 +32,7 @@ export default function GlobalDrugSearch({ placeholder }: { placeholder: string 
                 onChange={(e) => {
                     handleSearch(e.target.value);
                 }}
-                defaultValue={searchParams.get('query')?.toString()}
+                defaultValue={searchParams?.get('query')?.toString()}
             />
             <MagnifyingGlassIcon className="absolute right-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground peer-focus:text-foreground" />
         </div>

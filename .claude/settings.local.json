@@ -54,7 +54,16 @@
       "Bash(pwsh:*)",
       "Bash(pnpm:*)",
       "Bash(xargs sh:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm run:*)",
+      "Bash(for f in app/api/backup/download/route.ts app/api/inventory/transfers/sync/route.ts app/api/sync/products/route.ts app/api/sync/patients/route.ts)",
+      "Bash(do echo \"=== $f ===\")",
+      "Read(//d/Programming/Faramace/apps/web/**)",
+      "Bash(done)",
+      "Bash(sed:*)",
+      "Bash(npx tsx:*)",
+      "Bash(where sqlite3:*)"
     ]
   }
 }

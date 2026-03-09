@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Button } from "@faramace/ui";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -46,7 +48,7 @@ export default async function Page() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-card">
-                {branches.map((branch) => (
+                {branches.map((branch: any) => (
                   <tr
                     key={branch.id}
                     className="hover:bg-muted transition-colors"

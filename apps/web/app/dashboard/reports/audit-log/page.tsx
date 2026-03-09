@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import AuditLogClient from "@/app/ui/reports/audit-log-client";
 import { getTenantContext } from '@/app/lib/tenant-utils';

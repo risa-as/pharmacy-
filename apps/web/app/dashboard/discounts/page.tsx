@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Tag, Plus, Percent, Calendar, ChevronLeft } from "lucide-react";
 import Link from "next/link";
@@ -14,8 +16,8 @@ export default async function DiscountsPage() {
     });
 
     const now = new Date();
-    const active = discounts.filter(d => d.isActive && new Date(d.endDate) > now).length;
-    const expired = discounts.filter(d => new Date(d.endDate) <= now).length;
+    const active = discounts.filter((d: any) => d.isActive && new Date(d.endDate) > now).length;
+    const expired = discounts.filter((d: any) => new Date(d.endDate) <= now).length;
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>
@@ -73,7 +75,7 @@ export default async function DiscountsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {discounts.map((discount) => {
+                            {discounts.map((discount: any) => {
                                 const isExpired = new Date(discount.endDate) <= now;
                                 const isActive = discount.isActive && !isExpired;
                                 return (

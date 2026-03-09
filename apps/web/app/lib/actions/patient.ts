@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 "use server";
 
 import { prisma } from "@/app/lib/prisma";
@@ -60,8 +61,8 @@ export async function createPatient(prevState: any, formData: FormData) {
                 phone,
                 dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
                 gender: gender || null,
-                allergies: allergies ? allergies.split(",").map(s => s.trim()).filter(Boolean) : [],
-                chronicDiseases: chronicDiseases ? chronicDiseases.split(",").map(s => s.trim()).filter(Boolean) : [],
+                allergies: allergies ? allergies.split(",").map((s: any) => s.trim()).filter(Boolean) : [],
+                chronicDiseases: chronicDiseases ? chronicDiseases.split(",").map((s: any) => s.trim()).filter(Boolean) : [],
                 notes: notes || null,
                 branchId,
             },
@@ -124,8 +125,8 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
                 phone,
                 dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
                 gender: gender || null,
-                allergies: allergies ? allergies.split(",").map(s => s.trim()) : [],
-                chronicDiseases: chronicDiseases ? chronicDiseases.split(",").map(s => s.trim()) : [],
+                allergies: allergies ? allergies.split(",").map((s: any) => s.trim()) : [],
+                chronicDiseases: chronicDiseases ? chronicDiseases.split(",").map((s: any) => s.trim()) : [],
                 notes: notes || null,
             },
         });
@@ -166,11 +167,11 @@ export async function deletePatient(id: string) {
         }
 
         // حذف آمن — لا توجد ارتباطات حرجة
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // حذف الوصفات إن وُجدت
             const prescriptions = await tx.prescription.findMany({ where: { patientId: id }, select: { id: true } });
             if (prescriptions.length > 0) {
-                await tx.prescriptionItem.deleteMany({ where: { prescriptionId: { in: prescriptions.map(p => p.id) } } });
+                await tx.prescriptionItem.deleteMany({ where: { prescriptionId: { in: prescriptions.map((p: any) => p.id) } } });
                 await tx.prescription.deleteMany({ where: { patientId: id } });
             }
             await tx.insurancePolicy.deleteMany({ where: { patientId: id } });

@@ -42,12 +42,12 @@ export async function POST(request: Request) {
 
         // Build remaining balance per sale
         const unpaidSales = patient.sales
-            .map((sale) => {
-                const totalPaid = sale.debtPayments.reduce((sum, dp) => sum + dp.amount, 0);
+            .map((sale: any) => {
+                const totalPaid = sale.debtPayments.reduce((sum: any, dp: any) => sum + dp.amount, 0);
                 const remaining = sale.total - sale.discount - totalPaid;
                 return { ...sale, remaining };
             })
-            .filter((s) => s.remaining > 0);
+            .filter((s: any) => s.remaining > 0);
 
         if (unpaidSales.length === 0) {
             return NextResponse.json({ error: 'لا توجد فواتير غير مسددة' }, { status: 400 });

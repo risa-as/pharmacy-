@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
@@ -126,7 +128,7 @@ export async function GET(req: Request) {
                 dailyData[dateKey] = { revenue: 0, cogs: 0, expenses: 0, returns: 0 };
             }
             dailyData[dateKey].revenue += sale.total;
-            dailyData[dateKey].cogs += sale.items.reduce((sum, item) => sum + (item.cost * item.quantity), 0);
+            dailyData[dateKey].cogs += sale.items.reduce((sum: any, item: any) => sum + (item.cost * item.quantity), 0);
         }
 
         // Add expenses to daily breakdown
@@ -164,8 +166,8 @@ export async function GET(req: Request) {
         }
 
         const chart = Object.entries(dailyData)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([date, data]) => ({
+            .sort(([a]: any[], [b]: any[]) => a.localeCompare(b))
+            .map(([date, data]: any) => ({
                 date,
                 revenue: Math.round(data.revenue),
                 cogs: Math.round(data.cogs),
@@ -199,7 +201,7 @@ export async function GET(req: Request) {
                 returnsCount: returnsAgg._count,
             },
             chart,
-            expensesByCategory: expensesByCategory.map(e => ({
+            expensesByCategory: expensesByCategory.map((e: any) => ({
                 category: e.category,
                 amount: Math.round(e._sum.amount || 0)
             }))

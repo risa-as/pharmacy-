@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -27,7 +29,8 @@ export default async function Page() {
     try {
         users = await getUsers(tenantBranchWhere);
     } catch (e) {
-        users = await getUsers({});
+        console.error('[Users Page] Failed to load users:', e);
+        // Do NOT fall back to unscoped query — return empty list instead
     }
 
     return (
@@ -64,7 +67,7 @@ export default async function Page() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-card">
-                                {users.map((user) => (
+                                {users.map((user: any) => (
                                     <tr
                                         key={user.id}
                                         className="hover:bg-muted transition-colors"

@@ -8,8 +8,8 @@ export function exportToCSV(data: any[], filename: string, headers: string[]) {
     const BOM = "\uFEFF";
 
     const headerRow = headers.join(",");
-    const dataRows = data.map(row =>
-        headers.map(header => {
+    const dataRows = data.map((row: any) =>
+        headers.map((header: any) => {
             const value = row[header] ?? "";
             // Escape commas and quotes
             const escaped = String(value).replace(/"/g, '""');
@@ -93,8 +93,8 @@ export function formatDataForExport(
     const headers = Object.values(columnMapping);
     const keys = Object.keys(columnMapping);
 
-    const rows = data.map(item =>
-        keys.map(key => {
+    const rows = data.map((item: any) =>
+        keys.map((key: any) => {
             const value = item[key];
             if (value instanceof Date) {
                 return value.toLocaleDateString("ar-IQ");

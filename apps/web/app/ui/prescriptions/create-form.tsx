@@ -36,7 +36,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
             return;
         }
 
-        const drug = drugs.find((d) => d.id === selectedDrug);
+        const drug = drugs.find((d: any) => d.id === selectedDrug);
 
         const newItems = [
             ...items,
@@ -89,7 +89,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                             required
                         >
                             <option value="">اختر المريض</option>
-                            {patients.map((p) => (
+                            {patients.map((p: any) => (
                                 <option key={p.id} value={p.id}>
                                     {p.name} ({p.phone})
                                 </option>
@@ -137,7 +137,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                             className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                         >
                             <option value="">اختر الدواء...</option>
-                            {drugs.map((d) => (
+                            {drugs.map((d: any) => (
                                 <option key={d.id} value={d.id}>
                                     {d.tradeName}
                                 </option>
@@ -199,7 +199,7 @@ export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {items.map((item, idx) => (
+                                {items.map((item: any, idx: any) => (
                                     <tr key={idx} className="border-t">
                                         <td className="px-3 py-2 font-medium">{item.drugName}</td>
                                         <td className="px-3 py-2">{item.quantity}</td>

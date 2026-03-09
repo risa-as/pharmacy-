@@ -4,9 +4,11 @@ import { z } from "zod";
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { checkPlanLimit } from "@/app/lib/saas-guards";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/app/lib/audit";
 
 
 const UserSchema = z.object({
@@ -24,6 +26,9 @@ const UpdateUser = UserSchema.omit({ password: true }).extend({
 });
 
 export async function createUser(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+
     const validatedFields = CreateUser.safeParse({
         name: formData.get("name"),
         email: formData.get("email"),
@@ -41,6 +46,14 @@ export async function createUser(prevState: any, formData: FormData) {
 
     const { name, email, password, role, branchId } = validatedFields.data;
 
+    // Enforce per-plan user limit (skip for SUPER_ADMIN who has no org)
+    if (tenantCtx.user.organizationId) {
+        const limit = await checkPlanLimit(tenantCtx.user.organizationId, "users");
+        if (!limit.allowed) {
+            return { message: `لقد وصلت إلى الحد الأقصى للمستخدمين (${limit.max}) في خطتك الحالية.` };
+        }
+    }
+
     try {
         // التحقق من عدم وجود المستخدم
         const existingUser = await prisma.user.findUnique({
@@ -54,7 +67,7 @@ export async function createUser(prevState: any, formData: FormData) {
         // تشفير كلمة المرور
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        await prisma.user.create({
+        const newUser = await prisma.user.create({
             data: {
                 name,
                 email,
@@ -62,6 +75,16 @@ export async function createUser(prevState: any, formData: FormData) {
                 role,
                 branchId: branchId || null,
             },
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'USER',
+            entityId: newUser.id,
+            details: JSON.stringify({ name, email, role }),
+            branchId: branchId ?? undefined,
         });
     } catch (error) {
         console.error("Error creating user:", error);

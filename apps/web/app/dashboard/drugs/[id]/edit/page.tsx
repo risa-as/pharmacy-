@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import EditForm from "@/app/ui/drugs/edit-form";
 import { prisma } from "@/app/lib/prisma";
 import { notFound, redirect } from "next/navigation";

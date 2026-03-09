@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -77,11 +79,11 @@ export async function GET(req: Request) {
             }
         }
 
-        const profitReport = Array.from(profitByDrug.values()).sort((a, b) => b.profitMargin - a.profitMargin);
+        const profitReport = Array.from(profitByDrug.values()).sort((a: any, b: any) => b.profitMargin - a.profitMargin);
 
         // Summary totals
-        const totalRevenue = profitReport.reduce((sum, p) => sum + p.totalRevenue, 0);
-        const totalCost = profitReport.reduce((sum, p) => sum + p.totalCost, 0);
+        const totalRevenue = profitReport.reduce((sum: any, p: any) => sum + p.totalRevenue, 0);
+        const totalCost = profitReport.reduce((sum: any, p: any) => sum + p.totalCost, 0);
         const netProfit = totalRevenue - totalCost;
         const overallMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 10000) / 100 : 0;
 
@@ -108,15 +110,15 @@ export async function GET(req: Request) {
                 },
                 select: { drugId: true },
                 distinct: ['drugId']
-            })).map(i => i.drugId)
+            })).map((i: any) => i.drugId)
         );
 
         const deadStock = allInventory
-            .filter(inv => {
-                const stock = inv.batches.reduce((s, b) => s + b.quantity, 0);
+            .filter((inv: any) => {
+                const stock = inv.batches.reduce((s: number, b: any) => s + b.quantity, 0);
                 return stock > 0 && !soldDrugIds.has(inv.drugId);
             })
-            .map(inv => ({
+            .map((inv: any) => ({
                 drugId: inv.drugId,
                 tradeName: inv.drug?.tradeName || 'Unknown',
                 barcode: inv.drug?.barcode || '',
@@ -125,7 +127,7 @@ export async function GET(req: Request) {
                 estimatedValue: inv.batches.reduce((sum: number, b: any) => sum + (b.quantity * (b.costPrice || inv.cost || 0)), 0),
             }));
 
-        const totalDeadStockValue = deadStock.reduce((sum, d) => sum + d.estimatedValue, 0);
+        const totalDeadStockValue = deadStock.reduce((sum: any, d: any) => sum + d.estimatedValue, 0);
 
         // 3. Near-Expiry Loss — batches expiring within 90 days
         const nearExpiryWindow = new Date();
@@ -148,7 +150,7 @@ export async function GET(req: Request) {
             orderBy: { expiryDate: 'asc' }
         });
 
-        const nearExpiryLoss = expiringBatches.map(batch => ({
+        const nearExpiryLoss = expiringBatches.map((batch: any) => ({
             drugId: batch.inventory?.drugId,
             tradeName: batch.inventory?.drug?.tradeName || 'Unknown',
             barcode: batch.inventory?.drug?.barcode || '',
@@ -161,7 +163,7 @@ export async function GET(req: Request) {
             estimatedLoss: batch.quantity * (batch.costPrice || batch.inventory?.cost || 0),
         }));
 
-        const totalNearExpiryLoss = nearExpiryLoss.reduce((sum, b) => sum + b.estimatedLoss, 0);
+        const totalNearExpiryLoss = nearExpiryLoss.reduce((sum: any, b: any) => sum + b.estimatedLoss, 0);
 
         return NextResponse.json({
             period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },

@@ -80,7 +80,7 @@ export default function BackupManager() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {backups.map((backup) => (
+                            {backups.map((backup: any) => (
                                 <tr key={backup.name} className="hover:bg-primary/10/30 transition-colors group">
                                     <td className="p-3 font-medium text-foreground ltr:text-left" dir="ltr">
                                         {backup.name}

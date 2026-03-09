@@ -1,8 +1,9 @@
 "use server";
 
 import { prisma } from "@/app/lib/prisma";
-import { PaymentMethod } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+
+export type PaymentMethod = "CASH" | "CARD" | "MOBILE_WALLET" | "BANK_TRANSFER" | "ZAIN_CASH";
 
 // إنشاء دفعة جديدة
 export async function createPayment(

@@ -8,7 +8,7 @@ function createPrismaClient(): PrismaClient {
     });
 
     // Retry middleware: handles Neon cold-start (P1001) transparently
-    client.$use(async (params, next) => {
+    client.$use(async (params: any, next: (params: any) => Promise<any>) => {
         const MAX_RETRIES = 3;
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {

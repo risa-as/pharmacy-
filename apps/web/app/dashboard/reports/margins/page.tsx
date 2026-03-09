@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { DollarSign, TrendingUp, TrendingDown, AlertTriangle, Package } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
@@ -26,8 +28,8 @@ export default async function MarginsReportPage({
     });
 
     const items = inventory
-        .map((inv) => {
-            const stock = inv.batches.reduce((s, b) => s + b.quantity, 0);
+        .map((inv: any) => {
+            const stock = inv.batches.reduce((s: any, b: any) => s + b.quantity, 0);
             const marginPercent = inv.price > 0 ? ((inv.price - inv.cost) / inv.price) * 100 : 0;
             const profitPerUnit = inv.price - inv.cost;
 
@@ -44,20 +46,20 @@ export default async function MarginsReportPage({
                 totalPotentialProfit: profitPerUnit * stock,
             };
         })
-        .filter((i) => i.stock > 0);
+        .filter((i: any) => i.stock > 0);
 
     // Sort
-    if (sortBy === "margin_asc") items.sort((a, b) => a.marginPercent - b.marginPercent);
-    else if (sortBy === "margin_desc") items.sort((a, b) => b.marginPercent - a.marginPercent);
-    else if (sortBy === "profit_desc") items.sort((a, b) => b.totalPotentialProfit - a.totalPotentialProfit);
-    else if (sortBy === "stock_desc") items.sort((a, b) => b.stock - a.stock);
+    if (sortBy === "margin_asc") items.sort((a: any, b: any) => a.marginPercent - b.marginPercent);
+    else if (sortBy === "margin_desc") items.sort((a: any, b: any) => b.marginPercent - a.marginPercent);
+    else if (sortBy === "profit_desc") items.sort((a: any, b: any) => b.totalPotentialProfit - a.totalPotentialProfit);
+    else if (sortBy === "stock_desc") items.sort((a: any, b: any) => b.stock - a.stock);
 
     // Stats
-    const avgMargin = items.length > 0 ? items.reduce((s, i) => s + i.marginPercent, 0) / items.length : 0;
-    const lowMarginCount = items.filter((i) => i.marginPercent < 10).length;
-    const highMarginCount = items.filter((i) => i.marginPercent > 30).length;
-    const bestItem = items.length > 0 ? [...items].sort((a, b) => b.marginPercent - a.marginPercent)[0] : null;
-    const worstItem = items.length > 0 ? [...items].sort((a, b) => a.marginPercent - b.marginPercent)[0] : null;
+    const avgMargin = items.length > 0 ? items.reduce((s: any, i: any) => s + i.marginPercent, 0) / items.length : 0;
+    const lowMarginCount = items.filter((i: any) => i.marginPercent < 10).length;
+    const highMarginCount = items.filter((i: any) => i.marginPercent > 30).length;
+    const bestItem = items.length > 0 ? [...items].sort((a: any, b: any) => b.marginPercent - a.marginPercent)[0] : null;
+    const worstItem = items.length > 0 ? [...items].sort((a: any, b: any) => a.marginPercent - b.marginPercent)[0] : null;
 
     const sortOptions = [
         { label: "أقل هامش أولاً", value: "margin_asc" },
@@ -83,7 +85,7 @@ export default async function MarginsReportPage({
                     💰 تقرير هامش الربح لكل دواء
                 </h1>
                 <div className="flex gap-2 flex-wrap">
-                    {sortOptions.map((opt) => (
+                    {sortOptions.map((opt: any) => (
                         <a
                             key={opt.value}
                             href={buildSortUrl(opt.value)}
@@ -173,7 +175,7 @@ export default async function MarginsReportPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {items.map((item) => (
+                            {items.map((item: any) => (
                                 <tr key={item.id} className="hover:bg-muted transition-colors">
                                     <td className="px-4 py-3 font-bold text-foreground">{item.name}</td>
                                     <td className="px-4 py-3 text-sm text-muted-foreground">{item.branch}</td>

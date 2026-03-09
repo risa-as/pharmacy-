@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic';
+
+import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
@@ -24,7 +27,7 @@ export async function POST(req: Request) {
             sales: 0
         };
 
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // 1. Users
             if (Array.isArray(users)) {
                 for (const user of users) {

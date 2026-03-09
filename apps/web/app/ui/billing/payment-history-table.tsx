@@ -63,8 +63,8 @@ export default function PaymentHistoryTable({ transactions }: PaymentHistoryTabl
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                        {transactions.map((txn) => {
-                            const statusCfg = STATUS_CONFIG[txn.status];
+                        {transactions.map((txn: any) => {
+                            const statusCfg = (STATUS_CONFIG as any)[txn.status];
                             return (
                                 <tr key={txn.id} className="hover:bg-muted/30 transition-colors">
                                     <td className="px-4 py-3 text-foreground">
@@ -75,7 +75,7 @@ export default function PaymentHistoryTable({ transactions }: PaymentHistoryTabl
                                         <span className="text-xs text-muted-foreground">{txn.currency}</span>
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground">
-                                        {GATEWAY_LABELS[txn.gateway]}
+                                        {(GATEWAY_LABELS as any)[txn.gateway]}
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground">
                                         {txn.renewalMonths}{" "}

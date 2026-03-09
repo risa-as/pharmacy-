@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Shield, Plus, Calendar, User } from "lucide-react";
 import Link from "next/link";
@@ -19,8 +21,8 @@ export default async function InsurancePoliciesPage() {
         },
     });
 
-    const active = policies.filter(p => new Date(p.expiryDate) > new Date()).length;
-    const expired = policies.filter(p => new Date(p.expiryDate) <= new Date()).length;
+    const active = policies.filter((p: any) => new Date(p.expiryDate) > new Date()).length;
+    const expired = policies.filter((p: any) => new Date(p.expiryDate) <= new Date()).length;
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>
@@ -74,7 +76,7 @@ export default async function InsurancePoliciesPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {policies.map((policy) => {
+                            {policies.map((policy: any) => {
                                 const isExpired = new Date(policy.expiryDate) <= new Date();
                                 return (
                                     <tr key={policy.id} className="hover:bg-muted">

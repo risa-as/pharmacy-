@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -115,7 +117,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                                 <span className="font-bold">الحساسية</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {patient.allergies.map((allergy, i) => (
+                                {patient.allergies.map((allergy: any, i: any) => (
                                     <span key={i} className="px-2 py-1 bg-destructive/10 text-destructive rounded-lg text-sm font-bold">
                                         {allergy}
                                     </span>
@@ -132,7 +134,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                                 <span className="font-bold">الأمراض المزمنة</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {patient.chronicDiseases.map((disease, i) => (
+                                {patient.chronicDiseases.map((disease: any, i: any) => (
                                     <span key={i} className="px-2 py-1 bg-warning/10 text-warning rounded-lg text-sm font-bold">
                                         {disease}
                                     </span>
@@ -166,7 +168,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {patient.insurancePolicies.map((policy) => (
+                            {patient.insurancePolicies.map((policy: any) => (
                                 <div key={policy.id} className="p-3 bg-primary/10 rounded-lg">
                                     <div className="font-bold text-primary">{policy.company.name}</div>
                                     <div className="text-sm text-primary">
@@ -207,7 +209,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                         </div>
                     ) : (
                         <div className="space-y-3 max-h-80 overflow-y-auto">
-                            {patient.prescriptions.map((prescription) => (
+                            {patient.prescriptions.map((prescription: any) => (
                                 <div key={prescription.id} className="p-3 border rounded-lg hover:bg-muted">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-muted-foreground" suppressHydrationWarning>

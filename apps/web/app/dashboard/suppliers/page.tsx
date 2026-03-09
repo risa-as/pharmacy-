@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { Plus, Users, Mail, Phone, MapPin, FileText } from "lucide-react";
@@ -31,7 +33,8 @@ export default async function Page() {
     try {
         suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? undefined : tenantCtx.organizationId);
     } catch (e) {
-        suppliers = await getSuppliers();
+        console.error('[Suppliers Page] Failed to load suppliers:', e);
+        // Do NOT fall back to unscoped query — return empty list instead
     }
 
     return (
@@ -74,7 +77,7 @@ export default async function Page() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-card">
-                                {suppliers.map((supplier) => (
+                                {suppliers.map((supplier: any) => (
                                     <tr
                                         key={supplier.id}
                                         className="hover:bg-muted transition-colors"

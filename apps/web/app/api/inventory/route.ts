@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
@@ -19,11 +21,11 @@ export async function GET(req: Request) {
 
         // Fetch all drugs to map names
         const drugs = await prisma.globalDrug.findMany();
-        const drugMap = new Map(drugs.map(d => [d.id, d]));
+        const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
-        const mappedInventory = inventory.map(item => {
+        const mappedInventory = inventory.map((item: any) => {
             const drug = drugMap.get(item.drugId);
-            const totalQuantity = item.batches.reduce((sum, batch) => sum + batch.quantity, 0);
+            const totalQuantity = item.batches.reduce((sum: number, batch: any) => sum + batch.quantity, 0);
 
             return {
                 id: item.id,

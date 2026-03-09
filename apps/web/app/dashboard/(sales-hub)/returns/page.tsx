@@ -1,7 +1,10 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { Undo2, Search, Calendar } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function ReturnsPage({
     searchParams,
@@ -9,7 +12,8 @@ export default async function ReturnsPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const tenantCtx = await getTenantContext();
-    const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const returns = await prisma.saleReturn.findMany({
@@ -32,7 +36,7 @@ export default async function ReturnsPage({
         take: 100,
     });
 
-    const totalReturned = returns.reduce((acc, r) => acc + r.total, 0);
+    const totalReturned = returns.reduce((acc: any, r: any) => acc + r.total, 0);
 
     return (
         <div className="glass-card w-full p-6">
@@ -98,7 +102,7 @@ export default async function ReturnsPage({
                                     </td>
                                 </tr>
                             ) : (
-                                returns.map((ret, index) => (
+                                returns.map((ret: any, index: any) => (
                                     <tr key={ret.id} className="hover:bg-muted/50 transition-colors text-sm">
                                         <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
                                         <td className="px-4 py-3">
@@ -122,7 +126,7 @@ export default async function ReturnsPage({
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex flex-col gap-1">
-                                                {ret.items.map((item, i) => (
+                                                {ret.items.map((item: any, i: any) => (
                                                     <span key={i} className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded-md w-fit inline-block">
                                                         {item.quantity} × {item.drug?.tradeName || 'غير معروف'}
                                                     </span>

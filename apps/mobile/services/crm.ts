@@ -1,5 +1,5 @@
 
-import { getBaseUrl } from './api';
+import { request } from './api';
 
 export interface Patient {
     id: string;
@@ -14,30 +14,18 @@ export interface Patient {
 
 export const crmService = {
     async getPatients(query: string = '') {
-        const baseUrl = await getBaseUrl();
-        const response = await fetch(`${baseUrl}/patients?query=${query}`);
-        if (!response.ok) throw new Error('Failed to fetch patients');
-        return await response.json();
+        return request<any>(`/patients?query=${query}`);
     },
 
     async getPatient(id: string) {
-        const baseUrl = await getBaseUrl();
-        const response = await fetch(`${baseUrl}/patients/${id}`);
-        if (!response.ok) throw new Error('Failed to fetch patient');
-        return await response.json();
+        return request<any>(`/patients/${id}`);
     },
 
     async createPatient(data: Partial<Patient>) {
-        const baseUrl = await getBaseUrl();
-        const response = await fetch(`${baseUrl}/patients`, {
+        return request<any>('/patients', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to create patient');
-        }
-        return await response.json();
     },
 };

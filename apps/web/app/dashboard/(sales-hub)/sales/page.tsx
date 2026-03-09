@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { ShoppingCart, TrendingUp, Calendar, Package } from "lucide-react";
 import Link from "next/link";
@@ -5,6 +7,7 @@ import SalesTable from "@/app/ui/dashboard/sales/sales-table";
 
 import { getCompanySettings } from "@/app/lib/actions/settings";
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
 export default async function SalesPage({
@@ -13,7 +16,8 @@ export default async function SalesPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const tenantCtx = await getTenantContext();
-    const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const settings = await getCompanySettings();
@@ -37,13 +41,13 @@ export default async function SalesPage({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const todaySales = sales.filter(s => new Date(s.createdAt) >= today);
-    const todayTotal = todaySales.reduce((acc, s) => acc + s.total, 0);
-    const totalItems = todaySales.reduce((acc, s) => acc + s.items.length, 0);
+    const todaySales = sales.filter((s: any) => new Date(s.createdAt) >= today);
+    const todayTotal = todaySales.reduce((acc: any, s: any) => acc + s.total, 0);
+    const totalItems = todaySales.reduce((acc: any, s: any) => acc + s.items.length, 0);
 
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthSales = sales.filter(s => new Date(s.createdAt) >= thisMonth);
-    const monthTotal = monthSales.reduce((acc, s) => acc + s.total, 0);
+    const monthSales = sales.filter((s: any) => new Date(s.createdAt) >= thisMonth);
+    const monthTotal = monthSales.reduce((acc: any, s: any) => acc + s.total, 0);
 
     return (
         <div className="glass-card w-full p-6">

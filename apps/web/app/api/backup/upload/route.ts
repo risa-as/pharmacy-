@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { UTApi } from "uploadthing/server";
 import { prisma } from "@/app/lib/prisma"; // Adjust import if needed

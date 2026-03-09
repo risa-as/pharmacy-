@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
@@ -43,7 +45,7 @@ export default async function Page() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-card">
-                                {organizations.map((org) => (
+                                {organizations.map((org: any) => (
                                     <tr
                                         key={org.id}
                                         className="hover:bg-muted transition-colors"

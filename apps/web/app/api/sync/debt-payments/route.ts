@@ -1,14 +1,51 @@
+export const dynamic = 'force-dynamic';
+
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { auth } from '@/auth';
+
+async function validateBranchAccess(session: any, branchId: string): Promise<NextResponse | null> {
+    const userRole = session.user.role;
+    const userBranchId = (session.user as any).branchId;
+    const userOrgId = (session.user as any).organizationId;
+
+    if (userRole === 'SUPER_ADMIN') return null;
+
+    const branch = await prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { organizationId: true }
+    });
+    if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+
+    if (userRole === 'ADMIN') {
+        if (branch.organizationId !== userOrgId) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+    } else {
+        if (branchId !== userBranchId) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+    }
+    return null;
+}
 
 export async function GET(request: Request) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const branchId = searchParams.get("branchId");
 
         if (!branchId) {
             return NextResponse.json({ error: "branchId is required" }, { status: 400 });
         }
+
+        const accessError = await validateBranchAccess(session, branchId);
+        if (accessError) return accessError;
 
         // We want all debt payments belonging to sales created in this branch
         // Or if the debt payment itself was created in this branch. 
@@ -27,7 +64,7 @@ export async function GET(request: Request) {
         });
 
         // Map to return just the necessary info
-        const payload = payments.map(p => ({
+        const payload = payments.map((p: any) => ({
             id: p.id,
             saleId: p.saleId,
             amount: p.amount,
@@ -47,6 +84,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: NextRequest) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await request.json();
         const { branchId, payments } = body as {
             branchId: string;
@@ -63,6 +105,9 @@ export async function POST(request: NextRequest) {
         if (!branchId || !Array.isArray(payments) || payments.length === 0) {
             return NextResponse.json({ error: "branchId and payments are required" }, { status: 400 });
         }
+
+        const accessError = await validateBranchAccess(session, branchId);
+        if (accessError) return accessError;
 
         const syncedIds: string[] = [];
 
@@ -82,7 +127,7 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            await prisma.$transaction(async (tx) => {
+            await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                 await tx.debtPayment.create({
                     data: {
                         id: payment.id,

@@ -22,7 +22,7 @@ export async function checkDrugInteraction(
 
     // Normalize input
     const target = newDrugScientificName.trim();
-    const existing = currentCartScientificNames.map(d => d.trim()).filter(d => d !== target && d.length > 0);
+    const existing = currentCartScientificNames.map((d: any) => d.trim()).filter((d: any) => d !== target && d.length > 0);
 
     if (existing.length === 0) {
         return { found: false, interactions: [] };
@@ -48,7 +48,7 @@ export async function checkDrugInteraction(
         if (interactions.length > 0) {
             return {
                 found: true,
-                interactions: interactions.map(i => ({
+                interactions: interactions.map((i: any) => ({
                     drug1: i.drug1,
                     drug2: i.drug2,
                     severity: i.severity,

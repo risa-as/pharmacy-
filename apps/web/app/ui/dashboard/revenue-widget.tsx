@@ -53,7 +53,7 @@ export default function RevenueWidget({ data, title = "إيرادات اليوم
 
             {/* Breakdown */}
             <div className="space-y-3">
-                {methods.map((method, index) => {
+                {methods.map((method: any, index: any) => {
                     const percent = data.total > 0 ? (method.value / data.total) * 100 : 0;
                     const Icon = method.icon;
                     return (

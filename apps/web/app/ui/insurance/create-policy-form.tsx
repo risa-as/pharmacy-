@@ -58,7 +58,7 @@ export default function CreatePolicyForm({
                     required
                 >
                     <option value="">اختر المريض...</option>
-                    {patients.map((patient) => (
+                    {patients.map((patient: any) => (
                         <option key={patient.id} value={patient.id}>
                             {patient.name} - {patient.phone}
                         </option>
@@ -81,7 +81,7 @@ export default function CreatePolicyForm({
                     required
                 >
                     <option value="">اختر شركة التأمين...</option>
-                    {companies.map((company) => (
+                    {companies.map((company: any) => (
                         <option key={company.id} value={company.id}>
                             {company.name}
                         </option>

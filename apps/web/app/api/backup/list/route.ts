@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma"; // Adjust import if needed
 
@@ -19,7 +21,7 @@ export async function GET(req: Request) {
         });
 
         // Map to format expected by UI
-        const formattedBackups = backups.map(b => ({
+        const formattedBackups = backups.map((b: any) => ({
             id: b.id,
             name: b.name,
             size: b.size,

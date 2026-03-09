@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from "@/app/lib/prisma";
 import { TrendingUp, Calendar, Download, ArrowRight, DollarSign } from "lucide-react";
 import Link from "next/link";
@@ -45,22 +47,22 @@ export default async function SalesReportPage({
         salesByDay.set(dayName, 0);
     }
 
-    sales.forEach(sale => {
+    sales.forEach((sale: any) => {
         const dayName = dayNames[new Date(sale.createdAt).getDay()];
         const current = salesByDay.get(dayName) || 0;
         salesByDay.set(dayName, current + sale.total);
     });
 
-    const chartData = Array.from(salesByDay.entries()).map(([day, amount]) => ({
+    const chartData = Array.from(salesByDay.entries()).map(([day, amount]: any) => ({
         day,
         amount,
     }));
 
     // Calculate stats
-    const totalSales = sales.reduce((acc, s) => acc + s.total, 0);
+    const totalSales = sales.reduce((acc: any, s: any) => acc + s.total, 0);
     const averageSale = sales.length > 0 ? totalSales / sales.length : 0;
     const topBranches = new Map<string, number>();
-    sales.forEach(sale => {
+    sales.forEach((sale: any) => {
         const branchName = sale.branch.name;
         const current = topBranches.get(branchName) || 0;
         topBranches.set(branchName, current + sale.total);
@@ -121,9 +123,9 @@ export default async function SalesReportPage({
                     </h3>
                     <div className="space-y-3">
                         {Array.from(topBranches.entries())
-                            .sort((a, b) => b[1] - a[1])
+                            .sort((a: any, b: any) => b[1] - a[1])
                             .slice(0, 5)
-                            .map(([branch, amount], index) => (
+                            .map(([branch, amount]: any, index: any) => (
                                 <div key={branch} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                     <div className="flex items-center gap-3">
                                         <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${index === 0 ? "bg-warning/20 text-warning" :
@@ -166,7 +168,7 @@ export default async function SalesReportPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {sales.slice(-10).reverse().map((sale) => (
+                            {sales.slice(-10).reverse().map((sale: any) => (
                                 <tr key={sale.id} className="hover:bg-muted">
                                     <td className="px-4 py-3 text-muted-foreground">{sale.branch.name}</td>
                                     <td className="px-4 py-3 text-muted-foreground">{sale.items.length}</td>

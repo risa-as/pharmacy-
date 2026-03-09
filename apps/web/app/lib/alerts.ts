@@ -28,18 +28,18 @@ export async function getLowStockAlerts(branchId?: string, organizationId?: stri
     });
 
     // جلب الأدوية
-    const drugIds = inventory.map(i => i.drugId);
-    const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
+    const drugIds = inventory.map((i: any) => i.drugId);
+    const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map(d => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     const alerts: AlertItem[] = [];
 
     for (const item of inventory) {
-        const totalQty = item.batches.reduce((acc, b) => acc + b.quantity, 0);
+        const totalQty = item.batches.reduce((acc: any, b: any) => acc + b.quantity, 0);
 
         if (totalQty <= item.minStock) {
             const drug = drugMap.get(item.drugId);
@@ -85,13 +85,13 @@ export async function getExpiryAlerts(branchId?: string, organizationId?: string
     });
 
     // جلب الأدوية
-    const drugIds = batches.map(b => b.inventory.drugId);
-    const uniqueDrugIds = drugIds.filter((id, index) => drugIds.indexOf(id) === index);
+    const drugIds = batches.map((b: any) => b.inventory.drugId);
+    const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
         where: { id: { in: uniqueDrugIds } },
         select: { id: true, tradeName: true }
     });
-    const drugMap = new Map(drugs.map(d => [d.id, d]));
+    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
     const alerts: AlertItem[] = [];
 
@@ -113,7 +113,7 @@ export async function getExpiryAlerts(branchId?: string, organizationId?: string
         });
     }
 
-    return alerts.sort((a, b) => (a.daysLeft || 0) - (b.daysLeft || 0));
+    return alerts.sort((a: any, b: any) => (a.daysLeft || 0) - (b.daysLeft || 0));
 }
 
 // جلب جميع الإشعارات
@@ -132,10 +132,10 @@ export async function getAlertStats(branchId?: string, organizationId?: string) 
 
     return {
         total: alerts.length,
-        lowStock: alerts.filter(a => a.type === 'low_stock').length,
-        expired: alerts.filter(a => a.type === 'expired').length,
-        expiring: alerts.filter(a => a.type === 'expiring').length,
-        danger: alerts.filter(a => a.severity === 'danger').length,
-        warning: alerts.filter(a => a.severity === 'warning').length
+        lowStock: alerts.filter((a: any) => a.type === 'low_stock').length,
+        expired: alerts.filter((a: any) => a.type === 'expired').length,
+        expiring: alerts.filter((a: any) => a.type === 'expiring').length,
+        danger: alerts.filter((a: any) => a.severity === 'danger').length,
+        warning: alerts.filter((a: any) => a.severity === 'warning').length
     };
 }

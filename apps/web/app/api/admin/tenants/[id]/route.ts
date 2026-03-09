@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
@@ -8,7 +10,7 @@ export async function PATCH(
 ) {
     try {
         const session = await auth();
-        if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")) {
+        if (!session?.user || (session.user.role !== "SUPER_ADMIN")) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -58,7 +60,7 @@ export async function DELETE(
 ) {
     try {
         const session = await auth();
-        if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")) {
+        if (!session?.user || (session.user.role !== "SUPER_ADMIN")) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -80,9 +82,9 @@ export async function DELETE(
         }
 
         // Delete associated records in a transaction to maintain referential integrity.
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: any) => {
             // Find all branches for this organization
-            const branchIds = organization.branches.map(b => b.id);
+            const branchIds = organization.branches.map((b: any) => b.id);
 
             // 1. Delete associated device licenses
             if (branchIds.length > 0) {

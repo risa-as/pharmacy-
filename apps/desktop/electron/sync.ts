@@ -71,6 +71,7 @@ function getBranchId() {
 }
 
 let isOnline = false;
+let wasOffline = true; // tracks previous state to detect reconnection
 const runningSyncTasks = new Set<string>();
 let syncServiceStarted = false;
 
@@ -109,10 +110,17 @@ async function checkConnection(): Promise<boolean> {
             if (response.ok) {
                 console.log(`[Connection] Success! Connected to ${base}`);
                 setApiBaseUrl(base);
+                const justReconnected = wasOffline;
                 isOnline = true;
+                wasOffline = false;
                 BrowserWindow.getAllWindows().forEach(win => {
                     win.webContents.send('connection-status', true);
                 });
+                // Sync settings immediately on reconnection so loyalty/other
+                // settings changes made on the web are applied without delay.
+                if (justReconnected) {
+                    setTimeout(() => void syncSettings(), 500);
+                }
                 return true;
             } else {
                 console.log(`[Connection] Failed. Status: ${response.status} ${response.statusText}`);
@@ -125,6 +133,7 @@ async function checkConnection(): Promise<boolean> {
 
     console.log("[Connection] All candidates failed. Setting Offline.");
     isOnline = false;
+    wasOffline = true;
     BrowserWindow.getAllWindows().forEach(win => {
         win.webContents.send('connection-status', false);
     });
@@ -523,7 +532,7 @@ export function startSyncService() {
     setInterval(syncProducts, 5 * 60 * 1000); // Sync products every 5 mins
     setInterval(syncUsers, 5 * 60 * 1000); // Every 5 mins
     setInterval(syncPatients, 2 * 60 * 1000); // Every 2 mins
-    setInterval(syncSettings, 10 * 60 * 1000); // Every 10 mins
+    setInterval(syncSettings, 2 * 60 * 1000); // Every 2 mins
     setInterval(syncDebtPayments, 2 * 60 * 1000); // Every 2 mins
     setInterval(syncLoyalty, 2 * 60 * 1000); // Every 2 mins
     setInterval(syncShifts, 5 * 60 * 1000); // Every 5 mins
@@ -861,6 +870,12 @@ export async function syncLoyalty() {
 
         const result = await response.json();
         const syncedIds = result.syncedIds as string[];
+        const accountBalances = result.accountBalances as {
+            patientId: string;
+            totalPoints: number;
+            lifetimePoints: number;
+            tier: string;
+        }[] | undefined;
 
         if (syncedIds && syncedIds.length > 0) {
             await prisma.loyaltyTransaction.updateMany({
@@ -868,6 +883,28 @@ export async function syncLoyalty() {
                 data: { synced: true }
             });
             console.log(`[Sync] Loyalty sync completed. Marked ${syncedIds.length} transaction(s) as synced.`);
+        }
+
+        // Reconcile local account balances with the authoritative web values.
+        // This corrects any drift caused by web-originated transactions that
+        // never sync back to the desktop.
+        if (accountBalances && accountBalances.length > 0) {
+            for (const wb of accountBalances) {
+                const localAccount = await prisma.loyaltyAccount.findUnique({
+                    where: { patientId: wb.patientId }
+                });
+                if (localAccount) {
+                    await prisma.loyaltyAccount.update({
+                        where: { patientId: wb.patientId },
+                        data: {
+                            totalPoints: wb.totalPoints,
+                            lifetimePoints: wb.lifetimePoints,
+                            tier: wb.tier,
+                        }
+                    });
+                }
+            }
+            console.log(`[Sync] Reconciled ${accountBalances.length} loyalty account(s) from web.`);
         }
 
     } catch (error) {
@@ -944,10 +981,17 @@ export async function syncProducts() {
         };
 
         const drugs = Array.isArray(data?.drugs) ? data.drugs : [];
+
+        // Safety guard: empty response from cloud should not wipe local inventory.
+        // This protects against transient server errors returning an empty snapshot.
+        if (drugs.length === 0) {
+            console.log('[Sync] Cloud returned 0 products — skipping local inventory deletion to prevent data loss.');
+            return;
+        }
+
         const fetchedDrugIds: string[] = [];
         const fetchedInventoryIds: string[] = [];
         const hasCompleteInventoryIds =
-            drugs.length === 0 ||
             drugs.every((drug) => String(drug?.inventoryId || '').trim().length > 0);
 
         await prisma.$transaction(async (tx) => {
@@ -1282,6 +1326,13 @@ export async function syncPatients() {
         const patients = data.patients as any[];
         const cloudIds = patients.map((p: any) => p.id);
 
+        // Safety guard: if cloud returns an empty list, skip all deletion to prevent
+        // accidental data loss from transient API errors or filtering edge cases.
+        if (patients.length === 0) {
+            console.log('[Sync] Cloud returned 0 patients — skipping local deletion to prevent data loss.');
+            return;
+        }
+
         await prisma.$transaction(async (tx) => {
             for (const patient of patients) {
                 await tx.patient.upsert({
@@ -1359,7 +1410,11 @@ export async function syncSettings() {
     try {
         if (!await checkConnection()) return;
 
-        const response = await fetch(buildApiUrl('/sync/settings'));
+        const branchId = getBranchId();
+        const settingsUrl = branchId
+            ? buildApiUrl(`/sync/settings?branchId=${encodeURIComponent(branchId)}`)
+            : buildApiUrl('/sync/settings');
+        const response = await fetch(settingsUrl);
         if (!response.ok) throw new Error("Settings sync failed");
 
         const settings = await response.json();
