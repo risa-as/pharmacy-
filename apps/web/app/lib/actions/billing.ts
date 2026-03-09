@@ -319,3 +319,92 @@ export async function verifyZainCashPayment(
         return { success: false, status: "FAILED", error: "فشل التحقق من الدفع. يرجى التواصل مع الدعم." };
     }
 }
+
+// ── recordManualPayment ────────────────────────────────────────────────────
+
+export type ManualPaymentResult =
+    | { success: true; newExpiresAt: Date }
+    | { success: false; error: string };
+
+/**
+ * Records a manual/bank-transfer payment that was received outside the system.
+ * Only callable by SUPER_ADMIN. Creates a COMPLETED PaymentTransaction and
+ * extends the organization's subscription, clearing any suspension.
+ *
+ * @param organizationId  The tenant's org UUID
+ * @param amount          Amount received (IQD)
+ * @param renewalMonths   How many months to add
+ * @param method          "MANUAL" or "BANK_TRANSFER"
+ * @param reference       Optional reference number (hawala/receipt number)
+ * @param note            Optional internal note
+ */
+export async function recordManualPayment(
+    organizationId: string,
+    amount: number,
+    renewalMonths: number,
+    method: "MANUAL" | "BANK_TRANSFER",
+    reference?: string,
+    note?: string,
+): Promise<ManualPaymentResult> {
+    // ── Auth guard ────────────────────────────────────────────────────────
+    const session = await auth();
+    const user = session?.user as { role?: string } | undefined;
+    if (user?.role !== "SUPER_ADMIN") {
+        return { success: false, error: "غير مصرح: يتطلب صلاحية SUPER_ADMIN" };
+    }
+
+    try {
+        // ── Fetch current subscription end date ───────────────────────────
+        const org = await prisma.organization.findUnique({
+            where:  { id: organizationId },
+            select: { subscriptionEndsAt: true },
+        });
+
+        if (!org) {
+            return { success: false, error: "المؤسسة غير موجودة" };
+        }
+
+        // Extend from current expiry if in the future, otherwise from now
+        const base = org.subscriptionEndsAt && org.subscriptionEndsAt > new Date()
+            ? org.subscriptionEndsAt
+            : new Date();
+        const newExpiresAt = new Date(base);
+        newExpiresAt.setMonth(newExpiresAt.getMonth() + renewalMonths);
+
+        const now = new Date();
+
+        // ── Atomic transaction: create payment record + update org ────────
+        await prisma.$transaction([
+            prisma.paymentTransaction.create({
+                data: {
+                    organizationId,
+                    amount,
+                    currency:      "IQD",
+                    gateway:       "MANUAL",
+                    renewalMonths,
+                    status:        "COMPLETED",
+                    completedAt:   now,
+                    newExpiresAt,
+                    metadata:      { method, reference: reference ?? null, note: note ?? null },
+                },
+            }),
+            prisma.organization.update({
+                where: { id: organizationId },
+                data:  {
+                    subscriptionEndsAt: newExpiresAt,
+                    isSuspended:        false,
+                    suspendedAt:        null,
+                },
+            }),
+        ]);
+
+        revalidatePath("/dashboard/settings/billing");
+        revalidatePath("/dashboard/admin/tenants");
+
+        return { success: true, newExpiresAt };
+
+    } catch (error) {
+        console.error("[billing] recordManualPayment error:", error);
+        return { success: false, error: "حدث خطأ غير متوقع أثناء تسجيل الدفعة." };
+    }
+}

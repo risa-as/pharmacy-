@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getPurchases } from '@/app/lib/actions/purchase-actions';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';

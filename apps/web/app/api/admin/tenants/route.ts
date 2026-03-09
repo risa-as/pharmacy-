@@ -39,7 +39,9 @@ export async function GET() {
                 maxUsers: org.maxUsers || org.plan?.maxUsers || 3,
                 monthlyPrice: org.plan?.price || 0,
                 isActive: !org.isSuspended,
-                trialEndsAt: null
+                trialEndsAt: null,
+                subscriptionEndsAt: org.subscriptionEndsAt ?? null,
+                isSuspended: org.isSuspended
             };
         });
 

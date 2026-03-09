@@ -131,8 +131,12 @@ export async function getPurchases(branchId?: string) {
 }
 
 export async function getPurchaseDetails(id: string) {
-    const purchase = await prisma.purchase.findUnique({
-        where: { id },
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere } = tenantCtx;
+
+    const purchase = await prisma.purchase.findFirst({
+        where: { id, branch: tenantBranchWhere },
         include: {
             supplier: true,
             items: true
@@ -159,9 +163,13 @@ export async function getPurchaseDetails(id: string) {
 }
 
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
-    // 1. Get Purchase to verify
-    const purchase = await prisma.purchase.findUnique({
-        where: { id: purchaseId },
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) throw new Error("غير مصرح");
+    const { tenantBranchWhere } = tenantCtx;
+
+    // 1. Get Purchase and verify ownership
+    const purchase = await prisma.purchase.findFirst({
+        where: { id: purchaseId, branch: tenantBranchWhere },
         include: { items: true, supplier: true }
     });
 

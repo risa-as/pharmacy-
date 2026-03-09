@@ -48,16 +48,20 @@ export async function getSupplierSummary(supplierId: string) {
 
     if (!supplier) return null;
 
-    // إجمالي المشتريات المكتملة
+    // إجمالي المشتريات المكتملة (scoped to org branches)
+    const orgBranchIds = await prisma.branch
+        .findMany({ where: { organizationId: tenantCtx.organizationId || '' }, select: { id: true } })
+        .then((bs: any[]) => bs.map((b: any) => b.id));
+
     const totalPurchases = await prisma.purchase.aggregate({
-        where: { supplierId, status: 'COMPLETED' },
+        where: { supplierId, status: 'COMPLETED', branchId: { in: orgBranchIds } },
         _sum: { total: true, paidAmount: true },
         _count: true,
     });
 
-    // إجمالي الدفعات
+    // إجمالي الدفعات (scoped to org branches)
     const totalPayments = await prisma.supplierPayment.aggregate({
-        where: { supplierId },
+        where: { supplierId, branchId: { in: orgBranchIds } },
         _sum: { amount: true },
         _count: true,
     });
@@ -85,16 +89,20 @@ export async function getSupplierLedger(supplierId: string) {
     });
     if (!supplier) return [];
 
-    // مشتريات مكتملة
+    // مشتريات مكتملة (scoped to org branches)
+    const orgBranchIds = await prisma.branch
+        .findMany({ where: { organizationId: tenantCtx.organizationId || '' }, select: { id: true } })
+        .then((bs: any[]) => bs.map((b: any) => b.id));
+
     const purchases = await prisma.purchase.findMany({
-        where: { supplierId, status: 'COMPLETED' },
+        where: { supplierId, status: 'COMPLETED', branchId: { in: orgBranchIds } },
         include: { branch: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },
     });
 
-    // دفعات
+    // دفعات (scoped to org branches)
     const payments = await prisma.supplierPayment.findMany({
-        where: { supplierId },
+        where: { supplierId, branchId: { in: orgBranchIds } },
         include: { branch: { select: { name: true } } },
         orderBy: { date: 'desc' },
     });

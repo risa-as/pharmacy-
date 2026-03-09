@@ -7,6 +7,7 @@ import { UpdatePatient, DeletePatient } from "@/app/ui/patients/buttons";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
 
 
 
@@ -18,7 +19,7 @@ export default async function PatientsPage({
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere } = tenantCtx;
 
     const patients = await prisma.patient.findMany({

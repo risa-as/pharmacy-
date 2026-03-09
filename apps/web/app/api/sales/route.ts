@@ -80,7 +80,7 @@ export async function POST(request: Request) {
         const sale = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const saleItemsData = [];
 
-            // 3. Decrement Stock (FIFO / FEFO) and Calculate Cost
+            // 3. Decrement Stock (FEFO) and Calculate Cost
             for (const item of items) {
                 let itemTotalCost = 0;
                 let remainingToDeduct = item.quantity;
@@ -93,26 +93,19 @@ export async function POST(request: Request) {
                 if (inventory && inventory.batches.length > 0) {
                     for (const batch of inventory.batches) {
                         if (remainingToDeduct <= 0) break;
-
                         const deduction = Math.min(batch.quantity, remainingToDeduct);
                         itemTotalCost += deduction * batch.costPrice;
-
                         await tx.batch.update({
                             where: { id: batch.id },
                             data: { quantity: batch.quantity - deduction }
                         });
-
                         remainingToDeduct -= deduction;
                     }
                 }
-
-                // Fallback for remaining qty if batches ran out or didn't exist
                 if (remainingToDeduct > 0 && inventory) {
                     itemTotalCost += remainingToDeduct * inventory.cost;
                 }
-
                 const unitCost = item.quantity > 0 ? (itemTotalCost / item.quantity) : 0;
-
                 saleItemsData.push({
                     drugId: item.drugId,
                     quantity: item.quantity,
@@ -121,7 +114,15 @@ export async function POST(request: Request) {
                 });
             }
 
-            // 4. Create Sale
+            // 4. Find the branch's default CASH_DRAWER safe (for CASH payments)
+            const cashSafe = paymentMethod !== 'CREDIT'
+                ? await tx.safe.findFirst({
+                    where: { branchId: user.branchId!, type: 'CASH_DRAWER' },
+                    select: { id: true }
+                })
+                : null;
+
+            // 5. Create Sale (link to safe if CASH)
             const newSale = await tx.sale.create({
                 data: {
                     branchId: user.branchId!,
@@ -129,13 +130,41 @@ export async function POST(request: Request) {
                     total: totalAmount,
                     discount: discount ?? 0,
                     patientId: patientId || null,
-                    items: {
-                        create: saleItemsData
-                    }
+                    safeId: cashSafe?.id ?? null,
+                    items: { create: saleItemsData }
                 }
             });
 
-            // 5. Handle CREDIT: add debt to patient balance
+            // 6. Create Payment record
+            await tx.payment.create({
+                data: {
+                    saleId: newSale.id,
+                    amount: totalAmount,
+                    method: (paymentMethod ?? 'CASH') as any,
+                    status: 'COMPLETED' as any,
+                }
+            });
+
+            // 7. CASH: update safe balance + create Transaction record
+            if (paymentMethod !== 'CREDIT' && cashSafe) {
+                await tx.safe.update({
+                    where: { id: cashSafe.id },
+                    data: { balance: { increment: totalAmount } }
+                });
+                await tx.transaction.create({
+                    data: {
+                        safeId: cashSafe.id,
+                        type: 'IN',
+                        amount: totalAmount,
+                        referenceType: 'SALE',
+                        referenceId: newSale.id,
+                        description: `بيع موبايل #${newSale.id.slice(0, 8)}`,
+                        userId: user.id,
+                    }
+                });
+            }
+
+            // 8. CREDIT: add debt to patient balance
             if (paymentMethod === 'CREDIT' && patientId) {
                 await tx.patient.update({
                     where: { id: patientId },
@@ -143,7 +172,7 @@ export async function POST(request: Request) {
                 });
             }
 
-            // 5. Record Idempotency Key
+            // 9. Record Idempotency Key
             if (idempotencyKey) {
                 await tx.syncActionLog.create({
                     data: {

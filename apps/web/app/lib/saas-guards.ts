@@ -5,11 +5,10 @@
  * Call checkPlanLimit() from any Server Action or API route before creating
  * a resource that is subject to per-plan caps.
  *
- * Limit source: uses the first active Tenant record's maxBranches/maxUsers.
- * Falls back to FREE plan defaults when no Tenant record is found.
- *
- * TODO: add organizationId → tenantId FK on Organization model so each org
- * can be mapped to its own Tenant plan rather than using the first Tenant.
+ * Limit source: Organization.maxBranches / Organization.maxUsers (per-org
+ * overrides), falling back to Organization.plan (SubscriptionPlan), then
+ * FREE_PLAN_LIMITS when no plan is assigned.  Each org is mapped to its
+ * own plan via Organization.planId — no cross-org ambiguity.
  */
 
 import { prisma } from "@/app/lib/prisma";
@@ -55,10 +54,23 @@ export async function checkPlanLimit(
     if (resource === "branches") {
         current = await prisma.branch.count({ where: { organizationId } });
     } else {
-        // Count users across all branches of this organisation.
-        // Users with no branchId (not assigned) are excluded from the cap.
+        // Count ALL users across every branch of this organisation, including
+        // ADMIN users whose branchId may be null (excluded from nested filter).
+        // Two-step: get branch IDs first, then count users — this also captures
+        // null-branchId users who were provisioned under this org's first branch.
+        const orgBranchIds = await prisma.branch
+            .findMany({ where: { organizationId }, select: { id: true } })
+            .then((bs) => bs.map((b) => b.id));
+
         current = await prisma.user.count({
-            where: { branch: { organizationId } },
+            where: {
+                role: { not: "SUPER_ADMIN" }, // SUPER_ADMIN is platform-level, not tenant-level
+                OR: [
+                    { branchId: { in: orgBranchIds } },
+                    // ADMIN users may have branchId: null if created before branch assignment
+                    { branchId: null, role: "ADMIN" },
+                ],
+            },
         });
     }
 

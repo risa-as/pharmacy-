@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View, Text, TouchableOpacity, FlatList, TextInput,
@@ -277,15 +278,17 @@ export default function SalesScreen() {
             try {
                 const result: any = await apiService.createSale(saleData);
                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                const creditCartSnapshot = [...cart];
+                const creditTotalSnapshot = total;
                 setRecentItems(prev => {
                     const seen = new Set<string>();
-                    return [...cart.slice(0, 5), ...prev]
+                    return [...creditCartSnapshot.slice(0, 5), ...prev]
                         .filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; })
                         .slice(0, 5);
                 });
                 resetCart();
                 Alert.alert('تمت العملية', 'تمت عملية البيع', [
-                    { text: 'طباعة', onPress: printReceipt },
+                    { text: 'طباعة', onPress: () => printReceipt(creditCartSnapshot, creditTotalSnapshot) },
                     { text: 'موافق' },
                 ]);
             } catch (e) {
@@ -300,7 +303,17 @@ export default function SalesScreen() {
         try {
             await dbService.saveOfflineSale(saleData.items, saleData.totalAmount);
         } catch {
-            Alert.alert('خطأ', 'تعذر حفظ عملية البيع محلياً');
+            // Local save failed — warn about deducted points (rollback logged for admin)
+            if (pointsToRedeem > 0 && selectedPatient) {
+                // Points were already deducted server-side; log for manual reconciliation
+                const raw = await AsyncStorage.getItem('pendingLoyaltyRollbacks').catch(() => null);
+                const queue: { patientId: string; points: number; ts: number }[] = raw ? JSON.parse(raw) : [];
+                queue.push({ patientId: selectedPatient.id, points: pointsToRedeem, ts: Date.now() });
+                await AsyncStorage.setItem('pendingLoyaltyRollbacks', JSON.stringify(queue)).catch(() => {});
+                Alert.alert('خطأ', 'تعذر حفظ عملية البيع. تم تسجيل خصم النقاط — يرجى التواصل مع المشرف لاستعادتها.');
+            } else {
+                Alert.alert('خطأ', 'تعذر حفظ عملية البيع محلياً');
+            }
             setLoading(false);
             return;
         }
@@ -319,25 +332,37 @@ export default function SalesScreen() {
         resetCart();
         setLoading(false);
         Alert.alert('تمت العملية', 'تمت عملية البيع', [
-            { text: 'طباعة', onPress: printReceipt },
+            { text: 'طباعة', onPress: () => printReceipt(cartSnapshot, finalSnapshot) },
             { text: 'موافق' },
         ]);
 
-        // Background: sync + earn loyalty points
+        // Background: sync + earn loyalty points (with AsyncStorage queue for retry)
         void syncService.syncData();
         if (patientSnapshot && loyaltySettings?.loyaltyEnabled && finalSnapshot > 0) {
-            void apiService.earnLoyaltyPoints(patientSnapshot.id, null, finalSnapshot);
+            try {
+                await apiService.earnLoyaltyPoints(patientSnapshot.id, null, finalSnapshot);
+            } catch {
+                // Network failed — queue for retry on next sync
+                try {
+                    const raw = await AsyncStorage.getItem('pendingLoyaltyEarns');
+                    const queue: { patientId: string; amount: number; ts: number }[] = raw ? JSON.parse(raw) : [];
+                    queue.push({ patientId: patientSnapshot.id, amount: finalSnapshot, ts: Date.now() });
+                    await AsyncStorage.setItem('pendingLoyaltyEarns', JSON.stringify(queue));
+                } catch {
+                    console.warn('[Sales] Failed to queue pending loyalty earn');
+                }
+            }
         }
     };
 
-    const printReceipt = async () => {
+    const printReceipt = async (receiptCart: typeof cart, receiptTotal: number) => {
         const printer = await printerService.getSavedPrinter();
         if (!printer) { Alert.alert('تنبيه', 'لا توجد طابعة متصلة'); return; }
-        await printerService.printReceipt('Faramace Pharmacy', cart.map(i => ({
+        await printerService.printReceipt('Faramace Pharmacy', receiptCart.map(i => ({
             name: i.tradeName ?? i.name,
             quantity: i.quantity,
             price: i.price,
-        })), total);
+        })), receiptTotal);
     };
 
     return (

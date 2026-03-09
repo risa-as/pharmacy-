@@ -108,15 +108,37 @@ export const syncService = {
                 console.error('Error syncing patients:', e);
             }
 
-            // 5. Download Loyalty Info (if user has patients linked)
+            // 5. Download Loyalty Settings
             try {
-                const loyalty = await apiService.getLoyaltyInfo();
-                if (loyalty) {
-                    await dbService.saveLoyalty(loyalty);
-                    console.log('Loyalty data synced');
+                const loyaltySettings = await apiService.getLoyaltySettings();
+                if (loyaltySettings) {
+                    await dbService.saveLoyalty(loyaltySettings);
+                    console.log('Loyalty settings synced');
                 }
             } catch (e) {
-                console.error('Error syncing loyalty:', e);
+                console.error('Error syncing loyalty settings:', e);
+            }
+
+            // 6. Retry pending loyalty earns (queued when offline/failed during sale)
+            try {
+                const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+                const raw = await AsyncStorage.getItem('pendingLoyaltyEarns');
+                if (raw) {
+                    const queue: { patientId: string; amount: number; ts: number }[] = JSON.parse(raw);
+                    const failed: typeof queue = [];
+                    for (const earn of queue) {
+                        try {
+                            await apiService.earnLoyaltyPoints(earn.patientId, null, earn.amount);
+                        } catch {
+                            failed.push(earn);
+                        }
+                    }
+                    if (failed.length > 0) await AsyncStorage.setItem('pendingLoyaltyEarns', JSON.stringify(failed));
+                    else await AsyncStorage.removeItem('pendingLoyaltyEarns');
+                    console.log(`Loyalty earn retry: ${queue.length - failed.length} succeeded, ${failed.length} still pending`);
+                }
+            } catch (e) {
+                console.error('Error retrying pending loyalty earns:', e);
             }
 
             console.log('Sync completed');

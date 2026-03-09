@@ -614,6 +614,19 @@ export default function POSLayout({ user }: { user: any }) {
             ? `هل تريد بيع بالآجل بقيمة ${formatIQD(finalTotal)}؟\n(العميل: ${selectedPatient?.name})\nسيضاف المبلغ إلى دفتر الديون`
             : `هل تريد إتمام عملية الدفع بقيمة ${formatIQD(finalTotal)}؟ ${selectedPatient ? `\n(العميل: ${selectedPatient.name})` : ''}`;
 
+        // Block HIGH-severity drug interactions: require explicit acknowledgement
+        const hasHighInteraction = interactions.some(i => i.severity?.toUpperCase() === 'HIGH');
+        if (hasHighInteraction) {
+            const acknowledged = confirm(
+                '⚠️ تحذير: يوجد تفاعل دوائي خطير بين الأدوية المحددة!\n\n' +
+                interactions.filter(i => i.severity?.toUpperCase() === 'HIGH')
+                    .map(i => `• ${i.drug1} + ${i.drug2}: ${i.description}`)
+                    .join('\n') +
+                '\n\nهل أنت متأكد من المتابعة رغم الخطر؟ (يجب الحصول على موافقة المريض)'
+            );
+            if (!acknowledged) return;
+        }
+
         if (confirm(confirmMsg)) {
             const result = await window.ipcRenderer.invoke('process-sale', {
                 items: cart,

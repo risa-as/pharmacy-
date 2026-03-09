@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { crmService, Patient } from '../../services/crm';
@@ -12,6 +12,7 @@ export default function CRMListScreen() {
     const [search, setSearch] = useState('');
     const { isDarkMode } = useTheme();
     const C = Colors(isDarkMode);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => { fetchPatients(); }, []);
 
@@ -22,6 +23,7 @@ export default function CRMListScreen() {
             setPatients(data);
         } catch (error) {
             console.error(error);
+            Alert.alert('خطأ', 'تعذّر تحميل قائمة المرضى. تحقق من الاتصال وحاول مجدداً.');
         } finally {
             setLoading(false);
         }
@@ -29,7 +31,8 @@ export default function CRMListScreen() {
 
     const handleSearch = (text: string) => {
         setSearch(text);
-        fetchPatients(text);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => fetchPatients(text), 400);
     };
 
     const renderItem = ({ item }: { item: Patient }) => (

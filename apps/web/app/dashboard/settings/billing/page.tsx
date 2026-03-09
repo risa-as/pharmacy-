@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
-import { CreditCard, CheckCircle2, XCircle } from "lucide-react";
+import { CreditCard, CheckCircle2, XCircle, Building2 } from "lucide-react";
 import SubscriptionStatusCard from "@/app/ui/billing/subscription-status-card";
 import PaymentHistoryTable from "@/app/ui/billing/payment-history-table";
 import RenewButton from "@/app/ui/billing/renew-button";
@@ -189,6 +189,36 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                     <RenewButton organizationId={organizationId} />
                 </div>
             )}
+
+            {/* Bank Transfer Instructions */}
+            <div className="rounded-xl border border-border bg-muted/30 p-5 space-y-3" dir="rtl">
+                <div className="flex items-center gap-2">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                        <Building2 className="w-5 h-5 text-primary" />
+                    </div>
+                    <h2 className="font-bold text-base">الدفع عن طريق التحويل البنكي</h2>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                    يمكنك تجديد اشتراكك عن طريق إرسال التحويل البنكي إلى الحساب أدناه، ثم إرسال صورة الإيصال عبر واتساب أو البريد الإلكتروني للدعم.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div className="bg-background rounded-lg border p-3">
+                        <div className="text-xs text-muted-foreground mb-1">اسم البنك</div>
+                        <div className="font-medium">بنك الرافدين</div>
+                    </div>
+                    <div className="bg-background rounded-lg border p-3">
+                        <div className="text-xs text-muted-foreground mb-1">اسم صاحب الحساب</div>
+                        <div className="font-medium">شركة فاراماس للتقنية</div>
+                    </div>
+                    <div className="bg-background rounded-lg border p-3 sm:col-span-2">
+                        <div className="text-xs text-muted-foreground mb-1">رقم الحساب</div>
+                        <div className="font-mono font-bold tracking-wider" dir="ltr">XXXX-XXXX-XXXX-XXXX</div>
+                    </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    بعد إرسال الإيصال، سيقوم فريقنا بتفعيل الاشتراك خلال ساعات العمل (9 صباحاً – 5 مساءً).
+                </p>
+            </div>
 
             {/* Payment history */}
             <div className="space-y-3">

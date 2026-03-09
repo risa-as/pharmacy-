@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { crmService, Patient } from '../../services/crm';
@@ -21,6 +21,7 @@ export default function CRMDetailScreen() {
             setPatient(data);
         } catch (error) {
             console.error(error);
+            Alert.alert('خطأ', 'تعذّر تحميل بيانات المريض. تحقق من الاتصال وحاول مجدداً.');
         } finally {
             setLoading(false);
         }

@@ -158,7 +158,7 @@ export default function PurchaseDetailsScreen() {
                             <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.primary }}>x{item.quantity}</Text>
                         </View>
                         <Text style={{ fontSize: 14, color: C.mutedForeground, textAlign: 'right' }}>
-                            {item.cost.toLocaleString()} د.ع / قطعة
+                            {(item.cost ?? 0).toLocaleString()} د.ع / قطعة
                         </Text>
                     </View>
                 ))}

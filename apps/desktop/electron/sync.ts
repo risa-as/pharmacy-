@@ -1227,7 +1227,7 @@ export async function syncUsers() {
         const branchId = getBranchId();
         if (!branchId) return;
 
-        const response = await fetch(buildApiUrl(`/sync/users?branchId=${branchId}`));
+        const response = await fetchWithRetry(buildApiUrl(`/sync/users?branchId=${branchId}`));
         if (!response.ok) throw new Error("User sync failed");
 
         const data = await response.json();

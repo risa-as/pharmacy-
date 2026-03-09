@@ -7,6 +7,7 @@ import InventoryTable from "@/app/ui/inventory/inventory-table";
 import QuickBarcodeEntry from "@/app/ui/inventory/quick-barcode-entry";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
 
@@ -69,7 +70,7 @@ export default async function Page({
     };
 }) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, tenantWhere } = tenantCtx;
 
     const query = searchParams?.query || "";

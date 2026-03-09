@@ -6,6 +6,7 @@ import BestSellingChart from "@/app/ui/dashboard/reports/best-selling-chart";
 import StagnantItemsTable from "@/app/ui/dashboard/reports/stagnant-items-table";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 
 
 export default async function AnalyticsPage({
@@ -14,7 +15,7 @@ export default async function AnalyticsPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, tenantWhere } = tenantCtx;
 
     const stagnantPeriod = typeof searchParams.stagnantPeriod === 'string' ? parseInt(searchParams.stagnantPeriod) : 90;
@@ -47,38 +48,31 @@ export default async function AnalyticsPage({
         take: 10,
     });
 
-    // Populate Drug Names & Calculate Totals
-    const bestSellingItems = await Promise.all(bestSellingData.map(async (item: any) => {
-        const drug = await prisma.globalDrug.findUnique({
-            where: { id: item.drugId },
-            select: { tradeName: true }
-        });
+    // Batch: fetch all top-10 drug names in one query
+    const topDrugIds = bestSellingData.map((d: any) => d.drugId);
+    const topDrugs = await prisma.globalDrug.findMany({
+        where: { id: { in: topDrugIds } },
+        select: { id: true, tradeName: true }
+    });
+    const drugNameMap = new Map(topDrugs.map((d: any) => [d.id, d.tradeName]));
 
-        // Approximate Total Revenue for this item in period
-        // For accurate revenue, we should sum (quantity * price) for each saleItem. 
-        // Prisma groupBy doesn't support computed aggregation effectively in one go.
-        // Let's do a separate aggregation or just rely on Quantity for "Best Selling" definition.
-        // We will show Quantity primarily.
+    // Batch: fetch all sale items for top drugs in one query, compute revenue in JS
+    const topDrugSaleItems = await prisma.saleItem.findMany({
+        where: {
+            drugId: { in: topDrugIds },
+            sale: { createdAt: { gte: thirtyDaysAgo }, ...tenantBranchWhere }
+        },
+        select: { drugId: true, quantity: true, price: true }
+    });
+    const revenueMap = new Map<string, number>();
+    for (const si of topDrugSaleItems) {
+        revenueMap.set(si.drugId, (revenueMap.get(si.drugId) ?? 0) + si.quantity * si.price);
+    }
 
-        // Let's calculate accurate revenue for these top 10 items
-        const revenueAgg = await prisma.saleItem.findMany({
-            where: {
-                drugId: item.drugId,
-                sale: {
-                    createdAt: { gte: thirtyDaysAgo },
-                    ...tenantBranchWhere
-                }
-            },
-            select: { quantity: true, price: true }
-        });
-
-        const totalRevenue = revenueAgg.reduce((acc: any, curr: any) => acc + (curr.quantity * curr.price), 0);
-
-        return {
-            name: drug?.tradeName || 'Unknown',
-            quantity: item._sum.quantity || 0,
-            total: totalRevenue
-        };
+    const bestSellingItems = bestSellingData.map((item: any) => ({
+        name: drugNameMap.get(item.drugId) ?? 'Unknown',
+        quantity: item._sum.quantity ?? 0,
+        total: revenueMap.get(item.drugId) ?? 0,
     }));
 
     // --- 2. Stagnant Items (Rawakeed) ---

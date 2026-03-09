@@ -27,28 +27,29 @@ export default async function ForecastPage() {
         }
     });
 
-    const forecastItems = [];
-
-    for (const item of allInventory) {
-        // Get sales count in last 30 days
-        const sales = await prisma.saleItem.findMany({
-            where: {
-                drugId: item.drugId,
-                sale: {
-                    branchId: item.branchId,
-                    createdAt: { gte: thirtyDaysAgo }
-                }
+    // Single batch query: sum sold quantity per drug across all inventory branches in the period
+    const inventoryBranchIds = [...new Set(allInventory.map((i: any) => i.branchId))];
+    const soldData = await prisma.saleItem.groupBy({
+        by: ['drugId'],
+        where: {
+            sale: {
+                branchId: { in: inventoryBranchIds },
+                createdAt: { gte: thirtyDaysAgo }
             }
-        });
+        },
+        _sum: { quantity: true }
+    });
+    const soldMap = new Map(soldData.map((s: any) => [s.drugId, s._sum.quantity ?? 0]));
 
-        const totalSold30Days = sales.reduce((acc: any, sale: any) => acc + sale.quantity, 0);
+    const forecastItems = [];
+    for (const item of allInventory) {
+        const totalSold30Days = soldMap.get(item.drugId) ?? 0;
         const dailyRunRate = totalSold30Days / 30;
 
-        // If run rate is significant (e.g., > 0.1 item per day)
         if (dailyRunRate > 0.1) {
             const currentQuantity = item.batches.reduce((sum: any, b: any) => sum + b.quantity, 0);
             const daysOfCoverage = currentQuantity > 0 ? currentQuantity / dailyRunRate : 0;
-            const targetStock = dailyRunRate * 30; // Target 1 month of stock
+            const targetStock = dailyRunRate * 30;
             const recommendedOrder = Math.max(0, targetStock - currentQuantity);
 
             if (recommendedOrder > 0) {

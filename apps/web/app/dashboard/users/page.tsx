@@ -7,6 +7,7 @@ import { prisma } from "@/app/lib/prisma";
 import { UpdateUser, DeleteUser } from "@/app/ui/users/buttons";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
 
 
 async function getUsers(tenantBranchWhere: any) {
@@ -22,7 +23,7 @@ async function getUsers(tenantBranchWhere: any) {
 
 export default async function Page() {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere } = tenantCtx;
 
     let users = [];

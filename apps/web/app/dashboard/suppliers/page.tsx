@@ -7,6 +7,7 @@ import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
 
 async function getSuppliers(organizationId?: string) {
     const suppliers = await prisma.supplier.findMany({
@@ -25,7 +26,7 @@ async function getSuppliers(organizationId?: string) {
 
 export default async function Page() {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, user } = tenantCtx;
 
     // Super Admin sees everything. Others see only suppliers for their organization.

@@ -328,7 +328,7 @@ export const apiService = {
     },
 
     // Add Batch (Drug exists in Branch Inventory)
-    async addBatch(data: { inventoryId: string; batchNumber: string; quantity: number; expiryDate: string; price?: number }) {
+    async addBatch(data: { inventoryId: string; batchNumber?: string; quantity: number; expiryDate: string; price?: number }) {
         try {
             return await request<any>(`/inventory/add-batch`, {
                 method: 'POST',
@@ -346,10 +346,10 @@ export const apiService = {
         drugId: string;
         branchId: string;
         price: number;
-        costPrice: number;
+        cost: number;
         minStock: number;
         maxStock: number;
-        batchNumber: string;
+        batchNumber?: string;
         quantity: number;
         expiryDate: string;
     }) {

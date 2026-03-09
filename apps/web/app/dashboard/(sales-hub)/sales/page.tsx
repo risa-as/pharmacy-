@@ -21,21 +21,27 @@ export default async function SalesPage({
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const settings = await getCompanySettings();
+    const PAGE_SIZE = 100;
+    const page = typeof searchParams.page === 'string' ? Math.max(1, parseInt(searchParams.page) || 1) : 1;
+
     // جلب المبيعات
-    const sales = await prisma.sale.findMany({
-        where: branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere,
-        orderBy: { createdAt: "desc" },
-        include: {
-            items: {
-                include: {
-                    drug: true
-                }
+    const [sales, totalCount] = await Promise.all([
+        prisma.sale.findMany({
+            where: branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere,
+            orderBy: { createdAt: "desc" },
+            include: {
+                items: { include: { drug: true } },
+                branch: true,
+                user: true,
             },
-            branch: true,
-            user: true,
-        },
-        take: 100,
-    });
+            take: PAGE_SIZE,
+            skip: (page - 1) * PAGE_SIZE,
+        }),
+        prisma.sale.count({
+            where: branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere,
+        }),
+    ]);
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
     // إحصائيات
     const today = new Date();
@@ -112,8 +118,13 @@ export default async function SalesPage({
 
             {/* Sales Table */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                <div className="bg-muted p-4 border-b border-border">
+                <div className="bg-muted p-4 border-b border-border flex items-center justify-between">
                     <h2 className="font-bold text-foreground">سجل المبيعات</h2>
+                    {totalCount > PAGE_SIZE && (
+                        <span className="text-sm text-muted-foreground">
+                            {totalCount.toLocaleString()} سجل — صفحة {page} من {totalPages}
+                        </span>
+                    )}
                 </div>
 
                 {sales.length === 0 ? (
@@ -123,6 +134,29 @@ export default async function SalesPage({
                     </div>
                 ) : (
                     <SalesTable sales={sales} settings={settings} />
+                )}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 p-4 border-t border-border">
+                        {page > 1 && (
+                            <Link
+                                href={`/dashboard/sales?page=${page - 1}${branchId ? `&branch=${branchId}` : ''}`}
+                                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
+                            >
+                                السابق
+                            </Link>
+                        )}
+                        <span className="text-sm text-muted-foreground px-2">{page} / {totalPages}</span>
+                        {page < totalPages && (
+                            <Link
+                                href={`/dashboard/sales?page=${page + 1}${branchId ? `&branch=${branchId}` : ''}`}
+                                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
+                            >
+                                التالي
+                            </Link>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

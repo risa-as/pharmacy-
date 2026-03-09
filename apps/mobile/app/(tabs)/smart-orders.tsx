@@ -4,6 +4,7 @@ import {
     TouchableOpacity, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { apiService } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -59,24 +60,16 @@ export default function SmartOrdersScreen() {
         fetchData();
     }, [fetchData]);
 
-    const handleApprove = useCallback(async (item: SmartOrderItem) => {
+    const handleApprove = useCallback((item: SmartOrderItem) => {
         const drugName = item.drug?.tradeName ?? 'دواء';
         Alert.alert(
             'تأكيد الطلب',
-            `هل تريد إنشاء طلب شراء لـ "${drugName}" بكمية ${item.suggestedReorderQuantity}؟`,
+            `هل تريد الانتقال لإنشاء طلب شراء لـ "${drugName}" بكمية ${item.suggestedReorderQuantity}؟`,
             [
                 { text: 'إلغاء', style: 'cancel' },
                 {
-                    text: 'موافق',
-                    onPress: async () => {
-                        setApprovingId(item.id);
-                        try {
-                            // Placeholder: navigate to purchases create or call API
-                            Alert.alert('تم', 'سيتم توجيهك لإنشاء الطلب');
-                        } finally {
-                            setApprovingId(null);
-                        }
-                    },
+                    text: 'انتقل للطلبات',
+                    onPress: () => router.push('/(tabs)/purchases' as any),
                 },
             ],
         );
