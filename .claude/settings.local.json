@@ -61,7 +61,9 @@
       "Bash(do echo \"=== $f ===\")",
       "Read(//d/Programming/Faramace/apps/web/**)",
       "Bash(done)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(npx tsx:*)",
+      "Bash(where sqlite3:*)"
     ]
   }
 }

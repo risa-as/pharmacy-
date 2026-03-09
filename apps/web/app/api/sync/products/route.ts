@@ -2,14 +2,34 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { auth } from '@/auth';
 
 export async function GET(req: Request) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId');
 
         if (!branchId) {
             return NextResponse.json({ message: 'branchId is required' }, { status: 400 });
+        }
+
+        // Validate branchId ownership
+        const userRole = (session.user as any).role;
+        const userBranchId = (session.user as any).branchId;
+        const userOrgId = (session.user as any).organizationId;
+        if (userRole !== 'SUPER_ADMIN') {
+            const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
+            if (!branch) return NextResponse.json({ message: 'Branch not found' }, { status: 404 });
+            if (userRole === 'ADMIN') {
+                if (branch.organizationId !== userOrgId) return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+            } else {
+                if (branchId !== userBranchId) return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+            }
         }
 
         const inventories = await prisma.inventory.findMany({

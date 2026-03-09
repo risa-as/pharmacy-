@@ -44,15 +44,27 @@ export async function PUT(request: Request) {
         const body = await request.json();
         const organizationId = tenantCtx.organizationId;
 
+        const loyaltyData = {
+            loyaltyEnabled: body.loyaltyEnabled,
+            loyaltyPointsPerDinar: body.loyaltyPointsPerDinar !== undefined ? Number(body.loyaltyPointsPerDinar) : undefined,
+            loyaltyRedemptionValue: body.loyaltyRedemptionValue !== undefined ? Number(body.loyaltyRedemptionValue) : undefined,
+            loyaltyMinRedemption: body.loyaltyMinRedemption !== undefined ? Number(body.loyaltyMinRedemption) : undefined,
+        };
+
         const updated = await prisma.organization.update({
             where: { id: organizationId },
-            data: {
-                loyaltyEnabled: body.loyaltyEnabled,
-                loyaltyPointsPerDinar: body.loyaltyPointsPerDinar !== undefined ? Number(body.loyaltyPointsPerDinar) : undefined,
-                loyaltyRedemptionValue: body.loyaltyRedemptionValue !== undefined ? Number(body.loyaltyRedemptionValue) : undefined,
-                loyaltyMinRedemption: body.loyaltyMinRedemption !== undefined ? Number(body.loyaltyMinRedemption) : undefined,
-            },
+            data: loyaltyData,
         });
+
+        // Keep CompanySettings in sync so the Desktop sync route (/sync/settings)
+        // always reflects the correct loyalty configuration.
+        const existingSettings = await prisma.companySettings.findFirst();
+        if (existingSettings) {
+            await prisma.companySettings.update({
+                where: { id: existingSettings.id },
+                data: loyaltyData,
+            });
+        }
 
         return NextResponse.json({
             loyaltyEnabled: updated.loyaltyEnabled,

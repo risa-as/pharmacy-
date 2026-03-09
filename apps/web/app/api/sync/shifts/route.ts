@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { auth } from '@/auth';
 import { z } from "zod";
 
 
@@ -29,6 +30,11 @@ const SyncPayloadSchema = z.object({
 
 export async function POST(req: NextRequest) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const idempotencyKey = req.headers.get('x-idempotency-key');
         if (!idempotencyKey) {
             return NextResponse.json({ error: "Missing x-idempotency-key header" }, { status: 400 });
@@ -42,6 +48,20 @@ export async function POST(req: NextRequest) {
         }
 
         const { branchId, shifts } = result.data;
+
+        // Validate branchId belongs to the authenticated user
+        const userRole = (session.user as any).role;
+        const userBranchId = (session.user as any).branchId;
+        const userOrgId = (session.user as any).organizationId;
+        if (userRole !== 'SUPER_ADMIN') {
+            const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
+            if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+            if (userRole === 'ADMIN') {
+                if (branch.organizationId !== userOrgId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            } else {
+                if (branchId !== userBranchId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+        }
 
         // Check Idempotency
         const existingLog = await prisma.syncActionLog.findUnique({

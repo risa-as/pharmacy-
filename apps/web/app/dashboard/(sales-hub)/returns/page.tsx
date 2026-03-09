@@ -4,6 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import { Undo2, Search, Calendar } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 
 export default async function ReturnsPage({
     searchParams,
@@ -11,7 +12,8 @@ export default async function ReturnsPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const tenantCtx = await getTenantContext();
-    const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const returns = await prisma.saleReturn.findMany({

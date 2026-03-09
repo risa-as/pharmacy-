@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/app/lib/audit';
 
 export async function getWebProducts(searchTerm: string = "") {
     const tenantCtx = await getTenantContext();
@@ -178,6 +179,15 @@ export async function processWebSale(data: {
                 });
             }
 
+            // Server-side total validation — reject tampered totals
+            const serverTotal = saleItemsData.reduce(
+                (sum, i) => sum + i.price * i.quantity,
+                0
+            ) - (data.discount || 0);
+            if (Math.abs(serverTotal - data.total) > 0.01) {
+                throw new Error(`Total mismatch: client sent ${data.total}, server computed ${serverTotal.toFixed(2)}`);
+            }
+
             const sale = await tx.sale.create({
                 data: {
                     total: data.total,
@@ -269,9 +279,18 @@ export async function processWebSale(data: {
                     });
 
                     if (loyaltyAccount) {
+                        const newLifetime = loyaltyAccount.lifetimePoints + pointsEarned;
+                        let newTier = "BRONZE";
+                        if (newLifetime >= 20000) newTier = "GOLD";
+                        else if (newLifetime >= 5000) newTier = "SILVER";
+
                         await tx.loyaltyAccount.update({
                             where: { id: loyaltyAccount.id },
-                            data: { totalPoints: { increment: pointsEarned } },
+                            data: {
+                                totalPoints: { increment: pointsEarned },
+                                lifetimePoints: { increment: pointsEarned },
+                                tier: newTier,
+                            },
                         });
 
                         await tx.loyaltyTransaction.create({
@@ -291,6 +310,16 @@ export async function processWebSale(data: {
 
         revalidatePath('/dashboard/sales');
         revalidatePath('/dashboard/inventory');
+
+        await logAudit({
+            userId: user.id,
+            userName: user.name ?? user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'SALE',
+            entityId: result.id,
+            details: JSON.stringify({ total: result.total, discount: result.discount, itemCount: data.items?.length }),
+            branchId: branchId,
+        });
 
         return { success: true, sale: result };
     } catch (error: any) {

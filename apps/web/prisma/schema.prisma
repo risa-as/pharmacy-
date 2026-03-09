@@ -227,7 +227,7 @@ model Sale {
   createdAt    DateTime      @default(now())
   branch       Branch        @relation(fields: [branchId], references: [id])
   safe         Safe?         @relation(fields: [safeId], references: [id])
-  patient      Patient?      @relation(fields: [patientId], references: [id])
+  patient      Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
   items        SaleItem[]
   payment      Payment?
   debtPayments DebtPayment[]
@@ -384,7 +384,7 @@ model Prescription {
   notes      String?
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
-  patient    Patient            @relation(fields: [patientId], references: [id])
+  patient    Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   items      PrescriptionItem[]
 }
 
@@ -421,7 +421,7 @@ model InsurancePolicy {
   coverageRate Float            @default(0)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-  patient      Patient          @relation(fields: [patientId], references: [id])
+  patient      Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
   company      InsuranceCompany @relation(fields: [companyId], references: [id])
 }
 
@@ -516,7 +516,7 @@ model LoyaltyAccount {
   tier           String               @default("BRONZE")
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
-  patient        Patient              @relation(fields: [patientId], references: [id])
+  patient        Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
   transactions   LoyaltyTransaction[]
 }
 

@@ -2,12 +2,13 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { auth } from '@/auth';
 import { z } from "zod";
 
 
 const SyncLoyaltyTransactionSchema = z.object({
     id: z.string(),
-    patientId: z.string(), // We need patientId to link/create account
+    patientId: z.string(),
     type: z.string(),
     points: z.number(),
     description: z.string().nullable().optional(),
@@ -22,6 +23,11 @@ const SyncPayloadSchema = z.object({
 
 export async function POST(req: NextRequest) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await req.json();
         const result = SyncPayloadSchema.safeParse(body);
 
@@ -29,8 +35,46 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Invalid Payload", details: result.error }, { status: 400 });
         }
 
-        const { transactions } = result.data;
+        const { branchId, transactions } = result.data;
+
+        // ── Check if loyalty is enabled for this branch's organization ──────────
+        const branch = await prisma.branch.findUnique({
+            where: { id: branchId },
+            select: { organizationId: true, organization: { select: { loyaltyEnabled: true } } }
+        });
+
+        // Validate branchId ownership
+        const userRole = (session.user as any).role;
+        const userBranchId = (session.user as any).branchId;
+        const userOrgId = (session.user as any).organizationId;
+        if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+        if (userRole !== 'SUPER_ADMIN') {
+            if (userRole === 'ADMIN') {
+                if (branch.organizationId !== userOrgId) {
+                    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+                }
+            } else {
+                if (branchId !== userBranchId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+        }
+
+        const loyaltyEnabled = branch?.organization?.loyaltyEnabled ?? false;
+
+        if (!loyaltyEnabled) {
+            // Loyalty is disabled — acknowledge all transactions so the desktop
+            // marks them as synced and stops retrying. Points are NOT applied.
+            return NextResponse.json({
+                success: true,
+                syncedIds: transactions.map(t => t.id),
+                accountBalances: [],
+                message: 'Loyalty program is disabled — transactions acknowledged but not applied',
+            });
+        }
+        // ────────────────────────────────────────────────────────────────────────
+
         const processedIds: string[] = [];
+        // Track which accounts were updated so we can return their new balances
+        const updatedAccountIds = new Set<string>();
 
         for (const txData of transactions) {
             try {
@@ -51,7 +95,7 @@ export async function POST(req: NextRequest) {
                                 }
                             });
                         } catch (e) {
-                            // Race condition check
+                            // Race condition — another request created it first
                             account = await prismaTx.loyaltyAccount.findUnique({
                                 where: { patientId: txData.patientId }
                             });
@@ -59,13 +103,14 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
-                    // 2. Check if transaction already exists
+                    // 2. Skip duplicate transactions (idempotent)
                     const existingTx = await prismaTx.loyaltyTransaction.findUnique({
                         where: { id: txData.id }
                     });
 
                     if (existingTx) {
-                        return; // Already synced
+                        updatedAccountIds.add(account!.id);
+                        return;
                     }
 
                     // 3. Create Transaction
@@ -81,11 +126,7 @@ export async function POST(req: NextRequest) {
                         }
                     });
 
-                    // 4. Update Account Points
-                    // We assume the desktop calc is correct, but since we are syncing *events*, 
-                    // we should replay the effect on the server balance.
-                    // EARN adds, REDEEM subtracts.
-
+                    // 4. Update Account Points (replay the event)
                     if (txData.type === 'EARN') {
                         await prismaTx.loyaltyAccount.update({
                             where: { id: account!.id },
@@ -103,8 +144,10 @@ export async function POST(req: NextRequest) {
                         });
                     }
 
-                    // Update Tier Logic (Simple version)
-                    const updatedAccount = await prismaTx.loyaltyAccount.findUnique({ where: { id: account!.id } });
+                    // 5. Recalculate tier from lifetime points
+                    const updatedAccount = await prismaTx.loyaltyAccount.findUnique({
+                        where: { id: account!.id }
+                    });
                     if (updatedAccount) {
                         let newTier = "BRONZE";
                         if (updatedAccount.lifetimePoints >= 20000) newTier = "GOLD";
@@ -118,6 +161,7 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
+                    updatedAccountIds.add(account!.id);
                 });
                 processedIds.push(txData.id);
             } catch (err) {
@@ -125,7 +169,26 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, syncedIds: processedIds });
+        // ── Return authoritative balances so the desktop can reconcile ──────────
+        const accountBalances = updatedAccountIds.size > 0
+            ? await prisma.loyaltyAccount.findMany({
+                where: { id: { in: [...updatedAccountIds] } },
+                select: {
+                    id: true,
+                    patientId: true,
+                    totalPoints: true,
+                    lifetimePoints: true,
+                    tier: true,
+                }
+            })
+            : [];
+        // ────────────────────────────────────────────────────────────────────────
+
+        return NextResponse.json({
+            success: true,
+            syncedIds: processedIds,
+            accountBalances,
+        });
 
     } catch (error) {
         console.error("Loyalty Sync Error:", error);

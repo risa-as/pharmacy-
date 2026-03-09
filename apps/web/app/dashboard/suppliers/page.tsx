@@ -33,7 +33,8 @@ export default async function Page() {
     try {
         suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? undefined : tenantCtx.organizationId);
     } catch (e) {
-        suppliers = await getSuppliers();
+        console.error('[Suppliers Page] Failed to load suppliers:', e);
+        // Do NOT fall back to unscoped query — return empty list instead
     }
 
     return (

@@ -597,6 +597,12 @@ export default function POSLayout({ user }: { user: any }) {
     const handlePayment = async (paymentMethod: string = "CASH") => {
         if (!window.ipcRenderer) return;
 
+        // Enforce shift: sales cannot proceed without an open shift
+        if (!isShiftOpen) {
+            alert("يجب فتح وردية عمل أولاً قبل إجراء أي عملية بيع.");
+            return;
+        }
+
         const isCredit = paymentMethod === "CREDIT";
 
         if (isCredit && !selectedPatient) {

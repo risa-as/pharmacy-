@@ -29,7 +29,8 @@ export default async function Page() {
     try {
         users = await getUsers(tenantBranchWhere);
     } catch (e) {
-        users = await getUsers({});
+        console.error('[Users Page] Failed to load users:', e);
+        // Do NOT fall back to unscoped query — return empty list instead
     }
 
     return (

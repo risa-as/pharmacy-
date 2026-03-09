@@ -7,6 +7,7 @@ import SalesTable from "@/app/ui/dashboard/sales/sales-table";
 
 import { getCompanySettings } from "@/app/lib/actions/settings";
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
 export default async function SalesPage({
@@ -15,7 +16,8 @@ export default async function SalesPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const tenantCtx = await getTenantContext();
-    const tenantBranchWhere = 'tenantBranchWhere' in tenantCtx ? tenantCtx.tenantBranchWhere : {};
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const settings = await getCompanySettings();
