@@ -4,25 +4,19 @@ import { prisma } from "@/app/lib/prisma";
 import { PackageMinus, Trash2, Clock } from "lucide-react";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
-import BranchSelector from "@/app/ui/branch-selector";
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
 
 export default async function ExpiredDamagedPage({
     searchParams,
 }: {
-    searchParams?: { branchId?: string };
+    searchParams?: { branch?: string };
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
 
-    const selectedBranchId = searchParams?.branchId;
-
-    const branches = await prisma.branch.findMany({
-        where: tenantWhere,
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
-    });
+    const selectedBranchId = searchParams?.branch;
 
     const inventoryFilter = selectedBranchId
         ? { ...tenantBranchWhere, branchId: selectedBranchId }
@@ -33,18 +27,8 @@ export default async function ExpiredDamagedPage({
     thirtyDaysFromNow.setDate(now.getDate() + 30);
 
     const batches = await prisma.batch.findMany({
-        where: {
-            quantity: { gt: 0 },
-            inventory: inventoryFilter
-        },
-        include: {
-            inventory: {
-                include: {
-                    drug: true,
-                    branch: true,
-                },
-            },
-        },
+        where: { quantity: { gt: 0 }, inventory: inventoryFilter },
+        include: { inventory: { include: { drug: true, branch: true } } },
         orderBy: { expiryDate: "asc" },
     });
 
@@ -56,7 +40,6 @@ export default async function ExpiredDamagedPage({
 
     const expiredValue = expired.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
     const expiringSoonValue = expiringSoon.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
-
     const fmt = (v: number) => new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 0 }).format(v);
 
     const allAlerts = [
@@ -66,12 +49,15 @@ export default async function ExpiredDamagedPage({
 
     return (
         <div className="glass-card w-full p-6">
-            <div className="flex w-full items-center justify-between mb-8">
+            <div className="flex w-full items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
                     <PackageMinus className="w-7 h-7 text-destructive" />
                     التوالف والمنتهية الصلاحية
                 </h1>
-                <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={selectedBranchId} baseUrl="/dashboard/inventory/expired-damaged" />
             </div>
 
             {/* Stats */}
@@ -138,13 +124,11 @@ export default async function ExpiredDamagedPage({
                                         <td className="px-4 py-3">
                                             {batch.status === "expired" ? (
                                                 <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">
-                                                    <Trash2 className="w-3 h-3" />
-                                                    منتهي
+                                                    <Trash2 className="w-3 h-3" />منتهي
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-xs font-bold text-warning">
-                                                    <Clock className="w-3 h-3" />
-                                                    {daysLeft} يوم
+                                                    <Clock className="w-3 h-3" />{daysLeft} يوم
                                                 </span>
                                             )}
                                         </td>

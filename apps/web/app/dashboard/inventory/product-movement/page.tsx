@@ -2,8 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import { Activity, ArrowUpDown, Search } from "lucide-react";
-import BranchSelector from "@/app/ui/branch-selector";
-
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
@@ -11,20 +10,14 @@ import { NextResponse } from 'next/server';
 export default async function ProductMovementPage({
     searchParams,
 }: {
-    searchParams?: { barcode?: string; branchId?: string };
+    searchParams?: { barcode?: string; branch?: string };
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
 
     const barcode = searchParams?.barcode?.trim();
-    const selectedBranchId = searchParams?.branchId;
-
-    const branches = await prisma.branch.findMany({
-        where: tenantWhere,
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
-    });
+    const selectedBranchId = searchParams?.branch;
 
     const branchFilter = selectedBranchId
         ? { ...tenantBranchWhere, branchId: selectedBranchId }
@@ -54,10 +47,7 @@ export default async function ProductMovementPage({
             selectedDrug = { tradeName: drug.tradeName, barcode: drug.barcode };
 
             const saleItems = await prisma.saleItem.findMany({
-                where: {
-                    drugId: drug.id,
-                    sale: branchFilter
-                },
+                where: { drugId: drug.id, sale: branchFilter },
                 include: { sale: { include: { branch: true } } },
                 orderBy: { sale: { createdAt: "desc" } },
                 take: 100,
@@ -75,10 +65,7 @@ export default async function ProductMovementPage({
             }
 
             const purchaseItems = await prisma.purchaseItem.findMany({
-                where: {
-                    drugId: drug.id,
-                    purchase: branchFilter
-                },
+                where: { drugId: drug.id, purchase: branchFilter },
                 include: { purchase: { include: { branch: true } } },
                 orderBy: { purchase: { createdAt: "desc" } },
                 take: 100,
@@ -99,26 +86,33 @@ export default async function ProductMovementPage({
         }
     }
 
+    const extraParams = barcode ? `barcode=${encodeURIComponent(barcode)}` : undefined;
+
     return (
         <div className="glass-card w-full p-6">
-            <div className="flex w-full items-center justify-between mb-8">
+            <div className="flex w-full items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
                     <Activity className="w-7 h-7 text-primary" />
                     حركة منتج
                 </h1>
-                <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter
+                    currentBranch={selectedBranchId}
+                    baseUrl="/dashboard/inventory/product-movement"
+                    extraParams={extraParams}
+                />
             </div>
 
             {/* Barcode Search */}
             <div className="bg-card rounded-xl border border-border p-6 mb-6">
                 <form className="flex flex-col sm:flex-row gap-4 items-end">
                     {selectedBranchId && (
-                        <input type="hidden" name="branchId" value={selectedBranchId} />
+                        <input type="hidden" name="branch" value={selectedBranchId} />
                     )}
                     <div className="flex-1 w-full">
-                        <label className="block text-sm font-bold text-foreground mb-2">
-                            باركود المنتج
-                        </label>
+                        <label className="block text-sm font-bold text-foreground mb-2">باركود المنتج</label>
                         <div className="relative">
                             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <input
@@ -140,14 +134,12 @@ export default async function ProductMovementPage({
                 </form>
             </div>
 
-            {/* Not found */}
             {notFound && (
                 <div className="bg-destructive/10 rounded-xl border border-destructive/30 p-6 text-center text-destructive mb-6">
                     <p className="font-bold">لم يُعثر على منتج بالباركود: <span className="font-mono">{barcode}</span></p>
                 </div>
             )}
 
-            {/* Stats */}
             {selectedDrug && (
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -165,7 +157,6 @@ export default async function ProductMovementPage({
                         </div>
                     </div>
 
-                    {/* Movement table */}
                     <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
                         {movements.length === 0 ? (
                             <div className="p-12 text-center text-muted-foreground">
@@ -187,19 +178,10 @@ export default async function ProductMovementPage({
                                     {movements.map((m: any, idx: any) => (
                                         <tr key={idx} className="hover:bg-muted">
                                             <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
-                                                {new Date(m.date).toLocaleDateString("ar-IQ", {
-                                                    year: "numeric",
-                                                    month: "short",
-                                                    day: "numeric",
-                                                    hour: "2-digit",
-                                                    minute: "2-digit",
-                                                })}
+                                                {new Date(m.date).toLocaleDateString("ar-IQ", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold ${m.type === "شراء"
-                                                    ? "bg-success/10 text-success"
-                                                    : "bg-destructive/10 text-destructive"
-                                                    }`}>
+                                                <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold ${m.type === "شراء" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
                                                     {m.type}
                                                 </span>
                                             </td>

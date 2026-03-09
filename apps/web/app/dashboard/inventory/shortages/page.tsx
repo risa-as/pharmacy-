@@ -2,8 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import { AlertTriangle, ArrowDown } from "lucide-react";
-import BranchSelector from "@/app/ui/branch-selector";
-
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
@@ -11,19 +10,13 @@ import { NextResponse } from 'next/server';
 export default async function ShortagesPage({
     searchParams,
 }: {
-    searchParams?: { branchId?: string };
+    searchParams?: { branch?: string };
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
 
-    const selectedBranchId = searchParams?.branchId;
-
-    const branches = await prisma.branch.findMany({
-        where: tenantWhere,
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
-    });
+    const selectedBranchId = searchParams?.branch;
 
     const branchFilter = selectedBranchId
         ? { ...tenantBranchWhere, branchId: selectedBranchId }
@@ -31,11 +24,7 @@ export default async function ShortagesPage({
 
     const inventory = await prisma.inventory.findMany({
         where: branchFilter,
-        include: {
-            drug: true,
-            branch: true,
-            batches: true,
-        },
+        include: { drug: true, branch: true, batches: true },
         orderBy: { drug: { tradeName: "asc" } },
     });
 
@@ -48,12 +37,15 @@ export default async function ShortagesPage({
 
     return (
         <div className="glass-card w-full p-6">
-            <div className="flex w-full items-center justify-between mb-8">
+            <div className="flex w-full items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
                     <AlertTriangle className="w-7 h-7 text-warning" />
                     النواقص
                 </h1>
-                <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={selectedBranchId} baseUrl="/dashboard/inventory/shortages" />
             </div>
 
             {/* Stats */}
@@ -116,13 +108,9 @@ export default async function ShortagesPage({
                                     </td>
                                     <td className="px-4 py-3">
                                         {item.currentStock === 0 ? (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">
-                                                نفد
-                                            </span>
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">نفد</span>
                                         ) : (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-xs font-bold text-warning">
-                                                منخفض
-                                            </span>
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-xs font-bold text-warning">منخفض</span>
                                         )}
                                     </td>
                                 </tr>
