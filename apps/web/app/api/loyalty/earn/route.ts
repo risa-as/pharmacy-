@@ -21,7 +21,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "No organization assigned" }, { status: 400 });
         }
 
-        // 1. Get loyalty settings
+        // 1. Get loyalty settings (org-level master switch)
         const settings = await prisma.organization.findUnique({
             where: { id: tenantCtx.organizationId },
             select: { loyaltyEnabled: true, loyaltyPointsPerDinar: true }
@@ -29,6 +29,18 @@ export async function POST(request: Request) {
 
         if (!settings?.loyaltyEnabled) {
             return NextResponse.json({ error: "Loyalty program is disabled" }, { status: 400 });
+        }
+
+        // 1b. Check branch-level loyalty enabled (fine-grained control)
+        const branchId = tenantCtx.user.branchId;
+        if (branchId) {
+            const branch = await prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { loyaltyEnabled: true },
+            });
+            if (branch && !branch.loyaltyEnabled) {
+                return NextResponse.json({ error: "Loyalty program is disabled for this branch" }, { status: 400 });
+            }
         }
 
         const pointsPerDinar = settings.loyaltyPointsPerDinar;
