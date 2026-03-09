@@ -1,8 +1,6 @@
 export const dynamic = 'force-dynamic';
 
 
-import { PlusIcon } from "lucide-react";
-import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
 import { UpdateUser, DeleteUser } from "@/app/ui/users/buttons";
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -38,10 +36,6 @@ export default async function Page() {
         <div className="glass-card w-full p-6" suppressHydrationWarning>
             <div className="flex w-full items-center justify-between mb-8">
                 <h1 className="text-2xl font-bold font-cairo text-foreground">المستخدمين</h1>
-                <Link href="/dashboard/users/create" className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">
-                    <PlusIcon className="h-4 w-4" />
-                    <span className="hidden md:block">إضافة مستخدم</span>
-                </Link>
             </div>
 
             <div className="mt-4 flow-root">
