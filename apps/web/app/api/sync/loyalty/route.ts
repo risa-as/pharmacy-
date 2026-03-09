@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
         // ── Return authoritative balances so the desktop can reconcile ──────────
         const accountBalances = updatedAccountIds.size > 0
             ? await prisma.loyaltyAccount.findMany({
-                where: { id: { in: [...updatedAccountIds] } },
+                where: { id: { in: Array.from(updatedAccountIds) } },
                 select: {
                     id: true,
                     patientId: true,
