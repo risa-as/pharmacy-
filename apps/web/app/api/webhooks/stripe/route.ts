@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         }
         case "invoice.payment_failed": {
             const inv = event.data.object as Stripe.Invoice;
-            console.error(`[Stripe] Invoice payment FAILED for customer ${inv.customer} subscription ${inv.subscription} — manual action required.`);
+            console.error(`[Stripe] Invoice payment FAILED for customer ${inv.customer} — manual action required.`);
             break;
         }
         case "customer.subscription.updated": {
