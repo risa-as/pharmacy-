@@ -52,7 +52,7 @@ export default async function ShiftsTable({
 
     return (
         <div className="mt-6 flow-root">
-            <div className="inline-block min-w-full align-middle">
+            <div className="overflow-x-auto">
                 <div className="rounded-lg bg-transparent p-2 md:pt-0 border border-border shadow-sm overflow-hidden">
                     <div className="md:hidden">
                         {/* Mobile View */}

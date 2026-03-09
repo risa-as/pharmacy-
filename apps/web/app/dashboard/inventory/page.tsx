@@ -116,7 +116,7 @@ export default async function Page({
             <QuickBarcodeEntry branches={branches} />
 
             <div className="mt-4 flow-root">
-                <div className="inline-block min-w-full align-middle">
+                <div className="overflow-x-auto">
                     <InventoryTable items={items} />
 
                     {/* Pagination Controls */}

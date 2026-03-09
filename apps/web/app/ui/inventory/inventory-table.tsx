@@ -21,7 +21,7 @@ export default function InventoryTable({ items }: { items: InventoryItem[] }) {
 
     return (
         <>
-            <div className="rounded-xl bg-transparent border border-border shadow-sm overflow-hidden">
+            <div className="overflow-x-auto rounded-xl bg-transparent border border-border shadow-sm overflow-hidden">
                 <table className="min-w-full text-foreground">
                     <thead className="bg-card/50 text-right text-sm font-semibold text-foreground border-b border-border">
                         <tr>

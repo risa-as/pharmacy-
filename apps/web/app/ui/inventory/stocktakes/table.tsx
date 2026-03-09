@@ -30,7 +30,7 @@ export default async function StocktakesTable({
 
     return (
         <div className="mt-6 flow-root">
-            <div className="inline-block min-w-full align-middle">
+            <div className="overflow-x-auto">
                 <div className="rounded-lg bg-transparent p-2 md:pt-0">
 
                     <table className="hidden min-w-full text-foreground md:table">

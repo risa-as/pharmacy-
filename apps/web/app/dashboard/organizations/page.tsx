@@ -31,7 +31,7 @@ export default async function Page() {
             </div>
 
             <div className="mt-4 flow-root">
-                <div className="inline-block min-w-full align-middle">
+                <div className="overflow-x-auto">
                     <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
                         <table className="min-w-full text-foreground table-fixed">
                             <thead className="bg-muted text-right text-sm font-semibold text-foreground border-b border-border">
