@@ -2,20 +2,35 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import { AlertTriangle, ArrowDown } from "lucide-react";
-import Link from "next/link";
+import BranchSelector from "@/app/ui/branch-selector";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
 
-export default async function ShortagesPage() {
+export default async function ShortagesPage({
+    searchParams,
+}: {
+    searchParams?: { branchId?: string };
+}) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
 
-    // Get all inventory items where current stock <= minStock
+    const selectedBranchId = searchParams?.branchId;
+
+    const branches = await prisma.branch.findMany({
+        where: tenantWhere,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
+
+    const branchFilter = selectedBranchId
+        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        : tenantBranchWhere;
+
     const inventory = await prisma.inventory.findMany({
-        where: tenantBranchWhere,
+        where: branchFilter,
         include: {
             drug: true,
             branch: true,
@@ -38,6 +53,7 @@ export default async function ShortagesPage() {
                     <AlertTriangle className="w-7 h-7 text-warning" />
                     النواقص
                 </h1>
+                <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
             </div>
 
             {/* Stats */}
@@ -61,7 +77,7 @@ export default async function ShortagesPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
                 {shortages.length === 0 ? (
                     <div className="p-12 text-center text-muted-foreground">
                         <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />

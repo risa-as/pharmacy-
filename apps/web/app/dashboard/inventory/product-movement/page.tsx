@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import { Activity, ArrowUpDown, Search } from "lucide-react";
+import BranchSelector from "@/app/ui/branch-selector";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
@@ -10,13 +11,24 @@ import { NextResponse } from 'next/server';
 export default async function ProductMovementPage({
     searchParams,
 }: {
-    searchParams?: { barcode?: string };
+    searchParams?: { barcode?: string; branchId?: string };
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
 
     const barcode = searchParams?.barcode?.trim();
+    const selectedBranchId = searchParams?.branchId;
+
+    const branches = await prisma.branch.findMany({
+        where: tenantWhere,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
+
+    const branchFilter = selectedBranchId
+        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        : tenantBranchWhere;
 
     let movements: {
         date: Date;
@@ -44,7 +56,7 @@ export default async function ProductMovementPage({
             const saleItems = await prisma.saleItem.findMany({
                 where: {
                     drugId: drug.id,
-                    sale: tenantBranchWhere
+                    sale: branchFilter
                 },
                 include: { sale: { include: { branch: true } } },
                 orderBy: { sale: { createdAt: "desc" } },
@@ -65,7 +77,7 @@ export default async function ProductMovementPage({
             const purchaseItems = await prisma.purchaseItem.findMany({
                 where: {
                     drugId: drug.id,
-                    purchase: tenantBranchWhere
+                    purchase: branchFilter
                 },
                 include: { purchase: { include: { branch: true } } },
                 orderBy: { purchase: { createdAt: "desc" } },
@@ -94,11 +106,15 @@ export default async function ProductMovementPage({
                     <Activity className="w-7 h-7 text-primary" />
                     حركة منتج
                 </h1>
+                <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
             </div>
 
             {/* Barcode Search */}
             <div className="bg-card rounded-xl border border-border p-6 mb-6">
                 <form className="flex flex-col sm:flex-row gap-4 items-end">
+                    {selectedBranchId && (
+                        <input type="hidden" name="branchId" value={selectedBranchId} />
+                    )}
                     <div className="flex-1 w-full">
                         <label className="block text-sm font-bold text-foreground mb-2">
                             باركود المنتج
@@ -150,7 +166,7 @@ export default async function ProductMovementPage({
                     </div>
 
                     {/* Movement table */}
-                    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+                    <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
                         {movements.length === 0 ? (
                             <div className="p-12 text-center text-muted-foreground">
                                 <ArrowUpDown className="w-12 h-12 mx-auto mb-3 opacity-40" />

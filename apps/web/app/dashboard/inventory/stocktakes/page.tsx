@@ -2,6 +2,12 @@ import { Metadata } from 'next';
 import { Suspense } from 'react';
 import StocktakesTable from '@/app/ui/inventory/stocktakes/table';
 import { StartStocktakeButton } from '@/app/ui/inventory/stocktakes/buttons';
+import BranchSelector from '@/app/ui/branch-selector';
+import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
     title: 'جرد المخزون | Faramace',
@@ -10,13 +16,21 @@ export const metadata: Metadata = {
 export default async function Page({
     searchParams,
 }: {
-    searchParams?: {
-        query?: string;
-        page?: string;
-    };
+    searchParams?: { query?: string; page?: string; branchId?: string };
 }) {
     const query = searchParams?.query || '';
     const currentPage = Number(searchParams?.page) || 1;
+    const selectedBranchId = searchParams?.branchId;
+
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantWhere } = tenantCtx;
+
+    const branches = await prisma.branch.findMany({
+        where: tenantWhere,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
 
     return (
         <div className="glass-card w-full p-6">
@@ -24,11 +38,11 @@ export default async function Page({
                 <h1 className="text-2xl font-bold">جرد وتسوية المخزون</h1>
             </div>
             <div className="mt-4 flex items-center justify-between gap-2 md:mt-8">
-                <div className="w-full md:w-1/3">
-                    {/* Add a generic search if we plan to search stocktakes by notes or ID later. */}
+                <div className="flex items-center gap-3">
                     <div className="relative">
                         <input disabled placeholder="البحث معطل حالياً..." className="peer block w-full rounded-md border border-border py-[9px] pl-10 text-sm outline-2 placeholder:text-muted-foreground" />
                     </div>
+                    <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
                 </div>
                 <StartStocktakeButton />
             </div>
@@ -46,7 +60,7 @@ export default async function Page({
 
             <div className="w-full mt-6">
                 <Suspense fallback={<div>جاري تحميل بيانات الجرد...</div>}>
-                    <StocktakesTable query={query} currentPage={currentPage} />
+                    <StocktakesTable query={query} currentPage={currentPage} selectedBranchId={selectedBranchId} />
                 </Suspense>
             </div>
         </div>

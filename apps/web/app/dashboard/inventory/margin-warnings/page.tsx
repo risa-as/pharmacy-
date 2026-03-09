@@ -1,23 +1,44 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingDown, Settings } from 'lucide-react';
+import { AlertTriangle, TrendingDown, Settings, GitBranch } from 'lucide-react';
+
+interface Branch { id: string; name: string; }
 
 export default function MarginWarningsPage() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [minMargin, setMinMargin] = useState(5);
     const [saving, setSaving] = useState(false);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [selectedBranchId, setSelectedBranchId] = useState('');
 
-    useEffect(() => {
-        fetch('/api/inventory/margin-check')
+    const fetchData = (branchId?: string) => {
+        setLoading(true);
+        const url = branchId
+            ? `/api/inventory/margin-check?branchId=${branchId}`
+            : '/api/inventory/margin-check';
+        fetch(url)
             .then(r => r.json())
             .then(d => {
                 setData(d);
                 setMinMargin(d.minMargin || 5);
             })
             .finally(() => setLoading(false));
+    };
+
+    useEffect(() => {
+        fetch('/api/branches')
+            .then(r => r.json())
+            .then(b => setBranches(Array.isArray(b) ? b : []));
+        fetchData();
     }, []);
+
+    const handleBranchChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const val = e.target.value;
+        setSelectedBranchId(val);
+        fetchData(val || undefined);
+    };
 
     const updateMinMargin = async () => {
         setSaving(true);
@@ -27,10 +48,7 @@ export default function MarginWarningsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ minProfitMargin: minMargin })
             });
-            // Refresh data
-            const res = await fetch('/api/inventory/margin-check');
-            const d = await res.json();
-            setData(d);
+            fetchData(selectedBranchId || undefined);
         } catch (e) { console.error(e); }
         finally { setSaving(false); }
     };
@@ -39,7 +57,24 @@ export default function MarginWarningsPage() {
 
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">
-            <h1 className="text-2xl font-bold text-foreground">⚠️ نظام الحد الأدنى للربح</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold text-foreground">⚠️ نظام الحد الأدنى للربح</h1>
+                {branches.length > 1 && (
+                    <div className="flex items-center gap-2">
+                        <GitBranch className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <select
+                            value={selectedBranchId}
+                            onChange={handleBranchChange}
+                            className="rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                            <option value="">جميع الفروع</option>
+                            {branches.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
 
             {/* Settings Card */}
             <div className="bg-card rounded-xl shadow-sm border p-5">
@@ -106,7 +141,7 @@ export default function MarginWarningsPage() {
                                 </thead>
                                 <tbody>
                                     {data.warnings.map((w: any, i: number) => (
-                                        <tr key={w.drugId} className="border-b hover:bg-destructive/10/30">
+                                        <tr key={w.drugId} className="border-b hover:bg-muted/50">
                                             <td className="py-3 px-4 text-muted-foreground">{i + 1}</td>
                                             <td className="py-3 px-4 font-bold text-foreground">{w.drugName}</td>
                                             <td className="py-3 px-4 text-muted-foreground text-xs font-mono">{w.barcode}</td>

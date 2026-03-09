@@ -1,23 +1,37 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { Box, AlertTriangle, Calendar, Plus } from "lucide-react";
-import Link from "next/link";
+import { Box } from "lucide-react";
 import { formatCurrency } from "@/app/lib/utils/currency";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import BranchSelector from "@/app/ui/branch-selector";
 
 
-export default async function BatchesPage() {
+export default async function BatchesPage({
+    searchParams,
+}: {
+    searchParams?: { branchId?: string };
+}) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
-    const { tenantBranchWhere } = tenantCtx;
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
+    const selectedBranchId = searchParams?.branchId;
+
+    const branches = await prisma.branch.findMany({
+        where: tenantWhere,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
+
+    const inventoryFilter = selectedBranchId
+        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        : tenantBranchWhere;
 
     const batches = await prisma.batch.findMany({
         where: {
-            inventory: {
-                ...tenantBranchWhere
-            }
+            inventory: inventoryFilter
         },
         orderBy: { expiryDate: "asc" },
         include: {
@@ -30,7 +44,6 @@ export default async function BatchesPage() {
         },
     });
 
-    // جلب الأدوية
     const drugIds = batches.map((b: any) => b.inventory.drugId);
     const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
@@ -51,6 +64,7 @@ export default async function BatchesPage() {
                     <Box className="w-7 h-7 text-primary" />
                     إدارة الدفعات
                 </h1>
+                <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
             </div>
 
             {/* Stats */}
@@ -77,7 +91,7 @@ export default async function BatchesPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
                 {batches.length === 0 ? (
                     <div className="p-12 text-center text-muted-foreground">
                         <Box className="w-12 h-12 mx-auto mb-3 opacity-40" />

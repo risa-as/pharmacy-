@@ -7,18 +7,21 @@ import { CancelStocktakeButton } from './buttons';
 export default async function StocktakesTable({
     query,
     currentPage,
+    selectedBranchId,
 }: {
     query: string;
     currentPage: number;
+    selectedBranchId?: string;
 }) {
     const session = await auth();
-    const branchId = session?.user?.branchId;
+    const sessionBranchId = session?.user?.branchId;
 
-    if (!branchId) return <div>لا يوجد فرع محدد</div>;
+    const effectiveBranchId = selectedBranchId || sessionBranchId;
+    if (!effectiveBranchId) return <div>لا يوجد فرع محدد</div>;
 
     const stocktakes = await prisma.stocktake.findMany({
         where: {
-            branchId: branchId,
+            branchId: effectiveBranchId,
         },
         include: {
             user: { select: { name: true } },

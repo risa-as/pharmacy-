@@ -1,25 +1,41 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { PackageMinus, Trash2, AlertTriangle, Clock } from "lucide-react";
+import { PackageMinus, Trash2, Clock } from "lucide-react";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import BranchSelector from "@/app/ui/branch-selector";
 
 
-export default async function ExpiredDamagedPage() {
+export default async function ExpiredDamagedPage({
+    searchParams,
+}: {
+    searchParams?: { branchId?: string };
+}) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+
+    const selectedBranchId = searchParams?.branchId;
+
+    const branches = await prisma.branch.findMany({
+        where: tenantWhere,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
+
+    const inventoryFilter = selectedBranchId
+        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        : tenantBranchWhere;
 
     const now = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(now.getDate() + 30);
 
-    // Get all batches with their inventory and drug info
     const batches = await prisma.batch.findMany({
         where: {
             quantity: { gt: 0 },
-            inventory: tenantBranchWhere
+            inventory: inventoryFilter
         },
         include: {
             inventory: {
@@ -32,20 +48,21 @@ export default async function ExpiredDamagedPage() {
         orderBy: { expiryDate: "asc" },
     });
 
-    // Categorize
     const expired = batches.filter((b: any) => new Date(b.expiryDate) < now);
     const expiringSoon = batches.filter((b: any) => {
         const exp = new Date(b.expiryDate);
         return exp >= now && exp <= thirtyDaysFromNow;
     });
-    const safe = batches.filter((b: any) => new Date(b.expiryDate) > thirtyDaysFromNow);
 
     const expiredValue = expired.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
     const expiringSoonValue = expiringSoon.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
 
     const fmt = (v: number) => new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 0 }).format(v);
 
-    const allAlerts = [...expired.map((b: any) => ({ ...b, status: "expired" as const })), ...expiringSoon.map((b: any) => ({ ...b, status: "expiring" as const }))];
+    const allAlerts = [
+        ...expired.map((b: any) => ({ ...b, status: "expired" as const })),
+        ...expiringSoon.map((b: any) => ({ ...b, status: "expiring" as const }))
+    ];
 
     return (
         <div className="glass-card w-full p-6">
@@ -54,6 +71,7 @@ export default async function ExpiredDamagedPage() {
                     <PackageMinus className="w-7 h-7 text-destructive" />
                     التوالف والمنتهية الصلاحية
                 </h1>
+                <BranchSelector branches={branches} selectedBranchId={selectedBranchId} />
             </div>
 
             {/* Stats */}
@@ -77,7 +95,7 @@ export default async function ExpiredDamagedPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
                 {allAlerts.length === 0 ? (
                     <div className="p-12 text-center text-muted-foreground">
                         <PackageMinus className="w-12 h-12 mx-auto mb-3 opacity-40" />
