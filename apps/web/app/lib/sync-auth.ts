@@ -16,6 +16,8 @@ export interface SyncUser {
     role: string;
     branchId?: string;
     organizationId?: string;
+    name?: string;
+    email?: string;
 }
 
 const SYNC_SECRET = process.env.SYNC_TOKEN_SECRET || 'faramace-sync-secret-key';
@@ -76,5 +78,7 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
         role: (session.user as any).role || 'CASHIER',
         branchId: (session.user as any).branchId,
         organizationId: (session.user as any).organizationId,
+        name: session.user.name ?? undefined,
+        email: session.user.email ?? undefined,
     };
 }
