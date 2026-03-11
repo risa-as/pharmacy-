@@ -18,10 +18,15 @@ export interface TenantContext {
     tenantBranchWhere: Record<string, any>;
 }
 
-// Pre-encode the secret once at module load time instead of on every request.
-const _jwtSecret = new TextEncoder().encode(
-    process.env.AUTH_SECRET ?? (() => { throw new Error('AUTH_SECRET env var is not set'); })()
-);
+// Lazily encoded once per process; throws only at request time, not at build time.
+let _jwtSecret: Uint8Array | null = null;
+function getJwtSecret(): Uint8Array {
+    if (!_jwtSecret) {
+        if (!process.env.AUTH_SECRET) throw new Error('AUTH_SECRET env var is not set');
+        _jwtSecret = new TextEncoder().encode(process.env.AUTH_SECRET);
+    }
+    return _jwtSecret;
+}
 
 /**
  * Retrieves the current user's tenant isolation context.
@@ -54,7 +59,7 @@ export const getTenantContext = cache(
             }
             const token = authHeader.slice(7);
             try {
-                const { payload } = await jwtVerify(token, _jwtSecret);
+                const { payload } = await jwtVerify(token, getJwtSecret());
                 userId = payload.userId as string;
                 role = (payload.role as string) || 'CASHIER';
                 branchId = (payload.branchId as string) || undefined;
