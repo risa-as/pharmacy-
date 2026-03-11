@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 import ShiftsTable from '@/app/ui/reports/shifts/table';
+import DateRangeFilter from '@/app/ui/reports/date-range-filter';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
@@ -11,51 +12,22 @@ export const metadata: Metadata = {
     title: 'سجل إقفالات الورديات | Faramace',
 };
 
-// Summary Cards Component
-async function ShiftSummaryCards({ query, date, tenantBranchWhere }: { query: string, date: string, tenantBranchWhere: any }) {
-    // Parse Date filter
+function parseDateRange(from?: string, to?: string) {
     const now = new Date();
-    let startDate = new Date(0); // Epoch start
-    let endDate = new Date();
+    const startDate = from ? new Date(`${from}T00:00:00`) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endDate = to ? new Date(`${to}T23:59:59`) : new Date();
+    return { startDate, endDate };
+}
 
-    if (date === 'today') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    } else if (date === 'week') {
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
-    } else if (date === 'month') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
+function ShiftSummaryCards({ shifts }: { shifts: any[] }) {
+    let totalShortage = 0, totalOverage = 0, totalExpected = 0, totalActual = 0;
 
-    // Fetch aggregated data
-    const shifts = await prisma.shift.findMany({
-        where: {
-            ...tenantBranchWhere,
-            status: 'CLOSED',
-            createdAt: { gte: startDate, lte: endDate },
-            user: {
-                name: { contains: query, mode: 'insensitive' }
-            }
-        },
-        select: {
-            actualCash: true,
-            expectedCash: true
-        }
-    });
-
-    let totalShortage = 0;
-    let totalOverage = 0;
-    let totalExpected = 0;
-    let totalActual = 0;
-
-    shifts.forEach((shift: any) => {
+    shifts.filter((s: any) => s.status === 'CLOSED').forEach((shift: any) => {
         const expected = shift.expectedCash || 0;
         const actual = shift.actualCash || 0;
         const variance = actual - expected;
-
         totalExpected += expected;
         totalActual += actual;
-
         if (variance < 0) totalShortage += Math.abs(variance);
         if (variance > 0) totalOverage += variance;
     });
@@ -101,19 +73,42 @@ async function ShiftSummaryCards({ query, date, tenantBranchWhere }: { query: st
 export default async function Page({
     searchParams,
 }: {
-    searchParams?: {
-        query?: string;
-        page?: string;
-        date?: string;
-    };
+    searchParams?: { query?: string; page?: string; from?: string; to?: string };
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
     const { tenantBranchWhere } = tenantCtx;
 
     const query = searchParams?.query || '';
-    const date = searchParams?.date || 'all';
+    const from = searchParams?.from;
+    const to = searchParams?.to;
     const currentPage = Number(searchParams?.page) || 1;
+
+    const ITEMS_PER_PAGE = 20;
+    const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+    const { startDate, endDate } = parseDateRange(from, to);
+
+    const dateWhere = { createdAt: { gte: startDate, lte: endDate } };
+    const userWhere = query ? { user: { name: { contains: query, mode: 'insensitive' as const } } } : {};
+
+    // Single query — used for both summary cards and table
+    const [shifts, creditSales] = await Promise.all([
+        prisma.shift.findMany({
+            where: { ...tenantBranchWhere, ...dateWhere, ...userWhere },
+            include: { user: { select: { name: true, email: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: ITEMS_PER_PAGE,
+            skip: offset,
+        }),
+        prisma.sale.findMany({
+            where: {
+                ...tenantBranchWhere,   // scoped to tenant
+                ...dateWhere,
+                payment: { method: 'CREDIT' },
+            },
+            select: { userId: true, total: true, createdAt: true },
+        }),
+    ]);
 
     return (
         <div className="glass-card w-full p-6">
@@ -125,44 +120,44 @@ export default async function Page({
                 هذه الشاشة مخصصة للمحاسب ومدير الفرع لمراجعة إقفال كل وردية (Z-Report) ومعرفة مقدار المبالغ المستلمة من الكاشير مقارنة بالمبيعات الفعلية، لاكتشاف أي عجز أو فائض بالمحاسبة.
             </p>
 
-            <div className="mt-6 flex items-center justify-between gap-2 md:mt-8">
-                <form method="GET" className="flex w-full md:w-2/3 gap-4">
-                    <div className="flex-1 relative">
-                        <input
-                            type="text"
-                            name="query"
-                            defaultValue={query}
-                            placeholder="🔍 ابحث باسم الموظف..."
-                            className="peer block w-full rounded-md border border-border py-[9px] px-4 text-sm outline-2 placeholder:text-muted-foreground"
-                        />
-                    </div>
-                    <div className="w-48">
-                        <select
-                            name="date"
-                            defaultValue={date}
-                            className="peer block w-full rounded-md border border-border py-[9px] px-2 text-sm outline-2 placeholder:text-muted-foreground bg-card"
-                        >
-                            <option value="today">اليوم</option>
-                            <option value="week">آخر 7 أيام</option>
-                            <option value="month">هذا الشهر</option>
-                            <option value="all">كل الأوقات</option>
-                        </select>
-                    </div>
-                    <button type="submit" className="rounded-md bg-primary px-6 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-                        تطبيق
+            {/* Search */}
+            <div className="mt-6 flex items-center gap-2 md:mt-8">
+                <form method="GET" className="flex w-full md:w-1/2 gap-3">
+                    {from && <input type="hidden" name="from" value={from} />}
+                    {to && <input type="hidden" name="to" value={to} />}
+                    <input
+                        type="text"
+                        name="query"
+                        defaultValue={query}
+                        placeholder="🔍 ابحث باسم الموظف..."
+                        className="peer block w-full rounded-md border border-border py-[9px] px-4 text-sm outline-2 placeholder:text-muted-foreground"
+                    />
+                    <button type="submit" className="rounded-md bg-primary px-6 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary">
+                        بحث
                     </button>
                 </form>
             </div>
 
-            <div className="mt-8">
-                <Suspense fallback={<div>جاري حساب ملخص الورديات...</div>}>
-                    <ShiftSummaryCards query={query} date={date} tenantBranchWhere={tenantBranchWhere} />
-                </Suspense>
+            {/* Date Range Filter */}
+            <div className="mt-4">
+                <DateRangeFilter
+                    baseUrl="/dashboard/reports/shifts"
+                    currentFrom={from}
+                    currentTo={to}
+                    extraParams={query ? { query } : undefined}
+                    allowedPresets={["today", "yesterday", "last7", "custom"]}
+                />
             </div>
 
+            {/* Summary Cards — no async, data already fetched */}
+            <div className="mt-6">
+                <ShiftSummaryCards shifts={shifts} />
+            </div>
+
+            {/* Table */}
             <div className="mt-4">
                 <Suspense fallback={<div>جاري تحميل سجل الورديات...</div>}>
-                    <ShiftsTable query={query} currentPage={currentPage} date={date} tenantBranchWhere={tenantBranchWhere} />
+                    <ShiftsTable shifts={shifts} creditSales={creditSales} />
                 </Suspense>
             </div>
         </div>

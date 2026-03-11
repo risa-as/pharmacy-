@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
 
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import bcrypt from 'bcrypt';
+import { SignJWT } from 'jose';
 
 export async function POST(request: Request) {
     try {
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
 
         const user = await prisma.user.findUnique({
             where: { email },
+            include: { branch: { select: { organizationId: true } } },
         });
 
         if (!user) {
@@ -31,7 +32,6 @@ export async function POST(request: Request) {
         const passwordMatch = await bcrypt.compare(password, user.password);
 
         if (!passwordMatch) {
-            // Check for hardcoded fallback if specific env (optional, copying auth.ts logic if needed)
             if (password !== user.password) {
                 return NextResponse.json(
                     { message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' },
@@ -40,11 +40,21 @@ export async function POST(request: Request) {
             }
         }
 
-        // Generate a simple token (mock for now, or use a library if verified)
-        // Since we don't have JWT secret setup visible, we'll return a basic token
-        const token = Buffer.from(`${user.email}:${Date.now()}`).toString('base64');
+        const organizationId = user.branch?.organizationId ?? null;
 
-        // Return user data matching the interface expected by mobile app
+        const secret = new TextEncoder().encode(process.env.AUTH_SECRET || 'super-secret-key-123');
+        const token = await new SignJWT({
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+            branchId: user.branchId ?? null,
+            organizationId,
+        })
+            .setProtectedHeader({ alg: 'HS256' })
+            .setIssuedAt()
+            .setExpirationTime('30d')
+            .sign(secret);
+
         return NextResponse.json({
             token,
             user: {

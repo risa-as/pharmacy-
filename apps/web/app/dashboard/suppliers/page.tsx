@@ -15,12 +15,11 @@ async function getSuppliers(organizationId?: string) {
         orderBy: { createdAt: 'desc' },
         include: {
             _count: { select: { purchases: true } },
-            purchases: { select: { total: true, paidAmount: true } },
         }
     });
     return suppliers.map((s: any) => ({
         ...s,
-        computedBalance: s.purchases.reduce((acc: number, p: any) => acc + (p.total - p.paidAmount), 0),
+        computedBalance: s.balance ?? 0,
     }));
 }
 

@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
             orderBy: { name: 'asc' },
         });
 
-        return NextResponse.json(branches);
+        const response = NextResponse.json(branches);
+        response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+        return response;
     } catch (error) {
         console.error('API Branches Error:', error);
         return NextResponse.json(

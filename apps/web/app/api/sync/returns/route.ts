@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from '@/auth';
+import { validateSyncUser } from '@/app/lib/sync-auth';
 import { z } from "zod";
 
 
@@ -28,10 +28,8 @@ const SyncPayloadSchema = z.object({
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
 
         const body = await req.json();
         const result = SyncPayloadSchema.safeParse(body);
@@ -43,9 +41,9 @@ export async function POST(req: NextRequest) {
         const { branchId, returns } = result.data;
 
         // Validate branchId belongs to the authenticated user
-        const userRole = (session.user as any).role;
-        const userBranchId = (session.user as any).branchId;
-        const userOrgId = (session.user as any).organizationId;
+        const userRole = syncUser.role;
+        const userBranchId = syncUser.branchId;
+        const userOrgId = syncUser.organizationId;
         if (userRole !== 'SUPER_ADMIN') {
             const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
             if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });

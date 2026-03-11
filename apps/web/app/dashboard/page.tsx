@@ -27,10 +27,27 @@ async function getDashboardData(isAdmin: boolean, organizationId?: string, branc
     ]);
 
     if (!isAdmin) {
+        const branchWhere = branchId ? { branchId } : {};
+        const [todaySales, todayReturns] = await Promise.all([
+            prisma.sale.aggregate({
+                _sum: { total: true }, _count: true,
+                where: { createdAt: { gte: todayStart }, ...branchWhere }
+            }),
+            prisma.saleReturn.aggregate({
+                _sum: { total: true }, _count: true,
+                where: { createdAt: { gte: todayStart }, ...branchWhere }
+            }),
+        ]);
         return {
             drugCount, inventoryCount, alerts, isAdmin: false as const,
             branchCount: 0, userCount: 0,
-            today: { revenue: 0, salesCount: 0, expenses: 0, returns: 0, returnsCount: 0 },
+            today: {
+                revenue: todaySales._sum.total || 0,
+                salesCount: todaySales._count,
+                expenses: 0,
+                returns: todayReturns._sum.total || 0,
+                returnsCount: todayReturns._count,
+            },
             month: { revenue: 0, salesCount: 0, expenses: 0 },
             recentSales: [] as any[],
             topDrugs: [] as any[],
@@ -415,6 +432,42 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                             </div>
                         </Link>
                     )}
+
+                    {/* Shift Summary */}
+                    <div className="relative rounded-2xl overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-info/10 to-success/10 pointer-events-none" />
+                        <div className="relative p-4">
+                            <h2 className="font-bold text-foreground mb-3 flex items-center gap-2">
+                                <BarChart3 className="w-4 h-4 text-primary" /> ملخص الوردية
+                            </h2>
+                            <div className="grid sm:grid-cols-3 gap-3">
+                                <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <ShoppingCart className="w-4 h-4 text-primary" />
+                                        <span className="text-xs text-muted-foreground">إجمالي اليوم</span>
+                                    </div>
+                                    <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(data.today.revenue)} د.ع</div>
+                                    <p className="text-xs text-muted-foreground mt-1">{data.today.salesCount} فاتورة</p>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Undo2 className="w-4 h-4 text-warning" />
+                                        <span className="text-xs text-muted-foreground">المرتجعات</span>
+                                    </div>
+                                    <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(data.today.returns)} د.ع</div>
+                                    <p className="text-xs text-muted-foreground mt-1">{data.today.returnsCount} مرتجع</p>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <TrendingUp className="w-4 h-4 text-success" />
+                                        <span className="text-xs text-muted-foreground">الصافي</span>
+                                    </div>
+                                    <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(data.today.revenue - data.today.returns)} د.ع</div>
+                                    <p className="text-xs text-muted-foreground mt-1">بعد المرتجعات</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     {/* Info Cards */}
                     <div className="grid sm:grid-cols-2 gap-4">

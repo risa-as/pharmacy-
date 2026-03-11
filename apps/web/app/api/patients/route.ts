@@ -14,15 +14,25 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url);
         const query = searchParams.get('query');
+        const { user } = tenantCtx;
 
-        const where: any = { ...tenantBranchWhere };
+        // Build branch filter: include branch-specific patients AND null-branch patients
+        // (null-branch patients are synced from desktop without explicit branch assignment)
+        const branchFilter = user.branchId
+            ? { OR: [{ branchId: user.branchId }, { branchId: null }] }
+            : tenantBranchWhere;
 
-        if (query) {
-            where.OR = [
-                { name: { contains: query, mode: 'insensitive' } },
-                { phone: { contains: query } },
-            ];
-        }
+        const where: any = query
+            ? {
+                AND: [
+                    branchFilter,
+                    { OR: [
+                        { name: { contains: query, mode: 'insensitive' } },
+                        { phone: { contains: query } },
+                    ]},
+                ],
+            }
+            : branchFilter;
 
 
 

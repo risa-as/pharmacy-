@@ -17,67 +17,62 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId');
 
-        const whereClause: any = { ...tenantBranchWhere };
-        if (branchId) {
-            whereClause.branchId = branchId;
-        }
+        const whereClause: any = {
+            ...tenantBranchWhere,
+            minStock: { gt: 0 }, // Only items with minStock configured — skip unconfigured stock
+            ...(branchId ? { branchId } : {}),
+        };
 
-        // Fetch all inventory items with their batches and drug details
-        const inventoryItems = await prisma.inventory.findMany({
-            where: whereClause,
-            include: {
-                drug: {
-                    select: {
-                        tradeName: true,
-                        scientificName: true,
-                        barcode: true
-                    }
+        // Run inventory + pending purchases in parallel
+        const [inventoryItems, pendingPurchases] = await Promise.all([
+            // Only fetch items that COULD be low-stock (have minStock configured)
+            prisma.inventory.findMany({
+                where: whereClause,
+                select: {
+                    id: true,
+                    drugId: true,
+                    branchId: true,
+                    minStock: true,
+                    maxStock: true,
+                    drug: { select: { tradeName: true, scientificName: true, barcode: true } },
+                    branch: { select: { name: true } },
+                    batches: { select: { quantity: true } },
                 },
-                branch: {
-                    select: { name: true }
-                },
-                batches: {
-                    select: { quantity: true }
-                }
-            }
-        });
+            }),
+            prisma.purchase.findMany({
+                where: { status: 'PENDING', ...tenantBranchWhere, ...(branchId ? { branchId } : {}) },
+                select: { items: { select: { drugId: true } } },
+            }),
+        ]);
 
-        // Fetch pending purchases to exclude items already ordered
-        const pendingPurchases = await prisma.purchase.findMany({
-            where: { status: 'PENDING', ...tenantBranchWhere },
-            include: { items: true }
-        });
+        const pendingDrugIds = new Set<string>(
+            pendingPurchases.flatMap((p: any) => p.items.map((i: any) => i.drugId))
+        );
 
-        const pendingDrugIds = new Set<string>();
-        pendingPurchases.forEach((p: any) => {
-            p.items.forEach((i: any) => pendingDrugIds.add(i.drugId));
-        });
+        // Pre-compute which drugs actually need reorder (stock < minStock, no pending order)
+        const lowStockItems = inventoryItems
+            .map((item: any) => ({
+                ...item,
+                currentQuantity: item.batches.reduce((s: number, b: any) => s + b.quantity, 0),
+            }))
+            .filter((item: any) =>
+                !pendingDrugIds.has(item.drugId) &&
+                item.currentQuantity < item.minStock
+            );
 
-        // Fetch sales data for the last VELOCITY_WINDOW_DAYS to calculate sales velocity
+        if (lowStockItems.length === 0) return NextResponse.json([]);
+
+        // Only fetch sales velocity for the drugs that actually need reorder
+        const neededDrugIds = lowStockItems.map((i: any) => i.drugId);
         const velocityStart = new Date();
         velocityStart.setDate(velocityStart.getDate() - VELOCITY_WINDOW_DAYS);
 
         const recentSaleItems = await prisma.saleItem.findMany({
             where: {
-                sale: {
-                    createdAt: { gte: velocityStart },
-                    ...(branchId ? {
-                        items: {
-                            some: {
-                                drug: {
-                                    inventories: {
-                                        some: { branchId }
-                                    }
-                                }
-                            }
-                        }
-                    } : {})
-                }
+                drugId: { in: neededDrugIds }, // ← only drugs we care about
+                sale: { createdAt: { gte: velocityStart } },
             },
-            select: {
-                drugId: true,
-                quantity: true
-            }
+            select: { drugId: true, quantity: true },
         });
 
         // Calculate total sold per drug in the window
@@ -86,34 +81,22 @@ export async function GET(req: Request) {
             soldByDrug.set(item.drugId, (soldByDrug.get(item.drugId) || 0) + item.quantity);
         }
 
-        const enrichedItems = inventoryItems.map((item: any) => {
-            const totalQuantity = item.batches.reduce((sum: number, batch: any) => sum + batch.quantity, 0);
-            const totalSold = soldByDrug.get(item.drugId) || 0;
-            const averageDailySales = totalSold / VELOCITY_WINDOW_DAYS;
-            const daysUntilStockout = averageDailySales > 0
-                ? Math.round(totalQuantity / averageDailySales)
-                : totalQuantity > 0 ? 999 : 0;
-            const suggestedReorderQuantity = averageDailySales > 0
-                ? Math.ceil(averageDailySales * (LEAD_TIME_DAYS + SAFETY_STOCK_DAYS))
-                : item.maxStock - totalQuantity;
-
-            return {
-                ...item,
-                currentQuantity: totalQuantity,
-                averageDailySales: Math.round(averageDailySales * 100) / 100,
-                daysUntilStockout,
-                suggestedReorderQuantity: Math.max(0, suggestedReorderQuantity),
-                totalSoldLast30Days: totalSold
-            };
-        });
-
-        // Filter: low stock OR selling fast (will run out within lead time + safety)
-        const needsReorder = enrichedItems
-            .filter((item: any) =>
-                !pendingDrugIds.has(item.drugId) &&
-                (item.currentQuantity <= item.minStock || item.daysUntilStockout <= (LEAD_TIME_DAYS + SAFETY_STOCK_DAYS))
-            )
-            .sort((a: any, b: any) => a.daysUntilStockout - b.daysUntilStockout);
+        // Enrich the already-filtered low-stock items with sales velocity data
+        const needsReorder = lowStockItems
+            .map((item: any) => {
+                const totalSold = soldByDrug.get(item.drugId) || 0;
+                const averageDailySales = totalSold / VELOCITY_WINDOW_DAYS;
+                const suggestedReorderQuantity = averageDailySales > 0
+                    ? Math.ceil(averageDailySales * (LEAD_TIME_DAYS + SAFETY_STOCK_DAYS))
+                    : Math.max(0, item.maxStock - item.currentQuantity);
+                return {
+                    ...item,
+                    averageDailySales: Math.round(averageDailySales * 100) / 100,
+                    suggestedReorderQuantity: Math.max(1, suggestedReorderQuantity),
+                    totalSoldLast30Days: totalSold,
+                };
+            })
+            .sort((a: any, b: any) => a.currentQuantity - b.currentQuantity);
 
         return NextResponse.json(needsReorder);
     } catch (error) {

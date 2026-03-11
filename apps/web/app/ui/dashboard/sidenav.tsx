@@ -52,7 +52,7 @@ interface NavLink {
   name: string;
   href: string;
   icon: any;
-  subLinks?: { name: string; href: string }[];
+  subLinks?: { name: string; href: string; activeFor?: string[]; excludeFor?: string[] }[];
 }
 
 interface NavSection {
@@ -126,7 +126,7 @@ const sections: NavSection[] = [
           // RESTORED: /dashboard/inventory was previously missing from the sidebar
           { name: "المخزون", href: "/dashboard/inventory" },
           // Inventory sub-tools (Stocktakes, etc) → accessible inside the Inventory page
-          { name: "المبيعات", href: "/dashboard/sales" },
+          { name: "المبيعات", href: "/dashboard/sales", activeFor: ["/dashboard/invoices", "/dashboard/returns", "/dashboard/payments"] },
           // Invoices, Returns, Payments → tabs inside Sales page
           { name: "نقطة البيع (مؤقت)", href: "/dashboard/pos-temp" },
           { name: "دفتر الديون", href: "/dashboard/debts" },
@@ -142,10 +142,10 @@ const sections: NavSection[] = [
         href: "#",
         icon: Users,
         subLinks: [
-          { name: "المرضى", href: "/dashboard/patients" },
+          { name: "المرضى", href: "/dashboard/patients", activeFor: ["/dashboard/loyalty"] },
           // Insurance, Loyalty → tabs inside Patients page
           { name: "الموردون", href: "/dashboard/suppliers" },
-          { name: "المشتريات", href: "/dashboard/purchases" },
+          { name: "المشتريات", href: "/dashboard/purchases", excludeFor: ["/dashboard/purchases/smart-order"] },
           // CTO Override: Smart Orders stays in main nav (other supply sub-pages via row-clicks)
           { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order" },
         ],
@@ -364,8 +364,10 @@ export default function SideNav({
                   pathname === link.href ||
                   (link.href !== "#" && pathname.startsWith(link.href + "/"));
                 const isChildActive =
-                  link.subLinks?.some((sub: any) => pathname.startsWith(sub.href)) ||
-                  false;
+                  link.subLinks?.some((sub: any) =>
+                    pathname.startsWith(sub.href) ||
+                    sub.activeFor?.some((p: string) => pathname.startsWith(p))
+                  ) || false;
                 const isActive = isExactActive || isChildActive;
                 const isExpanded = openAccordions.includes(link.name);
 
@@ -411,9 +413,12 @@ export default function SideNav({
                         <div className="overflow-hidden">
                           <div className="flex flex-col gap-1 pr-9 pl-3 pt-1">
                             {link.subLinks.map((subLink: any) => {
-                              const isSubActive =
+                              const isExcluded = subLink.excludeFor?.some((p: string) => pathname.startsWith(p));
+                              const isSubActive = !isExcluded && (
                                 pathname === subLink.href ||
-                                pathname.startsWith(subLink.href + "/");
+                                pathname.startsWith(subLink.href + "/") ||
+                                subLink.activeFor?.some((p: string) => pathname.startsWith(p))
+                              );
                               return (
                                 <Link
                                   key={subLink.name}

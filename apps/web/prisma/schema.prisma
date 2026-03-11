@@ -36,6 +36,7 @@ model Branch {
   id                  String               @id @default(uuid())
   name                String
   organizationId      String
+  loyaltyEnabled      Boolean              @default(true)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   organization        Organization         @relation(fields: [organizationId], references: [id])
@@ -128,6 +129,10 @@ model Transaction {
   updatedAt     DateTime @updatedAt
 
   safe Safe @relation(fields: [safeId], references: [id])
+
+  @@index([safeId])
+  @@index([safeId, createdAt])
+  @@index([referenceId])
 }
 
 model GlobalDrug {
@@ -173,6 +178,8 @@ model Inventory {
   branch    Branch     @relation(fields: [branchId], references: [id])
 
   @@unique([drugId, branchId])
+  @@index([branchId])
+  @@index([branchId, minStock])
 }
 
 model Batch {
@@ -188,6 +195,10 @@ model Batch {
   inventory      Inventory       @relation(fields: [inventoryId], references: [id])
   supplier       Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   stocktakeItems StocktakeItem[]
+
+  @@index([inventoryId])
+  @@index([inventoryId, expiryDate])
+  @@index([expiryDate, quantity])
 }
 
 model Expense {
@@ -202,6 +213,9 @@ model Expense {
   updatedAt   DateTime @updatedAt
   branch      Branch   @relation(fields: [branchId], references: [id])
   safe        Safe?    @relation(fields: [safeId], references: [id])
+
+  @@index([branchId])
+  @@index([branchId, date])
 }
 
 model SyncActionLog {
@@ -234,6 +248,10 @@ model Sale {
   returns      SaleReturn[]
   userId       String? // Employee who made the sale
   user         User?         @relation(fields: [userId], references: [id])
+
+  @@index([branchId])
+  @@index([createdAt])
+  @@index([branchId, createdAt])
 }
 
 // ... (Rest of models)
@@ -257,6 +275,9 @@ model SaleItem {
   cost     Float      @default(0)
   sale     Sale       @relation(fields: [saleId], references: [id])
   drug     GlobalDrug @relation(fields: [drugId], references: [id])
+
+  @@index([saleId])
+  @@index([drugId])
 }
 
 model SaleReturn {
@@ -273,6 +294,9 @@ model SaleReturn {
   branch Branch           @relation(fields: [branchId], references: [id])
   safe   Safe?            @relation(fields: [safeId], references: [id])
   items  SaleReturnItem[]
+
+  @@index([branchId])
+  @@index([branchId, createdAt])
 }
 
 model SaleReturnItem {
@@ -318,6 +342,10 @@ model Purchase {
   branch        Branch         @relation(fields: [branchId], references: [id])
   supplier      Supplier       @relation(fields: [supplierId], references: [id])
   items         PurchaseItem[]
+
+  @@index([branchId])
+  @@index([branchId, status])
+  @@index([supplierId])
 }
 
 model PurchaseItem {
@@ -371,6 +399,9 @@ model Patient {
   branch            Branch?           @relation(fields: [branchId], references: [id])
 
   @@unique([phone, branchId])
+  @@index([branchId])
+  @@index([branchId, balance])
+  @@index([updatedAt])
 }
 
 // الوصفات الطبية
@@ -529,6 +560,9 @@ model LoyaltyTransaction {
   saleId      String?
   createdAt   DateTime       @default(now())
   account     LoyaltyAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@index([createdAt])
 }
 
 model Backup {
@@ -549,6 +583,8 @@ model DebtPayment {
   note      String?
   createdAt DateTime      @default(now())
   sale      Sale          @relation(fields: [saleId], references: [id])
+
+  @@index([saleId])
 }
 
 // ==================== التفاعلات الدوائية ====================
@@ -644,6 +680,8 @@ model AuditLog {
   @@index([userId])
   @@index([entity])
   @@index([createdAt])
+  @@index([branchId])
+  @@index([branchId, createdAt])
 }
 
 // =======================

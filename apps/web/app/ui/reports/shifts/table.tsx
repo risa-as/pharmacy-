@@ -1,66 +1,19 @@
-import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
-
-export default async function ShiftsTable({
-    query,
-    currentPage,
-    date,
-    tenantBranchWhere,
+export default function ShiftsTable({
+    shifts,
+    creditSales,
 }: {
-    query: string;
-    currentPage: number;
-    date: string;
-    tenantBranchWhere: any;
+    shifts: any[];
+    creditSales: any[];
 }) {
-    // Pagination logic
-    const ITEMS_PER_PAGE = 20;
-    const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-
-    // Date Logic
-    const now = new Date();
-    let startDate = new Date(0);
-    let endDate = new Date();
-
-    if (date === 'today') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    } else if (date === 'week') {
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
-    } else if (date === 'month') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
-
-    const shifts = await prisma.shift.findMany({
-        where: {
-            ...tenantBranchWhere,
-            createdAt: { gte: startDate, lte: endDate },
-            user: {
-                name: { contains: query, mode: 'insensitive' }
-            }
-        },
-        include: {
-            user: {
-                select: { name: true, email: true }
-            }
-        },
-        orderBy: {
-            createdAt: 'desc'
-        },
-        take: ITEMS_PER_PAGE,
-        skip: offset
-    });
-
     return (
         <div className="mt-6 flow-root">
             <div className="overflow-x-auto">
                 <div className="rounded-lg bg-transparent p-2 md:pt-0 border border-border shadow-sm overflow-hidden">
                     <div className="md:hidden">
-                        {/* Mobile View */}
                         {shifts?.map((shift: any) => {
                             const expected = shift.expectedCash || 0;
                             const actual = shift.actualCash || 0;
                             const variance = actual - expected;
-
                             return (
                                 <div key={shift.id} className="mb-2 w-full rounded-md bg-card p-4 border border-border">
                                     <div className="flex items-center justify-between border-b border-border pb-4">
@@ -105,6 +58,7 @@ export default async function ShiftsTable({
                                 <th scope="col" className="px-3 py-3 font-normal text-muted-foreground">ميعاد الجرد (الإغلاق)</th>
                                 <th scope="col" className="px-3 py-3 font-normal text-muted-foreground">رصيد افتتاحي</th>
                                 <th scope="col" className="px-3 py-3 font-normal text-muted-foreground">متوقع بالدرج</th>
+                                <th scope="col" className="px-3 py-3 font-normal text-destructive">مبيعات آجلة</th>
                                 <th scope="col" className="px-3 py-3 font-bold text-foreground bg-primary/5">الفعلي والمستلم</th>
                                 <th scope="col" className="px-3 py-3 font-bold text-center">الفرق (عجز/زيادة)</th>
                                 <th scope="col" className="px-3 py-3 font-normal text-muted-foreground text-center">حالة الوردية</th>
@@ -115,6 +69,14 @@ export default async function ShiftsTable({
                                 const expected = shift.expectedCash || 0;
                                 const actual = shift.actualCash || 0;
                                 const variance = actual - expected;
+                                const shiftEnd = shift.endTime ? new Date(shift.endTime) : new Date();
+                                const shiftStart = new Date(shift.startTime);
+                                const shiftCredit = creditSales.filter((s: any) =>
+                                    s.userId === shift.userId &&
+                                    new Date(s.createdAt) >= shiftStart &&
+                                    new Date(s.createdAt) <= shiftEnd
+                                );
+                                const creditTotal = shiftCredit.reduce((sum: number, s: any) => sum + s.total, 0);
 
                                 return (
                                     <tr key={shift.id} className="w-full border-b border-border py-3 text-sm last-of-type:border-none hover:bg-muted/50 transition-colors">
@@ -124,12 +86,10 @@ export default async function ShiftsTable({
                                                 <span className="text-xs text-muted-foreground font-mono">#{shift.id.slice(0, 6)}</span>
                                             </div>
                                         </td>
-
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" dir="ltr">
                                             {new Date(shift.startTime).toLocaleTimeString('ar-IQ')} <br />
                                             <span className="text-xs">{new Date(shift.startTime).toLocaleDateString('ar-IQ')}</span>
                                         </td>
-
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" dir="ltr">
                                             {shift.endTime ? (
                                                 <>
@@ -138,19 +98,24 @@ export default async function ShiftsTable({
                                                 </>
                                             ) : '-'}
                                         </td>
-
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground font-mono" dir="ltr">
                                             {shift.startingCash.toLocaleString()}
                                         </td>
-
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground font-mono" dir="ltr">
                                             {expected.toLocaleString()}
                                         </td>
-
+                                        <td className="whitespace-nowrap px-3 py-3 font-mono" dir="ltr">
+                                            {creditTotal > 0 ? (
+                                                <span className="text-destructive font-bold">
+                                                    {creditTotal.toLocaleString()} <span className="text-xs font-normal">({shiftCredit.length})</span>
+                                                </span>
+                                            ) : (
+                                                <span className="text-muted-foreground/40">-</span>
+                                            )}
+                                        </td>
                                         <td className="whitespace-nowrap px-3 py-3 font-bold text-foreground bg-primary/5 font-mono" dir="ltr">
                                             {shift.status === 'CLOSED' ? actual.toLocaleString() : '-'}
                                         </td>
-
                                         <td className="whitespace-nowrap px-3 py-3 text-center font-bold font-mono" dir="ltr">
                                             {shift.status === 'CLOSED' ? (
                                                 <span className={variance < 0 ? 'text-destructive px-2 py-1 bg-destructive/10 rounded' : variance > 0 ? 'text-success px-2 py-1 bg-success/10 rounded' : 'text-muted-foreground'}>
@@ -160,7 +125,6 @@ export default async function ShiftsTable({
                                                 <span className="text-muted-foreground/40">-</span>
                                             )}
                                         </td>
-
                                         <td className="whitespace-nowrap px-3 py-3 text-center">
                                             {shift.status === 'CLOSED' ? (
                                                 <span className="inline-flex items-center justify-center rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success ring-1 ring-inset ring-success/20 w-16">
@@ -178,7 +142,7 @@ export default async function ShiftsTable({
 
                             {shifts.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="py-10 text-center text-muted-foreground">
+                                    <td colSpan={9} className="py-10 text-center text-muted-foreground">
                                         لا توجد ورديات مطابقة لعملية البحث
                                     </td>
                                 </tr>

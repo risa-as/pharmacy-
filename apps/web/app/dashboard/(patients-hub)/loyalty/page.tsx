@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Gift, Award, Users, TrendingUp, Star, Crown, Medal } from "lucide-react";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import BranchLoyaltyToggle from '@/app/ui/loyalty/branch-loyalty-toggle';
 
 export default async function LoyaltyDashboardPage() {
     const tenantCtx = await getTenantContext();
@@ -54,6 +55,13 @@ export default async function LoyaltyDashboardPage() {
     const pointsPerDinar = (settings as any).loyaltyPointsPerDinar ?? 0.01;
     const redemptionValue = (settings as any).loyaltyRedemptionValue ?? 2.5;
     const minRedemption = (settings as any).loyaltyMinRedemption ?? 500;
+
+    // 3. Get branches for per-branch loyalty toggle
+    const branches = organizationId ? await prisma.branch.findMany({
+        where: { organizationId },
+        select: { id: true, name: true, loyaltyEnabled: true },
+        orderBy: { name: 'asc' },
+    }) : [];
 
     return (
         <div className="glass-card w-full p-6 space-y-6" dir="rtl">
@@ -112,6 +120,11 @@ export default async function LoyaltyDashboardPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Per-Branch Loyalty Toggle */}
+            {branches.length > 1 && (
+                <BranchLoyaltyToggle initialBranches={branches} orgLoyaltyEnabled={loyaltyEnabled} />
+            )}
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

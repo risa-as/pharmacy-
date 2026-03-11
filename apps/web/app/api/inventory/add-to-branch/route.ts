@@ -43,7 +43,7 @@ export async function POST(req: Request) {
             }
         }
 
-        const { id, drugId, branchId, price, cost, minStock, maxStock, quantity, expiryDate } = body;
+        const { id, drugId, branchId, price, cost, minStock, maxStock, quantity, expiryDate, supplierId } = body;
 
         if (!drugId || !branchId) {
             return NextResponse.json(
@@ -107,6 +107,7 @@ export async function POST(req: Request) {
                             : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
                         batchNumber,
                         costPrice: parsedCost,
+                        supplierId: supplierId ?? null,
                     }
                 });
             }

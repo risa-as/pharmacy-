@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Upload, FileSpreadsheet, CheckCircle, AlertTriangle, Loader2, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface ImportRow {
     name: string;
@@ -73,6 +74,44 @@ function parseCSV(text: string): ImportRow[] {
     }).filter((r: any) => r.name);
 }
 
+function parseExcel(buffer: ArrayBuffer): ImportRow[] {
+    const wb = XLSX.read(buffer, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    if (json.length === 0) return [];
+
+    // Normalize keys to lowercase
+    return json.map((raw) => {
+        const row: Record<string, string> = {};
+        for (const k of Object.keys(raw)) {
+            row[k.toLowerCase().trim()] = String(raw[k]).trim();
+        }
+
+        const get = (...keys: string[]) => {
+            for (const k of keys) {
+                for (const rk of Object.keys(row)) {
+                    if (rk.includes(k)) return row[rk];
+                }
+            }
+            return "";
+        };
+
+        const name = get("name", "اسم الدواء", "الاسم", "اسم", "trade_name", "tradename", "drug");
+        if (!name) return null;
+
+        return {
+            name,
+            barcode: get("barcode", "باركود", "الباركود", "code") || undefined,
+            price: parseFloat(get("price", "السعر", "سعر البيع", "sell", "سعر")) || 0,
+            cost: parseFloat(get("cost", "سعر الشراء", "التكلفة", "شراء", "purchase")) || 0,
+            quantity: parseInt(get("quantity", "الكمية", "كمية", "qty", "stock")) || 0,
+            expiryDate: get("expiry", "انتهاء", "الصلاحية", "تاريخ الانتهاء", "expiry_date") || undefined,
+            scientificName: get("scientific", "الاسم العلمي", "علمي") || undefined,
+            manufacturer: get("manufacturer", "الشركة", "المصنع", "شركة") || undefined,
+        } as ImportRow;
+    }).filter(Boolean) as ImportRow[];
+}
+
 function formatIQD(n: number) {
     return new Intl.NumberFormat("ar-IQ").format(Math.round(n)) + " د.ع";
 }
@@ -99,13 +138,23 @@ export default function DrugImportPage() {
         setFileName(file.name);
         setResult(null);
 
+        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
         const reader = new FileReader();
-        reader.onload = (ev) => {
-            const text = ev.target?.result as string;
-            const parsed = parseCSV(text);
-            setRows(parsed);
-        };
-        reader.readAsText(file, "utf-8");
+
+        if (isExcel) {
+            reader.onload = (ev) => {
+                const parsed = parseExcel(ev.target?.result as ArrayBuffer);
+                setRows(parsed);
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            reader.onload = (ev) => {
+                const text = ev.target?.result as string;
+                const parsed = parseCSV(text);
+                setRows(parsed);
+            };
+            reader.readAsText(file, "utf-8");
+        }
     };
 
     const handleImport = async () => {
@@ -127,14 +176,15 @@ export default function DrugImportPage() {
     };
 
     const downloadTemplate = () => {
-        const csv = "\uFEFFاسم الدواء,الباركود,سعر البيع,سعر الشراء,الكمية,تاريخ الانتهاء,الاسم العلمي,الشركة\nأموكسيسيلين 500,6281001210019,5000,3500,100,2026-06-30,Amoxicillin,الحكمة\nباراسيتامول 500,6281001210020,2000,1200,200,2027-01-15,Paracetamol,سامراء";
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "import_template.csv";
-        a.click();
-        URL.revokeObjectURL(url);
+        const data = [
+            ["اسم الدواء", "الباركود", "سعر البيع", "سعر الشراء", "الكمية", "تاريخ الانتهاء", "الاسم العلمي", "الشركة"],
+            ["أموكسيسيلين 500", "6281001210019", 5000, 3500, 100, "2026-06-30", "Amoxicillin", "الحكمة"],
+            ["باراسيتامول 500", "6281001210020", 2000, 1200, 200, "2027-01-15", "Paracetamol", "سامراء"],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "أدوية");
+        XLSX.writeFile(wb, "import_template.xlsx");
     };
 
     return (
@@ -149,7 +199,7 @@ export default function DrugImportPage() {
                     className="flex items-center gap-2 px-4 py-2 bg-success/10 text-success rounded-xl text-sm font-bold hover:bg-success/10 transition-colors border border-green-200"
                 >
                     <Download className="w-4 h-4" />
-                    تحميل نموذج CSV
+                    تحميل نموذج Excel
                 </button>
             </div>
 
@@ -160,15 +210,15 @@ export default function DrugImportPage() {
             >
                 <Upload className="w-12 h-12 mx-auto text-muted-foreground group-hover:text-primary transition-colors mb-4" />
                 <p className="text-lg font-medium text-muted-foreground">
-                    {fileName || "اسحب ملف CSV هنا أو انقر للاختيار"}
+                    {fileName || "اسحب ملف CSV أو Excel هنا أو انقر للاختيار"}
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
-                    يدعم ملفات CSV فقط. استخدم النموذج أعلاه كمرجع
+                    يدعم ملفات CSV و Excel (.xlsx, .xls). استخدم النموذج أعلاه كمرجع
                 </p>
                 <input
                     ref={fileRef}
                     type="file"
-                    accept=".csv,.txt"
+                    accept=".csv,.txt,.xlsx,.xls"
                     className="hidden"
                     onChange={handleFile}
                 />
