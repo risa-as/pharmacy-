@@ -47,7 +47,7 @@ export async function getLowStockInventory(branchId?: string) {
             branchId: inv.branchId,
             branchName: inv.branch.name
         };
-    }).filter((item: any) => item.currentStock <= item.minStock);
+    }).filter((item: any) => item.currentStock < item.minStock);
 
     // 4. Exclude items already in PENDING purchases
     const pendingFinalWhere = branchId ? { ...tenantBranchWhere, branchId, status: 'PENDING' } : { ...tenantBranchWhere, status: 'PENDING' };
@@ -131,8 +131,11 @@ export async function getPurchases(branchId?: string) {
 }
 
 export async function getPurchaseDetails(id: string) {
-    const purchase = await prisma.purchase.findUnique({
-        where: { id },
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+
+    const purchase = await prisma.purchase.findFirst({
+        where: { id, branch: { organizationId: tenantCtx.organizationId || undefined } },
         include: {
             supplier: true,
             items: true
@@ -159,9 +162,11 @@ export async function getPurchaseDetails(id: string) {
 }
 
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
-    // 1. Get Purchase to verify
-    const purchase = await prisma.purchase.findUnique({
-        where: { id: purchaseId },
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) throw new Error("غير مصرح");
+    // 1. Get Purchase and verify ownership
+    const purchase = await prisma.purchase.findFirst({
+        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
         include: { items: true, supplier: true }
     });
 

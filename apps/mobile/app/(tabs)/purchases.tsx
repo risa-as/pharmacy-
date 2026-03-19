@@ -16,7 +16,7 @@ import { useSyncStatus } from '../../context/SyncContext';
 
 type BadgeVariantType = 'success' | 'warning' | 'danger' | 'info' | 'default';
 type StatusKey = 'COMPLETED' | 'PENDING' | 'CANCELLED' | 'RECEIVED';
-type FilterKey = StatusKey | 'ALL';
+type FilterKey = StatusKey | 'ALL' | 'SUGGESTED';
 
 const STATUS_MAP: Record<string, { label: string; variant: BadgeVariantType; color: (C: ReturnType<typeof Colors>) => string }> = {
     COMPLETED: { label: 'مكتمل',        variant: 'success', color: C => C.success },
@@ -26,7 +26,8 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariantType; col
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [
-    { key: 'ALL',       label: 'الكل' },
+    { key: 'SUGGESTED', label: 'مقترح للطلب' },
+    { key: 'ALL',       label: 'السجل' },
     { key: 'PENDING',   label: 'قيد الانتظار' },
     { key: 'RECEIVED',  label: 'تم الاستلام' },
     { key: 'COMPLETED', label: 'مكتمل' },
@@ -40,20 +41,25 @@ function getStatus(status: string) {
 export default function PurchasesScreen() {
     const router = useRouter();
     const { isDarkMode } = useTheme();
-    const { branchId: authBranchId } = useAuth();
+    const { isAdmin, branchId: authBranchId } = useAuth();
     const { triggerSync } = useSyncStatus();
     const C = Colors(isDarkMode);
 
     const [purchases, setPurchases] = useState<any[]>([]);
+    const [lowStockItems, setLowStockItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedBranch, setSelectedBranch] = useState<string | null>(authBranchId);
-    const [activeFilter, setActiveFilter] = useState<FilterKey>('ALL');
+    const [activeFilter, setActiveFilter] = useState<FilterKey>('SUGGESTED');
 
     const fetchPurchases = useCallback(async () => {
         try {
-            const data = await apiService.getPurchases(selectedBranch ?? undefined);
-            setPurchases(Array.isArray(data) ? data : []);
+            const [purchasesData, lowStockData] = await Promise.all([
+                apiService.getPurchases(selectedBranch ?? undefined),
+                apiService.getLowStockItems(selectedBranch ?? undefined),
+            ]);
+            setPurchases(Array.isArray(purchasesData) ? purchasesData : []);
+            setLowStockItems(Array.isArray(lowStockData) ? lowStockData : []);
         } catch (error) {
             console.error('PurchasesScreen: fetch error', error);
         } finally {
@@ -73,13 +79,58 @@ export default function PurchasesScreen() {
         fetchPurchases();
     }, [fetchPurchases, triggerSync]);
 
-    const filtered = useMemo(() =>
-        activeFilter === 'ALL' ? purchases : purchases.filter(p => p.status === activeFilter),
-        [purchases, activeFilter]
-    );
+    const filtered = useMemo(() => {
+        if (activeFilter === 'SUGGESTED') return [];
+        if (activeFilter === 'ALL') return purchases;
+        return purchases.filter(p => p.status === activeFilter);
+    }, [purchases, activeFilter]);
 
     const pendingCount = useMemo(() => purchases.filter(p => p.status === 'PENDING').length, [purchases]);
     const totalValue   = useMemo(() => purchases.reduce((s, p) => s + (p.totalAmount ?? 0), 0), [purchases]);
+
+    const renderLowStockItem = useCallback(({ item }: { item: any }) => {
+        return (
+            <View style={{
+                backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border,
+                marginBottom: 10, overflow: 'hidden',
+            }}>
+                <View style={{ height: 3, backgroundColor: item.currentStock === 0 ? C.danger : C.warning }} />
+                <View style={{ padding: 14 }}>
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                        <View style={{ flex: 1, paddingLeft: 10 }}>
+                            <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
+                                {item.drugName}
+                            </Text>
+                            <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
+                                {item.branchName}
+                            </Text>
+                        </View>
+                        <Badge
+                            label={item.currentStock === 0 ? 'نفاد تام' : 'نقص مخزون'}
+                            variant={item.currentStock === 0 ? 'danger' : 'warning'}
+                        />
+                    </View>
+                    <View style={{ height: 1, backgroundColor: C.border, marginBottom: 10 }} />
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>المخزون الحالي</Text>
+                            <Text style={{ color: item.currentStock === 0 ? C.danger : C.warning, fontWeight: '800', fontSize: 18 }}>
+                                {item.currentStock}
+                            </Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>الحد الأدنى</Text>
+                            <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 18 }}>{item.minStock}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-start' }}>
+                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>الكمية المقترحة</Text>
+                            <Text style={{ color: C.primary, fontWeight: '800', fontSize: 18 }}>{item.suggestedQty}</Text>
+                        </View>
+                    </View>
+                </View>
+            </View>
+        );
+    }, [C]);
 
     const renderPurchase = useCallback(({ item: purchase }: { item: any }) => {
         const { label, variant, color } = getStatus(purchase.status);
@@ -193,11 +244,13 @@ export default function PurchasesScreen() {
                     </View>
                 </View>
 
-                {/* Branch Selector */}
-                <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} />
+                {/* Branch Selector — admin only */}
+                {isAdmin && (
+                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} />
+                )}
 
-                {/* Stats bar — only when data loaded */}
-                {!loading && purchases.length > 0 && (
+                {/* Stats bar — only when data loaded and not on suggested tab */}
+                {!loading && activeFilter !== 'SUGGESTED' && purchases.length > 0 && (
                     <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 14 }}>
                         {/* Total orders */}
                         <View style={{
@@ -243,7 +296,7 @@ export default function PurchasesScreen() {
                 )}
 
                 {/* Status filter chips */}
-                {!loading && purchases.length > 0 && (
+                {!loading && (
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -286,6 +339,33 @@ export default function PurchasesScreen() {
                 <View style={{ paddingHorizontal: 20, gap: 10 }}>
                     {[1, 2, 3, 4].map(i => <Skeleton key={i} height={108} radius={10} />)}
                 </View>
+            ) : activeFilter === 'SUGGESTED' ? (
+                <FlatList
+                    data={lowStockItems}
+                    keyExtractor={item => item.inventoryId}
+                    renderItem={renderLowStockItem}
+                    contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 110 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+                    ListHeaderComponent={lowStockItems.length > 0 ? (
+                        <View style={{
+                            backgroundColor: `${C.warning}18`, borderRadius: 8, padding: 12,
+                            marginBottom: 12, borderWidth: 1, borderColor: `${C.warning}40`,
+                            flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
+                        }}>
+                            <Ionicons name="alert-circle" size={18} color={C.warning} />
+                            <Text style={{ color: C.warning, fontWeight: '700', fontSize: 13, flex: 1, textAlign: 'right' }}>
+                                {lowStockItems.length} صنف وصل للحد الأدنى ولا يوجد طلب شراء معلق
+                            </Text>
+                        </View>
+                    ) : null}
+                    ListEmptyComponent={
+                        <EmptyState
+                            icon="checkmark-circle-outline"
+                            title="المخزون بمستويات جيدة"
+                            subtitle="لا توجد أصناف وصلت للحد الأدنى"
+                        />
+                    }
+                />
             ) : (
                 <FlatList
                     data={filtered}
@@ -294,7 +374,7 @@ export default function PurchasesScreen() {
                     contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 110 }}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
                     ListEmptyComponent={
-                        filtered.length === 0 && purchases.length > 0 ? (
+                        activeFilter !== 'ALL' && purchases.length > 0 ? (
                             <View style={{ alignItems: 'center', paddingTop: 48 }}>
                                 <Ionicons name="filter-outline" size={40} color={C.mutedForeground} />
                                 <Text style={{ color: C.mutedForeground, fontSize: 14, marginTop: 12 }}>

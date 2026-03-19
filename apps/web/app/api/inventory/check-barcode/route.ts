@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         }
 
         // 1. Check if drug exists globally
-        const drug = await prisma.globalDrug.findUnique({
+        const drug = await prisma.globalDrug.findFirst({
             where: { barcode },
             select: {
                 id: true,

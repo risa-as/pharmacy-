@@ -3,10 +3,30 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { checkFeatureAccess } from '@/app/lib/saas-guards';
+
+async function checkMarketplaceAccess() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null; // unauthenticated — let existing auth handle
+    if (!tenantCtx.organizationId) return null; // SUPER_ADMIN — allow
+    const access = await checkFeatureAccess(tenantCtx.organizationId, 'marketplace');
+    if (!access.allowed) {
+        return NextResponse.json({
+            error: 'هذه الميزة متاحة في باقة الشركات فقط.',
+            code: 'FEATURE_NOT_IN_PLAN',
+            requiredPlan: 'ENTERPRISE'
+        }, { status: 403 });
+    }
+    return null;
+}
 
 // GET: Browse marketplace listings
 export async function GET(req: NextRequest) {
     try {
+        const guard = await checkMarketplaceAccess();
+        if (guard) return guard;
+
         const { searchParams } = new URL(req.url);
         const search = searchParams.get('search') || '';
         const page = Number(searchParams.get('page') || 1);
@@ -43,6 +63,9 @@ export async function POST(req: NextRequest) {
     try {
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        const guard = await checkMarketplaceAccess();
+        if (guard) return guard;
 
         const body = await req.json();
         const { drugId, quantity, unitPrice, minOrderQty, description, expiryDate, batchNumber, branchId } = body;

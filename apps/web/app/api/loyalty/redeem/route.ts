@@ -31,6 +31,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Loyalty program is disabled" }, { status: 400 });
         }
 
+        // 1b. Check branch-level loyalty enabled
+        const branchId = tenantCtx.user.branchId;
+        if (branchId) {
+            const branch = await prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { loyaltyEnabled: true },
+            });
+            if (branch && !branch.loyaltyEnabled) {
+                return NextResponse.json({ error: "Loyalty program is disabled for this branch" }, { status: 400 });
+            }
+        }
+
         // 2. Check minimum
         if (points < settings.loyaltyMinRedemption) {
             return NextResponse.json({

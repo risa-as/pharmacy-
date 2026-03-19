@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from "@/app/lib/prisma";
-import { auth } from '@/auth';
+import { validateSyncUser } from '@/app/lib/sync-auth';
 
 
 /**
@@ -17,10 +17,8 @@ import { auth } from '@/auth';
  *           If omitted, returns the latest 50 notifications (full fetch).
  */
 export async function GET(req: Request) {
-    const session = await auth();
-    if (!session?.user?.id) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
+    const syncUser = await validateSyncUser(req);
+    if (syncUser instanceof NextResponse) return syncUser;
 
     const { searchParams } = new URL(req.url);
     const sinceParam = searchParams.get('since');
@@ -32,7 +30,7 @@ export async function GET(req: Request) {
 
     const notifications = await prisma.notification.findMany({
         where: {
-            userId: session.user.id,
+            userId: syncUser.id,
             ...(since ? { createdAt: { gt: since } } : {}),
         },
         orderBy: { createdAt: 'desc' },
@@ -49,7 +47,7 @@ export async function GET(req: Request) {
     });
 
     const unreadCount = await prisma.notification.count({
-        where: { userId: session.user.id, isRead: false },
+        where: { userId: syncUser.id, isRead: false },
     });
 
     return NextResponse.json({

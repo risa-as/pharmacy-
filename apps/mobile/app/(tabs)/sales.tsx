@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View, Text, TouchableOpacity, FlatList, TextInput,
@@ -121,6 +122,7 @@ export default function SalesScreen() {
 
     // Recently sold quick-add (last 5 cart items from session)
     const [recentItems, setRecentItems] = useState<CartItem[]>([]);
+    const [loadingRecentId, setLoadingRecentId] = useState<string | null>(null);
 
     // Fetch loyalty settings once on mount
     useEffect(() => {
@@ -181,6 +183,11 @@ export default function SalesScreen() {
                 }
                 return prev.map(i => i.id === drug.id ? { ...i, quantity: i.quantity + 1 } : i);
             }
+            // Block adding out-of-stock items
+            if (drug.quantity !== undefined && drug.quantity <= 0) {
+                Alert.alert('نفاد المخزون', 'هذا الدواء غير متوفر حالياً في المخزون');
+                return prev;
+            }
             return [...prev, { id: drug.id, name: drug.name, tradeName: drug.tradeName, price: drug.price, quantity: 1, stock: drug.quantity, scientificName: drug.scientificName }];
         });
 
@@ -193,6 +200,32 @@ export default function SalesScreen() {
             }).catch(() => {});
         }
     }, [cart, selectedPatient]);
+
+    const handleRecentItemPress = useCallback(async (item: CartItem) => {
+        // Prevent double-tap race condition
+        if (loadingRecentId === item.id) return;
+        setLoadingRecentId(item.id);
+        try {
+            const currentStock = await apiService.getDrugCurrentStock(item.id, branchId ?? undefined);
+            // Block if stock is confirmed 0 or not found
+            if (currentStock !== null && currentStock <= 0) {
+                // Remove from recent list since it's sold out
+                setRecentItems(prev => prev.filter(r => r.id !== item.id));
+                Alert.alert('نفاد المخزون', 'هذا الدواء غير متوفر حالياً في المخزون');
+                return;
+            }
+            // If API failed (null), fall back to estimated stock
+            const stockToUse = currentStock ?? Math.max(0, (item.stock ?? 0) - 1);
+            if (stockToUse <= 0) {
+                setRecentItems(prev => prev.filter(r => r.id !== item.id));
+                Alert.alert('نفاد المخزون', 'هذا الدواء غير متوفر حالياً في المخزون');
+                return;
+            }
+            addToCart({ ...item, quantity: stockToUse });
+        } finally {
+            setLoadingRecentId(null);
+        }
+    }, [branchId, addToCart, loadingRecentId]);
 
     const removeFromCart = useCallback((id: string) => {
         setCart(prev => prev.filter(i => i.id !== id));
@@ -277,15 +310,27 @@ export default function SalesScreen() {
             try {
                 const result: any = await apiService.createSale(saleData);
                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                const creditCartSnapshot = [...cart];
+                const creditTotalSnapshot = total;
                 setRecentItems(prev => {
+                    // Deduct sold quantities from stock and remove sold-out items
+                    const soldMap = new Map(creditCartSnapshot.map(i => [i.id, i.quantity]));
+                    const updatedPrev = prev.map(r => {
+                        const soldQty = soldMap.get(r.id) ?? 0;
+                        return { ...r, stock: Math.max(0, (r.stock ?? 0) - soldQty) };
+                    }).filter(r => (r.stock ?? 0) > 0);
+                    const newItems = creditCartSnapshot
+                        .map(i => ({ ...i, stock: Math.max(0, (i.stock ?? 0) - i.quantity), quantity: 1 }))
+                        .filter(i => (i.stock ?? 0) > 0)
+                        .slice(0, 5);
                     const seen = new Set<string>();
-                    return [...cart.slice(0, 5), ...prev]
+                    return [...newItems, ...updatedPrev]
                         .filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; })
                         .slice(0, 5);
                 });
                 resetCart();
                 Alert.alert('تمت العملية', 'تمت عملية البيع', [
-                    { text: 'طباعة', onPress: printReceipt },
+                    { text: 'طباعة', onPress: () => printReceipt(creditCartSnapshot, creditTotalSnapshot) },
                     { text: 'موافق' },
                 ]);
             } catch (e) {
@@ -300,7 +345,17 @@ export default function SalesScreen() {
         try {
             await dbService.saveOfflineSale(saleData.items, saleData.totalAmount);
         } catch {
-            Alert.alert('خطأ', 'تعذر حفظ عملية البيع محلياً');
+            // Local save failed — warn about deducted points (rollback logged for admin)
+            if (pointsToRedeem > 0 && selectedPatient) {
+                // Points were already deducted server-side; log for manual reconciliation
+                const raw = await AsyncStorage.getItem('pendingLoyaltyRollbacks').catch(() => null);
+                const queue: { patientId: string; points: number; ts: number }[] = raw ? JSON.parse(raw) : [];
+                queue.push({ patientId: selectedPatient.id, points: pointsToRedeem, ts: Date.now() });
+                await AsyncStorage.setItem('pendingLoyaltyRollbacks', JSON.stringify(queue)).catch(() => {});
+                Alert.alert('خطأ', 'تعذر حفظ عملية البيع. تم تسجيل خصم النقاط — يرجى التواصل مع المشرف لاستعادتها.');
+            } else {
+                Alert.alert('خطأ', 'تعذر حفظ عملية البيع محلياً');
+            }
             setLoading(false);
             return;
         }
@@ -311,33 +366,55 @@ export default function SalesScreen() {
         const patientSnapshot = selectedPatient;
         const finalSnapshot  = total;
         setRecentItems(prev => {
+            // Deduct sold quantities from stock and remove sold-out items
+            const soldMap = new Map(cartSnapshot.map(i => [i.id, i.quantity]));
+            const updatedPrev = prev.map(r => {
+                const soldQty = soldMap.get(r.id) ?? 0;
+                return { ...r, stock: Math.max(0, (r.stock ?? 0) - soldQty) };
+            }).filter(r => (r.stock ?? 0) > 0);
+            const newItems = cartSnapshot
+                .map(i => ({ ...i, stock: Math.max(0, (i.stock ?? 0) - i.quantity), quantity: 1 }))
+                .filter(i => (i.stock ?? 0) > 0)
+                .slice(0, 5);
             const seen = new Set<string>();
-            return [...cartSnapshot.slice(0, 5), ...prev]
+            return [...newItems, ...updatedPrev]
                 .filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; })
                 .slice(0, 5);
         });
         resetCart();
         setLoading(false);
         Alert.alert('تمت العملية', 'تمت عملية البيع', [
-            { text: 'طباعة', onPress: printReceipt },
+            { text: 'طباعة', onPress: () => printReceipt(cartSnapshot, finalSnapshot) },
             { text: 'موافق' },
         ]);
 
-        // Background: sync + earn loyalty points
+        // Background: sync + earn loyalty points (with AsyncStorage queue for retry)
         void syncService.syncData();
         if (patientSnapshot && loyaltySettings?.loyaltyEnabled && finalSnapshot > 0) {
-            void apiService.earnLoyaltyPoints(patientSnapshot.id, null, finalSnapshot);
+            try {
+                await apiService.earnLoyaltyPoints(patientSnapshot.id, null, finalSnapshot);
+            } catch {
+                // Network failed — queue for retry on next sync
+                try {
+                    const raw = await AsyncStorage.getItem('pendingLoyaltyEarns');
+                    const queue: { patientId: string; amount: number; ts: number }[] = raw ? JSON.parse(raw) : [];
+                    queue.push({ patientId: patientSnapshot.id, amount: finalSnapshot, ts: Date.now() });
+                    await AsyncStorage.setItem('pendingLoyaltyEarns', JSON.stringify(queue));
+                } catch {
+                    console.warn('[Sales] Failed to queue pending loyalty earn');
+                }
+            }
         }
     };
 
-    const printReceipt = async () => {
+    const printReceipt = async (receiptCart: typeof cart, receiptTotal: number) => {
         const printer = await printerService.getSavedPrinter();
         if (!printer) { Alert.alert('تنبيه', 'لا توجد طابعة متصلة'); return; }
-        await printerService.printReceipt('Faramace Pharmacy', cart.map(i => ({
+        await printerService.printReceipt('Faramace Pharmacy', receiptCart.map(i => ({
             name: i.tradeName ?? i.name,
             quantity: i.quantity,
             price: i.price,
-        })), total);
+        })), receiptTotal);
     };
 
     return (
@@ -430,18 +507,22 @@ export default function SalesScreen() {
                         آخر المبيعات
                     </Text>
                     <View style={{ flexDirection: 'row-reverse', gap: 8, flexWrap: 'wrap' }}>
-                        {recentItems.map((item) => (
-                            <TouchableOpacity
-                                key={item.id}
-                                onPress={() => addToCart(item)}
-                                style={{ backgroundColor: C.card, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 8 }}
-                            >
-                                <Text style={{ color: C.foreground, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
-                                    {item.tradeName ?? item.name}
-                                </Text>
-                                <Text style={{ color: C.primary, fontSize: 11 }}>{item.price.toLocaleString()} د.ع</Text>
-                            </TouchableOpacity>
-                        ))}
+                        {recentItems.map((item) => {
+                            const isLoadingThis = loadingRecentId === item.id;
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    onPress={() => handleRecentItemPress(item)}
+                                    disabled={loadingRecentId !== null}
+                                    style={{ backgroundColor: C.card, borderRadius: 6, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 8, opacity: isLoadingThis ? 0.5 : 1 }}
+                                >
+                                    <Text style={{ color: C.foreground, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
+                                        {isLoadingThis ? '...' : (item.tradeName ?? item.name)}
+                                    </Text>
+                                    <Text style={{ color: C.primary, fontSize: 11 }}>{item.price.toLocaleString()} د.ع</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                 </View>
             )}

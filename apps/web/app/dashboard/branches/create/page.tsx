@@ -11,7 +11,10 @@ export default async function Page() {
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) redirect("/login");
 
+  // Scope: SUPER_ADMIN sees all orgs; ADMIN sees only their own org
+  const orgWhere = tenantCtx.user.role === 'SUPER_ADMIN' ? {} : { id: tenantCtx.organizationId };
   const organizations = await prisma.organization.findMany({
+    where: orgWhere,
     select: { id: true, name: true },
     orderBy: { name: 'asc' },
   });

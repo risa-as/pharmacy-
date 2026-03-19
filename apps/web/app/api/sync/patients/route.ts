@@ -2,24 +2,22 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from '@/auth';
+import { validateSyncUser } from '@/app/lib/sync-auth';
 
 
 export async function GET(request: Request) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const syncUser = await validateSyncUser(request);
+        if (syncUser instanceof NextResponse) return syncUser;
 
         const { searchParams } = new URL(request.url);
         const branchId = searchParams.get("branchId");
 
         // Validate branchId ownership: ensure the caller can only access their own branch/org
         if (branchId) {
-            const userRole = (session.user as any).role;
-            const userBranchId = (session.user as any).branchId;
-            const userOrgId = (session.user as any).organizationId;
+            const userRole = syncUser.role;
+            const userBranchId = syncUser.branchId;
+            const userOrgId = syncUser.organizationId;
 
             if (userRole !== 'SUPER_ADMIN') {
                 const branch = await prisma.branch.findUnique({

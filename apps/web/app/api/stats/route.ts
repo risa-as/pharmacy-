@@ -16,70 +16,58 @@ export async function GET(request: NextRequest) {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
-        // 1. Sales Today (Total Revenue)
-        const salesTodayAgg = await prisma.sale.aggregate({
-            _sum: {
-                total: true
-            },
-            where: {
-                createdAt: {
-                    gte: todayStart
+        const branchFilter = { ...tenantBranchWhere, ...(branchId && { branchId }) };
+
+        // Run all queries in parallel for performance
+        const [
+            salesTodayAgg,
+            salesCountToday,
+            inventoryCount,
+            inventoriesForStock,
+            expiringCount,
+            debtsCount,
+        ] = await Promise.all([
+            // 1. Sales revenue today
+            prisma.sale.aggregate({
+                _sum: { total: true },
+                where: { createdAt: { gte: todayStart }, ...branchFilter },
+            }),
+            // 2. Sales count today
+            prisma.sale.count({
+                where: { createdAt: { gte: todayStart }, ...branchFilter },
+            }),
+            // 3. Total inventory items
+            prisma.inventory.count({ where: branchFilter }),
+            // 4. Low stock inventory items (minStock > 0)
+            prisma.inventory.findMany({
+                where: { ...branchFilter, minStock: { gt: 0 } },
+                include: { batches: { select: { quantity: true }, where: { quantity: { gt: 0 } } } },
+            }),
+            // 5. Expiring batches within 90 days
+            prisma.batch.count({
+                where: {
+                    expiryDate: { lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) },
+                    quantity: { gt: 0 },
+                    inventory: branchFilter,
                 },
-                ...tenantBranchWhere,
-                ...(branchId && { branchId })
-            }
-        });
-        const salesToday = salesTodayAgg._sum.total || 0;
+            }),
+            // 6. Patients with outstanding balance (debts)
+            prisma.patient.count({ where: { ...tenantBranchWhere, balance: { not: 0 } } }),
+        ]);
 
-        // 2. Total Inventory Items (Count of unique drugs in inventory)
-        const inventoryCount = await prisma.inventory.count({
-            where: {
-                ...tenantBranchWhere,
-                ...(branchId && { branchId })
-            }
-        });
-
-        // 3. Low Stock Items
-        // Note: Inventory model in schema seems to currently lack 'minStock'.
-        // For now, we will return 0 or a placeholder to match the 'smart-order' issue.
-        // Once schema is updated with minStock, we can uncomment the logic.
-        /*
-        const inventoryItems = await prisma.inventory.findMany({
-            include: {
-                batches: {
-                    select: { quantity: true }
-                }
-            }
-        });
-        const lowStockCount = inventoryItems.filter((item: any) => {
-            // @ts-ignore
-            const min = item.minStock || 10; // Default threshold if missing
-            const totalQuantity = item.batches.reduce((sum: any, batch: any) => sum + batch.quantity, 0);
-            return totalQuantity <= min;
+        const salesToday = salesTodayAgg._sum.total ?? 0;
+        const lowStockCount = inventoriesForStock.filter((inv: any) => {
+            const total = inv.batches.reduce((s: number, b: any) => s + b.quantity, 0);
+            return total < inv.minStock;
         }).length;
-        */
-        const lowStockCount = 0;
-
-        // 4. Expiring Batches (Next 90 days to match Alerts tab)
-        const ninetyDaysFromNow = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
-        const expiringCount = await prisma.batch.count({
-            where: {
-                expiryDate: {
-                    lte: ninetyDaysFromNow
-                },
-                quantity: { gt: 0 },
-                inventory: {
-                    ...tenantBranchWhere,
-                    ...(branchId && { branchId })
-                }
-            }
-        });
 
         return NextResponse.json({
-            salesToday: salesToday,
+            salesToday,
+            salesCount: salesCountToday,
             inventory: inventoryCount,
             lowStock: lowStockCount,
             expiring: expiringCount,
+            debtsCount,
         });
     } catch (error) {
         console.error('API Stats Error:', error);

@@ -35,11 +35,15 @@ export async function GET() {
                 ownerEmail: owner?.email || 'N/A',
                 planId: org.plan?.id,
                 plan: org.plan,
-                maxBranches: org.maxBranches || org.plan?.maxBranches || 1,
-                maxUsers: org.maxUsers || org.plan?.maxUsers || 3,
+                maxBranches: org.maxBranches ?? org.plan?.maxBranches ?? 1,
+                maxUsers: org.maxUsers ?? org.plan?.maxUsers ?? 3,
+                maxDevices: org.maxDevices ?? org.plan?.maxDevices ?? 1,
+                maxMobileUsers: org.maxMobileUsers ?? org.plan?.maxMobileUsers ?? 1,
                 monthlyPrice: org.plan?.price || 0,
                 isActive: !org.isSuspended,
-                trialEndsAt: null
+                trialEndsAt: null,
+                subscriptionEndsAt: org.subscriptionEndsAt ?? null,
+                isSuspended: org.isSuspended
             };
         });
 
@@ -59,7 +63,7 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { name, ownerEmail, ownerName, ownerPassword, plan, maxBranches, maxUsers } = body;
+        const { name, ownerEmail, ownerName, ownerPassword, plan, maxBranches, maxUsers, maxDevices, maxMobileUsers } = body;
 
         if (!name || !ownerEmail || !ownerPassword) {
             return NextResponse.json({ error: "الاسم، الإيميل، وكلمة المرور مطلوبة" }, { status: 400 });
@@ -108,6 +112,8 @@ export async function POST(req: NextRequest) {
                     planId: selectedPlan.id,
                     maxBranches: maxBranches || selectedPlan.maxBranches,
                     maxUsers: maxUsers || selectedPlan.maxUsers,
+                    maxDevices: maxDevices !== undefined ? Number(maxDevices) : selectedPlan.maxDevices,
+                    maxMobileUsers: maxMobileUsers !== undefined ? Number(maxMobileUsers) : selectedPlan.maxMobileUsers,
                 },
             });
 
@@ -156,8 +162,10 @@ export async function POST(req: NextRequest) {
             ownerEmail,
             planId: selectedPlan.id,
             plan: selectedPlan,
-            maxBranches: result.organization.maxBranches || selectedPlan.maxBranches,
-            maxUsers: result.organization.maxUsers || selectedPlan.maxUsers,
+            maxBranches: result.organization.maxBranches ?? selectedPlan.maxBranches,
+            maxUsers: result.organization.maxUsers ?? selectedPlan.maxUsers,
+            maxDevices: result.organization.maxDevices ?? selectedPlan.maxDevices ?? 1,
+            maxMobileUsers: result.organization.maxMobileUsers ?? selectedPlan.maxMobileUsers ?? 1,
             monthlyPrice: selectedPlan.price,
             isActive: !result.organization.isSuspended,
             trialEndsAt: null,

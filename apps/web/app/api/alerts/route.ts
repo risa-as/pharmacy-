@@ -16,75 +16,108 @@ export async function GET(req: Request) {
         const today = new Date();
         const ninetyDaysFromNow = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-        const whereClause: any = {
-            expiryDate: {
-                lte: ninetyDaysFromNow, // Expiring in next 90 days OR already expired
-            },
-            quantity: { gt: 0 }
-        };
-
-        whereClause.inventory = {
+        const branchFilter = {
             ...tenantBranchWhere,
-            ...(branchId ? { branchId } : {})
+            ...(branchId ? { branchId } : {}),
         };
 
-        const batches = await prisma.batch.findMany({
-            where: whereClause,
+        // ── 1. Expiry alerts: batches expiring within 90 days (including already expired) ──
+        const expiringBatches = await prisma.batch.findMany({
+            where: {
+                expiryDate: { lte: ninetyDaysFromNow },
+                quantity: { gt: 0 },
+                inventory: branchFilter,
+            },
             include: {
                 inventory: {
                     include: {
-                        drug: {
-                            select: {
-                                tradeName: true,
-                                scientificName: true
-                            }
-                        },
-                        branch: {
-                            select: { name: true }
-                        }
-                    }
-                }
+                        drug: { select: { tradeName: true, scientificName: true } },
+                        branch: { select: { name: true } },
+                    },
+                },
             },
-            orderBy: {
-                expiryDate: 'asc'
-            }
+            orderBy: { expiryDate: 'asc' },
         });
 
-        // Format for mobile
-        const alerts = batches.map((batch: any) => {
+        // ── 2. Stock alerts: all inventories to check quantity vs minStock ──
+        const inventories = await prisma.inventory.findMany({
+            where: branchFilter,
+            include: {
+                batches: { select: { quantity: true }, where: { quantity: { gt: 0 } } },
+                drug: { select: { tradeName: true, scientificName: true } },
+                branch: { select: { name: true } },
+            },
+        });
+
+        const alerts: any[] = [];
+
+        // ── Build expiry alerts ──
+        for (const batch of expiringBatches) {
             const isExpired = new Date(batch.expiryDate) < today;
-            const daysDiff = Math.ceil((new Date(batch.expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-            let title = '';
-            let type = 'warning';
-            let dateText = batch.expiryDate.toISOString().split('T')[0];
-
-            const drugName = batch.inventory?.drug?.tradeName || 'دواء غير معروف';
-            const branchName = batch.inventory?.branch?.name || 'فرع غير معروف';
+            const daysDiff = Math.ceil(
+                (new Date(batch.expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            );
+            const drugName = batch.inventory?.drug?.tradeName ?? 'دواء غير معروف';
+            const branchName = batch.inventory?.branch?.name ?? 'فرع غير معروف';
+            const dateStr = batch.expiryDate.toISOString().split('T')[0];
 
             if (isExpired) {
-                title = `منتهي الصلاحية: ${drugName}`;
-                type = 'critical';
-                const daysAgo = Math.abs(daysDiff);
-                dateText = `منتهي منذ ${daysAgo} يوم (${dateText})`;
+                alerts.push({
+                    id: `exp-${batch.id}`,
+                    type: 'EXPIRED',
+                    title: `منتهي الصلاحية: ${drugName}`,
+                    description: `الكمية المتبقية: ${batch.quantity} · ${branchName}`,
+                    date: `انتهى منذ ${Math.abs(daysDiff)} يوم (${dateStr})`,
+                    priority: 1,
+                });
             } else {
-                title = `قارب على الانتهاء: ${drugName}`;
-                type = 'warning';
-                dateText = `ينتهي خلال ${daysDiff} يوم (${dateText})`;
+                alerts.push({
+                    id: `exp-${batch.id}`,
+                    type: 'EXPIRY',
+                    title: `يقترب من الانتهاء: ${drugName}`,
+                    description: `الكمية: ${batch.quantity} · ${branchName}`,
+                    date: `ينتهي خلال ${daysDiff} يوم (${dateStr})`,
+                    priority: daysDiff <= 30 ? 3 : 4,
+                });
             }
+        }
 
-            return {
-                id: batch.id,
-                title: title,
-                description: `الكمية: ${batch.quantity} - ${branchName}`,
-                date: dateText,
-                type: type
-            };
+        // ── Build stock alerts ──
+        for (const inv of inventories) {
+            const totalQty = inv.batches.reduce((sum: number, b: any) => sum + b.quantity, 0);
+            const drugName = inv.drug?.tradeName ?? 'دواء غير معروف';
+            const branchName = inv.branch?.name ?? 'فرع غير معروف';
+
+            if (totalQty === 0) {
+                alerts.push({
+                    id: `stock-${inv.id}`,
+                    type: 'OUT_OF_STOCK',
+                    title: `نفاد المخزون: ${drugName}`,
+                    description: `لا يوجد مخزون متاح · ${branchName}`,
+                    date: null,
+                    priority: 0,
+                });
+            } else if (inv.minStock > 0 && totalQty < inv.minStock) {
+                alerts.push({
+                    id: `stock-${inv.id}`,
+                    type: 'LOW_STOCK',
+                    title: `مخزون منخفض: ${drugName}`,
+                    description: `المتبقي: ${totalQty} · الحد الأدنى: ${inv.minStock} · ${branchName}`,
+                    date: null,
+                    priority: 2,
+                });
+            }
+        }
+
+        // ── Sort: OUT_OF_STOCK → EXPIRED → LOW_STOCK → EXPIRY (nearest first) ──
+        alerts.sort((a, b) => {
+            if (a.priority !== b.priority) return a.priority - b.priority;
+            return a.title.localeCompare(b.title, 'ar');
         });
 
         return NextResponse.json(alerts);
-    } catch (error) {
-        console.error("Alerts API Error:", error);
-        return NextResponse.json({ message: "Failed to fetch alerts" }, { status: 500 });
+    } catch (error: any) {
+        console.error('Alerts API Error:', error);
+        return NextResponse.json({ message: 'Failed to fetch alerts' }, { status: 500 });
     }
 }

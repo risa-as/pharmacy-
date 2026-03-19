@@ -62,12 +62,58 @@ export const isServerConfigured = async (): Promise<boolean> => {
 export let API_BASE_URL = 'http://localhost:3000/api'; // Initial default
 
 
+// In-memory token cache — avoids slow SecureStore reads on every API call
+let cachedToken: string | null | undefined = undefined; // undefined = not loaded yet
+
+// Branch list cache — shared across all BranchSelector instances
+let _branchCache: any[] | null = null;
+let _branchCacheTs = 0;
+
+// ─── Response cache (GET only) ───────────────────────────────────────────────
+// Keyed by full endpoint string (path + query). TTL per path prefix.
+interface _CacheEntry { data: unknown; ts: number }
+const _responseCache = new Map<string, _CacheEntry>();
+const _CACHE_TTL: Array<[string, number]> = [
+    ['/stats',               30_000],  // 30 s
+    ['/alerts',              30_000],  // 30 s
+    ['/inventory',           60_000],  // 1 min
+    ['/smart-order',         60_000],  // 1 min
+    ['/purchases/low-stock', 60_000],  // 1 min
+    ['/reports',            120_000],  // 2 min
+    ['/debts',               60_000],  // 1 min
+];
+function _cacheTTL(endpoint: string): number {
+    const path = endpoint.split('?')[0];
+    for (const [prefix, ttl] of _CACHE_TTL) {
+        if (path.startsWith(prefix)) return ttl;
+    }
+    return 0;
+}
+function _clearRelatedCache(endpoint: string) {
+    const path = endpoint.split('?')[0];
+    for (const key of _responseCache.keys()) {
+        if (key.split('?')[0] === path) _responseCache.delete(key);
+    }
+}
+
+// ─── In-flight deduplication (GET only) ──────────────────────────────────────
+// If the same endpoint is already being fetched, reuse the same Promise instead
+// of firing a duplicate network request.
+const _inflight = new Map<string, Promise<unknown>>();
+
+export function setCachedToken(token: string | null) {
+    cachedToken = token;
+}
+
 // دالة مساعدة لقراءة التوكن من التخزين الآمن
 async function getStoredToken(): Promise<string | null> {
+    if (cachedToken !== undefined) return cachedToken;
     try {
-        return await SecureStore.getItemAsync('authToken');
+        cachedToken = await SecureStore.getItemAsync('authToken');
+        return cachedToken;
     } catch {
-        return await AsyncStorage.getItem('authToken');
+        cachedToken = await AsyncStorage.getItem('authToken');
+        return cachedToken;
     }
 }
 
@@ -94,6 +140,10 @@ async function handleSessionExpiry() {
     // always gets the freshly-stored user, not stale admin/previous user data.
     _sessionExpiredHandler?.();
 
+    cachedToken = null;       // Clear token cache
+    _branchCache = null;      // Clear branch cache
+    _responseCache.clear();   // Clear all response caches
+    _inflight.clear();        // Clear any pending in-flight requests
     try {
         await SecureStore.deleteItemAsync('authToken');
         await SecureStore.deleteItemAsync('user');
@@ -148,14 +198,14 @@ async function fetchOnce<T>(
         ...(options.headers as Record<string, string>),
     };
 
-    console.log(`[API] Requesting: ${baseUrl}${cleanEndpoint}`);
+    if (__DEV__) console.log(`[API] ${options.method ?? 'GET'} ${cleanEndpoint}`);
 
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     try {
         const response = await fetch(`${baseUrl}${cleanEndpoint}`, {
@@ -200,26 +250,61 @@ async function request<T>(
     options: RequestInit = {},
     noAutoLogout = false,
 ): Promise<T> {
-    const token = await getStoredToken();
-    const baseUrl = await getBaseUrl();
+    const isGet = !options.method || options.method.toUpperCase() === 'GET';
 
-    const MAX_RETRIES = 3;
-    const BACKOFF_MS = [1000, 2000, 4000];
-
-    let lastError: unknown;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            return await fetchOnce<T>(endpoint, options, token, baseUrl, noAutoLogout);
-        } catch (error) {
-            lastError = error;
-            // Only retry on network/timeout errors — not on 4xx/5xx or auth failures
-            if (!isNetworkError(error) || attempt === MAX_RETRIES) break;
-            const delay = BACKOFF_MS[attempt] ?? 4000;
-            console.warn(`[API] Network error on attempt ${attempt + 1}. Retrying in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
+    // ── 1. Response cache (GET only) ─────────────────────────────────────────
+    if (isGet) {
+        const ttl = _cacheTTL(endpoint);
+        if (ttl > 0) {
+            const hit = _responseCache.get(endpoint);
+            if (hit && Date.now() - hit.ts < ttl) return hit.data as T;
         }
     }
-    throw lastError;
+
+    // ── 2. In-flight deduplication (GET only) ────────────────────────────────
+    if (isGet) {
+        const pending = _inflight.get(endpoint);
+        if (pending) return pending as Promise<T>;
+    }
+
+    // ── 3. Resolve token + baseUrl in parallel ────────────────────────────────
+    const [token, baseUrl] = await Promise.all([getStoredToken(), getBaseUrl()]);
+
+    const MAX_RETRIES = 2;
+    const BACKOFF_MS = [300, 800];
+
+    const execute = async (): Promise<T> => {
+        let lastError: unknown;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const result = await fetchOnce<T>(endpoint, options, token, baseUrl, noAutoLogout);
+                // Store in response cache on success
+                if (isGet) {
+                    const ttl = _cacheTTL(endpoint);
+                    if (ttl > 0) _responseCache.set(endpoint, { data: result, ts: Date.now() });
+                }
+                return result;
+            } catch (error) {
+                lastError = error;
+                if (!isNetworkError(error) || attempt === MAX_RETRIES) break;
+                const delay = BACKOFF_MS[attempt] ?? 4000;
+                if (__DEV__) console.warn(`[API] Retry ${attempt + 1} for ${endpoint} in ${delay}ms`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+        throw lastError;
+    };
+
+    if (isGet) {
+        const promise = execute().finally(() => _inflight.delete(endpoint));
+        _inflight.set(endpoint, promise);
+        return promise;
+    }
+
+    // For mutations: run immediately then invalidate matching cache entries
+    const result = await execute();
+    _clearRelatedCache(endpoint);
+    return result;
 }
 
 /**
@@ -270,6 +355,18 @@ export const apiService = {
     },
 
     // Inventory
+    async getDrugCurrentStock(drugId: string, branchId?: string): Promise<number | null> {
+        try {
+            const params = new URLSearchParams({ drugId });
+            if (branchId) params.set('branchId', branchId);
+            const result = await request<any[]>(`/inventory?${params.toString()}`);
+            if (!result || result.length === 0) return 0;
+            return result[0].quantity ?? 0;
+        } catch {
+            return null;
+        }
+    },
+
     async getInventory(branchId?: string) {
         try {
             const query = branchId ? `?branchId=${branchId}` : '';
@@ -328,7 +425,7 @@ export const apiService = {
     },
 
     // Add Batch (Drug exists in Branch Inventory)
-    async addBatch(data: { inventoryId: string; batchNumber: string; quantity: number; expiryDate: string; price?: number }) {
+    async addBatch(data: { inventoryId: string; batchNumber?: string; quantity: number; expiryDate: string; price?: number; costPrice?: number; supplierId?: string | null }) {
         try {
             return await request<any>(`/inventory/add-batch`, {
                 method: 'POST',
@@ -346,12 +443,13 @@ export const apiService = {
         drugId: string;
         branchId: string;
         price: number;
-        costPrice: number;
+        cost: number;
         minStock: number;
         maxStock: number;
-        batchNumber: string;
+        batchNumber?: string;
         quantity: number;
         expiryDate: string;
+        supplierId?: string | null;
     }) {
         try {
             return await request<any>(`/inventory/add-to-branch`, {
@@ -385,6 +483,7 @@ export const apiService = {
         quantity: number;
         expiryDate: string;
         supplierId?: string | null;
+        isQuickSale?: boolean;
     }) {
         try {
             return await request<any>(`/inventory/create-quick`, {
@@ -394,6 +493,19 @@ export const apiService = {
             });
         } catch (error) {
             console.error('API Error createQuickDrug:', error);
+            return { success: false, message: 'Server error' };
+        }
+    },
+
+    // Toggle quick-sale flag for a drug
+    async toggleQuickSale(drugId: string, isQuickSale: boolean) {
+        try {
+            return await request<any>('/inventory/quick-sale', {
+                method: 'PATCH',
+                body: JSON.stringify({ drugId, isQuickSale }),
+            });
+        } catch (error) {
+            console.error('API Error toggleQuickSale:', error);
             return { success: false, message: 'Server error' };
         }
     },
@@ -512,12 +624,28 @@ export const apiService = {
         }
     },
 
-    // Get Branches
+    // Get Branches (cached for 5 minutes to avoid redundant network calls)
     async getBranches() {
+        const now = Date.now();
+        if (_branchCache && now - _branchCacheTs < 5 * 60 * 1000) return _branchCache;
         try {
-            return await request<any[]>('/branches');
+            const data = await request<any[]>('/branches');
+            _branchCache = data;
+            _branchCacheTs = now;
+            return data;
         } catch (error) {
             console.error('API Error getBranches:', error);
+            return _branchCache ?? [];
+        }
+    },
+
+    // Low-stock items that need ordering (stock ≤ minStock, no pending order)
+    async getLowStockItems(branchId?: string) {
+        try {
+            const query = branchId ? `?branchId=${branchId}` : '';
+            return await request<any[]>(`/purchases/low-stock${query}`);
+        } catch (error) {
+            console.error('API Error getLowStockItems:', error);
             return [];
         }
     },

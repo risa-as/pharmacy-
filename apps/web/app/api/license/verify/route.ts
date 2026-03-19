@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { checkDeviceLimit, getPlanFeatures } from "@/app/lib/saas-guards";
 
 export async function POST(req: Request) {
     try {
@@ -43,10 +44,22 @@ export async function POST(req: Request) {
             data: { lastSeenAt: new Date() }
         });
 
+        // Fetch device limit status for the desktop app to show usage info
+        const orgId = license.branch.organizationId;
+        const [deviceLimit, planFeatures] = await Promise.all([
+            checkDeviceLimit(orgId),
+            getPlanFeatures(orgId),
+        ]);
+
         return NextResponse.json({
             success: true,
             valid: true,
-            branch: license.branch
+            branch: license.branch,
+            planInfo: {
+                currentDevices: deviceLimit.current,
+                maxDevices: deviceLimit.max,
+            },
+            planFeatures,
         });
 
     } catch (error) {

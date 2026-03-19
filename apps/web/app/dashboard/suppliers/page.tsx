@@ -7,6 +7,9 @@ import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
 async function getSuppliers(organizationId?: string) {
     const suppliers = await prisma.supplier.findMany({
@@ -14,22 +17,26 @@ async function getSuppliers(organizationId?: string) {
         orderBy: { createdAt: 'desc' },
         include: {
             _count: { select: { purchases: true } },
-            purchases: { select: { total: true, paidAmount: true } },
         }
     });
     return suppliers.map((s: any) => ({
         ...s,
-        computedBalance: s.purchases.reduce((acc: number, p: any) => acc + (p.total - p.paidAmount), 0),
+        computedBalance: s.balance ?? 0,
     }));
 }
 
 export default async function Page() {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere, user } = tenantCtx;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
+    const { tenantBranchWhere, user, organizationId } = tenantCtx;
+
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'supplierManagement');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
 
     // Super Admin sees everything. Others see only suppliers for their organization.
-    let suppliers = [];
+    let suppliers: Awaited<ReturnType<typeof getSuppliers>> = [];
     try {
         suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? undefined : tenantCtx.organizationId);
     } catch (e) {
@@ -54,7 +61,7 @@ export default async function Page() {
             </div>
 
             <div className="mt-4 flow-root">
-                <div className="inline-block min-w-full align-middle">
+                <div className="overflow-x-auto">
                     <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
                         <table className="min-w-full text-foreground">
                             <thead className="bg-muted text-right text-sm font-semibold text-foreground border-b border-border">

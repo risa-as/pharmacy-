@@ -5,6 +5,7 @@ import SmartOrderClient from "./smart-order-client";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 
 
 export default async function SmartOrderPage() {
@@ -17,7 +18,7 @@ export default async function SmartOrderPage() {
     }
 
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantWhere } = tenantCtx;
 
     let branches: { id: string; name: string }[] = [];

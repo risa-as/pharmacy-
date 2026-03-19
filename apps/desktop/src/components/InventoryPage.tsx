@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Save, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown } from "lucide-react";
+import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Save, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, ChevronDown, Zap } from "lucide-react";
 import SyncHealthDashboard from "./SyncHealthDashboard";
+
+function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
+    return Promise.race([
+        window.ipcRenderer.invoke(channel, ...args) as Promise<T>,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`IPC timeout (${channel})`)), 12000)
+        ),
+    ]);
+}
 
 interface InventoryItem {
     id: string;
@@ -11,6 +20,7 @@ interface InventoryItem {
         scientificName: string;
         barcode: string;
         price: number;
+        isQuickSale: boolean;
     };
     quantity: number;
     costPrice: number;
@@ -62,6 +72,24 @@ export default function InventoryPage({ user }: { user: any }) {
     const barcodeInputRef = useRef<HTMLInputElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
+    // Quick-Sale Toggle State
+    const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>({});
+    const [togglingQuickSale, setTogglingQuickSale] = useState<string | null>(null);
+
+    const handleQuickSaleToggle = async (drugId: string) => {
+        setTogglingQuickSale(drugId);
+        const newValue = !quickSaleState[drugId];
+        setQuickSaleState((prev) => ({ ...prev, [drugId]: newValue }));
+        try {
+            const res = await ipcInvoke('toggle-quick-sale', { drugId, isQuickSale: newValue });
+            if (!res.success) setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+        } catch {
+            setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+        } finally {
+            setTogglingQuickSale(null);
+        }
+    };
+
     // Modal States
     const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
     const [showEditModal, setShowEditModal] = useState<InventoryItem | null>(null);
@@ -79,11 +107,29 @@ export default function InventoryPage({ user }: { user: any }) {
 
     // Local supplier cache for offline dropdown
     const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
+    // Supplier combobox state — shared between batch modal and create-drug modal
+    const [supplierSearch, setSupplierSearch] = useState("");
+    const [supplierOpen, setSupplierOpen] = useState(false);
+    const supplierRef = useRef<HTMLDivElement>(null);
+    // Supplier for create-drug modal (batchData.supplierId is used for add-batch modal)
+    const [createDrugSupplierId, setCreateDrugSupplierId] = useState("");
 
     useEffect(() => {
-        window.ipcRenderer.invoke('get-local-suppliers')
+        ipcInvoke('get-local-suppliers')
             .then((result: any) => { if (Array.isArray(result)) setSuppliers(result); })
             .catch(() => {});
+    }, []);
+
+    // Close supplier dropdown on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
+                setSupplierOpen(false);
+                setSupplierSearch("");
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
     }, []);
 
     const formatIQD = (amount: number) => {
@@ -164,7 +210,7 @@ export default function InventoryPage({ user }: { user: any }) {
         if (!window.ipcRenderer) return;
         setIsChecking(true);
         try {
-            const data = await window.ipcRenderer.invoke('check-barcode-local', {
+            const data = await ipcInvoke('check-barcode-local', {
                 barcode: code,
                 branchId: user.branchId
             });
@@ -197,11 +243,14 @@ export default function InventoryPage({ user }: { user: any }) {
             setLoading(true);
             try {
                 const [data, pending, health] = await Promise.all([
-                    window.ipcRenderer.invoke('get-inventory-items', { searchTerm: "", user }),
-                    window.ipcRenderer.invoke('get-pending-sync-count'),
-                    window.ipcRenderer.invoke('get-sync-health')
+                    ipcInvoke('get-inventory-items', { searchTerm: "", user }),
+                    ipcInvoke('get-pending-sync-count'),
+                    ipcInvoke('get-sync-health')
                 ]);
                 setItems(data);
+                if (Array.isArray(data)) {
+                    setQuickSaleState(Object.fromEntries(data.map((i: InventoryItem) => [i.drug.id, i.drug.isQuickSale ?? false])));
+                }
                 const pendingCount = Number(health?.pendingCount ?? pending?.count ?? 0);
                 setPendingSyncCount(Number.isFinite(pendingCount) ? pendingCount : 0);
                 setSyncHealth(health ?? null);
@@ -217,7 +266,7 @@ export default function InventoryPage({ user }: { user: any }) {
         if (!window.ipcRenderer) return;
         setIsUploadingPending(true);
         try {
-            const res = await window.ipcRenderer.invoke('sync-pending-inventory');
+            const res = await ipcInvoke('sync-pending-inventory');
             await fetchInventory();
 
             if (!res.success && res.failed > 0) {
@@ -240,7 +289,7 @@ export default function InventoryPage({ user }: { user: any }) {
         if (window.ipcRenderer) {
             setLoading(true);
             try {
-                const res = await window.ipcRenderer.invoke('sync-inventory');
+                const res = await ipcInvoke('sync-inventory');
                 if (res.success) {
                     await fetchInventory();
                     setUploadToast({ type: "success", message: "تمت المزامنة بنجاح ✓" });
@@ -302,7 +351,7 @@ export default function InventoryPage({ user }: { user: any }) {
     const handleDelete = async () => {
         if (!showDeleteModal) return;
         try {
-            await window.ipcRenderer.invoke('delete-inventory-item', showDeleteModal);
+            await ipcInvoke('delete-inventory-item', showDeleteModal);
             setShowDeleteModal(null);
             fetchInventory();
         } catch (error) {
@@ -315,7 +364,7 @@ export default function InventoryPage({ user }: { user: any }) {
         if (!showEditModal) return;
         const formData = new FormData(e.currentTarget);
         try {
-            await window.ipcRenderer.invoke('update-inventory-item', {
+            await ipcInvoke('update-inventory-item', {
                 id: showEditModal.id,
                 drugId: showEditModal.drugId || showEditModal.drug?.id,
                 price: formData.get('price'),
@@ -335,7 +384,7 @@ export default function InventoryPage({ user }: { user: any }) {
         e.preventDefault();
         if (!showBatchModal) return;
         try {
-            await window.ipcRenderer.invoke('add-inventory-batch', {
+            await ipcInvoke('add-inventory-batch', {
                 inventoryId: showBatchModal.id,
                 ...batchData
             });
@@ -366,9 +415,9 @@ export default function InventoryPage({ user }: { user: any }) {
         };
 
         try {
-            const res = await window.ipcRenderer.invoke('create-global-drug-local', data);
+            const res = await ipcInvoke('create-global-drug-local', data);
             if (res.success) {
-                await window.ipcRenderer.invoke('add-to-inventory-local', {
+                await ipcInvoke('add-to-inventory-local', {
                     drugId: res.drug.id,
                     branchId: user.branchId,
                     costPrice: formData.get('costPrice'),
@@ -377,9 +426,11 @@ export default function InventoryPage({ user }: { user: any }) {
                     minStock: formData.get('minStock'),
                     maxStock: formData.get('maxStock'),
                     expiryDate: formData.get('expiryDate'),
+                    supplierId: createDrugSupplierId || null,
                     skipCloudPush: true,
                 });
                 setShowCreateDrugModal(null);
+                setCreateDrugSupplierId("");
                 fetchInventory();
                 setUploadToast({ type: "success", message: "تم إضافة الدواء بنجاح ✓" });
             }
@@ -393,7 +444,7 @@ export default function InventoryPage({ user }: { user: any }) {
         if (!showAddToInventoryModal) return;
         const formData = new FormData(e.currentTarget);
         try {
-            await window.ipcRenderer.invoke('add-to-inventory-local', {
+            await ipcInvoke('add-to-inventory-local', {
                 drugId: showAddToInventoryModal.id,
                 branchId: user.branchId,
                 costPrice: formData.get('costPrice'),
@@ -686,6 +737,9 @@ export default function InventoryPage({ user }: { user: any }) {
                                             </div>
                                         </th>
                                     )}
+                                    <th className="px-4 py-3.5 text-center">
+                                        <span className="flex items-center justify-center gap-1"><Zap className="w-3.5 h-3.5 text-amber-500" />سريع</span>
+                                    </th>
                                     <th className="px-4 py-3.5 text-center">إجراءات</th>
                                 </tr>
                             </thead>
@@ -771,6 +825,25 @@ export default function InventoryPage({ user }: { user: any }) {
                                                     </div>
                                                 </td>
                                             )}
+
+                                            {/* Quick Sale Toggle */}
+                                            <td className="px-4 py-3.5 text-center">
+                                                <button
+                                                    dir="ltr"
+                                                    onClick={() => handleQuickSaleToggle(item.drug.id)}
+                                                    disabled={togglingQuickSale === item.drug.id}
+                                                    title="تفعيل/إلغاء البيع السريع"
+                                                    className={`w-9 h-5 rounded-full transition-colors relative inline-flex items-center ${
+                                                        quickSaleState[item.drug.id]
+                                                            ? 'bg-amber-400'
+                                                            : 'bg-muted-foreground/30'
+                                                    } ${togglingQuickSale === item.drug.id ? 'opacity-50' : ''}`}
+                                                >
+                                                    <span className={`absolute w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                                                        quickSaleState[item.drug.id] ? 'translate-x-4' : 'translate-x-0.5'
+                                                    }`} />
+                                                </button>
+                                            </td>
 
                                             {/* Actions */}
                                             <td className="px-4 py-3.5">
@@ -936,12 +1009,53 @@ export default function InventoryPage({ user }: { user: any }) {
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">المورد (اختياري)</label>
-                                    <select value={batchData.supplierId} onChange={(e) => setBatchData({ ...batchData, supplierId: e.target.value })} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring">
-                                        <option value="">اختر مورداً...</option>
-                                        {suppliers.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
+                                    {/* Searchable supplier combobox for Add Batch */}
+                                    {(() => {
+                                        const selectedName = suppliers.find(s => s.id === batchData.supplierId)?.name ?? "";
+                                        const filteredBatch = suppliers.filter(s =>
+                                            !supplierSearch || s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+                                        );
+                                        return (
+                                            <div ref={supplierRef} className="relative">
+                                                <div
+                                                    className="flex items-center gap-2 w-full bg-card border border-border rounded-xl px-3 py-2 cursor-text focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring"
+                                                    onClick={() => setSupplierOpen(true)}
+                                                >
+                                                    <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                                    <input
+                                                        className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
+                                                        placeholder={selectedName || "اكتب للبحث عن مورد..."}
+                                                        value={supplierOpen ? supplierSearch : selectedName}
+                                                        onChange={e => { setSupplierSearch(e.target.value); setSupplierOpen(true); }}
+                                                        onFocus={() => setSupplierOpen(true)}
+                                                        dir="rtl"
+                                                    />
+                                                    {batchData.supplierId && (
+                                                        <button type="button" onClick={e => { e.stopPropagation(); setBatchData({ ...batchData, supplierId: "" }); setSupplierSearch(""); }}
+                                                            className="text-muted-foreground hover:text-destructive shrink-0">
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                    <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
+                                                </div>
+                                                {supplierOpen && (
+                                                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                                                        {filteredBatch.length === 0 ? (
+                                                            <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
+                                                        ) : (
+                                                            filteredBatch.map(s => (
+                                                                <button key={s.id} type="button"
+                                                                    onClick={() => { setBatchData({ ...batchData, supplierId: s.id }); setSupplierOpen(false); setSupplierSearch(""); }}
+                                                                    className={`w-full text-right px-4 py-2 text-sm hover:bg-muted transition-colors block ${s.id === batchData.supplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
+                                                                    {s.name}
+                                                                </button>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                                 <div className="flex gap-3 pt-3">
                                     <button type="submit" className="flex-1 bg-success text-success-foreground py-2.5 rounded-xl font-bold hover:bg-success/90 transition-colors text-sm shadow-lg shadow-success/20">إضافة الدفعة</button>
@@ -999,6 +1113,55 @@ export default function InventoryPage({ user }: { user: any }) {
                                 <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">تاريخ انتهاء الصلاحية</label>
                                     <input type="date" name="expiryDate" defaultValue={new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0]} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">المورد (اختياري)</label>
+                                    {(() => {
+                                        const selectedName = suppliers.find(s => s.id === createDrugSupplierId)?.name ?? "";
+                                        const filteredCreate = suppliers.filter(s =>
+                                            !supplierSearch || s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+                                        );
+                                        return (
+                                            <div ref={supplierRef} className="relative">
+                                                <div
+                                                    className="flex items-center gap-2 w-full bg-card border border-border rounded-xl px-3 py-2 cursor-text focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring"
+                                                    onClick={() => setSupplierOpen(true)}
+                                                >
+                                                    <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                                    <input
+                                                        className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
+                                                        placeholder={selectedName || "اكتب للبحث عن مورد..."}
+                                                        value={supplierOpen ? supplierSearch : selectedName}
+                                                        onChange={e => { setSupplierSearch(e.target.value); setSupplierOpen(true); }}
+                                                        onFocus={() => setSupplierOpen(true)}
+                                                        dir="rtl"
+                                                    />
+                                                    {createDrugSupplierId && (
+                                                        <button type="button" onClick={e => { e.stopPropagation(); setCreateDrugSupplierId(""); setSupplierSearch(""); }}
+                                                            className="text-muted-foreground hover:text-destructive shrink-0">
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                    <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
+                                                </div>
+                                                {supplierOpen && (
+                                                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                                                        {filteredCreate.length === 0 ? (
+                                                            <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
+                                                        ) : (
+                                                            filteredCreate.map(s => (
+                                                                <button key={s.id} type="button"
+                                                                    onClick={() => { setCreateDrugSupplierId(s.id); setSupplierOpen(false); setSupplierSearch(""); }}
+                                                                    className={`w-full text-right px-4 py-2 text-sm hover:bg-muted transition-colors block ${s.id === createDrugSupplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
+                                                                    {s.name}
+                                                                </button>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                                 <div className="col-span-2 flex gap-3 pt-4">
                                     <button type="submit" className="flex-1 bg-primary text-primary-foreground py-3 rounded-xl font-bold hover:bg-primary/90 transition-all text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2">

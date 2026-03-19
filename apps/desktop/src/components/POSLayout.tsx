@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import HotkeyHelpPanel from "./HotkeyHelpPanel";
-import { Search, ShoppingCart, Trash2, Plus, Minus, Database, Wifi, WifiOff, CheckCircle, Printer, X, LayoutGrid, TicketPercent, Gift, Clock, CreditCard, Banknote, Smartphone, AlertTriangle, Eraser, Undo2 } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, Database, Wifi, WifiOff, CheckCircle, Printer, X, LayoutGrid, TicketPercent, Gift, Clock, CreditCard, Banknote, Smartphone, AlertTriangle, Eraser, Undo2, Zap } from "lucide-react";
 import SyncHealthDashboard from "./SyncHealthDashboard";
 import InvoicePrint from "./InvoicePrint";
 import SaleReturnModal from "./SaleReturnModal";
@@ -46,6 +46,16 @@ function formatIQD(amount: number) {
 }
 
 // توليد رقم فاتورة
+/** Wraps ipcRenderer.invoke with a timeout to prevent loading states from freezing forever */
+function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
+    return Promise.race([
+        window.ipcRenderer.invoke(channel, ...args) as Promise<T>,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`IPC timeout (${channel})`)), 12000)
+        ),
+    ]);
+}
+
 function generateInvoiceNumber() {
     return Math.floor(10000000 + Math.random() * 90000000).toString();
 }
@@ -54,6 +64,7 @@ export default function POSLayout({ user }: { user: any }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [cart, setCart] = useState<CartItem[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
+    const [quickSaleProducts, setQuickSaleProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
     const [isOnline, setIsOnline] = useState(false);
     const [isZainCashProcessing, setIsZainCashProcessing] = useState(false);
@@ -70,8 +81,6 @@ export default function POSLayout({ user }: { user: any }) {
     // Shift Modals State
     const [showShiftOpenModal, setShowShiftOpenModal] = useState(false);
     const [showShiftCloseModal, setShowShiftCloseModal] = useState(false);
-    const [availableSafes, setAvailableSafes] = useState<any[]>([]);
-    const [selectedSafeId, setSelectedSafeId] = useState("");
     const [startingCashAmount, setStartingCashAmount] = useState("");
     const [actualCashAmount, setActualCashAmount] = useState("");
     const [shiftSummary, setShiftSummary] = useState<any>(null);
@@ -108,7 +117,7 @@ export default function POSLayout({ user }: { user: any }) {
     const checkShiftStatus = useCallback(async () => {
         if (window.ipcRenderer && user?.id) {
             try {
-                const status = await window.ipcRenderer.invoke('get-shift-status', { userId: user.id });
+                const status = await ipcInvoke('get-shift-status', { userId: user.id });
                 if (status.isWorking) {
                     setIsShiftOpen(true);
                     setShiftStartTime(status.startTime);
@@ -136,7 +145,7 @@ export default function POSLayout({ user }: { user: any }) {
             // Fetch summary first before showing close modal
             setLoading(true);
             try {
-                const res = await window.ipcRenderer.invoke('get-shift-summary', { userId: user.id });
+                const res = await ipcInvoke('get-shift-summary', { userId: user.id });
                 if (res.success) {
                     setShiftSummary(res.summary);
                     setActualCashAmount(""); // Clear previous
@@ -150,33 +159,17 @@ export default function POSLayout({ user }: { user: any }) {
                 setLoading(false);
             }
         } else {
-            // Fetch safes before showing open modal
-            setLoading(true);
-            try {
-                const safes = await window.ipcRenderer.invoke('get-safes', { branchId: user.branchId });
-                setAvailableSafes(safes);
-                if (safes.length > 0) setSelectedSafeId(safes[0].id);
-                setStartingCashAmount("");
-                setShowShiftOpenModal(true);
-            } catch (error: any) {
-                alert("فشل في جلب الصناديق: " + error.message);
-            } finally {
-                setLoading(false);
-            }
+            setStartingCashAmount("");
+            setShowShiftOpenModal(true);
         }
     };
 
     const confirmStartShift = async () => {
-        if (!selectedSafeId) {
-            alert("يرجى اختيار صندوق");
-            return;
-        }
         setLoading(true);
         try {
-            const res = await window.ipcRenderer.invoke('clock-in', {
+            const res = await ipcInvoke('clock-in', {
                 userId: user.id,
                 branchId: user.branchId,
-                safeId: selectedSafeId,
                 startingCash: parseFloat(startingCashAmount || "0")
             });
             if (res.success) {
@@ -199,7 +192,7 @@ export default function POSLayout({ user }: { user: any }) {
         }
         setLoading(true);
         try {
-            const res = await window.ipcRenderer.invoke('clock-out', {
+            const res = await ipcInvoke('clock-out', {
                 userId: user.id,
                 actualCash: parseFloat(actualCashAmount)
             });
@@ -227,7 +220,7 @@ export default function POSLayout({ user }: { user: any }) {
         if (!window.ipcRenderer) return;
         setLoading(true);
         try {
-            const res = await window.ipcRenderer.invoke('process-cash-drop', {
+            const res = await ipcInvoke('process-cash-drop', {
                 userId: user.id,
                 amount: parseFloat(cashDropAmount),
                 type: cashDropType,
@@ -272,7 +265,7 @@ export default function POSLayout({ user }: { user: any }) {
         const checkConnection = async () => {
             if (window.ipcRenderer) {
                 try {
-                    const status = await window.ipcRenderer.invoke('get-connection-status');
+                    const status = await ipcInvoke('get-connection-status');
                     setIsOnline(status);
                 } catch (e) {
                     console.error("Connection check failed", e);
@@ -287,7 +280,7 @@ export default function POSLayout({ user }: { user: any }) {
             if (window.ipcRenderer) {
                 setLoading(true);
                 try {
-                    const data = await window.ipcRenderer.invoke('get-products', { searchTerm, branchId: user?.branchId });
+                    const data = await ipcInvoke('get-products', { searchTerm, branchId: user?.branchId });
                     setProducts(data);
                 } catch (error) {
                     console.error("فشل في جلب المنتجات", error);
@@ -303,6 +296,21 @@ export default function POSLayout({ user }: { user: any }) {
             clearInterval(connectionInterval);
         };
     }, [searchTerm]);
+
+    // جلب أدوية البيع السريع عند التحميل
+    useEffect(() => {
+        const fetchQuickSale = async () => {
+            if (window.ipcRenderer) {
+                try {
+                    const data = await ipcInvoke('get-quick-sale-products', { branchId: user?.branchId });
+                    setQuickSaleProducts(data || []);
+                } catch (error) {
+                    console.error("فشل جلب أدوية البيع السريع", error);
+                }
+            }
+        };
+        fetchQuickSale();
+    }, []);
 
     // مسح الباركود السريع
     const handleBarcodeSearch = (barcode: string) => {
@@ -351,7 +359,7 @@ export default function POSLayout({ user }: { user: any }) {
             try {
                 // 1. Check Drug Interactions
                 if (scientificNames.length >= 2) {
-                    const inters = await window.ipcRenderer.invoke('pos:check-interactions', scientificNames);
+                    const inters = await ipcInvoke('pos:check-interactions', scientificNames);
                     setInteractions(inters || []);
                 } else {
                     setInteractions([]);
@@ -359,7 +367,7 @@ export default function POSLayout({ user }: { user: any }) {
 
                 // 2. Check Patient Allergies
                 if (selectedPatient?.id) {
-                    const allergies = await window.ipcRenderer.invoke('pos:check-allergies', {
+                    const allergies = await ipcInvoke('pos:check-allergies', {
                         scientificNames,
                         patientId: selectedPatient.id
                     });
@@ -386,7 +394,7 @@ export default function POSLayout({ user }: { user: any }) {
             if (window.ipcRenderer) {
                 setLoading(true);
                 try {
-                    const alts = await window.ipcRenderer.invoke('get-alternatives', {
+                    const alts = await ipcInvoke('get-alternatives', {
                         drugId: product.id,
                         branchId: user?.branchId
                     });
@@ -395,15 +403,16 @@ export default function POSLayout({ user }: { user: any }) {
                         setAlternatives(alts);
                         setOutOfStockProduct(product);
                         setShowAlternativesModal(true);
-                        setLoading(false);
                         return; // Stop here, let user choose
                     } else {
                         alert("هذا المنتج غير متوفر ولا توجد بدائل متاحة حالياً.");
-                        setLoading(false);
                         return;
                     }
                 } catch (e) {
                     console.error("Failed to fetch alternatives", e);
+                    alert("هذا المنتج نفد من المخزون!");
+                    return;
+                } finally {
                     setLoading(false);
                 }
             }
@@ -462,7 +471,7 @@ export default function POSLayout({ user }: { user: any }) {
             if (patientQuery.length <= 1) {
                 const fetchRecents = async () => {
                     if (window.ipcRenderer) {
-                        const recents = await window.ipcRenderer.invoke('get-patients', { branchId: user?.branchId });
+                        const recents = await ipcInvoke('get-patients', { branchId: user?.branchId });
                         setPatientResults(recents);
                     }
                 };
@@ -470,7 +479,7 @@ export default function POSLayout({ user }: { user: any }) {
             } else {
                 const search = async () => {
                     if (window.ipcRenderer) {
-                        const results = await window.ipcRenderer.invoke('search-patients', patientQuery, user?.branchId);
+                        const results = await ipcInvoke('search-patients', patientQuery, user?.branchId);
                         setPatientResults(results);
                     }
                 };
@@ -483,7 +492,7 @@ export default function POSLayout({ user }: { user: any }) {
     const handleCreatePatient = async (e: React.FormEvent) => {
         e.preventDefault();
         if (window.ipcRenderer) {
-            const res = await window.ipcRenderer.invoke('create-patient', { ...newPatient, branchId: user?.branchId });
+            const res = await ipcInvoke('create-patient', { ...newPatient, branchId: user?.branchId });
             if (res.success) {
                 setSelectedPatient(res.patient);
                 setShowPatientModal(false);
@@ -506,7 +515,7 @@ export default function POSLayout({ user }: { user: any }) {
         const fetchSettings = async () => {
             if (window.ipcRenderer) {
                 try {
-                    const settings = await window.ipcRenderer.invoke('get-settings');
+                    const settings = await ipcInvoke('get-settings');
                     setCompanySettings(settings);
                 } catch (error) {
                     console.error("Failed to fetch settings:", error);
@@ -541,7 +550,7 @@ export default function POSLayout({ user }: { user: any }) {
         try {
             const saleId = `POS-${Date.now()}`;
             // @ts-ignore
-            const result = await window.ipcRenderer.invoke('initiate-zain-cash-payment', {
+            const result = await ipcInvoke('initiate-zain-cash-payment', {
                 amount: finalTotal,
                 saleId
             });
@@ -553,7 +562,7 @@ export default function POSLayout({ user }: { user: any }) {
             }
 
             // @ts-ignore
-            await window.ipcRenderer.invoke('open-external-url', result.redirectUrl);
+            await ipcInvoke('open-external-url', result.redirectUrl);
 
             setIsZainCashProcessing(true);
             setLoading(false);
@@ -562,7 +571,7 @@ export default function POSLayout({ user }: { user: any }) {
             const pollInterval = setInterval(async () => {
                 try {
                     // @ts-ignore
-                    const statusResult = await window.ipcRenderer.invoke('check-zain-cash-status', { transactionId });
+                    const statusResult = await ipcInvoke('check-zain-cash-status', { transactionId });
                     if (statusResult.success) {
                         if (statusResult.status === 'success' || statusResult.status === 'completed') {
                             clearInterval(pollInterval);
@@ -614,8 +623,21 @@ export default function POSLayout({ user }: { user: any }) {
             ? `هل تريد بيع بالآجل بقيمة ${formatIQD(finalTotal)}؟\n(العميل: ${selectedPatient?.name})\nسيضاف المبلغ إلى دفتر الديون`
             : `هل تريد إتمام عملية الدفع بقيمة ${formatIQD(finalTotal)}؟ ${selectedPatient ? `\n(العميل: ${selectedPatient.name})` : ''}`;
 
+        // Block HIGH-severity drug interactions: require explicit acknowledgement
+        const hasHighInteraction = interactions.some(i => i.severity?.toUpperCase() === 'HIGH');
+        if (hasHighInteraction) {
+            const acknowledged = confirm(
+                '⚠️ تحذير: يوجد تفاعل دوائي خطير بين الأدوية المحددة!\n\n' +
+                interactions.filter(i => i.severity?.toUpperCase() === 'HIGH')
+                    .map(i => `• ${i.drug1} + ${i.drug2}: ${i.description}`)
+                    .join('\n') +
+                '\n\nهل أنت متأكد من المتابعة رغم الخطر؟ (يجب الحصول على موافقة المريض)'
+            );
+            if (!acknowledged) return;
+        }
+
         if (confirm(confirmMsg)) {
-            const result = await window.ipcRenderer.invoke('process-sale', {
+            const result = await ipcInvoke('process-sale', {
                 items: cart,
                 total: finalTotal,
                 userId: user.id,
@@ -637,7 +659,7 @@ export default function POSLayout({ user }: { user: any }) {
                         price: item.price
                     })),
                     total: finalTotal,
-                    invoiceNumber: generateInvoiceNumber(),
+                    invoiceNumber: result.invoiceNumber || generateInvoiceNumber(),
                     date: new Date(),
                     patientName: selectedPatient?.name,
                     patientPhone: selectedPatient?.phone, // Add phone persistence
@@ -662,7 +684,7 @@ export default function POSLayout({ user }: { user: any }) {
                 setManualDiscount(0);
                 setIsRedeemingLoyalty(false);
 
-                const refreshed = await window.ipcRenderer.invoke('get-products', { searchTerm: "", branchId: user?.branchId });
+                const refreshed = await ipcInvoke('get-products', { searchTerm: "", branchId: user?.branchId });
                 setProducts(refreshed);
             } else {
                 alert("فشلت عملية البيع: " + result.error);
@@ -672,9 +694,9 @@ export default function POSLayout({ user }: { user: any }) {
 
     const handleSeed = async () => {
         if (window.ipcRenderer) {
-            const res = await window.ipcRenderer.invoke('seed-products');
+            const res = await ipcInvoke('seed-products');
             alert(res === "Seeded" ? "تم إضافة بيانات تجريبية" : "البيانات موجودة مسبقاً");
-            const refreshed = await window.ipcRenderer.invoke('get-products', { searchTerm: "", branchId: user?.branchId });
+            const refreshed = await ipcInvoke('get-products', { searchTerm: "", branchId: user?.branchId });
             setProducts(refreshed);
         }
     };
@@ -682,7 +704,7 @@ export default function POSLayout({ user }: { user: any }) {
     const handleSync = useCallback(async () => {
         if (window.ipcRenderer) {
             try {
-                await window.ipcRenderer.invoke('trigger-sync');
+                await ipcInvoke('trigger-sync');
             } catch (e) {
                 console.error("Sync failed", e);
             }
@@ -1160,6 +1182,36 @@ export default function POSLayout({ user }: { user: any }) {
                     </div>
                 )}
 
+                {/* لوحة البيع السريع */}
+                {!searchTerm && quickSaleProducts.length > 0 && (
+                    <div className="px-5 pb-3 pt-1">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Zap className="w-4 h-4 text-amber-500" />
+                            <span className="text-xs font-bold text-muted-foreground">بيع سريع</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {quickSaleProducts.map((product) => (
+                                <button
+                                    key={product.id}
+                                    onClick={() => addToCart(product)}
+                                    disabled={product.stock <= 0}
+                                    className={`flex flex-col items-start px-3 py-2 rounded-xl border text-right transition-all text-sm font-bold ${
+                                        product.stock <= 0
+                                            ? 'opacity-40 cursor-not-allowed bg-muted border-border'
+                                            : 'bg-amber-50 border-amber-200 hover:border-amber-400 hover:bg-amber-100 active:scale-95 dark:bg-amber-950/20 dark:border-amber-800'
+                                    }`}
+                                >
+                                    <span className="text-foreground leading-tight">{product.name}</span>
+                                    <span className="text-xs font-normal text-amber-600 dark:text-amber-400">
+                                        {new Intl.NumberFormat('ar-IQ').format(product.price)} د.ع
+                                        {product.stock <= 0 && <span className="text-destructive mr-1">• نفد</span>}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* شبكة المنتجات */}
                 <div className="flex-1 overflow-y-auto px-5 pb-5">
                     <div className="grid grid-cols-2 gap-3 pt-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -1594,19 +1646,6 @@ export default function POSLayout({ user }: { user: any }) {
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">اختر الصندوق</label>
-                                <select
-                                    className="w-full border-border rounded-lg shadow-sm focus:border-primary focus:ring-primary"
-                                    value={selectedSafeId}
-                                    onChange={(e) => setSelectedSafeId(e.target.value)}
-                                >
-                                    <option value="" disabled>-- اختر صندوقاً --</option>
-                                    {availableSafes.map(safe => (
-                                        <option key={safe.id} value={safe.id}>{safe.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
                                 <label className="block text-sm font-medium text-foreground mb-1">الرصيد الافتتاحي (د.ع)</label>
                                 <input
                                     type="number"
@@ -1623,7 +1662,7 @@ export default function POSLayout({ user }: { user: any }) {
                         <div className="p-4 border-t bg-muted/50 flex gap-3">
                             <button
                                 onClick={confirmStartShift}
-                                disabled={loading || !selectedSafeId}
+                                disabled={loading}
                                 className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-4 rounded-lg disabled:opacity-50 transition-colors"
                             >
                                 بدء الوردية
@@ -1670,8 +1709,20 @@ export default function POSLayout({ user }: { user: any }) {
                                             <p className="font-bold text-primary">{shiftSummary.safeName}</p>
                                         </div>
                                         <div className="bg-success/10 p-4 rounded-xl border border-success/20">
-                                            <p className="text-xs text-success mb-1">المبيعات ({shiftSummary.salesCount})</p>
+                                            <p className="text-xs text-success mb-1">إجمالي المبيعات ({shiftSummary.salesCount})</p>
                                             <p className="font-bold text-success">{formatIQD(shiftSummary.salesTotalAmount)}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Sales breakdown: cash vs credit */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-primary/5 p-3 rounded-xl border border-primary/20">
+                                            <p className="text-xs text-primary mb-1">نقدي ({shiftSummary.cashSalesCount})</p>
+                                            <p className="font-bold text-primary">{formatIQD(shiftSummary.cashSalesTotal)}</p>
+                                        </div>
+                                        <div className="bg-destructive/5 p-3 rounded-xl border border-destructive/20">
+                                            <p className="text-xs text-destructive mb-1">آجل ({shiftSummary.creditSalesCount})</p>
+                                            <p className="font-bold text-destructive">{formatIQD(shiftSummary.creditSalesTotal)}</p>
                                         </div>
                                     </div>
 

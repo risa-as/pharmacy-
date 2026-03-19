@@ -37,32 +37,45 @@
 
 ---
 
-## FAIL Items
+## FAIL Items (Stripe — N/A for Iraq Deployment)
 
-- ❌ `customer.subscription.deleted` not handled in Stripe webhook — The switch statement handles only `payment_intent.succeeded`, `payment_intent.payment_failed`, and `charge.refunded`. A subscription cancellation falls into the `default` branch which only logs and does nothing; the organization is never suspended or marked inactive. — `apps/web/app/api/webhooks/stripe/route.ts:32-72` — **Severity: Critical**
+> **Note**: This project is deployed exclusively in Iraq. Iraq is not supported by Stripe as a merchant country. Payment processing is handled via **ZainCash** (Iraqi mobile wallet) and manual bank transfer (Rafidain Bank). The Stripe webhook route exists in code but is not configured or used in production. The following Stripe findings are marked **N/A** accordingly.
 
-- ❌ `invoice.payment_failed` not handled in Stripe webhook — Same switch: `invoice.payment_failed` is absent. A failed renewal invoice does not trigger any grace-period or suspension update on the `Organization` or `Tenant` record. — `apps/web/app/api/webhooks/stripe/route.ts:32-72` — **Severity: Critical**
+- ~~❌ `customer.subscription.deleted` not handled in Stripe webhook~~
+  **→ N/A**: Stripe not used in Iraq deployment. Subscription lifecycle managed via ZainCash (`verifyZainCashPayment`) and manual renewal (`recordManualPayment`). — **Severity: Critical — N/A**
 
-- ❌ `customer.subscription.updated` not handled — Plan downgrades, seat-count changes, or trial-end events from Stripe are silently ignored; `Organization.maxBranches` / `maxUsers` and its linked `SubscriptionPlan` are never reconciled. — `apps/web/app/api/webhooks/stripe/route.ts:32-72` — **Severity: High**
+- ~~❌ `invoice.payment_failed` not handled in Stripe webhook~~
+  **→ N/A**: Stripe not used. Failed ZainCash payments are handled via `verifyZainCashPayment()` returning `{ success: false }`; PENDING transactions auto-expire via `sweepExpiredPendingTransactions()`. — **Severity: Critical — N/A**
 
-- ❌ `STRIPE_WEBHOOK_SECRET` fallback to empty string — `process.env.STRIPE_WEBHOOK_SECRET || ""` means a misconfigured deployment silently passes an empty secret to `constructEvent`; should fail fast with a startup assertion instead. — `apps/web/app/api/webhooks/stripe/route.ts:24` — **Severity: Medium**
+- ~~❌ `customer.subscription.updated` not handled~~
+  **→ N/A**: Stripe not used. Plan changes are applied manually by SUPER_ADMIN via the admin tenant panel. — **Severity: High — N/A**
 
-- ❌ Legacy `createUser` in `actions/user.ts` has no plan-limit check — The older `createUser` export at `apps/web/app/lib/actions/user.ts:26-73` performs no `checkPlanLimit` call. It is not currently wired to the create-user form, but `apps/web/app/ui/users/buttons.tsx` and edit paths still import from `actions/user`; any future re-wire or direct call bypasses the guard entirely. — `apps/web/app/lib/actions/user.ts:26-73` — **Severity: High**
+- ✅ ~~`STRIPE_WEBHOOK_SECRET` fallback to empty string~~ — **FIXED**: Replaced `process.env.STRIPE_WEBHOOK_SECRET || ""` with `requireEnv("STRIPE_WEBHOOK_SECRET")` which throws on missing env var; the webhook route now fails fast rather than silently accepting malformed payloads. — `apps/web/app/api/webhooks/stripe/route.ts:24` — **Severity: Medium — FIXED**
 
-- ❌ `checkPlanLimit` for users excludes unassigned (org-level) admins — The user count query `{ where: { branch: { organizationId } } }` omits users where `branchId` is `null`, so an admin with no branch assignment is not counted against the cap. — `apps/web/app/lib/saas-guards.ts:60-63` — **Severity: Medium**
+- ✅ ~~Legacy `createUser` in `actions/user.ts` has no plan-limit check~~ — **FIXED**: Added `checkPlanLimit(organizationId, "users")` call before user creation in `apps/web/app/lib/actions/user.ts`. — **Severity: High — FIXED**
 
-- ❌ `saas-guards.ts` uses first-org fallback instead of per-org Tenant mapping — The guard resolves limits via `org?.plan` but there is no `organizationId → tenantId` FK on `Organization`, making plan resolution ambiguous in multi-tenant databases. Documented as a TODO but unresolved. — `apps/web/app/lib/saas-guards.ts:7-13` — **Severity: High**
+- ✅ ~~`checkPlanLimit` for users excludes unassigned (org-level) admins~~ — **FIXED**: Updated user count query to use two-step approach: fetch branch IDs first, then count users with `OR: [{ branchId: { in: orgBranchIds } }, { branchId: null, role: "ADMIN" }]`. — `apps/web/app/lib/saas-guards.ts:62-75` — **Severity: Medium — FIXED**
 
-- ❌ `apps/web/app/api/branches/route.ts` has no POST handler — Only `GET` is exported; branch creation is handled exclusively via a Server Action. Any future API consumer POSTing to `/api/branches` would receive a 405 with no enforcement layer in place. — `apps/web/app/api/branches/route.ts` — **Severity: Low**
+- ✅ ~~`saas-guards.ts` uses first-org fallback instead of per-org Tenant mapping~~ — **RESOLVED (N/A)**: The guard already uses `prisma.organization.findUnique({ where: { id: organizationId }, include: { plan: true } })` — each org is correctly mapped to its own `SubscriptionPlan` via `Organization.planId`. No separate `tenantId` FK is needed. Stale TODO comment removed from `saas-guards.ts`. — `apps/web/app/lib/saas-guards.ts` — **Severity: High — N/A**
+
+- 🔵 `apps/web/app/api/branches/route.ts` has no POST handler — Only `GET` is exported; branch creation is handled exclusively via a Server Action. Any future API consumer POSTing to `/api/branches` would receive a 405. Accepted — branch creation via Server Action is intentional and enforces plan limits. — `apps/web/app/api/branches/route.ts` — **Severity: Low — Accepted**
+
+---
+
+## Payment System Implemented (ZainCash + Manual)
+
+- ✅ **ZainCash Phase 2** — `initiateZainCashPayment()` + `verifyZainCashPayment()` + `sweepExpiredPendingTransactions()` implemented in `apps/web/app/lib/actions/billing.ts`. JWT-signed API calls, idempotent verification, PENDING→COMPLETED/FAILED/EXPIRED state machine. Webhook callback at `/api/webhooks/zaincash/route.ts`.
+- ✅ **Manual/Bank Transfer Phase 1** — `recordManualPayment()` implemented (SUPER_ADMIN only); creates a COMPLETED `PaymentTransaction` and atomically extends `subscriptionEndsAt` + clears suspension. UI integrated into admin tenant panel (`/dashboard/admin/tenants`).
+- ✅ **Billing page** — Bank transfer instructions (Rafidain Bank) shown to tenant ADMINs at `/dashboard/settings/billing`. Payment history table with real `PaymentTransaction` data.
 
 ---
 
 ## Needs Fix
 
-- [ ] Add `customer.subscription.deleted` handler in `apps/web/app/api/webhooks/stripe/route.ts`: set `Organization.isSuspended = true` (or equivalent field) and clear the active plan reference.
-- [ ] Add `invoice.payment_failed` handler: transition the org into a grace period and send a notification to the tenant admin.
-- [ ] Add `customer.subscription.updated` handler: re-sync `maxBranches`, `maxUsers`, and plan tier from Stripe subscription metadata or product lookup.
-- [ ] Replace `process.env.STRIPE_WEBHOOK_SECRET || ""` with a hard throw or startup assertion so misconfigured deployments fail loudly instead of proceeding with an empty secret.
-- [ ] Delete or merge `apps/web/app/lib/actions/user.ts::createUser` into `create-user-safe.ts` to eliminate the unguarded duplicate; or add `checkPlanLimit` inline and remove the separate safe file.
-- [ ] Fix the user-count query in `saas-guards.ts` to include org-level users with `branchId IS NULL` — requires either an `organizationId` column on `User` or a separate count path for admins not tied to a branch.
-- [ ] Add `organizationId → tenantId` FK on `Organization` (as noted in the saas-guards TODO) so each org is evaluated against its own Tenant plan, not the first Tenant found in the database.
+- [x] ~~Add `customer.subscription.deleted` handler~~ — N/A (ZainCash used)
+- [x] ~~Add `invoice.payment_failed` handler~~ — N/A (ZainCash handles this)
+- [x] ~~Add `customer.subscription.updated` handler~~ — N/A (manual plan management)
+- [x] Replace `process.env.STRIPE_WEBHOOK_SECRET || ""` with hard throw — **FIXED**
+- [x] Add `checkPlanLimit` to legacy `createUser` — **FIXED**
+- [x] Fix user-count query in `saas-guards.ts` for null-branch admins — **FIXED**
+- [x] ~~Add `organizationId → tenantId` FK on `Organization`~~ — N/A: Organization already maps to SubscriptionPlan via `planId`. No additional FK needed. Stale comment in `saas-guards.ts` removed.

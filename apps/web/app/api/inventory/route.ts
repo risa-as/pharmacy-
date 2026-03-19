@@ -11,8 +11,18 @@ export async function GET(req: Request) {
         if (tenantCtx instanceof NextResponse) return tenantCtx;
         const { tenantBranchWhere } = tenantCtx;
 
+        const url = new URL(req.url);
+        const filterDrugId = url.searchParams.get('drugId');
+        const filterBranchId = url.searchParams.get('branchId');
+
+        const where = {
+            ...tenantBranchWhere,
+            ...(filterDrugId ? { drugId: filterDrugId } : {}),
+            ...(filterBranchId ? { branchId: filterBranchId } : {}),
+        };
+
         const inventory = await prisma.inventory.findMany({
-            where: tenantBranchWhere,
+            where,
             include: {
                 batches: true,
                 // No direct relation to GlobalDrug in schema (drugId is just string)
@@ -37,6 +47,7 @@ export async function GET(req: Request) {
                 publicPrice: drug ? (drug as any).publicPrice || item.price : item.price,
                 reorderLevel: item.minStock,
                 branchId: item.branchId,
+                isQuickSale: drug ? (drug.isQuickSale ?? false) : false,
             };
         });
 

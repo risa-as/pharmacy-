@@ -1,5 +1,8 @@
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
+import { jwtVerify } from 'jose';
+import { headers } from 'next/headers';
+import { cache } from 'react';
 
 export interface TenantContext {
     user: {
@@ -11,65 +14,96 @@ export interface TenantContext {
         organizationId?: string;
     };
     organizationId?: string;
-    // Helper to inject into Prisma "where" clauses to automatically filter by tenant/branch
     tenantWhere: Record<string, any>;
-    // Same as above but used when the target table relates to branch (e.g., target -> branch -> organization)
     tenantBranchWhere: Record<string, any>;
 }
 
-/**
- * Retrieves the current user's session and extracts their tenant isolation context.
- * Useful for any API route to ensure queries are strictly bounded to their organization or branch.
- * Usage: const { tenantWhere, tenantBranchWhere, user } = await requireTenantContext();
- */
-export async function getTenantContext(): Promise<TenantContext | NextResponse> {
-    const session = await auth();
-
-    if (!session?.user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+// Lazily encoded once per process; throws only at request time, not at build time.
+let _jwtSecret: Uint8Array | null = null;
+function getJwtSecret(): Uint8Array {
+    if (!_jwtSecret) {
+        if (!process.env.AUTH_SECRET) throw new Error('AUTH_SECRET env var is not set');
+        _jwtSecret = new TextEncoder().encode(process.env.AUTH_SECRET);
     }
-
-    const role = session.user.role || 'CASHIER';
-    const isSuperAdmin = role === 'SUPER_ADMIN';
-    const isAdmin = role === 'ADMIN';
-
-    const organizationId = (session.user as any).organizationId as string | undefined;
-    const branchId = session.user.branchId as string | undefined;
-
-    let tenantWhere: Record<string, any> = {};
-    let tenantBranchWhere: Record<string, any> = {};
-
-    if (isSuperAdmin) {
-        // Super admins see everything across all tenants. No filters applied.
-        tenantWhere = {};
-        tenantBranchWhere = {};
-    } else if (isAdmin) {
-        // Admins see everything within their organization.
-        if (!organizationId) {
-            return NextResponse.json({ error: "Organization not found for Admin user" }, { status: 403 });
-        }
-        tenantWhere = { organizationId };
-        tenantBranchWhere = { branch: { organizationId } };
-    } else {
-        // Staff see only their specific branch.
-        if (!branchId) {
-            return NextResponse.json({ error: "Branch not assigned to user" }, { status: 403 });
-        }
-        tenantWhere = { branchId }; // If the model has branchId directly
-        tenantBranchWhere = { branchId }; // Fallback equivalent
-    }
-
-    return {
-        user: {
-            id: session.user.id!,
-            name: session.user.name ?? undefined,
-            email: session.user.email ?? undefined,
-            role,
-            branchId,
-            organizationId
-        },
-        organizationId,
-        tenantWhere,
-        tenantBranchWhere
-    };
+    return _jwtSecret;
 }
+
+/**
+ * Retrieves the current user's tenant isolation context.
+ * Wrapped with React's `cache()` so that multiple calls within the same
+ * server request return the same result without re-running auth verification.
+ *
+ * Supports both NextAuth cookie sessions (web) and Bearer JWT tokens (mobile).
+ */
+export const getTenantContext = cache(
+    async (): Promise<TenantContext | NextResponse> => {
+        // Try NextAuth session first (web browser / dashboard)
+        const session = await auth();
+
+        let role: string;
+        let organizationId: string | undefined;
+        let branchId: string | undefined;
+        let userId: string;
+
+        if (session?.user) {
+            role = session.user.role || 'CASHIER';
+            organizationId = (session.user as any).organizationId as string | undefined;
+            branchId = session.user.branchId as string | undefined;
+            userId = session.user.id!;
+        } else {
+            // Fallback: Bearer JWT token (mobile app)
+            const headersList = await headers();
+            const authHeader = headersList.get('authorization');
+            if (!authHeader?.startsWith('Bearer ')) {
+                return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            }
+            const token = authHeader.slice(7);
+            try {
+                const { payload } = await jwtVerify(token, getJwtSecret());
+                userId = payload.userId as string;
+                role = (payload.role as string) || 'CASHIER';
+                branchId = (payload.branchId as string) || undefined;
+                organizationId = (payload.organizationId as string) || undefined;
+            } catch {
+                return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            }
+        }
+
+        const isSuperAdmin = role === 'SUPER_ADMIN';
+        const isAdmin = role === 'ADMIN' || role === 'MANAGER';
+
+        let tenantWhere: Record<string, any> = {};
+        let tenantBranchWhere: Record<string, any> = {};
+
+        if (isSuperAdmin) {
+            tenantWhere = {};
+            tenantBranchWhere = {};
+        } else if (isAdmin) {
+            if (!organizationId) {
+                return NextResponse.json({ error: "Organization not found for Admin user" }, { status: 403 });
+            }
+            tenantWhere = { organizationId };
+            tenantBranchWhere = { branch: { organizationId } };
+        } else {
+            if (!branchId) {
+                return NextResponse.json({ error: "Branch not assigned to user" }, { status: 403 });
+            }
+            tenantWhere = { branchId };
+            tenantBranchWhere = { branchId };
+        }
+
+        return {
+            user: {
+                id: userId,
+                name: session?.user?.name ?? undefined,
+                email: session?.user?.email ?? undefined,
+                role,
+                branchId,
+                organizationId,
+            },
+            organizationId,
+            tenantWhere,
+            tenantBranchWhere,
+        };
+    }
+);

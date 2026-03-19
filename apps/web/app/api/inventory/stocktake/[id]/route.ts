@@ -115,6 +115,39 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 }
 
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+    try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
+        const { id } = params;
+
+        const stocktake = await prisma.stocktake.findUnique({
+            where: { id },
+            select: { id: true, status: true, branchId: true }
+        });
+
+        if (!stocktake) {
+            return NextResponse.json({ error: "Stocktake not found" }, { status: 404 });
+        }
+
+        if (stocktake.status !== "PENDING") {
+            return NextResponse.json({ error: "يمكن إلغاء الجردات التي في حالة قيد الإجراء فقط" }, { status: 400 });
+        }
+
+        // Mark as CANCELLED — items cascade-deleted via onDelete: Cascade
+        await prisma.stocktake.update({
+            where: { id },
+            data: { status: "CANCELLED" }
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("DELETE Stocktake error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
         const tenantCtx = await getTenantContext();

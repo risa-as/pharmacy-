@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from '@/auth';
+import { validateSyncUser } from '@/app/lib/sync-auth';
 import { z } from "zod";
 
 
@@ -27,10 +27,8 @@ const SyncPayloadSchema = z.object({
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
 
         const idempotencyKey = req.headers.get('x-idempotency-key');
         if (!idempotencyKey) {
@@ -47,9 +45,9 @@ export async function POST(req: NextRequest) {
         const { branchId, transactions } = result.data;
 
         // Validate branchId belongs to the authenticated user
-        const userRole = (session.user as any).role;
-        const userBranchId = (session.user as any).branchId;
-        const userOrgId = (session.user as any).organizationId;
+        const userRole = syncUser.role;
+        const userBranchId = syncUser.branchId;
+        const userOrgId = syncUser.organizationId;
         if (userRole !== 'SUPER_ADMIN') {
             const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
             if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
@@ -79,6 +77,18 @@ export async function POST(req: NextRequest) {
 
                 if (existing) {
                     continue; // Log already exists, skip
+                }
+
+                // Ensure the safe exists in cloud (desktop may have auto-created it locally)
+                const safeExists = await tx.safe.findUnique({ where: { id: txn.safeId }, select: { id: true } });
+                if (!safeExists) {
+                    try {
+                        await tx.safe.create({
+                            data: { id: txn.safeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId }
+                        });
+                    } catch {
+                        // Safe was created concurrently — safe to ignore
+                    }
                 }
 
                 // Create Transaction
@@ -112,7 +122,7 @@ export async function POST(req: NextRequest) {
             // Log the action
             await tx.syncActionLog.upsert({
                 where: { idempotencyKey },
-                update: { status: "PROCESSED", updatedAt: new Date() },
+                update: { status: "PROCESSED" },
                 create: {
                     idempotencyKey,
                     actionType: "SYNC_TRANSACTIONS",

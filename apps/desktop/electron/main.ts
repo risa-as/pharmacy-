@@ -14,6 +14,8 @@ import {
   getConnectionStatus,
   syncSales,
   syncProducts,
+  syncShifts,
+  syncTransactions,
   syncDebtPayments,
   pushCreateDrugToCloud,
   pushAddToInventoryToCloud,
@@ -21,6 +23,7 @@ import {
   pushPatient,
   pushAddBatchToCloud,
   pushUpdateInventoryToCloud,
+  pushQuickSaleToggle,
 } from "./sync";
 import {
   createBackup,
@@ -99,8 +102,16 @@ app.on("activate", () => {
 // ظ†ط³ط® ط§ط­طھظٹط§ط·ظٹ طھظ„ظ‚ط§ط¦ظٹ ط¹ظ†ط¯ ط¥ط؛ظ„ط§ظ‚ ط§ظ„طھط·ط¨ظٹظ‚
 app.on("before-quit", async () => {
   console.log("Creating auto-backup before quit...");
-  await createBackup();
+  try {
+    await Promise.race([
+      createBackup(),
+      new Promise<void>(resolve => setTimeout(resolve, 8000)), // 8s max
+    ]);
+  } catch (e) {
+    console.error("Auto-backup failed on quit:", e);
+  }
   cleanupOldBackups(10);
+  await prisma.$disconnect();
 });
 
 type PendingSyncType =
@@ -1097,6 +1108,13 @@ app.whenReady().then(() => {
             // Update Store
             if (safeUser.branchId) {
               store.set("branchId", safeUser.branchId);
+              // Store sync token for headless desktop auth
+              if (data.syncToken) {
+                store.set("syncToken", data.syncToken);
+                store.set("syncUserId", cloudUser.id);
+                store.set("syncUserRole", cloudUser.role);
+                store.set("syncOrgId", cloudUser.organizationId || "");
+              }
               void processPendingSyncActions();
               // Trigger immediate sync and wait for it
               try {
@@ -1193,7 +1211,7 @@ ipcMain.handle("get-safes", async (_, { branchId }) => {
 
 ipcMain.handle(
   "clock-in",
-  async (_, { userId, branchId, safeId, startingCash }) => {
+  async (_, { userId, branchId, startingCash }) => {
     try {
       const activeShift = await prisma.shift.findFirst({
         where: { userId, status: "OPEN" },
@@ -1203,13 +1221,30 @@ ipcMain.handle(
         return { success: false, message: "لديك وردية مفتوحة بالفعل" };
       }
 
+      // Auto-get or create the default safe for this branch
+      let defaultSafe = await prisma.safe.findFirst({
+        where: { branchId, type: "CASH_DRAWER" },
+        orderBy: { createdAt: "asc" },
+      });
+
+      if (!defaultSafe) {
+        defaultSafe = await prisma.safe.create({
+          data: {
+            name: "الصندوق الرئيسي",
+            type: "CASH_DRAWER",
+            balance: 0,
+            branchId,
+          },
+        });
+      }
+
       await prisma.shift.create({
         data: {
           userId,
           branchId,
-          safeId,
+          safeId: defaultSafe.id,
           startingCash: startingCash || 0,
-          expectedCash: startingCash || 0, // Initial expected cash
+          expectedCash: startingCash || 0,
           startTime: new Date(),
           status: "OPEN",
         },
@@ -1232,32 +1267,52 @@ ipcMain.handle("get-shift-summary", async (_, { userId }) => {
     if (!activeShift)
       return { success: false, message: "لا توجد وردية مفتوحة" };
 
-    const safeBalance = activeShift.safe?.balance || 0;
+    const shiftWhere = { userId, createdAt: { gte: activeShift.startTime } };
 
-    // Count sales during this shift (for info)
-    const salesCount = await prisma.sale.count({
-      where: {
-        userId,
-        createdAt: { gte: activeShift.startTime },
-      },
+    // Fetch all sales during the shift with their payments
+    const shiftSales = await prisma.sale.findMany({
+      where: shiftWhere,
+      include: { payment: true },
     });
 
-    const salesTotal = await prisma.sale.aggregate({
-      _sum: { total: true },
-      where: {
-        userId,
-        createdAt: { gte: activeShift.startTime },
-      },
-    });
+    const cashSales = shiftSales.filter((s: any) => s.payment?.method !== 'CREDIT');
+    const creditSales = shiftSales.filter((s: any) => s.payment?.method === 'CREDIT');
+
+    const cashSalesTotal = cashSales.reduce((sum: number, s: any) => sum + s.total, 0);
+    const creditSalesTotal = creditSales.reduce((sum: number, s: any) => sum + s.total, 0);
+    const salesCount = shiftSales.length;
+    const salesTotalAmount = cashSalesTotal + creditSalesTotal;
+
+    // Calculate expected cash correctly:
+    // startingCash + all IN transactions on this safe since shift start - all OUT transactions
+    let expectedCash = activeShift.startingCash;
+    if (activeShift.safeId) {
+      // @ts-ignore
+      const txns = await prisma.transaction.findMany({
+        where: {
+          safeId: activeShift.safeId,
+          createdAt: { gte: activeShift.startTime },
+        },
+        select: { type: true, amount: true },
+      });
+      for (const t of txns) {
+        if (t.type === "IN") expectedCash += t.amount;
+        else expectedCash -= t.amount;
+      }
+    }
 
     return {
       success: true,
       summary: {
         startTime: activeShift.startTime,
         startingCash: activeShift.startingCash,
-        expectedCash: safeBalance, // expected based on Safe current balance
+        expectedCash,
         salesCount,
-        salesTotalAmount: salesTotal._sum.total || 0,
+        salesTotalAmount,
+        cashSalesCount: cashSales.length,
+        cashSalesTotal,
+        creditSalesCount: creditSales.length,
+        creditSalesTotal,
         safeName: activeShift.safe?.name,
       },
     };
@@ -1281,7 +1336,22 @@ ipcMain.handle("clock-out", async (_, { userId, actualCash }) => {
     const durationMs = endTime.getTime() - activeShift.startTime.getTime();
     const durationHours = durationMs / (1000 * 60 * 60);
 
-    const expectedCash = activeShift.safe ? activeShift.safe.balance : 0;
+    // Calculate expected cash: startingCash + IN transactions - OUT transactions since shift start
+    let expectedCash = activeShift.startingCash;
+    if (activeShift.safeId) {
+      // @ts-ignore
+      const txns = await prisma.transaction.findMany({
+        where: {
+          safeId: activeShift.safeId,
+          createdAt: { gte: activeShift.startTime },
+        },
+        select: { type: true, amount: true },
+      });
+      for (const t of txns) {
+        if (t.type === "IN") expectedCash += t.amount;
+        else expectedCash -= t.amount;
+      }
+    }
 
     await prisma.shift.update({
       where: { id: activeShift.id },
@@ -1291,8 +1361,14 @@ ipcMain.handle("clock-out", async (_, { userId, actualCash }) => {
         duration: durationHours,
         expectedCash,
         actualCash,
+        // @ts-ignore
+        synced: false, // Re-queue for sync so cloud gets the closed state
       },
     });
+
+    // Trigger immediate sync so the closed shift reaches the cloud right away
+    void syncShifts();
+    void syncTransactions();
 
     return { success: true };
   } catch (error: any) {
@@ -1471,10 +1547,67 @@ ipcMain.handle("get-products", async (_, arg: any) => {
         barcode: p.barcode,
         stock: totalStock,
         nearestExpiry: nearestBatch?.expiryDate || null,
+        isQuickSale: p.isQuickSale ?? false,
       };
     });
   } catch (error) {
     console.error("Error fetching products:", error);
+    return [];
+  }
+});
+
+ipcMain.handle("toggle-quick-sale", async (_, { drugId, isQuickSale }: { drugId: string; isQuickSale: boolean }) => {
+  try {
+    await prisma.globalDrug.update({
+      where: { id: drugId },
+      data: { isQuickSale },
+    });
+    // Push to cloud in background (fire-and-forget — local is source of truth)
+    pushQuickSaleToggle(drugId, isQuickSale).catch(() => {});
+    return { success: true };
+  } catch (error: any) {
+    console.error("toggle-quick-sale failed:", error);
+    return { success: false, error: error.message || String(error) };
+  }
+});
+
+ipcMain.handle("get-quick-sale-products", async (_, { branchId }: { branchId: string }) => {
+  try {
+    const drugs = await prisma.globalDrug.findMany({
+      where: { isQuickSale: true, isActive: true },
+      include: {
+        inventory: {
+          where: branchId ? { branchId } : {},
+          include: {
+            batches: {
+              where: { quantity: { gt: 0 } },
+              orderBy: { expiryDate: "asc" },
+            },
+          },
+        },
+        saleItems: {
+          select: { quantity: true },
+        },
+      },
+    });
+
+    return drugs
+      .map((p) => {
+        const inv = p.inventory[0];
+        const stock = inv ? inv.batches.reduce((s, b) => s + b.quantity, 0) : 0;
+        const totalSold = p.saleItems.reduce((s, si) => s + si.quantity, 0);
+        return {
+          id: p.id,
+          name: p.tradeName,
+          barcode: p.barcode,
+          price: inv ? p.price : 0,
+          stock,
+          totalSold,
+        };
+      })
+      .sort((a, b) => b.totalSold - a.totalSold);
+  } catch (error: any) {
+    console.error("get-quick-sale-products failed:", error);
     return [];
   }
 });
@@ -1703,6 +1836,7 @@ ipcMain.handle(
       maxStock,
       quantity,
       expiryDate,
+      supplierId,
       skipCloudPush,
     },
   ) => {
@@ -1735,6 +1869,7 @@ ipcMain.handle(
             expiryDate: expiryDate
               ? new Date(expiryDate)
               : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+            supplierId: supplierId || null,
           },
         });
       }
@@ -2097,6 +2232,17 @@ ipcMain.handle(
           });
 
           if (inventory) {
+            // Validate sufficient stock before deducting
+            const totalAvailable = inventory.batches.reduce(
+              (sum: number, b: any) => sum + b.quantity,
+              0,
+            );
+            if (item.quantity > totalAvailable) {
+              throw new Error(
+                `الكمية المطلوبة (${item.quantity}) تتجاوز المخزون المتوفر (${totalAvailable}) للدواء`,
+              );
+            }
+
             // Decrement total inventory quantity
             await tx.inventory.update({
               where: { id: inventory.id },
@@ -2137,9 +2283,13 @@ ipcMain.handle(
           });
         }
 
+        // Generate a unique 8-digit invoice number
+        const invoiceNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
+
         const sale = await tx.sale.create({
           data: {
             total,
+            invoiceNumber,
             discount: discount || 0,
             userId: validUser?.id ?? null,
             patientId: validPatient?.id ?? null,
@@ -2273,7 +2423,7 @@ ipcMain.handle(
           }
         }
 
-        return { success: true, saleId: sale.id, isCredit };
+        return { success: true, saleId: sale.id, invoiceNumber: sale.invoiceNumber, isCredit };
       });
 
       // Trigger sync immediately after success
@@ -2755,15 +2905,19 @@ ipcMain.handle("retry-sync-failure", async (_event, failureData) => {
 
 ipcMain.handle("search-sale", async (_event, query) => {
   try {
-    const sale = await prisma.sale.findFirst({
-      where: { id: Object.assign({ startsWith: query }) }, // Handle full or partial barcode/ID
-      include: {
-        items: { include: { drug: true } },
-        patient: true,
-        payment: true,
-        returns: { include: { items: true } },
-      },
-    });
+    // Normalize Arabic/Eastern-Arabic digits to Western digits
+    const normalized = String(query).replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+
+    const include = {
+      items: { include: { drug: true } },
+      patient: true,
+      payment: true,
+      returns: { include: { items: true } },
+    };
+    // Search by invoiceNumber first (what's printed on receipt), then fall back to id prefix
+    const sale =
+      (await prisma.sale.findFirst({ where: { invoiceNumber: normalized }, include })) ||
+      (await prisma.sale.findFirst({ where: { id: { startsWith: normalized } }, include }));
     if (!sale) return { success: false, error: "الفاتورة غير موجودة" };
     return { success: true, sale };
   } catch (error: any) {

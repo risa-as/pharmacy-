@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus, X } from "lucide-react";
+import { ChevronDown, Plus, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { addBatch } from "@/app/lib/actions/inventory";
 
@@ -14,10 +14,91 @@ interface AddBatchModalProps {
     onClose: () => void;
 }
 
+function SupplierCombobox({ suppliers, value, onChange }: {
+    suppliers: Supplier[];
+    value: string;
+    onChange: (id: string) => void;
+}) {
+    const [search, setSearch] = useState("");
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const selected = suppliers.find(s => s.id === value);
+    const filtered = suppliers.filter(s =>
+        s.name.toLowerCase().includes(search.toLowerCase())
+    );
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setOpen(false);
+                setSearch("");
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    const select = (id: string) => {
+        onChange(id);
+        setOpen(false);
+        setSearch("");
+    };
+
+    return (
+        <div ref={containerRef} className="relative">
+            <div
+                className="flex items-center gap-2 w-full rounded-lg border border-border bg-background px-3 py-2 cursor-pointer focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/20"
+                onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+            >
+                <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                    ref={inputRef}
+                    type="text"
+                    className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
+                    placeholder={selected ? selected.name : "اكتب للبحث عن مورد..."}
+                    value={open ? search : (selected?.name ?? "")}
+                    onChange={e => { setSearch(e.target.value); setOpen(true); }}
+                    onFocus={() => setOpen(true)}
+                    dir="rtl"
+                />
+                {value && (
+                    <button type="button" onClick={e => { e.stopPropagation(); select(""); }}
+                        className="shrink-0 text-muted-foreground hover:text-destructive">
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                )}
+                <ChevronDown className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+            </div>
+
+            {open && (
+                <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+                    {filtered.length === 0 ? (
+                        <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
+                    ) : (
+                        filtered.map(s => (
+                            <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => select(s.id)}
+                                className={`w-full text-right px-4 py-2.5 text-sm hover:bg-muted transition-colors block ${s.id === value ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}
+                            >
+                                {s.name}
+                            </button>
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBatchModalProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [supplierId, setSupplierId] = useState("");
 
     const router = useRouter();
 
@@ -35,6 +116,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
 
         const formData = new FormData(e.currentTarget);
         formData.set("inventoryId", inventoryId);
+        formData.set("supplierId", supplierId);
 
         try {
             const result = await addBatch(null, formData);
@@ -74,15 +156,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <label className="block text-sm font-bold text-foreground mb-1">المورد (اختياري)</label>
-                        <select
-                            name="supplierId"
-                            className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
-                        >
-                            <option value="">اختر مورداً...</option>
-                            {suppliers.map((s: any) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                        </select>
+                        <SupplierCombobox suppliers={suppliers} value={supplierId} onChange={setSupplierId} />
                     </div>
 
                     <div>

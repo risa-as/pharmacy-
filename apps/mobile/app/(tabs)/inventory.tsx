@@ -23,12 +23,14 @@ type TabKey = 'all' | 'low-stock' | 'expiring';
 
 interface InventoryItem {
     id: string;
+    drugId?: string;
     barcode?: string;
     drugName: string;
     quantity: number;
     price: number;
     reorderLevel: number;
     expiryDate?: string;
+    isQuickSale?: boolean;
 }
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -64,14 +66,19 @@ export default function InventoryScreen() {
     const [modalLoading, setModalLoading] = useState(false);
     const [formData, setFormData] = useState({
         tradeName: '', scientificName: '', price: '', costPrice: '',
-        minStock: '5', maxStock: '100', quantity: '', expiryDate: '',
+        minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '',
     });
+    const [isQuickSale, setIsQuickSale] = useState(false);
+    const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>({});
+    const [togglingQuickSale, setTogglingQuickSale] = useState<string | null>(null);
 
-    // Supplier picker state (for quick-create modal)
+    // Supplier picker state (shared across all modals)
     const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
     const [showSupplierPicker, setShowSupplierPicker] = useState(false);
     const [supplierSearch, setSupplierSearch] = useState('');
+    // Which modal triggered the supplier picker ('batch' | 'branch' | 'create')
+    const [supplierPickerContext, setSupplierPickerContext] = useState<'batch' | 'branch' | 'create'>('create');
 
     const params = useLocalSearchParams();
 
@@ -91,6 +98,11 @@ export default function InventoryScreen() {
                 const effectiveBranchId = !isAdmin ? authBranchId : selectedBranch;
                 const data = await apiService.getInventory(effectiveBranchId || undefined);
                 setItems(data);
+                if (Array.isArray(data)) {
+                    setQuickSaleState(Object.fromEntries(
+                        data.filter((i: any) => i.drugId).map((i: any) => [i.drugId, i.isQuickSale ?? false])
+                    ));
+                }
             } else {
                 const products = await dbService.searchProducts('');
                 setItems(products.map((p: any) => ({
@@ -114,15 +126,35 @@ export default function InventoryScreen() {
 
     useEffect(() => { fetchInventory(); }, [fetchInventory]);
 
-    // Load suppliers once when quick-create modal opens
+    const handleQuickSaleToggle = async (drugId: string) => {
+        if (togglingQuickSale === drugId) return;
+        setTogglingQuickSale(drugId);
+        const newValue = !quickSaleState[drugId];
+        setQuickSaleState(prev => ({ ...prev, [drugId]: newValue }));
+        try {
+            const res = await apiService.toggleQuickSale(drugId, newValue);
+            if (!res?.success) setQuickSaleState(prev => ({ ...prev, [drugId]: !newValue }));
+        } catch {
+            setQuickSaleState(prev => ({ ...prev, [drugId]: !newValue }));
+        } finally {
+            setTogglingQuickSale(null);
+        }
+    };
+
+    // Load suppliers when any modal that needs them opens
     useEffect(() => {
-        if (showCreateModal) {
+        if (showBatchModal || showBranchModal || showCreateModal) {
             apiService.getSuppliers().then(setSuppliers).catch(() => {});
-        } else {
+        }
+    }, [!!showBatchModal, !!showBranchModal, !!showCreateModal]);
+
+    // Reset supplier selection when all modals close
+    useEffect(() => {
+        if (!showBatchModal && !showBranchModal && !showCreateModal) {
             setSelectedSupplierId(null);
             setSupplierSearch('');
         }
-    }, [showCreateModal]);
+    }, [showBatchModal, showBranchModal, showCreateModal]);
 
     // Barcode scan return handler
     const handleScannedProduct = async (code: string) => {
@@ -164,10 +196,12 @@ export default function InventoryScreen() {
             await apiService.addBatch({
                 inventoryId: showBatchModal.id,
                 quantity: parseInt(formData.quantity) || 0,
+                costPrice: parseFloat(formData.costPrice) || 0,
                 expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                supplierId: selectedSupplierId || null,
             });
             setShowBatchModal(null);
-            setFormData(f => ({ ...f, quantity: '', expiryDate: '' }));
+            setFormData(f => ({ ...f, quantity: '', expiryDate: '', costPrice: '' }));
             fetchInventory();
         } catch { Alert.alert('خطأ', 'فشل إضافة الجرعة'); }
         finally { setModalLoading(false); }
@@ -182,14 +216,15 @@ export default function InventoryScreen() {
             await apiService.addToBranch({
                 drugId: showBranchModal.id, branchId: selectedBranch!,
                 price: parseFloat(formData.price) || 0,
-                costPrice: parseFloat(formData.costPrice) || 0,
+                cost: parseFloat(formData.costPrice) || 0,
                 minStock: parseInt(formData.minStock) || 5,
                 maxStock: parseInt(formData.maxStock) || 100,
                 quantity: parseInt(formData.quantity) || 0,
                 expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                supplierId: selectedSupplierId || null,
             });
             setShowBranchModal(null);
-            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '' });
+            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
             fetchInventory();
         } catch { Alert.alert('خطأ', 'فشل إضافة الدواء للفرع'); }
         finally { setModalLoading(false); }
@@ -211,10 +246,11 @@ export default function InventoryScreen() {
                 quantity: parseInt(formData.quantity) || 0,
                 expiryDate: formData.expiryDate + 'T00:00:00.000Z',
                 supplierId: selectedSupplierId || null,
+                isQuickSale,
             });
             setShowCreateModal(null);
-            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '' });
-            setSelectedSupplierId(null);
+            setIsQuickSale(false);
+            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
             fetchInventory();
         } catch { Alert.alert('خطأ', 'فشل تسجيل الدواء الجديد'); }
         finally { setModalLoading(false); }
@@ -262,10 +298,35 @@ export default function InventoryScreen() {
                         )}
                     </View>
                 </View>
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border }}>
-                    <Text style={{ color: C.mutedForeground, fontSize: 12 }}>حد الطلب: {item.reorderLevel}</Text>
-                    {item.barcode && (
-                        <Text style={{ color: C.mutedForeground, fontSize: 12 }}>{item.barcode}</Text>
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 12 }}>حد الطلب: {item.reorderLevel}</Text>
+                        {item.barcode && (
+                            <Text style={{ color: C.mutedForeground, fontSize: 12 }}>{item.barcode}</Text>
+                        )}
+                    </View>
+                    {item.drugId && (
+                        <TouchableOpacity
+                            onPress={() => handleQuickSaleToggle(item.drugId!)}
+                            disabled={togglingQuickSale === item.drugId}
+                            style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 4,
+                                opacity: togglingQuickSale === item.drugId ? 0.5 : 1,
+                            }}
+                        >
+                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>⚡</Text>
+                            <View style={{
+                                width: 32, height: 18, borderRadius: 9,
+                                backgroundColor: quickSaleState[item.drugId] ? '#f59e0b' : C.border,
+                                justifyContent: 'center', paddingHorizontal: 2,
+                            }}>
+                                <View style={{
+                                    width: 14, height: 14, borderRadius: 7, backgroundColor: '#fff',
+                                    alignSelf: quickSaleState[item.drugId] ? 'flex-end' : 'flex-start',
+                                    elevation: 2,
+                                }} />
+                            </View>
+                        </TouchableOpacity>
                     )}
                 </View>
             </Card>
@@ -381,17 +442,27 @@ export default function InventoryScreen() {
             {/* Add Batch Modal */}
             <Modal visible={!!showBatchModal} transparent animationType="slide" onRequestClose={() => setShowBatchModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24 }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} contentContainerStyle={{ padding: 24 }}>
                         <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 16 }}>
-                            إضافة كمية: {showBatchModal?.drug?.tradeName}
+                            إضافة دفعة: {showBatchModal?.drug?.tradeName}
                         </Text>
-                        <TextInput style={inputStyle} placeholder="الكمية" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
-                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
-                        <View style={{ gap: 8, marginTop: 4 }}>
+                        <TextInput style={inputStyle} placeholder="الكمية *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
+                        <TextInput style={inputStyle} placeholder="سعر التكلفة" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.costPrice} onChangeText={t => setFormData(f => ({ ...f, costPrice: t }))} />
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        <TouchableOpacity
+                            onPress={() => { setSupplierPickerContext('batch'); setShowSupplierPicker(true); }}
+                            style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
+                        >
+                            <Text style={{ color: selectedSupplierId ? C.foreground : C.mutedForeground, fontSize: 14 }}>
+                                {selectedSupplierId ? (suppliers.find(s => s.id === selectedSupplierId)?.name ?? 'مورد محدد') : 'المورد (اختياري)'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={16} color={C.mutedForeground} />
+                        </TouchableOpacity>
+                        <View style={{ gap: 8, marginTop: 4, paddingBottom: 24 }}>
                             <Button label="حفظ" loading={modalLoading} onPress={handleAddBatch} />
                             <Button label="إلغاء" variant="ghost" onPress={() => setShowBatchModal(null)} />
                         </View>
-                    </View>
+                    </ScrollView>
                 </View>
             </Modal>
 
@@ -408,6 +479,15 @@ export default function InventoryScreen() {
                         <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
                         <TextInput style={inputStyle} placeholder="الكمية" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
                         <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        <TouchableOpacity
+                            onPress={() => { setSupplierPickerContext('branch'); setShowSupplierPicker(true); }}
+                            style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
+                        >
+                            <Text style={{ color: selectedSupplierId ? C.foreground : C.mutedForeground, fontSize: 14 }}>
+                                {selectedSupplierId ? (suppliers.find(s => s.id === selectedSupplierId)?.name ?? 'مورد محدد') : 'المورد (اختياري)'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={16} color={C.mutedForeground} />
+                        </TouchableOpacity>
                         <View style={{ gap: 8, marginTop: 4, paddingBottom: 24 }}>
                             <Button label="تنشيط وإضافة" loading={modalLoading} onPress={handleAddToBranch} />
                             <Button label="إلغاء" variant="ghost" onPress={() => setShowBranchModal(null)} />
@@ -433,7 +513,7 @@ export default function InventoryScreen() {
                         <TextInput style={inputStyle} placeholder="حد النواقص" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.minStock} onChangeText={t => setFormData(f => ({ ...f, minStock: t }))} />
                         {/* Supplier picker */}
                         <TouchableOpacity
-                            onPress={() => setShowSupplierPicker(true)}
+                            onPress={() => { setSupplierPickerContext('create'); setShowSupplierPicker(true); }}
                             style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
                         >
                             <Text style={{ color: selectedSupplierId ? C.foreground : C.mutedForeground, fontSize: 14 }}>
@@ -444,6 +524,25 @@ export default function InventoryScreen() {
                         <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
                         <TextInput style={inputStyle} placeholder="الكمية *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
                         <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        {/* Quick Sale Toggle */}
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, marginVertical: 4 }}>
+                            <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '600' }}>بيع سريع ⚡</Text>
+                            <TouchableOpacity
+                                onPress={() => setIsQuickSale(v => !v)}
+                                style={{
+                                    width: 36, height: 20, borderRadius: 10,
+                                    backgroundColor: isQuickSale ? '#f59e0b' : C.border,
+                                    justifyContent: 'center', paddingHorizontal: 2,
+                                }}
+                                activeOpacity={0.8}
+                            >
+                                <View style={{
+                                    width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff',
+                                    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
+                                    alignSelf: isQuickSale ? 'flex-end' : 'flex-start',
+                                }} />
+                            </TouchableOpacity>
+                        </View>
                         <View style={{ gap: 8, marginTop: 4, paddingBottom: 30 }}>
                             <Button label="حفظ الدواء" loading={modalLoading} onPress={handleCreateDrug} />
                             <Button label="إلغاء" variant="ghost" onPress={() => setShowCreateModal(null)} />

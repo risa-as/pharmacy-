@@ -12,6 +12,9 @@ export default async function Page({ params }: { params: { id: string } }) {
     if (tenantCtx instanceof NextResponse) redirect("/login");
 
     const id = params.id;
+    // Scope: non-SUPER_ADMIN may only edit their own org
+    const allowedId = tenantCtx.user.role === 'SUPER_ADMIN' ? id : tenantCtx.organizationId;
+    if (allowedId !== id) notFound();
     const organization = await prisma.organization.findUnique({
         where: { id },
     });

@@ -1,33 +1,9 @@
-import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
-
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-
+import { auth } from '@/auth';
 import { getTenantContext } from '@/app/lib/tenant-utils';
-
-// Helper to validate user from token (Mock implementation matching login)
-// Deprecated: Using auth session via getTenantContext for security
-async function getUserFromRequest(request: Request) {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-
-    const token = authHeader.split(' ')[1];
-    try {
-        // Token format: base64(email:timestamp)
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const email = decoded.split(':')[0];
-
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: { branch: true }
-        });
-        return user;
-    } catch {
-        return null;
-    }
-}
 
 export async function GET(request: Request) {
     try {
@@ -42,7 +18,8 @@ export async function GET(request: Request) {
         });
         return NextResponse.json(sales);
     } catch (error) {
-        return NextResponse.json([], { status: 500 });
+        console.error('GET /api/sales error:', error);
+        return NextResponse.json({ error: 'Failed to fetch sales' }, { status: 500 }); // Fix #7: proper error response
     }
 }
 
@@ -77,42 +54,49 @@ export async function POST(request: Request) {
             }
         }
 
-        const sale = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const sale = await prisma.$transaction(async (tx) => {
+            // Fix #3: Batch-fetch all inventory + batches BEFORE the loop (eliminates N+1)
+            const drugIds = items.map((i: any) => i.drugId);
+            const allInventories = await tx.inventory.findMany({
+                where: { branchId: user.branchId!, drugId: { in: drugIds } },
+                include: {
+                    batches: {
+                        orderBy: { expiryDate: 'asc' },
+                        where: { quantity: { gt: 0 } }
+                    }
+                }
+            });
+            const inventoryMap = new Map(allInventories.map(inv => [inv.drugId, inv]));
+
             const saleItemsData = [];
 
-            // 3. Decrement Stock (FIFO / FEFO) and Calculate Cost
+            // 3. Decrement Stock (FEFO) and Calculate Cost
             for (const item of items) {
                 let itemTotalCost = 0;
                 let remainingToDeduct = item.quantity;
 
-                const inventory = await tx.inventory.findFirst({
-                    where: { branchId: user.branchId!, drugId: item.drugId },
-                    include: { batches: { orderBy: { expiryDate: 'asc' }, where: { quantity: { gt: 0 } } } }
-                });
+                const inventory = inventoryMap.get(item.drugId);
 
                 if (inventory && inventory.batches.length > 0) {
                     for (const batch of inventory.batches) {
                         if (remainingToDeduct <= 0) break;
-
                         const deduction = Math.min(batch.quantity, remainingToDeduct);
                         itemTotalCost += deduction * batch.costPrice;
-
                         await tx.batch.update({
                             where: { id: batch.id },
-                            data: { quantity: batch.quantity - deduction }
+                            data: { quantity: { decrement: deduction } }
                         });
-
                         remainingToDeduct -= deduction;
                     }
                 }
 
-                // Fallback for remaining qty if batches ran out or didn't exist
                 if (remainingToDeduct > 0 && inventory) {
+                    // Fallback: log warning for over-sell scenarios
+                    console.warn(`[Sales] Over-sell detected for drugId=${item.drugId}, remaining=${remainingToDeduct}. Using inventory.cost as fallback.`);
                     itemTotalCost += remainingToDeduct * inventory.cost;
                 }
 
                 const unitCost = item.quantity > 0 ? (itemTotalCost / item.quantity) : 0;
-
                 saleItemsData.push({
                     drugId: item.drugId,
                     quantity: item.quantity,
@@ -121,7 +105,15 @@ export async function POST(request: Request) {
                 });
             }
 
-            // 4. Create Sale
+            // 4. Find the branch's default CASH_DRAWER safe (for CASH payments)
+            const cashSafe = paymentMethod !== 'CREDIT'
+                ? await tx.safe.findFirst({
+                    where: { branchId: user.branchId!, type: 'CASH_DRAWER' },
+                    select: { id: true }
+                })
+                : null;
+
+            // 5. Create Sale (link to safe if CASH)
             const newSale = await tx.sale.create({
                 data: {
                     branchId: user.branchId!,
@@ -129,13 +121,41 @@ export async function POST(request: Request) {
                     total: totalAmount,
                     discount: discount ?? 0,
                     patientId: patientId || null,
-                    items: {
-                        create: saleItemsData
-                    }
+                    safeId: cashSafe?.id ?? null,
+                    items: { create: saleItemsData }
                 }
             });
 
-            // 5. Handle CREDIT: add debt to patient balance
+            // 6. Create Payment record
+            await tx.payment.create({
+                data: {
+                    saleId: newSale.id,
+                    amount: totalAmount,
+                    method: (paymentMethod ?? 'CASH') as any,
+                    status: 'COMPLETED' as any,
+                }
+            });
+
+            // 7. CASH: update safe balance + create Transaction record
+            if (paymentMethod !== 'CREDIT' && cashSafe) {
+                await tx.safe.update({
+                    where: { id: cashSafe.id },
+                    data: { balance: { increment: totalAmount } }
+                });
+                await tx.transaction.create({
+                    data: {
+                        safeId: cashSafe.id,
+                        type: 'IN',
+                        amount: totalAmount,
+                        referenceType: 'SALE',
+                        referenceId: newSale.id,
+                        description: `بيع #${newSale.id.slice(0, 8)}`,
+                        userId: user.id,
+                    }
+                });
+            }
+
+            // 8. CREDIT: add debt to patient balance
             if (paymentMethod === 'CREDIT' && patientId) {
                 await tx.patient.update({
                     where: { id: patientId },
@@ -143,7 +163,7 @@ export async function POST(request: Request) {
                 });
             }
 
-            // 5. Record Idempotency Key
+            // 9. Record Idempotency Key
             if (idempotencyKey) {
                 await tx.syncActionLog.create({
                     data: {

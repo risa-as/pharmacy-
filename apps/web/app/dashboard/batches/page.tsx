@@ -1,36 +1,37 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { Box, AlertTriangle, Calendar, Plus } from "lucide-react";
-import Link from "next/link";
+import { Box } from "lucide-react";
 import { formatCurrency } from "@/app/lib/utils/currency";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
 
-export default async function BatchesPage() {
+export default async function BatchesPage({
+    searchParams,
+}: {
+    searchParams?: { branch?: string };
+}) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
+    if (tenantCtx instanceof NextResponse) return null;
     const { tenantBranchWhere } = tenantCtx;
 
+    const selectedBranchId = searchParams?.branch;
+
+    const inventoryFilter = selectedBranchId
+        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        : tenantBranchWhere;
+
     const batches = await prisma.batch.findMany({
-        where: {
-            inventory: {
-                ...tenantBranchWhere
-            }
-        },
+        where: { inventory: inventoryFilter },
         orderBy: { expiryDate: "asc" },
         include: {
-            inventory: {
-                include: {
-                    branch: true,
-                },
-            },
+            inventory: { include: { branch: true } },
             supplier: { select: { name: true } },
         },
     });
 
-    // جلب الأدوية
     const drugIds = batches.map((b: any) => b.inventory.drugId);
     const uniqueDrugIds = drugIds.filter((id: any, index: any) => drugIds.indexOf(id) === index);
     const drugs = await prisma.globalDrug.findMany({
@@ -45,12 +46,15 @@ export default async function BatchesPage() {
 
     return (
         <div className="glass-card w-full p-6">
-            {/* Header */}
-            <div className="flex w-full items-center justify-between mb-8">
+            <div className="flex w-full items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
                     <Box className="w-7 h-7 text-primary" />
                     إدارة الدفعات
                 </h1>
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={selectedBranchId} baseUrl="/dashboard/batches" />
             </div>
 
             {/* Stats */}
@@ -77,7 +81,7 @@ export default async function BatchesPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
                 {batches.length === 0 ? (
                     <div className="p-12 text-center text-muted-foreground">
                         <Box className="w-12 h-12 mx-auto mb-3 opacity-40" />
@@ -106,42 +110,20 @@ export default async function BatchesPage() {
 
                                 let statusClass = "bg-success/10 text-success";
                                 let statusText = "صالح";
-
-                                if (isExpired) {
-                                    statusClass = "bg-destructive/10 text-destructive";
-                                    statusText = "منتهي";
-                                } else if (isExpiringSoon) {
-                                    statusClass = "bg-warning/20 text-warning";
-                                    statusText = "قريب الانتهاء";
-                                }
+                                if (isExpired) { statusClass = "bg-destructive/10 text-destructive"; statusText = "منتهي"; }
+                                else if (isExpiringSoon) { statusClass = "bg-warning/20 text-warning"; statusText = "قريب الانتهاء"; }
 
                                 return (
                                     <tr key={batch.id} className="hover:bg-muted">
-                                        <td className="px-4 py-3 font-medium text-foreground">
-                                            {drug?.tradeName || "غير معروف"}
-                                        </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
-                                            {batch.inventory.branch?.name || "غير محدد"}
-                                        </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
-                                            {batch.supplier?.name || <span className="text-muted-foreground/50">—</span>}
-                                        </td>
-                                        <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
-                                            {batch.batchNumber}
-                                        </td>
-                                        <td className="px-4 py-3 font-bold text-foreground" dir="ltr">
-                                            {formatCurrency(batch.costPrice)}
-                                        </td>
-                                        <td className="px-4 py-3 font-bold text-foreground">
-                                            {batch.quantity}
-                                        </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
-                                            {expiryDate.toLocaleDateString("ar-IQ")}
-                                        </td>
+                                        <td className="px-4 py-3 font-medium text-foreground">{drug?.tradeName || "غير معروف"}</td>
+                                        <td className="px-4 py-3 text-muted-foreground">{batch.inventory.branch?.name || "غير محدد"}</td>
+                                        <td className="px-4 py-3 text-muted-foreground">{batch.supplier?.name || <span className="text-muted-foreground/50">—</span>}</td>
+                                        <td className="px-4 py-3 font-mono text-sm text-muted-foreground">{batch.batchNumber}</td>
+                                        <td className="px-4 py-3 font-bold text-foreground" dir="ltr">{formatCurrency(batch.costPrice)}</td>
+                                        <td className="px-4 py-3 font-bold text-foreground">{batch.quantity}</td>
+                                        <td className="px-4 py-3 text-muted-foreground">{expiryDate.toLocaleDateString("ar-IQ")}</td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${statusClass}`}>
-                                                {statusText}
-                                            </span>
+                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${statusClass}`}>{statusText}</span>
                                         </td>
                                     </tr>
                                 );

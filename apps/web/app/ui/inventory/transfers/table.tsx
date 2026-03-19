@@ -49,7 +49,7 @@ export default async function TransfersTable({
 
     return (
         <div className="mt-6 flow-root">
-            <div className="inline-block min-w-full align-middle">
+            <div className="overflow-x-auto">
                 <div className="rounded-lg bg-transparent p-2 md:pt-0 border border-border shadow-sm overflow-hidden">
                     <table className="hidden min-w-full text-foreground md:table text-right text-sm">
                         <thead className="rounded-lg bg-card/50 font-medium text-muted-foreground">

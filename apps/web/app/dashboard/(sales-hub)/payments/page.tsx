@@ -54,7 +54,7 @@ export default async function PaymentsPage({
     const saleWhere = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
     const payments = await prisma.payment.findMany({
-        where: { sale: saleWhere },
+        where: { sale: saleWhere, method: { not: 'CREDIT' } },
         orderBy: { createdAt: "desc" },
         include: {
             sale: {

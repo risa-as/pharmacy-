@@ -32,9 +32,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                     const user = await getUser(email);
                     if (!user) return null;
 
-                    // In production: await bcrypt.compare(password, user.password)
-                    // For now, assuming simple comparison or bcrypt if seeded
-                    const passwordsMatch = await bcrypt.compare(password, user.password).catch(() => false) || password === user.password;
+                    const passwordsMatch = await bcrypt.compare(password, user.password);
 
                     if (passwordsMatch) return user;
                 }

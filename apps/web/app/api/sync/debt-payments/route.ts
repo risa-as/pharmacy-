@@ -3,12 +3,12 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { auth } from '@/auth';
+import { validateSyncUser } from '@/app/lib/sync-auth';
 
-async function validateBranchAccess(session: any, branchId: string): Promise<NextResponse | null> {
-    const userRole = session.user.role;
-    const userBranchId = (session.user as any).branchId;
-    const userOrgId = (session.user as any).organizationId;
+async function validateBranchAccess(syncUser: any, branchId: string): Promise<NextResponse | null> {
+    const userRole = syncUser.role;
+    const userBranchId = syncUser.branchId;
+    const userOrgId = syncUser.organizationId;
 
     if (userRole === 'SUPER_ADMIN') return null;
 
@@ -32,10 +32,8 @@ async function validateBranchAccess(session: any, branchId: string): Promise<Nex
 
 export async function GET(request: Request) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const syncUser = await validateSyncUser(request);
+        if (syncUser instanceof NextResponse) return syncUser;
 
         const { searchParams } = new URL(request.url);
         const branchId = searchParams.get("branchId");
@@ -44,7 +42,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "branchId is required" }, { status: 400 });
         }
 
-        const accessError = await validateBranchAccess(session, branchId);
+        const accessError = await validateBranchAccess(syncUser, branchId);
         if (accessError) return accessError;
 
         // We want all debt payments belonging to sales created in this branch
@@ -84,10 +82,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const syncUser = await validateSyncUser(request);
+        if (syncUser instanceof NextResponse) return syncUser;
 
         const body = await request.json();
         const { branchId, payments } = body as {
@@ -106,7 +102,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "branchId and payments are required" }, { status: 400 });
         }
 
-        const accessError = await validateBranchAccess(session, branchId);
+        const accessError = await validateBranchAccess(syncUser, branchId);
         if (accessError) return accessError;
 
         const syncedIds: string[] = [];

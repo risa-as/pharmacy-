@@ -4,8 +4,35 @@ import { prisma } from "@/app/lib/prisma";
 import { TrendingUp, TrendingDown, DollarSign, Calendar, Receipt } from "lucide-react";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import DateRangeFilter from "@/app/ui/reports/date-range-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
+
+function parseDateParam(val: string | string[] | undefined) {
+    return typeof val === "string" ? val : undefined;
+}
+
+function buildDateRange(from?: string, to?: string) {
+    const now = new Date();
+    if (from && to) {
+        const start = new Date(from); start.setHours(0, 0, 0, 0);
+        const end = new Date(to); end.setHours(23, 59, 59, 999);
+        return { start, end, label: `${from} — ${to}` };
+    }
+    const start = new Date(now); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
+    const end = new Date(now); end.setHours(23, 59, 59, 999);
+    return { start, end, label: "آخر 7 أيام" };
+}
+
+function getDaysBetween(start: Date, end: Date) {
+    const days: string[] = [];
+    const cur = new Date(start); cur.setHours(0, 0, 0, 0);
+    const endDay = new Date(end); endDay.setHours(0, 0, 0, 0);
+    while (cur <= endDay) { days.push(cur.toLocaleDateString("en-GB")); cur.setDate(cur.getDate() + 1); }
+    return days;
+}
 
 export default async function ProfitsReportPage({
     searchParams,
@@ -13,138 +40,141 @@ export default async function ProfitsReportPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null; // Handle generically for server component
-    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+    if (tenantCtx instanceof NextResponse) return null;
+    const { tenantBranchWhere, organizationId } = tenantCtx;
 
-    const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'advancedReports');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
 
-    // === 1. Last 30 Days Data (Primary View) ===
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const branchId = parseDateParam(searchParams.branch);
+    const fromParam = parseDateParam(searchParams.from);
+    const toParam = parseDateParam(searchParams.to);
+    const { start, end, label: periodLabel } = buildDateRange(fromParam, toParam);
 
     const branchWhere = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
-    const sales = await prisma.sale.findMany({
-        where: { createdAt: { gte: thirtyDaysAgo }, ...branchWhere },
-        include: { items: true },
-    });
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
 
-    const expenses = await prisma.expense.findMany({
-        where: { date: { gte: thirtyDaysAgo }, ...branchWhere },
-    });
+    // ── Run ALL queries in parallel ──────────────────────────────────────────
+    const [sales, expenses, inventoryRaw, pendingTotal, monthlySales, monthlyExpenses] = await Promise.all([
+        // Period sales — only fields needed for COGS + revenue
+        prisma.sale.findMany({
+            where: { createdAt: { gte: start, lte: end }, ...branchWhere },
+            select: {
+                total: true,
+                branchId: true,
+                createdAt: true,
+                items: { select: { drugId: true, quantity: true } },
+            },
+        }),
+        // Period expenses — only needed fields
+        prisma.expense.findMany({
+            where: { date: { gte: start, lte: end }, ...branchWhere },
+            select: { amount: true, category: true },
+        }),
+        // Inventory cost map + value — select only what's needed
+        prisma.inventory.findMany({
+            where: branchWhere,
+            select: {
+                branchId: true,
+                drugId: true,
+                cost: true,
+                batches: { select: { quantity: true } },
+            },
+        }),
+        // Pending purchases total — aggregate instead of findMany
+        prisma.purchase.aggregate({
+            where: { status: "PENDING", ...branchWhere },
+            _sum: { total: true },
+        }),
+        // Last 6 months sales for monthly breakdown
+        prisma.sale.findMany({
+            where: { createdAt: { gte: sixMonthsAgo }, ...branchWhere },
+            select: { total: true, createdAt: true },
+        }),
+        // Last 6 months expenses
+        prisma.expense.findMany({
+            where: { date: { gte: sixMonthsAgo }, ...branchWhere },
+            select: { amount: true, date: true },
+        }),
+    ]);
 
-    // Cost Map (branchId_drugId -> cost)
+    // ── Build cost map ───────────────────────────────────────────────────────
     const costMap = new Map<string, number>();
     let totalInventoryValue = 0;
-
-    const allInventory = await prisma.inventory.findMany({
-        where: branchWhere,
-        include: { batches: true },
-    });
-
-    allInventory.forEach((inv: any) => {
+    for (const inv of inventoryRaw) {
         costMap.set(`${inv.branchId}_${inv.drugId}`, inv.cost);
-        const qty = inv.batches.reduce((s: any, b: any) => s + b.quantity, 0);
+        const qty = inv.batches.reduce((s: number, b: any) => s + b.quantity, 0);
         totalInventoryValue += inv.cost * qty;
-    });
+    }
 
-    // Pending purchases
-    const pendingPurchases = await prisma.purchase.findMany({
-        where: { status: "PENDING", ...branchWhere },
-    });
-    const totalPendingPurchases = pendingPurchases.reduce((s: any, p: any) => s + p.total, 0);
+    const totalPendingPurchases = pendingTotal._sum.total ?? 0;
 
-    // Expense Breakdown
-    const expensesByCategory: { [key: string]: number } = {};
-    expenses.forEach((e: any) => {
-        expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + e.amount;
-    });
-
-    // === Calculate Financials ===
+    // ── Calculate Financials ─────────────────────────────────────────────────
     let totalRevenue = 0;
     let totalCOGS = 0;
-
-    sales.forEach((sale: any) => {
+    for (const sale of sales) {
         totalRevenue += sale.total;
-        sale.items.forEach((item: any) => {
-            const cost = costMap.get(`${sale.branchId}_${item.drugId}`) || 0;
-            totalCOGS += cost * item.quantity;
-        });
-    });
+        for (const item of sale.items) {
+            totalCOGS += (costMap.get(`${sale.branchId}_${item.drugId}`) || 0) * item.quantity;
+        }
+    }
 
-    const totalExpenses = expenses.reduce((s: any, e: any) => s + e.amount, 0);
+    const totalExpenses = expenses.reduce((s: number, e: any) => s + e.amount, 0);
     const grossProfit = totalRevenue - totalCOGS;
     const netProfit = grossProfit - totalExpenses;
     const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
     const netMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
-    // === Daily Profit Chart Data ===
-    const profitByDay = new Map<string, number>();
-    for (let i = 29; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        profitByDay.set(d.toLocaleDateString("en-GB"), 0);
+    const expensesByCategory: Record<string, number> = {};
+    for (const e of expenses) {
+        expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + e.amount;
     }
 
-    sales.forEach((sale: any) => {
+    // ── Daily Profit Chart ───────────────────────────────────────────────────
+    const days = getDaysBetween(start, end);
+    const profitByDay = new Map<string, number>(days.map((d) => [d, 0]));
+    for (const sale of sales) {
         const key = new Date(sale.createdAt).toLocaleDateString("en-GB");
         if (profitByDay.has(key)) {
             let saleCost = 0;
-            sale.items.forEach((item: any) => {
+            for (const item of sale.items) {
                 saleCost += (costMap.get(`${sale.branchId}_${item.drugId}`) || 0) * item.quantity;
-            });
+            }
             profitByDay.set(key, (profitByDay.get(key) || 0) + (sale.total - saleCost));
         }
-    });
+    }
+    const chartData = Array.from(profitByDay.entries()).map(([day, amount]) => ({ day, amount }));
 
-    const chartData = Array.from(profitByDay.entries()).map(([date, amount]: any) => ({
-        day: date,
-        amount,
-    }));
-
-    // === Monthly Breakdown (Last 6 months) ===
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-    const monthlySales = await prisma.sale.findMany({
-        where: { createdAt: { gte: sixMonthsAgo }, ...branchWhere },
-        include: { items: true },
-    });
-
-    const monthlyExpenses = await prisma.expense.findMany({
-        where: { date: { gte: sixMonthsAgo }, ...branchWhere },
-    });
-
+    // ── Monthly Breakdown ────────────────────────────────────────────────────
     const monthlyData: { month: string; revenue: number; expenses: number; profit: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
+        const d = new Date(); d.setMonth(d.getMonth() - i);
         const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         const monthLabel = d.toLocaleDateString("ar-IQ", { month: "long", year: "numeric" });
 
-        const mSales = monthlySales.filter(
-            (s: any) => {
+        const rev = monthlySales
+            .filter((s: any) => {
                 const sd = new Date(s.createdAt);
                 return `${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, "0")}` === monthKey;
-            }
-        );
-        const mExpenses = monthlyExpenses.filter(
-            (e: any) => {
+            })
+            .reduce((s: number, sale: any) => s + sale.total, 0);
+
+        const exp = monthlyExpenses
+            .filter((e: any) => {
                 const ed = new Date(e.date);
                 return `${ed.getFullYear()}-${String(ed.getMonth() + 1).padStart(2, "0")}` === monthKey;
-            }
-        );
+            })
+            .reduce((s: number, e: any) => s + e.amount, 0);
 
-        const rev = mSales.reduce((s: any, sale: any) => s + sale.total, 0);
-        const exp = mExpenses.reduce((s: any, e: any) => s + e.amount, 0);
-
-        monthlyData.push({
-            month: monthLabel,
-            revenue: rev,
-            expenses: exp,
-            profit: rev - exp,
-        });
+        monthlyData.push({ month: monthLabel, revenue: rev, expenses: exp, profit: rev - exp });
     }
+
+    const extraParams: Record<string, string | undefined> = branchId ? { branch: branchId } : {};
 
     return (
         <div className="glass-card w-full p-6 space-y-6" dir="rtl">
@@ -155,22 +185,28 @@ export default async function ProfitsReportPage({
                 </h1>
             </div>
 
-            {/* Branch Filter */}
-            <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/profits" />
+            {/* Filters */}
+            <div className="space-y-3">
+                <DateRangeFilter
+                    baseUrl="/dashboard/reports/profits"
+                    currentFrom={fromParam}
+                    currentTo={toParam}
+                    extraParams={extraParams}
+                />
+                <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/profits" />
+            </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-card p-5 rounded-xl border shadow-sm">
                     <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <DollarSign className="w-4 h-4" />
-                        إجمالي الإيرادات
+                        <DollarSign className="w-4 h-4" />إجمالي الإيرادات
                     </div>
                     <div className="text-2xl font-bold text-primary">{totalRevenue.toLocaleString()} د.ع</div>
                 </div>
                 <div className="bg-card p-5 rounded-xl border shadow-sm">
                     <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <TrendingUp className="w-4 h-4" />
-                        إجمالي الربح
+                        <TrendingUp className="w-4 h-4" />إجمالي الربح
                     </div>
                     <div className={`text-2xl font-bold ${grossProfit >= 0 ? "text-success" : "text-destructive"}`}>
                         {grossProfit.toLocaleString()} د.ع
@@ -179,8 +215,7 @@ export default async function ProfitsReportPage({
                 </div>
                 <div className="bg-card p-5 rounded-xl border shadow-sm">
                     <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <Receipt className="w-4 h-4" />
-                        إجمالي المصروفات
+                        <Receipt className="w-4 h-4" />إجمالي المصروفات
                     </div>
                     <div className="text-2xl font-bold text-warning">{totalExpenses.toLocaleString()} د.ع</div>
                 </div>
@@ -199,7 +234,7 @@ export default async function ProfitsReportPage({
             {/* Income Statement */}
             <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
                 <div className="px-6 py-4 bg-gradient-to-l from-blue-50 to-indigo-50 border-b">
-                    <h2 className="font-bold text-lg text-foreground">📋 قائمة الدخل (آخر 30 يوم)</h2>
+                    <h2 className="font-bold text-lg text-foreground">📋 قائمة الدخل ({periodLabel})</h2>
                 </div>
                 <div className="p-6 space-y-3">
                     <div className="flex justify-between py-2">
@@ -237,15 +272,13 @@ export default async function ProfitsReportPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-card p-5 rounded-xl border shadow-sm">
                     <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <Calendar className="w-4 h-4" />
-                        قيمة المخزون الحالي
+                        <Calendar className="w-4 h-4" />قيمة المخزون الحالي
                     </div>
                     <div className="text-xl font-bold text-foreground">{totalInventoryValue.toLocaleString()} د.ع</div>
                 </div>
                 <div className="bg-warning/10 p-5 rounded-xl border border-orange-200">
                     <div className="flex items-center gap-2 text-warning text-sm mb-1">
-                        <Receipt className="w-4 h-4" />
-                        مشتريات معلقة الدفع
+                        <Receipt className="w-4 h-4" />مشتريات معلقة الدفع
                     </div>
                     <div className="text-xl font-bold text-warning">{totalPendingPurchases.toLocaleString()} د.ع</div>
                 </div>
@@ -254,7 +287,7 @@ export default async function ProfitsReportPage({
             {/* Daily Profit Chart */}
             <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
                 <div className="px-6 py-4 bg-gradient-to-l from-green-50 to-emerald-50 border-b">
-                    <h2 className="font-bold text-lg text-foreground">📊 الربح اليومي (آخر 30 يوم)</h2>
+                    <h2 className="font-bold text-lg text-foreground">📊 الربح اليومي ({periodLabel})</h2>
                 </div>
                 <div className="p-6">
                     <SalesChart data={chartData} />
@@ -276,7 +309,7 @@ export default async function ProfitsReportPage({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {monthlyData.map((m: any) => (
+                        {monthlyData.map((m) => (
                             <tr key={m.month} className="hover:bg-muted">
                                 <td className="px-4 py-3 font-bold">{m.month}</td>
                                 <td className="px-4 py-3 text-primary">{m.revenue.toLocaleString()} د.ع</td>
@@ -298,18 +331,15 @@ export default async function ProfitsReportPage({
                     </div>
                     <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                         {Object.entries(expensesByCategory)
-                            .sort((a: any, b: any) => b[1] - a[1])
+                            .sort((a, b) => (b[1] as number) - (a[1] as number))
                             .map(([cat, amount]: any) => {
                                 const percent = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
                                 return (
                                     <div key={cat} className="bg-muted p-4 rounded-xl">
                                         <div className="text-sm text-muted-foreground mb-1">{cat}</div>
                                         <div className="text-lg font-bold text-foreground">{amount.toLocaleString()} د.ع</div>
-                                        <div className="mt-2 bg-muted rounded-full h-2">
-                                            <div
-                                                className="bg-warning h-2 rounded-full"
-                                                style={{ width: `${percent}%` }}
-                                            />
+                                        <div className="mt-2 bg-background rounded-full h-2">
+                                            <div className="bg-warning h-2 rounded-full" style={{ width: `${percent}%` }} />
                                         </div>
                                         <div className="text-xs text-muted-foreground mt-1">{percent.toFixed(1)}%</div>
                                     </div>

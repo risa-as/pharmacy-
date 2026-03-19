@@ -2,14 +2,12 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from '@/auth';
+import { validateSyncUser } from '@/app/lib/sync-auth';
 
 export async function GET(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
 
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId');

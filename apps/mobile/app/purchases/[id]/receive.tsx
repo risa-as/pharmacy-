@@ -8,6 +8,7 @@ import {
     Alert,
     Platform,
     KeyboardAvoidingView,
+    ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { apiService } from '../../../services/api';
@@ -19,6 +20,7 @@ export default function ReceiveItemsScreen() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
     const [items, setItems] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const { isDarkMode } = useTheme();
     const C = Colors(isDarkMode);
@@ -37,6 +39,9 @@ export default function ReceiveItemsScreen() {
             })));
         } catch (error) {
             console.error(error);
+            Alert.alert('خطأ', 'تعذّر تحميل تفاصيل الطلب');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -87,6 +92,13 @@ export default function ReceiveItemsScreen() {
         color: C.foreground,
         textAlign: 'right' as const,
     };
+
+    if (loading) return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: C.background }}>
+            <Stack.Screen options={{ title: 'استلام المواد', headerBackTitle: 'إلغاء' }} />
+            <ActivityIndicator size="large" color={C.primary} />
+        </View>
+    );
 
     return (
         <KeyboardAvoidingView

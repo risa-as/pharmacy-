@@ -1,23 +1,40 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingDown, Settings } from 'lucide-react';
+import { AlertTriangle, TrendingDown, Settings, Building2 } from 'lucide-react';
+
+interface Branch { id: string; name: string; }
 
 export default function MarginWarningsPage() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [minMargin, setMinMargin] = useState(5);
     const [saving, setSaving] = useState(false);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [selectedBranchId, setSelectedBranchId] = useState('');
+
+    const fetchData = (branchId?: string) => {
+        setLoading(true);
+        const url = branchId
+            ? `/api/inventory/margin-check?branchId=${branchId}`
+            : '/api/inventory/margin-check';
+        fetch(url)
+            .then(r => r.json())
+            .then(d => { setData(d); setMinMargin(d.minMargin || 5); })
+            .finally(() => setLoading(false));
+    };
 
     useEffect(() => {
-        fetch('/api/inventory/margin-check')
+        fetch('/api/branches')
             .then(r => r.json())
-            .then(d => {
-                setData(d);
-                setMinMargin(d.minMargin || 5);
-            })
-            .finally(() => setLoading(false));
+            .then(b => setBranches(Array.isArray(b) ? b : []));
+        fetchData();
     }, []);
+
+    const handleBranchSelect = (branchId: string) => {
+        setSelectedBranchId(branchId);
+        fetchData(branchId || undefined);
+    };
 
     const updateMinMargin = async () => {
         setSaving(true);
@@ -27,10 +44,7 @@ export default function MarginWarningsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ minProfitMargin: minMargin })
             });
-            // Refresh data
-            const res = await fetch('/api/inventory/margin-check');
-            const d = await res.json();
-            setData(d);
+            fetchData(selectedBranchId || undefined);
         } catch (e) { console.error(e); }
         finally { setSaving(false); }
     };
@@ -40,6 +54,37 @@ export default function MarginWarningsPage() {
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">
             <h1 className="text-2xl font-bold text-foreground">⚠️ نظام الحد الأدنى للربح</h1>
+
+            {/* Branch Filter — pill style matching BranchFilter component */}
+            {branches.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-1 text-sm text-muted-foreground font-bold">
+                        <Building2 className="w-4 h-4" />
+                        الفرع:
+                    </span>
+                    <button
+                        onClick={() => handleBranchSelect('')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${!selectedBranchId
+                            ? 'bg-primary text-primary-foreground shadow-md'
+                            : 'bg-card border border-border text-muted-foreground hover:border-primary/50'
+                        }`}
+                    >
+                        كل الفروع
+                    </button>
+                    {branches.map(b => (
+                        <button
+                            key={b.id}
+                            onClick={() => handleBranchSelect(b.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedBranchId === b.id
+                                ? 'bg-primary text-primary-foreground shadow-md'
+                                : 'bg-card border border-border text-muted-foreground hover:border-primary/50'
+                            }`}
+                        >
+                            {b.name}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Settings Card */}
             <div className="bg-card rounded-xl shadow-sm border p-5">
@@ -70,7 +115,6 @@ export default function MarginWarningsPage() {
                 </div>
             ) : data ? (
                 <>
-                    {/* Summary */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="bg-destructive/10 border border-red-100 rounded-xl p-5">
                             <div className="flex items-center gap-2 text-destructive mb-1">
@@ -89,7 +133,6 @@ export default function MarginWarningsPage() {
                         </div>
                     </div>
 
-                    {/* Warnings Table */}
                     {data.warnings?.length > 0 ? (
                         <div className="bg-card rounded-xl shadow-sm border overflow-x-auto">
                             <table className="min-w-full text-sm">
@@ -106,15 +149,13 @@ export default function MarginWarningsPage() {
                                 </thead>
                                 <tbody>
                                     {data.warnings.map((w: any, i: number) => (
-                                        <tr key={w.drugId} className="border-b hover:bg-destructive/10/30">
+                                        <tr key={w.drugId} className="border-b hover:bg-muted/50">
                                             <td className="py-3 px-4 text-muted-foreground">{i + 1}</td>
                                             <td className="py-3 px-4 font-bold text-foreground">{w.drugName}</td>
                                             <td className="py-3 px-4 text-muted-foreground text-xs font-mono">{w.barcode}</td>
                                             <td className="py-3 px-4 text-warning">{fmt(w.cost)}</td>
                                             <td className="py-3 px-4 text-primary">{fmt(w.price)}</td>
-                                            <td className={`py-3 px-4 font-bold ${w.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
-                                                {fmt(w.profit)}
-                                            </td>
+                                            <td className={`py-3 px-4 font-bold ${w.profit >= 0 ? 'text-success' : 'text-destructive'}`}>{fmt(w.profit)}</td>
                                             <td className="py-3 px-4">
                                                 <span className="px-2 py-0.5 bg-destructive/10 text-destructive rounded-full text-xs font-bold flex items-center gap-1 w-fit">
                                                     <TrendingDown className="w-3 h-3" />

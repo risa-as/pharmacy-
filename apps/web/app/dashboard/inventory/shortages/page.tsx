@@ -2,25 +2,36 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import { AlertTriangle, ArrowDown } from "lucide-react";
-import Link from "next/link";
-
+import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
 
-export default async function ShortagesPage() {
+export default async function ShortagesPage({
+    searchParams,
+}: {
+    searchParams?: { branch?: string };
+}) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+    const { tenantBranchWhere, organizationId } = tenantCtx;
 
-    // Get all inventory items where current stock <= minStock
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'interBranchTransfers');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
+
+    const selectedBranchId = searchParams?.branch;
+
+    const branchFilter = selectedBranchId
+        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        : tenantBranchWhere;
+
     const inventory = await prisma.inventory.findMany({
-        where: tenantBranchWhere,
-        include: {
-            drug: true,
-            branch: true,
-            batches: true,
-        },
+        where: branchFilter,
+        include: { drug: true, branch: true, batches: true },
         orderBy: { drug: { tradeName: "asc" } },
     });
 
@@ -33,11 +44,15 @@ export default async function ShortagesPage() {
 
     return (
         <div className="glass-card w-full p-6">
-            <div className="flex w-full items-center justify-between mb-8">
+            <div className="flex w-full items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
                     <AlertTriangle className="w-7 h-7 text-warning" />
                     النواقص
                 </h1>
+            </div>
+
+            <div className="mb-6">
+                <BranchFilter currentBranch={selectedBranchId} baseUrl="/dashboard/inventory/shortages" />
             </div>
 
             {/* Stats */}
@@ -61,7 +76,7 @@ export default async function ShortagesPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
                 {shortages.length === 0 ? (
                     <div className="p-12 text-center text-muted-foreground">
                         <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />
@@ -100,13 +115,9 @@ export default async function ShortagesPage() {
                                     </td>
                                     <td className="px-4 py-3">
                                         {item.currentStock === 0 ? (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">
-                                                نفد
-                                            </span>
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">نفد</span>
                                         ) : (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-xs font-bold text-warning">
-                                                منخفض
-                                            </span>
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-xs font-bold text-warning">منخفض</span>
                                         )}
                                     </td>
                                 </tr>

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/mobile/session/cleanup",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

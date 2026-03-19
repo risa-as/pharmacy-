@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authService, User } from '../services/auth';
+import { authService, MobileSessionLimitError, User } from '../services/auth';
 import { registerSessionExpiredHandler } from '../services/api';
 
 interface AuthContextType {
@@ -31,6 +31,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const refreshUser = useCallback(async () => {
         try {
             const currentUser = await authService.getCurrentUser();
+
+            // Enforce mobile session limit on startup for ADMIN/PHARMACIST.
+            // This catches users who have stored credentials but never went through
+            // the login-time session check (e.g. logged in before the feature existed).
+            // On 403 (plan limit exceeded) → force logout.
+            // On network error → allow offline access silently.
+            if (currentUser && currentUser.role !== 'SUPER_ADMIN') {
+                try {
+                    await authService.verifySessionOnStartup(currentUser.id);
+                } catch (sessionError: any) {
+                    if (sessionError instanceof MobileSessionLimitError) {
+                        // Plan limit exceeded — another user holds the only available slot
+                        console.warn('AuthContext: session limit exceeded on startup, forcing logout');
+                        await authService.logout();
+                        setUser(null);
+                        return;
+                    }
+                    // Any other error (network, server down) → allow offline access
+                }
+            }
+
             setUser(currentUser);
         } catch (error) {
             console.error('AuthContext: failed to load user', error);

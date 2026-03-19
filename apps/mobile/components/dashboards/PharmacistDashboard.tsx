@@ -19,7 +19,7 @@ interface Alert {
 
 interface Sale {
     id: string;
-    totalAmount: number;
+    total: number;
     createdAt: string;
 }
 
@@ -68,7 +68,7 @@ export function PharmacistDashboard() {
         fetchData();
     }, [fetchData]);
 
-    const todayRevenue = sales.reduce((sum, s) => sum + (s.totalAmount ?? 0), 0);
+    const todayRevenue = sales.reduce((sum, s) => sum + (s.total ?? 0), 0);
     const todaySalesCount = sales.length;
 
     return (

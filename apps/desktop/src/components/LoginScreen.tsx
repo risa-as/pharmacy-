@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Pill, Shield, Zap, BarChart3, Eye, EyeOff } from 'lucide-react';
 
+function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
+    return Promise.race([
+        window.ipcRenderer.invoke(channel, ...args) as Promise<T>,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`IPC timeout (${channel})`)), 12000)
+        ),
+    ]);
+}
+
 interface LoginScreenProps {
     onLogin: (user: any) => void;
 }
@@ -17,7 +26,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     useEffect(() => {
         setMounted(true);
         if (window.ipcRenderer) {
-            window.ipcRenderer.invoke('get-users').then(setUsers);
+            ipcInvoke('get-users').then(setUsers);
         }
     }, []);
 
@@ -27,7 +36,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         setError('');
 
         try {
-            const result = await window.ipcRenderer.invoke('login', { email, password });
+            const result = await ipcInvoke('login', { email, password });
             if (result.success) {
                 onLogin(result.user);
             } else {
