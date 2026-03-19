@@ -16,13 +16,38 @@ class SyncClientError extends Error {
  * Enhanced fetch with retry logic and timeout
  */
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 1000) {
+    // Inject device auth headers automatically
+    const licenseKey  = store.get('licenseKey')    as string | undefined;
+    const branchId    = store.get('branchId')      as string | undefined;
+    const syncToken   = store.get('syncToken')     as string | undefined;
+    const syncUserId  = store.get('syncUserId')    as string | undefined;
+    const syncOrgId   = store.get('syncOrgId')     as string | undefined;
+    const syncUserRole = store.get('syncUserRole') as string | undefined;
+    const deviceHeaders: Record<string, string> = {};
+    if (branchId) deviceHeaders['x-branch-id'] = branchId;
+    if (syncToken && syncUserId && branchId && syncOrgId && syncUserRole) {
+        // Prefer HMAC sync token (user logged in via cloud)
+        deviceHeaders['x-sync-token']  = syncToken;
+        deviceHeaders['x-user-id']     = syncUserId;
+        deviceHeaders['x-org-id']      = syncOrgId;
+        deviceHeaders['x-user-role']   = syncUserRole;
+    } else if (licenseKey) {
+        // Fallback to device license key
+        deviceHeaders['x-device-license-key'] = licenseKey;
+    }
+
+    const mergedOptions: RequestInit = {
+        ...options,
+        headers: { ...deviceHeaders, ...(options.headers as Record<string, string> || {}) },
+    };
+
     for (let i = 0; i < retries; i++) {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
             const response = await fetch(url, {
-                ...options,
+                ...mergedOptions,
                 signal: controller.signal
             });
 
@@ -967,6 +992,7 @@ export async function syncProducts() {
                 costPrice?: number;
                 purchasePrice?: number;
                 buyPrice?: number;
+                isQuickSale?: boolean;
                 stock?: number;
                 minStock?: number;
                 maxStock?: number;
@@ -1035,7 +1061,8 @@ export async function syncProducts() {
                         tradeName: drug.tradeName,
                         scientificName: drug.scientificName,
                         price: Number(drug.price || 0),
-                        isActive: true
+                        isActive: true,
+                        isQuickSale: drug.isQuickSale ?? false,
                     },
                     create: {
                         id: drug.id,
@@ -1043,7 +1070,8 @@ export async function syncProducts() {
                         tradeName: drug.tradeName,
                         scientificName: drug.scientificName,
                         price: Number(drug.price || 0),
-                        isActive: true
+                        isActive: true,
+                        isQuickSale: drug.isQuickSale ?? false,
                     }
                 });
 
@@ -1414,7 +1442,7 @@ export async function syncSettings() {
         const settingsUrl = branchId
             ? buildApiUrl(`/sync/settings?branchId=${encodeURIComponent(branchId)}`)
             : buildApiUrl('/sync/settings');
-        const response = await fetch(settingsUrl);
+        const response = await fetchWithRetry(settingsUrl);
         if (!response.ok) throw new Error("Settings sync failed");
 
         const settings = await response.json();
@@ -1843,6 +1871,30 @@ export async function pushUpdateInventoryToCloud(data: {
         return true;
     } catch (error) {
         console.error("[CloudSync] Error pushing inventory update:", error);
+        return false;
+    }
+}
+
+/**
+ * Push a quick-sale toggle to the cloud API.
+ * Called after the local SQLite is already updated.
+ */
+export async function pushQuickSaleToggle(drugId: string, isQuickSale: boolean): Promise<boolean> {
+    try {
+        if (!await checkConnection()) return false;
+        const response = await fetchWithRetry(buildApiUrl('/inventory/quick-sale'), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ drugId, isQuickSale }),
+        });
+        if (!response.ok) {
+            console.error(`[CloudSync] quick-sale toggle failed: ${response.status}`);
+            return false;
+        }
+        console.log(`[CloudSync] quick-sale toggle synced — drugId=${drugId} isQuickSale=${isQuickSale}`);
+        return true;
+    } catch (error) {
+        console.error('[CloudSync] pushQuickSaleToggle error:', error);
         return false;
     }
 }

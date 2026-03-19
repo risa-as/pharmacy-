@@ -52,6 +52,7 @@ export async function GET(req: Request) {
                     costPrice: inv.cost || 0,
                     minStock: inv.minStock || 0,
                     maxStock: inv.maxStock || 100,
+                    isQuickSale: inv.drug.isQuickSale ?? false,
                     stock: totalStock,
                     batches: inv.batches.map((b: any) => ({
                         id: b.id,

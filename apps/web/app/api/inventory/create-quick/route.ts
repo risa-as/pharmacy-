@@ -52,12 +52,14 @@ export async function POST(req: Request) {
             branchId,
             price,
             cost,
+            costPrice,
             minStock,
             maxStock,
             quantity,
             expiryDate,
             inventoryId,
             supplierId,
+            isQuickSale,
         } = body;
 
         if (!barcode || !tradeName || !branchId) {
@@ -73,7 +75,7 @@ export async function POST(req: Request) {
 
         const parsedQuantity = Number.parseInt(String(quantity ?? 0), 10) || 0;
         const parsedPrice = Number.parseFloat(String(price ?? 0)) || 0;
-        const parsedCost = Number.parseFloat(String(cost ?? 0)) || 0;
+        const parsedCost = Number.parseFloat(String(cost ?? costPrice ?? 0)) || 0;
         const parsedMin = Number.parseInt(String(minStock ?? 0), 10) || 0;
         const parsedMax = Number.parseInt(String(maxStock ?? 100), 10) || 100;
 
@@ -99,6 +101,7 @@ export async function POST(req: Request) {
                         tradeName,
                         scientificName: scientificName || tradeName,
                         origin: origin || "unknown",
+                        isQuickSale: isQuickSale === true,
                     }
                 });
             }

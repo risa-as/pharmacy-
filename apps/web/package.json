@@ -11,8 +11,13 @@
         "db:generate": "prisma generate",
         "db:push": "prisma db push",
         "db:seed": "node prisma/seed.js",
+        "db:seed-users": "npx ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" prisma/seed-users.ts",
         "db:studio": "prisma studio"
     },
+    "prisma": {
+        "seed": "npx ts-node --skip-project prisma/seed-plans.ts"
+    },
+
     "dependencies": {
         "@auth/core": "^0.41.0",
         "@faramace/shared": "workspace:*",

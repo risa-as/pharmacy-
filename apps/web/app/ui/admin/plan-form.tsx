@@ -2,9 +2,27 @@
 
 import { useState } from 'react';
 import { createPlan, updatePlan } from '@/app/lib/actions/plans';
-import { Loader2, Plus, Edit2, Shield, ShieldOff, Save, X } from 'lucide-react';
+import { Loader2, Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+
+const ALL_FLAGS = [
+    { key: 'advancedReports', label: 'التقارير المتقدمة', tier: 'Pro' },
+    { key: 'productMovement', label: 'حركة المنتجات', tier: 'Pro' },
+    { key: 'supplierManagement', label: 'إدارة الموردين', tier: 'Pro' },
+    { key: 'granularPermissions', label: 'الصلاحيات التفصيلية', tier: 'Pro' },
+    { key: 'warehouseManagement', label: 'إدارة المستودعات', tier: 'Enterprise' },
+    { key: 'interBranchTransfers', label: 'التحويلات بين الفروع', tier: 'Enterprise' },
+    { key: 'marketplace', label: 'السوق الإلكتروني', tier: 'Enterprise' },
+];
+
+function defaultFeatures(plan?: any) {
+    const f: Record<string, boolean> = {};
+    ALL_FLAGS.forEach(({ key }) => {
+        f[key] = plan?.features?.[key] ?? false;
+    });
+    return f;
+}
 
 export default function PlanForm({ plan, onClose }: { plan?: any, onClose: () => void }) {
     const isEdit = !!plan;
@@ -16,7 +34,11 @@ export default function PlanForm({ plan, onClose }: { plan?: any, onClose: () =>
         price: plan?.price || 0,
         maxBranches: plan?.maxBranches || 1,
         maxUsers: plan?.maxUsers || 3,
+        maxDevices: plan?.maxDevices || 1,
+        maxMobileUsers: plan?.maxMobileUsers || 1,
         isActive: plan?.isActive ?? true,
+        isPopular: plan?.isPopular ?? false,
+        features: defaultFeatures(plan),
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -25,13 +47,28 @@ export default function PlanForm({ plan, onClose }: { plan?: any, onClose: () =>
         setFormData(prev => ({ ...prev, [name]: finalValue }));
     };
 
+    const toggleFlag = (key: string) => {
+        setFormData(prev => ({
+            ...prev,
+            features: { ...prev.features, [key]: !prev.features[key] }
+        }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
+            const payload = {
+                ...formData,
+                price: Number(formData.price),
+                maxBranches: Number(formData.maxBranches),
+                maxUsers: Number(formData.maxUsers),
+                maxDevices: Number(formData.maxDevices),
+                maxMobileUsers: Number(formData.maxMobileUsers),
+            };
             const res = isEdit
-                ? await updatePlan(plan.id, formData)
-                : await createPlan(formData);
+                ? await updatePlan(plan.id, payload)
+                : await createPlan(payload);
 
             if (res.success) {
                 toast.success(isEdit ? 'تم تحديث الباقة بنجاح' : 'تم إنشاء الباقة بنجاح');
@@ -52,97 +89,81 @@ export default function PlanForm({ plan, onClose }: { plan?: any, onClose: () =>
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
+            {/* Name */}
             <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-1.5">اسم الباقة *</label>
-                <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                    placeholder="مثال: الباقة الأساسية"
-                    className={inputClass}
-                />
+                <input type="text" name="name" value={formData.name} onChange={handleChange} required
+                    placeholder="مثال: الباقة الاحترافية" className={inputClass} />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">السعر شهرياً (IQD) *</label>
-                    <input
-                        type="number"
-                        name="price"
-                        value={formData.price}
-                        onChange={handleChange}
-                        required
-                        min="0"
-                        className={inputClass}
-                        dir="ltr"
-                    />
-                </div>
-                <div>
-                    {/* Placeholder for Layout purposes */}
-                </div>
+            {/* Price */}
+            <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1.5">السعر الشهري <span dir="ltr">(IQD)</span> *</label>
+                <input type="number" name="price" value={formData.price} onChange={handleChange} required min="0" className={inputClass} dir="ltr" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">الحد الأقصى للفروع *</label>
-                    <input
-                        type="number"
-                        name="maxBranches"
-                        value={formData.maxBranches}
-                        onChange={handleChange}
-                        required
-                        min="-1"
-                        className={inputClass}
-                        dir="ltr"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1 text-left">-1 يعني غير محدود</p>
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">الحد الأقصى للمستخدمين *</label>
-                    <input
-                        type="number"
-                        name="maxUsers"
-                        value={formData.maxUsers}
-                        onChange={handleChange}
-                        required
-                        min="-1"
-                        className={inputClass}
-                        dir="ltr"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1 text-left">-1 يعني غير محدود</p>
+            {/* Limits */}
+            <div className="grid grid-cols-2 gap-3">
+                {[
+                    { name: 'maxBranches', label: 'حد الفروع' },
+                    { name: 'maxUsers', label: 'حد المستخدمين' },
+                    { name: 'maxDevices', label: 'حد الأجهزة (كاشير)' },
+                    { name: 'maxMobileUsers', label: 'حد جلسات الموبايل' },
+                ].map(({ name, label }) => (
+                    <div key={name}>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
+                        <input type="number" name={name} value={(formData as any)[name]} onChange={handleChange}
+                            min="-1" className={inputClass} dir="ltr" />
+                        <p className="text-xs text-muted-foreground mt-0.5">-1 = غير محدود</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Feature Flags */}
+            <div className="border border-border rounded-xl p-4 space-y-3">
+                <p className="text-sm font-bold text-foreground mb-2">🔒 ميزات الباقة (Feature Flags)</p>
+                <div className="grid grid-cols-1 gap-2">
+                    {ALL_FLAGS.map(({ key, label, tier }) => (
+                        <label key={key} className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-muted/50">
+                            <div className="flex items-center gap-2">
+                                <input type="checkbox" checked={formData.features[key]} onChange={() => toggleFlag(key)}
+                                    className="w-4 h-4 text-primary rounded" />
+                                <span className="text-sm text-foreground">{label}</span>
+                            </div>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${tier === 'Pro' ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning'}`}>
+                                {tier}
+                            </span>
+                        </label>
+                    ))}
                 </div>
             </div>
 
-            <div className="flex items-center gap-2 mt-2 p-3 bg-muted/20 border border-border rounded-xl">
-                <input
-                    type="checkbox"
-                    id="isActive"
-                    name="isActive"
-                    checked={formData.isActive}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-primary rounded border-border focus:ring-primary"
-                />
-                <label htmlFor="isActive" className="text-sm font-medium text-foreground cursor-pointer">
-                    تفعيل الباقة (تظهر للعملاء الجدد)
-                </label>
+            {/* isActive + isPopular */}
+            <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 bg-muted/20 border border-border rounded-xl">
+                    <input type="checkbox" id="isActive" name="isActive" checked={formData.isActive} onChange={handleChange}
+                        className="w-4 h-4 text-primary rounded border-border focus:ring-primary" />
+                    <label htmlFor="isActive" className="text-sm font-medium text-foreground cursor-pointer">
+                        تفعيل الباقة (تظهر للعملاء الجدد)
+                    </label>
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                    <input type="checkbox" id="isPopular" name="isPopular" checked={formData.isPopular} onChange={handleChange}
+                        className="w-4 h-4 text-amber-500 rounded border-amber-300 focus:ring-amber-400" />
+                    <label htmlFor="isPopular" className="text-sm font-medium text-foreground cursor-pointer">
+                        ⭐ الأكثر طلباً (تظهر شارة على بطاقة الأسعار)
+                    </label>
+                </div>
             </div>
 
+            {/* Actions */}
             <div className="flex gap-3 justify-end mt-6 pt-4 border-t border-border">
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-4 py-2.5 bg-muted text-muted-foreground rounded-xl text-sm font-medium hover:bg-muted/80 transition-all"
-                    disabled={loading}
-                >
+                <button type="button" onClick={onClose} disabled={loading}
+                    className="px-4 py-2.5 bg-muted text-muted-foreground rounded-xl text-sm font-medium hover:bg-muted/80 transition-all">
                     إلغاء
                 </button>
-                <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-l from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground rounded-xl text-sm font-bold disabled:opacity-50 transition-all shadow-lg shadow-primary/20"
-                >
+                <button type="submit" disabled={loading}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-l from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground rounded-xl text-sm font-bold disabled:opacity-50 transition-all shadow-lg shadow-primary/20">
                     {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                     {!loading && <Save className="w-4 h-4" />}
                     {isEdit ? 'تحديث الباقة' : 'حفظ الباقة'}

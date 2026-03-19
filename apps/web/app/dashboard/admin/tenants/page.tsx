@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2, Calendar, Banknote } from 'lucide-react';
 import { suspendOrganization, reactivateOrganization } from '@/app/lib/actions/organization-suspension';
 import { recordManualPayment } from '@/app/lib/actions/billing';
+import PlanOverridesPanel from '@/app/ui/admin/PlanOverridesPanel';
 
 export default function TenantsPage() {
     const [tenants, setTenants] = useState<any[]>([]);
@@ -12,7 +13,7 @@ export default function TenantsPage() {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1 });
     const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
     const [provisionResult, setProvisionResult] = useState<{
@@ -40,7 +41,9 @@ export default function TenantsPage() {
                     ...prev,
                     plan: defaultPlan.id,
                     maxBranches: defaultPlan.maxBranches,
-                    maxUsers: defaultPlan.maxUsers
+                    maxUsers: defaultPlan.maxUsers,
+                    maxDevices: defaultPlan.maxDevices ?? 1,
+                    maxMobileUsers: defaultPlan.maxMobileUsers ?? 1,
                 }));
             }
         }).finally(() => setLoading(false));
@@ -54,7 +57,9 @@ export default function TenantsPage() {
             ...prev,
             plan: planId,
             maxBranches: selectedPlan ? selectedPlan.maxBranches : prev.maxBranches,
-            maxUsers: selectedPlan ? selectedPlan.maxUsers : prev.maxUsers
+            maxUsers: selectedPlan ? selectedPlan.maxUsers : prev.maxUsers,
+            maxDevices: selectedPlan ? (selectedPlan.maxDevices ?? 1) : prev.maxDevices,
+            maxMobileUsers: selectedPlan ? (selectedPlan.maxMobileUsers ?? 1) : prev.maxMobileUsers,
         }));
     };
 
@@ -76,7 +81,9 @@ export default function TenantsPage() {
                 name: form.name,
                 plan: form.plan,
                 maxBranches: form.maxBranches,
-                maxUsers: form.maxUsers
+                maxUsers: form.maxUsers,
+                maxDevices: form.maxDevices,
+                maxMobileUsers: form.maxMobileUsers,
             } : form;
 
             const res = await fetch(url, {
@@ -101,7 +108,7 @@ export default function TenantsPage() {
                 }
                 setShowForm(false);
                 setEditingId(null);
-                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1 });
             } else {
                 const data = await res.json();
                 alert(data.error || 'حدث خطأ');
@@ -146,6 +153,8 @@ export default function TenantsPage() {
             plan: plan?.id || '',
             maxBranches: tenant.maxBranches,
             maxUsers: tenant.maxUsers,
+            maxDevices: tenant.maxDevices ?? plan?.maxDevices ?? 1,
+            maxMobileUsers: tenant.maxMobileUsers ?? plan?.maxMobileUsers ?? 1,
         });
         setShowForm(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -211,7 +220,7 @@ export default function TenantsPage() {
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
                 <button onClick={() => {
                     setEditingId(null);
-                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3 });
+                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1 });
                     setShowForm(!showForm);
                 }}
                     className="flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors shadow-sm">
@@ -250,7 +259,7 @@ export default function TenantsPage() {
                             className="border rounded-lg px-3 py-2 text-sm bg-muted col-span-1 md:col-span-1">
                             {plans.map((p: any) => (
                                 <option key={p.id} value={p.id}>
-                                    {p.name} - {p.price === 0 ? 'مجاني' : `$${p.price}/شهر`}
+                                    {p.name} - {p.price === 0 ? 'مجاني' : `${Number(p.price).toLocaleString('en-US')} IQD/شهر`}
                                 </option>
                             ))}
                         </select>
@@ -263,6 +272,16 @@ export default function TenantsPage() {
                             <div>
                                 <label className="block text-xs text-muted-foreground mb-1">حد المستخدمين (تجاوز)</label>
                                 <input type="number" value={form.maxUsers} onChange={e => setForm({ ...form, maxUsers: Number(e.target.value) })}
+                                    className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1">حد الأجهزة (تجاوز، ‎-1 = غير محدود)</label>
+                                <input type="number" value={form.maxDevices} onChange={e => setForm({ ...form, maxDevices: Number(e.target.value) })}
+                                    className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1">حد موبايل (تجاوز، ‎-1 = غير محدود)</label>
+                                <input type="number" value={form.maxMobileUsers} onChange={e => setForm({ ...form, maxMobileUsers: Number(e.target.value) })}
                                     className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
                             </div>
                         </div>
@@ -352,7 +371,9 @@ export default function TenantsPage() {
                                         <td className="py-3 px-4 text-muted-foreground text-xs">{t.ownerEmail}</td>
                                         <td className="py-3 px-4 text-foreground">max {t.maxBranches}</td>
                                         <td className="py-3 px-4 text-foreground">max {t.maxUsers}</td>
-                                        <td className="py-3 px-4 font-bold text-success">${t.monthlyPrice}/mo</td>
+                                        <td className="py-3 px-4 font-bold text-success" dir="ltr">
+                                            {t.monthlyPrice === 0 ? 'مجاني' : `${Number(t.monthlyPrice).toLocaleString('en-US')} IQD/شهر`}
+                                        </td>
                                         <td className="py-3 px-4">
                                             <span className={`text-xs px-2 py-0.5 rounded-full ${t.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                                                 {t.isActive ? 'فعال' : 'معطل'}
@@ -429,6 +450,20 @@ export default function TenantsPage() {
                             })}
                         </tbody>
                     </table>
+
+                    {/* Per-tenant plan override panels */}
+                    <div className="divide-y border-t">
+                        {tenants.map((t: any) => (
+                            <div key={`override-${t.id}`} className="px-4 py-2">
+                                <div className="text-xs text-muted-foreground mb-1 font-semibold">{t.name}</div>
+                                <PlanOverridesPanel
+                                    organizationId={t.id}
+                                    organizationName={t.name}
+                                    plans={plans}
+                                />
+                            </div>
+                        ))}
+                    </div>
                 </div>
             ) : (
                 <div className="text-center py-16 text-muted-foreground">
@@ -448,12 +483,12 @@ export default function TenantsPage() {
                         <div className="space-y-3">
                             <div>
                                 <label className="text-xs text-muted-foreground block mb-1">المبلغ (دينار عراقي) *</label>
-                                <input type="number" value={manualForm.amount} onChange={e => setManualForm({...manualForm, amount: e.target.value})}
+                                <input type="number" value={manualForm.amount} onChange={e => setManualForm({ ...manualForm, amount: e.target.value })}
                                     placeholder="مثال: 50000" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
                             </div>
                             <div>
                                 <label className="text-xs text-muted-foreground block mb-1">مدة التجديد (أشهر)</label>
-                                <select value={manualForm.months} onChange={e => setManualForm({...manualForm, months: e.target.value})}
+                                <select value={manualForm.months} onChange={e => setManualForm({ ...manualForm, months: e.target.value })}
                                     className="w-full border rounded-lg px-3 py-2 text-sm bg-muted">
                                     <option value="1">شهر واحد</option>
                                     <option value="3">3 أشهر</option>
@@ -463,7 +498,7 @@ export default function TenantsPage() {
                             </div>
                             <div>
                                 <label className="text-xs text-muted-foreground block mb-1">طريقة الدفع</label>
-                                <select value={manualForm.method} onChange={e => setManualForm({...manualForm, method: e.target.value})}
+                                <select value={manualForm.method} onChange={e => setManualForm({ ...manualForm, method: e.target.value })}
                                     className="w-full border rounded-lg px-3 py-2 text-sm bg-muted">
                                     <option value="BANK_TRANSFER">تحويل بنكي</option>
                                     <option value="MANUAL">نقداً / يدوي</option>
@@ -471,12 +506,12 @@ export default function TenantsPage() {
                             </div>
                             <div>
                                 <label className="text-xs text-muted-foreground block mb-1">رقم مرجعي (اختياري)</label>
-                                <input value={manualForm.reference} onChange={e => setManualForm({...manualForm, reference: e.target.value})}
+                                <input value={manualForm.reference} onChange={e => setManualForm({ ...manualForm, reference: e.target.value })}
                                     placeholder="رقم الحوالة أو رقم الوصل" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
                             </div>
                             <div>
                                 <label className="text-xs text-muted-foreground block mb-1">ملاحظات (اختياري)</label>
-                                <input value={manualForm.note} onChange={e => setManualForm({...manualForm, note: e.target.value})}
+                                <input value={manualForm.note} onChange={e => setManualForm({ ...manualForm, note: e.target.value })}
                                     placeholder="أي تفاصيل إضافية" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" />
                             </div>
                         </div>

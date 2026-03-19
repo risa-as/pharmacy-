@@ -3,6 +3,10 @@ import { Suspense } from 'react';
 import TransfersTable from '@/app/ui/inventory/transfers/table';
 import { StartTransferButton } from '@/app/ui/inventory/transfers/buttons';
 import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
+import { NextResponse } from 'next/server';
 
 export const metadata: Metadata = {
     title: 'تحويلات الأدوية بين الأفرع | Faramace',
@@ -21,6 +25,13 @@ export default async function Page({
     const branchId = session?.user?.branchId;
 
     if (!branchId) return <div>يرجى تسجيل الدخول</div>;
+
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx.organizationId) {
+        const upgrade = await requireFeature(tenantCtx.organizationId, 'interBranchTransfers');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
 
     const query = searchParams?.query || '';
     const currentPage = Number(searchParams?.page) || 1;

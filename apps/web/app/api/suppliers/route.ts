@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { checkFeatureAccess } from "@/app/lib/saas-guards";
 
 export async function GET(req: NextRequest) {
     try {
@@ -32,7 +33,23 @@ export async function GET(req: NextRequest) {
                 });
                 organizationId = branch?.organizationId ?? null;
             }
-            // SUPER_ADMIN: no filter (organizationId stays null → fetch all)
+            // SUPER_ADMIN: no filter (organizationId stays null → fetch all, bypasses gate)
+        }
+
+        // Fix #6: Feature Gate check AFTER resolving organizationId, but
+        // BEFORE any data query — prevent access even for Desktop app callers.
+        if (organizationId) {
+            const access = await checkFeatureAccess(organizationId, 'supplierManagement');
+            if (!access.allowed) {
+                return NextResponse.json(
+                    {
+                        error: 'هذه الميزة متاحة في الباقة الاحترافية فقط.',
+                        code: 'FEATURE_NOT_IN_PLAN',
+                        requiredPlan: 'PROFESSIONAL'
+                    },
+                    { status: 403 }
+                );
+            }
         }
 
         const suppliers = await prisma.supplier.findMany({

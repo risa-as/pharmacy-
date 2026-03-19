@@ -24,7 +24,7 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        const { pharmacyName, ownerEmail, ownerPassword, ownerName, durationMonths } = body;
+        const { pharmacyName, ownerEmail, ownerPassword, ownerName, durationMonths, planId } = body;
 
         if (!pharmacyName || !ownerEmail || !ownerPassword) {
             return NextResponse.json(
@@ -50,6 +50,17 @@ export async function POST(req: Request) {
             exists = await prisma.deviceLicense.findUnique({ where: { licenseKey } });
         }
 
+        // Resolve plan (optional — SUPER_ADMIN can pass a planId)
+        let selectedPlan = null;
+        if (planId) {
+            selectedPlan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+        }
+        if (!selectedPlan) {
+            selectedPlan = await prisma.subscriptionPlan.findFirst({
+                where: { name: 'FREE', isActive: true }
+            });
+        }
+
         // Calculate expiry
         const expiresAt = durationMonths
             ? new Date(Date.now() + durationMonths * 30 * 24 * 60 * 60 * 1000)
@@ -60,9 +71,14 @@ export async function POST(req: Request) {
 
         // ===== Run everything in a single transaction =====
         const result = await prisma.$transaction(async (tx: any) => {
-            // 1. Create Organization
+            // 1. Create Organization (with plan limits if a plan was resolved)
             const organization = await tx.organization.create({
-                data: { name: pharmacyName },
+                data: {
+                    name: pharmacyName,
+                    planId: selectedPlan?.id ?? undefined,
+                    maxDevices: selectedPlan?.maxDevices ?? undefined,
+                    maxMobileUsers: selectedPlan?.maxMobileUsers ?? undefined,
+                },
             });
 
             // 2. Create Branch (default "الفرع الرئيسي")

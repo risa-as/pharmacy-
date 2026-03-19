@@ -133,8 +133,8 @@ export default function SmartOrdersScreen() {
                                     )}
                                 </View>
                                 <Badge
-                                    label={item.daysUntilStockout !== undefined && item.daysUntilStockout <= 7 ? 'عاجل' : 'نقص'}
-                                    variant={item.daysUntilStockout !== undefined && item.daysUntilStockout <= 7 ? 'danger' : 'warning'}
+                                    label={item.currentQuantity === 0 ? 'نفاد تام' : 'نقص مخزون'}
+                                    variant={item.currentQuantity === 0 ? 'danger' : 'warning'}
                                 />
                             </View>
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { getPlans, updatePlan } from '@/app/lib/actions/plans';
 import PlanForm from '@/app/ui/admin/plan-form';
 import {
@@ -44,6 +45,8 @@ export default function AdminPlansPage() {
             price: Number(plan.price),
             maxBranches: Number(plan.maxBranches),
             maxUsers: Number(plan.maxUsers),
+            maxDevices: Number(plan.maxDevices ?? 1),
+            maxMobileUsers: Number(plan.maxMobileUsers ?? 1),
             features: plan.features,
             isActive: !plan.isActive,
         });
@@ -58,7 +61,37 @@ export default function AdminPlansPage() {
         fetchPlans();
     };
 
+    const modal = showModal ? createPortal(
+        <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+            onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+        >
+            <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="flex justify-between items-center px-6 py-4 border-b border-border shrink-0">
+                    <h2 className="text-lg font-bold text-foreground">
+                        {selectedPlan ? 'تعديل باقة' : 'إنشاء باقة جديدة'}
+                    </h2>
+                    <button
+                        onClick={closeModal}
+                        className="text-muted-foreground hover:bg-muted p-1.5 rounded-full transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                {/* Body — scrollable */}
+                <div className="overflow-y-auto flex-1 px-6 py-4">
+                    <PlanForm plan={selectedPlan} onClose={closeModal} />
+                </div>
+            </div>
+        </div>,
+        document.body
+    ) : null;
+
     return (
+        <>
+        {modal}
         <div className="glass-card space-y-6 p-6" dir="rtl">
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -79,23 +112,6 @@ export default function AdminPlansPage() {
                     باقة جديدة
                 </button>
             </div>
-
-            {/* Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-card border border-border rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-lg font-bold text-foreground">
-                                {selectedPlan ? "تعديل باقة" : "إنشاء باقة جديدة"}
-                            </h2>
-                            <button onClick={closeModal} className="text-muted-foreground hover:bg-muted p-1 rounded-full transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <PlanForm plan={selectedPlan} onClose={closeModal} />
-                    </div>
-                </div>
-            )}
 
             {/* Table */}
             {loading ? (
@@ -121,7 +137,7 @@ export default function AdminPlansPage() {
                                 return (
                                     <tr key={plan.id} className="border-b border-border hover:bg-muted/20 transition-colors">
                                         <td className="py-3 px-4 font-semibold text-foreground">{plan.name}</td>
-                                        <td className="py-3 px-4 text-primary font-bold">
+                                        <td className="py-3 px-4 text-primary font-bold" dir="ltr">
                                             {Number(plan.price).toLocaleString('en-US')} IQD
                                         </td>
                                         <td className="py-3 px-4">
@@ -181,5 +197,6 @@ export default function AdminPlansPage() {
                 </div>
             )}
         </div>
+        </>
     );
 }

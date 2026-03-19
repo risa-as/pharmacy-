@@ -7,27 +7,31 @@ function createPrismaClient(): PrismaClient {
         log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
     });
 
-    // Retry middleware: handles Neon/serverless cold-start (P1001) transparently.
-    // Kept intentionally short to avoid user-visible latency on healthy connections.
+    // Retry middleware: handles Neon/serverless connection drops transparently.
     client.$use(async (params: any, next: (params: any) => Promise<any>) => {
-        const MAX_RETRIES = 2;
-        const DELAYS_MS = [500, 1500]; // was 2000/4000 — Neon cold-starts are ≤1s
+        const MAX_RETRIES = 3;
+        const DELAYS_MS = [300, 800, 2000];
 
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {
                 return await next(params);
             } catch (err: any) {
-                const isConnError =
-                    err?.code === "P1001" ||
-                    err?.code === "P1002" ||
-                    err?.message?.includes("Can't reach database") ||
-                    err?.message?.includes("connection timeout");
+                const code = err?.code as string | undefined;
+                const msg: string = err?.message ?? "";
+                const isRetryable =
+                    code === "P1001" ||  // Can't reach database server
+                    code === "P1002" ||  // Connection timed out
+                    code === "P1017" ||  // Server closed connection
+                    code === "P2024" ||  // Connection pool timeout
+                    msg.includes("Can't reach database") ||
+                    msg.includes("connection timeout") ||
+                    msg.includes("Server has closed the connection") ||
+                    msg.includes("Connection reset") ||
+                    msg.includes("10054");  // Windows: connection forcibly closed
 
-                if (isConnError && attempt < MAX_RETRIES - 1) {
+                if (isRetryable && attempt < MAX_RETRIES - 1) {
                     const delay = DELAYS_MS[attempt];
-                    if (process.env.NODE_ENV !== "production") {
-                        console.warn(`[Prisma] Connection retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`);
-                    }
+                    console.warn(`[Prisma] Retrying (${code ?? "conn"}) attempt ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`);
                     await new Promise((r) => setTimeout(r, delay));
                 } else {
                     throw err;

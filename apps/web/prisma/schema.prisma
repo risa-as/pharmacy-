@@ -13,6 +13,8 @@ model Organization {
   planId             String?
   maxBranches        Int?
   maxUsers           Int?
+  maxDevices         Int? // Per-org override for device license limit
+  maxMobileUsers     Int? // Per-org override for mobile session limit
   isSuspended        Boolean   @default(false)
   suspendedAt        DateTime?
   subscriptionEndsAt DateTime?
@@ -59,6 +61,7 @@ model Branch {
   patientAppOrders    PatientAppOrder[]
   demandForecasts     DemandForecast[]
   deviceLicenses      DeviceLicense[]
+  notifications       Notification[]
 }
 
 model User {
@@ -77,6 +80,7 @@ model User {
   sales         Sale[]
   shifts        Shift[]
   stocktakes    Stocktake[]
+  notifications Notification[]
 }
 
 model Shift {
@@ -137,12 +141,13 @@ model Transaction {
 
 model GlobalDrug {
   id                   String                @id @default(uuid())
-  barcode              String                @unique
+  barcode              String
   tradeName            String
   scientificName       String
   origin               String?
   image                String?
   isActive             Boolean               @default(true)
+  isQuickSale          Boolean               @default(false)
   alternatives         String[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
@@ -159,6 +164,7 @@ model GlobalDrug {
   organizationId       String?
   organization         Organization? @relation("OrganizationCustomDrugs", fields: [organizationId], references: [id])
 
+  @@unique([barcode, organizationId])
   @@index([tradeName])
   @@index([barcode])
 }
@@ -225,7 +231,6 @@ model SyncActionLog {
   status         String   @default("PROCESSED") // 'PROCESSED', 'FAILED'
   errorMessage   String?
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
 
   @@index([actionType])
   @@index([branchId])
@@ -239,6 +244,7 @@ model Sale {
   total        Float
   discount     Float         @default(0)
   createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   branch       Branch        @relation(fields: [branchId], references: [id])
   safe         Safe?         @relation(fields: [safeId], references: [id])
   patient      Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
@@ -254,7 +260,7 @@ model Sale {
   @@index([branchId, createdAt])
 }
 
-// ... (Rest of models)
+
 
 enum PaymentMethod {
   CASH
@@ -308,6 +314,9 @@ model SaleReturnItem {
 
   saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
   drug       GlobalDrug @relation(fields: [drugId], references: [id])
+
+  @@index([saleReturnId])
+  @@index([drugId])
 }
 
 model Supplier {
@@ -358,6 +367,9 @@ model PurchaseItem {
   batchNumber String?
   purchase    Purchase   @relation(fields: [purchaseId], references: [id])
   drug        GlobalDrug @relation(fields: [drugId], references: [id])
+
+  @@index([purchaseId])
+  @@index([drugId])
 }
 
 model SupplierPayment {
@@ -374,6 +386,9 @@ model SupplierPayment {
   supplier   Supplier @relation(fields: [supplierId], references: [id])
   branch     Branch   @relation(fields: [branchId], references: [id])
   safe       Safe?    @relation(fields: [safeId], references: [id])
+
+  @@index([supplierId])
+  @@index([branchId, date])
 }
 
 // ==================== الميزات الجديدة ====================
@@ -570,7 +585,7 @@ model Backup {
   name      String
   url       String
   size      Int
-  branchId  String?  @default("default")
+  branchId  String? // optional branch reference — no FK to allow orphaned backups
   createdAt DateTime @default(now())
 }
 
@@ -629,6 +644,9 @@ model StocktakeItem {
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
   batch     Batch     @relation(fields: [batchId], references: [id])
+
+  @@index([stocktakeId])
+  @@index([batchId])
 }
 
 // =======================
@@ -795,33 +813,8 @@ enum MarketplaceOrderStatus {
   CANCELLED
 }
 
-// =======================
-// Multi-tenant SaaS
-// =======================
-model Tenant {
-  id                 String     @id @default(uuid())
-  name               String
-  slug               String     @unique
-  ownerEmail         String
-  phone              String?
-  planId             String?
-  maxBranches        Int        @default(1)
-  maxUsers           Int        @default(3)
-  isActive           Boolean    @default(true)
-  trialEndsAt        DateTime?
-  subscriptionEndsAt DateTime?
-  isSuspended        Boolean    @default(false)
-  suspendedAt        DateTime?
-  monthlyPrice       Float      @default(0)
-  currency           String     @default("USD")
-  features           String?
-  customDomain       String?
-  logoUrl            String?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-
-  plan               SubscriptionPlan? @relation(fields: [planId], references: [id])
-}
+// NOTE: Tenant model removed — Organization is the single SaaS tenant entity.
+// The word 'tenant' in API routes refers to JSON response shapes, not this DB model.
 
 // =======================
 // Patient App
@@ -940,24 +933,27 @@ model DeviceLicense {
   @@index([licenseKey])
   @@index([hardwareId])
   @@index([branchId])
+  @@index([branchId, isActive])
 }
 
 // =======================
 // Dynamic Subscriptions
 // =======================
 model SubscriptionPlan {
-  id          String         @id @default(uuid())
-  name        String
-  price       Float          @default(0)
-  maxBranches Int            @default(1)
-  maxUsers    Int            @default(3)
-  features    Json?
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id             String         @id @default(uuid())
+  name           String
+  price          Float          @default(0)
+  maxBranches    Int            @default(1)
+  maxUsers       Int            @default(3)
+  maxDevices     Int            @default(1) // Max cashier device licenses
+  maxMobileUsers Int            @default(1) // Max concurrent mobile app users
+  features       Json?
+  isActive       Boolean        @default(true)
+  isPopular      Boolean        @default(false) // Highlighted as most popular on pricing page
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   organizations Organization[]
-  tenants       Tenant[]
 }
 
 // =======================
@@ -1022,7 +1018,27 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime         @default(now())
 
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
   @@index([userId, isRead])
   @@index([branchId, createdAt])
   @@index([createdAt])
+}
+
+// =======================
+// Mobile Session Tracking
+// =======================
+model MobileSession {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  deviceToken    String   @unique  // one row per device installation
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+
+  @@index([organizationId, isActive])
+  @@index([userId])
+  @@index([lastSeenAt])
 }

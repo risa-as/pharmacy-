@@ -82,11 +82,13 @@ export async function POST(req: NextRequest) {
                 // Ensure the safe exists in cloud (desktop may have auto-created it locally)
                 const safeExists = await tx.safe.findUnique({ where: { id: txn.safeId }, select: { id: true } });
                 if (!safeExists) {
-                    await tx.safe.upsert({
-                        where: { id: txn.safeId },
-                        update: {},
-                        create: { id: txn.safeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId }
-                    });
+                    try {
+                        await tx.safe.create({
+                            data: { id: txn.safeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId }
+                        });
+                    } catch {
+                        // Safe was created concurrently — safe to ignore
+                    }
                 }
 
                 // Create Transaction
@@ -120,7 +122,7 @@ export async function POST(req: NextRequest) {
             // Log the action
             await tx.syncActionLog.upsert({
                 where: { idempotencyKey },
-                update: { status: "PROCESSED", updatedAt: new Date() },
+                update: { status: "PROCESSED" },
                 create: {
                     idempotencyKey,
                     actionType: "SYNC_TRANSACTIONS",

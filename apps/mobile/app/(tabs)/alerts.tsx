@@ -17,7 +17,7 @@ interface Notification {
     id: string;
     title: string;
     body: string;
-    type: 'LOW_STOCK' | 'EXPIRY' | 'NEW_PURCHASE' | 'SYSTEM';
+    type: 'LOW_STOCK' | 'EXPIRY' | 'EXPIRED' | 'OUT_OF_STOCK' | 'NEW_PURCHASE' | 'SYSTEM';
     isRead: boolean;
     createdAt: string;
 }
@@ -27,9 +27,11 @@ const TYPE_CONFIG: Record<string, {
     variant: 'danger' | 'warning' | 'info' | 'success';
     label: string;
 }> = {
-    LOW_STOCK:    { icon: 'alert-circle',    variant: 'danger',  label: 'نقص مخزون' },
-    EXPIRY:       { icon: 'time',            variant: 'warning', label: 'قرب الانتهاء' },
-    NEW_PURCHASE: { icon: 'receipt',         variant: 'info',    label: 'طلب شراء' },
+    OUT_OF_STOCK: { icon: 'close-circle',      variant: 'danger',  label: 'نفاد تام' },
+    EXPIRED:      { icon: 'skull',             variant: 'danger',  label: 'منتهي الصلاحية' },
+    LOW_STOCK:    { icon: 'alert-circle',      variant: 'warning', label: 'نقص مخزون' },
+    EXPIRY:       { icon: 'time',              variant: 'warning', label: 'قرب الانتهاء' },
+    NEW_PURCHASE: { icon: 'receipt',           variant: 'info',    label: 'طلب شراء' },
     SYSTEM:       { icon: 'information-circle', variant: 'success', label: 'نظام' },
 };
 
@@ -62,11 +64,12 @@ export default function AlertsScreen() {
             ]);
 
             // Convert inventory/expiry alerts to the Notification shape
+            // API returns explicit types: OUT_OF_STOCK, EXPIRED, LOW_STOCK, EXPIRY
             const inventoryAsNotifications: Notification[] = (inventoryAlerts as any[]).map((a: any) => ({
                 id: `inv-${a.id}`,
                 title: a.title ?? '',
-                body: a.description ?? '',
-                type: (a.type === 'critical' ? 'LOW_STOCK' : 'EXPIRY') as Notification['type'],
+                body: `${a.description ?? ''}${a.date ? `\n${a.date}` : ''}`,
+                type: (a.type as Notification['type']) ?? 'SYSTEM',
                 isRead: false,
                 createdAt: new Date().toISOString(),
             }));

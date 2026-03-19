@@ -92,7 +92,7 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
             // Default to null, Desktop POS IPC processes it
             // @ts-ignore
             const shiftStatus = await window.ipcRenderer.invoke('get-shift-status', { userId: user.id });
-            const safeId = shiftStatus?.activeShift?.safeId || null;
+            const safeId = shiftStatus?.safeId || null;
 
             // @ts-ignore
             const res = await window.ipcRenderer.invoke('return-sale', {

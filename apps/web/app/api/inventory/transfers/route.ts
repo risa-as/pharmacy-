@@ -4,11 +4,29 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { checkFeatureAccess } from "@/app/lib/saas-guards";
+
+async function checkTransferAccess(tenantCtx: any) {
+    if (!tenantCtx.organizationId) return null; // SUPER_ADMIN — allow
+    const access = await checkFeatureAccess(tenantCtx.organizationId, 'interBranchTransfers');
+    if (!access.allowed) {
+        return NextResponse.json({
+            error: 'هذه الميزة متاحة في باقة الشركات فقط.',
+            code: 'FEATURE_NOT_IN_PLAN',
+            requiredPlan: 'ENTERPRISE'
+        }, { status: 403 });
+    }
+    return null;
+}
 
 export async function POST(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+
+        const guard = await checkTransferAccess(tenantCtx);
+        if (guard) return guard;
+
         const fromBranchId = tenantCtx.user.branchId;
 
         if (!fromBranchId) {
@@ -26,15 +44,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Cannot transfer to the same branch" }, { status: 400 });
         }
 
-        // 1. Transaction to ensure Atomicity (Either it all succeeds, or none)
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-
-            // Generate the transfer record
             const transfer = await tx.transfer.create({
                 data: {
                     fromBranchId,
                     toBranchId,
-                    status: 'IN_TRANSIT', // Immediately marked as sent
+                    status: 'IN_TRANSIT',
                     notes: notes || null,
                     items: {
                         create: items.map((item: any) => ({
@@ -46,20 +61,13 @@ export async function POST(req: NextRequest) {
                         }))
                     }
                 },
-                include: {
-                    items: true
-                }
+                include: { items: true }
             });
 
-            // 2. Deduct inventory from the Sender (fromBranchId)
             for (const item of items) {
-                // Find specifically this batch in the sender's inventory
                 const batch = await tx.batch.findFirst({
                     where: {
-                        inventory: {
-                            branchId: fromBranchId,
-                            drugId: item.drugId
-                        },
+                        inventory: { branchId: fromBranchId, drugId: item.drugId },
                         batchNumber: item.batchNumber
                     }
                 });
@@ -68,7 +76,6 @@ export async function POST(req: NextRequest) {
                     throw new Error(`Insufficient quantity for drug ${item.drugId} batch ${item.batchNumber}`);
                 }
 
-                // Decrement batch quantity
                 await tx.batch.update({
                     where: { id: batch.id },
                     data: { quantity: { decrement: item.quantity } }
@@ -90,6 +97,10 @@ export async function GET(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+
+        const guard = await checkTransferAccess(tenantCtx);
+        if (guard) return guard;
+
         const branchId = tenantCtx.user.branchId;
 
         if (!branchId) {
@@ -97,7 +108,7 @@ export async function GET(req: NextRequest) {
         }
 
         const { searchParams } = new URL(req.url);
-        const type = searchParams.get('type') || 'all'; // 'incoming', 'outgoing', 'all'
+        const type = searchParams.get('type') || 'all';
 
         let whereClause: any = {};
 
@@ -106,12 +117,7 @@ export async function GET(req: NextRequest) {
         } else if (type === 'outgoing') {
             whereClause = { fromBranchId: branchId };
         } else {
-            whereClause = {
-                OR: [
-                    { fromBranchId: branchId },
-                    { toBranchId: branchId }
-                ]
-            };
+            whereClause = { OR: [{ fromBranchId: branchId }, { toBranchId: branchId }] };
         }
 
         const transfers = await prisma.transfer.findMany({

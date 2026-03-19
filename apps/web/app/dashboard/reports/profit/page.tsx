@@ -6,6 +6,8 @@ import { auth } from '@/auth';
 import ProfitReportClient from '@/app/ui/reports/profit-report-client';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
 export default async function ProfitReportPage({
     searchParams
@@ -17,7 +19,12 @@ export default async function ProfitReportPage({
 
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantWhere } = tenantCtx;
+    const { tenantWhere, organizationId } = tenantCtx;
+
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'advancedReports');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
 
     // Fetch branches for filter dropdown
     const branches = await prisma.branch.findMany({

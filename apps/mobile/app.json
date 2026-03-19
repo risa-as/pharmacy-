@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "فاراماس",
+    "name": "Faramace",
     "slug": "faramace",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F7575"
+      "backgroundColor": "#22C55E"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -28,7 +28,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0F7575"
+        "backgroundColor": "#22C55E"
       },
       "package": "com.faramace.mobile",
       "permissions": [

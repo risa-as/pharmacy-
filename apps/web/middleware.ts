@@ -45,6 +45,7 @@ export default auth((req) => {
 
 export const config = {
     // Include API routes so the grace-period write-block (T022) can intercept
-    // blocked operations. Static assets and image optimization are still excluded.
-    matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+    // blocked operations. Static assets, image optimization, and sync routes
+    // (which use raw request bodies) are excluded to avoid body-stream conflicts.
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/sync|api/mobile|api/public).*)"],
 };

@@ -47,6 +47,7 @@ export async function GET(req: Request) {
                 publicPrice: drug ? (drug as any).publicPrice || item.price : item.price,
                 reorderLevel: item.minStock,
                 branchId: item.branchId,
+                isQuickSale: drug ? (drug.isQuickSale ?? false) : false,
             };
         });
 

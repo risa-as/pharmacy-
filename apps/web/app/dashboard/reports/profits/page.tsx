@@ -7,6 +7,8 @@ import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import DateRangeFilter from "@/app/ui/reports/date-range-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
 function parseDateParam(val: string | string[] | undefined) {
     return typeof val === "string" ? val : undefined;
@@ -39,7 +41,12 @@ export default async function ProfitsReportPage({
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+    const { tenantBranchWhere, organizationId } = tenantCtx;
+
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'advancedReports');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
 
     const branchId = parseDateParam(searchParams.branch);
     const fromParam = parseDateParam(searchParams.from);

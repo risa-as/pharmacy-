@@ -97,12 +97,13 @@ export async function POST(req: NextRequest) {
                     if (resolvedSafeId) {
                         const safeExists = await tx.safe.findUnique({ where: { id: resolvedSafeId }, select: { id: true } });
                         if (!safeExists) {
-                            // Upsert a default safe so FK constraint is satisfied
-                            await tx.safe.upsert({
-                                where: { id: resolvedSafeId },
-                                update: {},
-                                create: { id: resolvedSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId }
-                            });
+                            try {
+                                await tx.safe.create({
+                                    data: { id: resolvedSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId }
+                                });
+                            } catch {
+                                // Safe was created concurrently — safe to ignore
+                            }
                         }
                     }
                     // Create new
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
             // Log the action
             await tx.syncActionLog.upsert({
                 where: { idempotencyKey },
-                update: { status: "PROCESSED", updatedAt: new Date() },
+                update: { status: "PROCESSED" },
                 create: {
                     idempotencyKey,
                     actionType: "SYNC_SHIFTS",

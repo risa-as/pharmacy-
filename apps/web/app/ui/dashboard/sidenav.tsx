@@ -43,7 +43,9 @@ import {
   MessageSquare,
   ShoppingBag,
   ChevronDown,
+  Lock,
 } from "lucide-react";
+
 import { handleSignOut } from "@/app/lib/actions/auth-actions";
 import { type UserPermissions } from "@/app/lib/permissions";
 import { getLinkPermission } from "@/app/lib/route-permissions";
@@ -52,8 +54,11 @@ interface NavLink {
   name: string;
   href: string;
   icon: any;
-  subLinks?: { name: string; href: string; activeFor?: string[]; excludeFor?: string[] }[];
+  /** 'pro' or 'enterprise' — shows a lock badge and keeps the link so UpgradeRequired page is shown */
+  plan?: 'pro' | 'enterprise';
+  subLinks?: { name: string; href: string; activeFor?: string[]; excludeFor?: string[]; plan?: 'pro' | 'enterprise' }[];
 }
+
 
 interface NavSection {
   label: string;
@@ -73,6 +78,12 @@ const controlTowerSections: NavSection[] = [
     label: "",
     links: [
       { name: "المؤسسات", href: "/dashboard/admin/tenants", icon: Building2 },
+    ],
+  },
+  {
+    label: "",
+    links: [
+      { name: "الباقات", href: "/dashboard/admin/plans", icon: CreditCard },
     ],
   },
   {
@@ -143,12 +154,11 @@ const sections: NavSection[] = [
         icon: Users,
         subLinks: [
           { name: "المرضى", href: "/dashboard/patients", activeFor: ["/dashboard/loyalty"] },
-          // Insurance, Loyalty → tabs inside Patients page
-          { name: "الموردون", href: "/dashboard/suppliers" },
+          { name: "الموردون", href: "/dashboard/suppliers", plan: 'pro' },
           { name: "المشتريات", href: "/dashboard/purchases", excludeFor: ["/dashboard/purchases/smart-order"] },
-          // CTO Override: Smart Orders stays in main nav (other supply sub-pages via row-clicks)
           { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order" },
         ],
+
       },
     ],
   },
@@ -161,9 +171,12 @@ const sections: NavSection[] = [
         icon: BarChart3,
         subLinks: [
           { name: "التقارير", href: "/dashboard/reports" },
-          // All 14 sub-reports → accessible as tabs inside the Reports hub page
+          { name: "التقارير المتقدمة", href: "/dashboard/reports/analytics", plan: 'pro' },
+          { name: "مقارنة الفروع", href: "/dashboard/reports/branch-comparison", plan: 'pro' },
           { name: "الفريق", href: "/dashboard/users" },
+          { name: "الصلاحيات", href: "/dashboard/users/permissions", plan: 'pro' },
         ],
+
       },
     ],
   },
@@ -420,12 +433,12 @@ export default function SideNav({
                                 subLink.activeFor?.some((p: string) => pathname.startsWith(p))
                               );
                               return (
-                                <Link
+                                 <Link
                                   key={subLink.name}
                                   href={subLink.href}
                                   onClick={() => setMobileOpen(false)}
                                   className={cn(
-                                    "flex h-8 items-center rounded-md px-3 text-[12px] font-semibold transition-all duration-150 relative",
+                                    "flex h-8 items-center rounded-md px-3 text-[12px] font-semibold transition-all duration-150 relative gap-1",
                                     {
                                       "text-primary bg-primary/5": isSubActive,
                                       "text-muted-foreground hover:text-foreground hover:bg-muted/50":
@@ -436,10 +449,21 @@ export default function SideNav({
                                   {isSubActive && (
                                     <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-primary rounded-l-full" />
                                   )}
-                                  <span className="truncate">
+                                  <span className="truncate flex-1">
                                     {subLink.name}
                                   </span>
+                                  {subLink.plan === 'pro' && (
+                                    <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary font-bold shrink-0">
+                                      <Lock className="w-2.5 h-2.5" /> Pro
+                                    </span>
+                                  )}
+                                  {subLink.plan === 'enterprise' && (
+                                    <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-warning/10 text-warning font-bold shrink-0">
+                                      <Lock className="w-2.5 h-2.5" /> Ent
+                                    </span>
+                                  )}
                                 </Link>
+
                               );
                             })}
                           </div>
@@ -474,16 +498,15 @@ export default function SideNav({
         <div className="flex-1" />
       </nav>
 
-      {/* ─── Admin Footer: Settings (pharmacy ADMINs only — SUPER_ADMIN has Settings in their Control Tower nav) ─── */}
+      {/* ─── Admin Footer: Settings + Billing (pharmacy ADMINs only) ─── */}
       {userRole === "ADMIN" && (
         <div className="px-0.5 mt-1 flex gap-1">
-          {/* Settings Gear — org, branches, finance, expenses */}
           <Link
             href="/dashboard/settings"
             onClick={() => setMobileOpen(false)}
             className={cn(
               "flex flex-1 h-9 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
-              pathname.startsWith("/dashboard/settings") ||
+              (pathname.startsWith("/dashboard/settings") && !pathname.startsWith("/dashboard/settings/billing")) ||
                 pathname.startsWith("/dashboard/branches") ||
                 pathname.startsWith("/dashboard/finance") ||
                 pathname.startsWith("/dashboard/expenses") ||
@@ -494,7 +517,20 @@ export default function SideNav({
             )}
           >
             <SettingsIcon className="w-[18px] h-[18px] shrink-0" />
-            <span>الإعدادات الشاملة</span>
+            <span>الإعدادات</span>
+          </Link>
+          <Link
+            href="/dashboard/settings/billing"
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              "flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
+              pathname.startsWith("/dashboard/settings/billing")
+                ? "bg-primary/10 text-primary shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <CreditCard className="w-[18px] h-[18px] shrink-0" />
+            <span>اشتراكي</span>
           </Link>
         </div>
       )}

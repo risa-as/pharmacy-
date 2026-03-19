@@ -5,6 +5,8 @@ import { AlertTriangle, ArrowDown } from "lucide-react";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
 
 export default async function ShortagesPage({
@@ -14,7 +16,12 @@ export default async function ShortagesPage({
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+    const { tenantBranchWhere, organizationId } = tenantCtx;
+
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'interBranchTransfers');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
 
     const selectedBranchId = searchParams?.branch;
 

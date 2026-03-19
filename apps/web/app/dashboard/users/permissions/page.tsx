@@ -4,11 +4,19 @@ import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
 import PermissionsEditor from '@/app/ui/users/permissions-editor';
 import { redirect } from 'next/navigation';
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
 export default async function PermissionsPage() {
     const session = await auth();
     if (session?.user?.role !== 'ADMIN') {
         redirect('/dashboard');
+    }
+
+    const organizationId = (session?.user as any)?.organizationId;
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'granularPermissions');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
     }
 
     const users = await prisma.user.findMany({

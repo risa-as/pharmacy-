@@ -5,60 +5,97 @@ const prisma = new PrismaClient();
 async function main() {
     console.log('Seeding default subscription plans...');
 
-    // Define the default plans based on legacy Enums and reasonable caps
     const plans = [
         {
             name: 'FREE',
             price: 0,
             maxBranches: 1,
             maxUsers: 3,
+            maxDevices: 1,
+            maxMobileUsers: 1,
             isActive: true,
-            features: { description: 'Basic features for small setups.' }
+            features: {
+                advancedReports: false,
+                productMovement: false,
+                supplierManagement: false,
+                granularPermissions: false,
+                warehouseManagement: false,
+                interBranchTransfers: false,
+                marketplace: false,
+            },
         },
         {
             name: 'BASIC',
-            price: 50,
-            maxBranches: 3,
-            maxUsers: 10,
+            price: 20000,
+            maxBranches: 1,
+            maxUsers: 5,
+            maxDevices: 1,
+            maxMobileUsers: 1,
             isActive: true,
-            features: { description: 'Standard tier for growing businesses.' }
+            features: {
+                advancedReports: false,
+                productMovement: false,
+                supplierManagement: false,
+                granularPermissions: false,
+                warehouseManagement: false,
+                interBranchTransfers: false,
+                marketplace: false,
+            },
         },
         {
             name: 'PROFESSIONAL',
-            price: 150,
-            maxBranches: 10,
-            maxUsers: 50,
+            price: 40000,
+            maxBranches: 5,
+            maxUsers: 20,
+            maxDevices: 3,
+            maxMobileUsers: 3,
             isActive: true,
-            features: { description: 'Advanced features for clinics and chains.' }
-        }
+            features: {
+                advancedReports: true,
+                productMovement: true,
+                supplierManagement: true,
+                granularPermissions: true,
+                warehouseManagement: false,
+                interBranchTransfers: false,
+                marketplace: false,
+            },
+        },
+        {
+            name: 'ENTERPRISE',
+            price: 80000,
+            maxBranches: -1,
+            maxUsers: -1,
+            maxDevices: -1,
+            maxMobileUsers: -1,
+            isActive: true,
+            features: {
+                advancedReports: true,
+                productMovement: true,
+                supplierManagement: true,
+                granularPermissions: true,
+                warehouseManagement: true,
+                interBranchTransfers: true,
+                marketplace: true,
+            },
+        },
     ];
 
-    const createdPlans = [];
-
     for (const planData of plans) {
-        const plan = await prisma.subscriptionPlan.create({
-            data: planData
+        // findFirst then create/update because `name` is not @unique in schema
+        const existing = await prisma.subscriptionPlan.findFirst({
+            where: { name: planData.name },
         });
-        createdPlans.push(plan);
-        console.log(`Created plan: ${plan.name} (ID: ${plan.id})`);
-    }
 
-    const freePlan = createdPlans.find(p => p.name === 'FREE');
-
-    if (freePlan) {
-        console.log(`Assigning FREE plan to existing organizations...`);
-        const result = await prisma.organization.updateMany({
-            where: {
-                planId: null
-            },
-            data: {
-                planId: freePlan.id,
-                // We keep native overrides null so they strictly follow the plan defaults unless explicitly overridden later
-                maxBranches: null,
-                maxUsers: null,
-            }
-        });
-        console.log(`Successfully assigned FREE plan to ${result.count} existing organizations.`);
+        if (existing) {
+            await prisma.subscriptionPlan.update({
+                where: { id: existing.id },
+                data: planData,
+            });
+            console.log(`Updated plan: ${planData.name}`);
+        } else {
+            await prisma.subscriptionPlan.create({ data: planData });
+            console.log(`Created plan: ${planData.name}`);
+        }
     }
 
     console.log('Seed completed successfully.');

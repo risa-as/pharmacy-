@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { checkDeviceLimit } from "@/app/lib/saas-guards";
 
 export async function POST(req: Request) {
     try {
@@ -39,8 +40,23 @@ export async function POST(req: Request) {
             branchName: license.branch.name,
         };
 
-        // First time activation
+        // First time activation — check device limit before binding hardware
         if (!license.hardwareId) {
+            const orgId = license.branch.organizationId;
+            const limitResult = await checkDeviceLimit(orgId);
+
+            if (!limitResult.allowed) {
+                return NextResponse.json(
+                    {
+                        error: `لقد وصلت للحد الأقصى من الأجهزة في باقتك (${limitResult.max} جهاز). يرجى الترقية لباقة أعلى لتفعيل المزيد من الأجهزة.`,
+                        code: "DEVICE_LIMIT_EXCEEDED",
+                        currentDevices: limitResult.current,
+                        maxDevices: limitResult.max,
+                    },
+                    { status: 403 }
+                );
+            }
+
             await prisma.deviceLicense.update({
                 where: { id: license.id },
                 data: {
@@ -81,4 +97,3 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
-

@@ -8,6 +8,8 @@ import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
+import { requireFeature } from '@/app/lib/page-guards';
+import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
 async function getSuppliers(organizationId?: string) {
     const suppliers = await prisma.supplier.findMany({
@@ -26,7 +28,12 @@ async function getSuppliers(organizationId?: string) {
 export default async function Page() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
-    const { tenantBranchWhere, user } = tenantCtx;
+    const { tenantBranchWhere, user, organizationId } = tenantCtx;
+
+    if (organizationId) {
+        const upgrade = await requireFeature(organizationId, 'supplierManagement');
+        if (upgrade) return <UpgradeRequired {...upgrade} />;
+    }
 
     // Super Admin sees everything. Others see only suppliers for their organization.
     let suppliers: Awaited<ReturnType<typeof getSuppliers>> = [];

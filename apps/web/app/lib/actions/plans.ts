@@ -17,8 +17,11 @@ export async function createPlan(data: {
     price: number;
     maxBranches: number;
     maxUsers: number;
+    maxDevices?: number;
+    maxMobileUsers?: number;
     features?: any;
     isActive?: boolean;
+    isPopular?: boolean;
 }) {
     const authError = await requireSuperAdmin();
     if (authError) return { success: false, error: authError.error };
@@ -30,8 +33,11 @@ export async function createPlan(data: {
                 price: Number(data.price),
                 maxBranches: Number(data.maxBranches),
                 maxUsers: Number(data.maxUsers),
+                maxDevices: data.maxDevices !== undefined ? Number(data.maxDevices) : 1,
+                maxMobileUsers: data.maxMobileUsers !== undefined ? Number(data.maxMobileUsers) : 1,
                 features: data.features,
                 isActive: data.isActive ?? true,
+                isPopular: data.isPopular ?? false,
             }
         });
         revalidatePath("/dashboard/admin/plans");
@@ -47,8 +53,11 @@ export async function updatePlan(id: string, data: {
     price: number;
     maxBranches: number;
     maxUsers: number;
+    maxDevices?: number;
+    maxMobileUsers?: number;
     features?: any;
     isActive: boolean;
+    isPopular?: boolean;
 }) {
     const authError = await requireSuperAdmin();
     if (authError) return { success: false, error: authError.error };
@@ -61,8 +70,11 @@ export async function updatePlan(id: string, data: {
                 price: Number(data.price),
                 maxBranches: Number(data.maxBranches),
                 maxUsers: Number(data.maxUsers),
+                maxDevices: data.maxDevices !== undefined ? Number(data.maxDevices) : undefined,
+                maxMobileUsers: data.maxMobileUsers !== undefined ? Number(data.maxMobileUsers) : undefined,
                 features: data.features,
                 isActive: data.isActive,
+                isPopular: data.isPopular ?? false,
             }
         });
         revalidatePath("/dashboard/admin/plans");

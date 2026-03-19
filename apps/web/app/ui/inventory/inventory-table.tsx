@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Package } from "lucide-react";
+import { Plus, Package, Zap } from "lucide-react";
 import AddBatchModal from "./add-batch-modal";
 import { UpdateInventory, DeleteInventory } from "./buttons";
 
 interface InventoryItem {
     id: string;
-    drug: { tradeName: string; barcode: string };
+    drug: { id: string; tradeName: string; barcode: string; isQuickSale: boolean };
     branch: { name: string };
     currentStock: number;
     minStock: number;
@@ -18,6 +18,28 @@ interface InventoryItem {
 
 export default function InventoryTable({ items }: { items: InventoryItem[] }) {
     const [selectedInventory, setSelectedInventory] = useState<{ id: string; drugName: string } | null>(null);
+    const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>(
+        () => Object.fromEntries(items.map((i) => [i.drug.id, i.drug.isQuickSale]))
+    );
+    const [toggling, setToggling] = useState<string | null>(null);
+
+    const handleQuickSaleToggle = async (drugId: string) => {
+        setToggling(drugId);
+        const newValue = !quickSaleState[drugId];
+        setQuickSaleState((prev) => ({ ...prev, [drugId]: newValue }));
+        try {
+            const res = await fetch('/api/inventory/quick-sale', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drugId, isQuickSale: newValue }),
+            });
+            if (!res.ok) setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+        } catch {
+            setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+        } finally {
+            setToggling(null);
+        }
+    };
 
     return (
         <>
@@ -31,6 +53,9 @@ export default function InventoryTable({ items }: { items: InventoryItem[] }) {
                             <th scope="col" className="px-6 py-4 font-cairo">الحدود</th>
                             <th scope="col" className="px-6 py-4 font-cairo">الحالة</th>
                             <th scope="col" className="px-6 py-4 font-cairo">سعر الجمهور</th>
+                            <th scope="col" className="px-6 py-4 font-cairo text-center">
+                                <span className="flex items-center justify-center gap-1"><Zap className="w-4 h-4 text-amber-500" />بيع سريع</span>
+                            </th>
                             <th scope="col" className="px-6 py-4 font-cairo">إجراءات</th>
                         </tr>
                     </thead>
@@ -73,6 +98,23 @@ export default function InventoryTable({ items }: { items: InventoryItem[] }) {
                                     <td className="whitespace-nowrap px-6 py-4 font-bold text-foreground">
                                         {item.price.toFixed(2)}
                                     </td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-center">
+                                        <button
+                                            dir="ltr"
+                                            onClick={() => handleQuickSaleToggle(item.drug.id)}
+                                            disabled={toggling === item.drug.id}
+                                            title="تفعيل/إلغاء البيع السريع"
+                                            className={`w-9 h-5 rounded-full transition-colors relative inline-flex items-center ${
+                                                quickSaleState[item.drug.id]
+                                                    ? 'bg-amber-400'
+                                                    : 'bg-muted-foreground/30'
+                                            } ${toggling === item.drug.id ? 'opacity-50' : ''}`}
+                                        >
+                                            <span className={`absolute w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                                                quickSaleState[item.drug.id] ? 'translate-x-4' : 'translate-x-0.5'
+                                            }`} />
+                                        </button>
+                                    </td>
                                     <td className="whitespace-nowrap px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <button
@@ -91,7 +133,7 @@ export default function InventoryTable({ items }: { items: InventoryItem[] }) {
                         })}
                         {items.length === 0 && (
                             <tr>
-                                <td colSpan={7} className="px-6 py-10 text-center text-muted-foreground">
+                                <td colSpan={8} className="px-6 py-10 text-center text-muted-foreground">
                                     <Package className="w-10 h-10 mx-auto mb-2 opacity-40" />
                                     المخزون فارغ.
                                 </td>

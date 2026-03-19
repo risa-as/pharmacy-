@@ -32,6 +32,19 @@ export const syncService = {
             return;
         }
 
+        // Don't sync if user is not authenticated or token is invalid
+        const currentUser = await authService.getCurrentUser();
+        const token = await authService.getToken();
+        // JWT tokens have 3 base64url parts separated by dots; old tokens don't
+        if (!currentUser || !token || token.split('.').length !== 3) {
+            console.log('Not authenticated or invalid token: Skipping sync');
+            if (currentUser && token && token.split('.').length !== 3) {
+                // Clear stale non-JWT token so user is redirected to login cleanly
+                await authService.logout();
+            }
+            return;
+        }
+
         if (!(await this.isOnline())) {
             console.log('Offline: Skipping sync');
             return;

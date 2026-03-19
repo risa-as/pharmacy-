@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { guardFeature } from '@/app/lib/api-guards';
 
 export async function GET(req: Request) {
     try {
@@ -40,7 +41,13 @@ export async function GET(req: Request) {
 
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
-        const { tenantBranchWhere } = tenantCtx;
+        const { tenantBranchWhere, organizationId } = tenantCtx;
+
+        // Feature gate: advancedReports (Pro+)
+        if (organizationId) {
+            const denied = await guardFeature('advancedReports', 'PROFESSIONAL');
+            if (denied) return denied;
+        }
 
         const branchFilter = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
@@ -54,16 +61,20 @@ export async function GET(req: Request) {
             }
         });
 
-        // 2. Cost of Goods Sold (COGS) from SaleItems
-        const cogsAgg = await prisma.saleItem.aggregate({
-            _sum: { cost: true },
+        // 2. Cost of Goods Sold — Fix: SUM(cost × quantity) per SaleItem, NOT SUM(cost)
+        //    SaleItem.cost stores unit cost; multiply by quantity for true COGS.
+        const saleItemsForCOGS = await prisma.saleItem.findMany({
             where: {
                 sale: {
                     ...branchFilter,
                     createdAt: { gte: startDate, lte: endDate }
                 }
-            }
+            },
+            select: { cost: true, quantity: true }
         });
+        const totalCOGS = saleItemsForCOGS.reduce(
+            (sum, item) => sum + item.cost * item.quantity, 0
+        );
 
         // 3. Total Expenses
         const expensesAgg = await prisma.expense.aggregate({
@@ -95,7 +106,6 @@ export async function GET(req: Request) {
 
         const totalRevenue = salesAgg._sum.total || 0;
         const totalDiscount = salesAgg._sum.discount || 0;
-        const totalCOGS = cogsAgg._sum.cost || 0;
         const totalExpenses = expensesAgg._sum.amount || 0;
         const totalReturns = returnsAgg._sum.total || 0;
         const totalSupplierPayments = supplierPaymentsAgg._sum.amount || 0;
@@ -103,6 +113,7 @@ export async function GET(req: Request) {
         const grossProfit = totalRevenue - totalCOGS;
         const netProfit = grossProfit - totalExpenses - totalReturns;
         const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0;
+
 
         // 6. Daily breakdown for chart
         const sales = await prisma.sale.findMany({
