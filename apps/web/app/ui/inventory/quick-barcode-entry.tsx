@@ -94,25 +94,27 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
     };
 
     return (
-        <div className="w-full bg-card/50 p-4 rounded-xl shadow-sm border border-border mb-6">
-            <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg text-primary">
-                    <Scan className="w-6 h-6" />
-                </div>
+        <>
+            <div className="w-full bg-card/50 p-4 rounded-xl shadow-sm border border-border mb-6">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg text-primary">
+                        <Scan className="w-6 h-6" />
+                    </div>
 
-                <div className="flex-1 relative">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={barcode}
-                        onChange={(e) => setBarcode(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="امسح الباركود هنا (أو اضغط Enter)..."
-                        className="w-full text-lg p-3 pl-12 border-2 border-border rounded-lg focus:border-primary focus:ring-4 focus:ring-ring/20 transition-all font-mono"
-                        disabled={isChecking}
-                    />
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                        {isChecking ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                    <div className="flex-1 relative">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={barcode}
+                            onChange={(e) => setBarcode(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="امسح الباركود هنا (أو اضغط Enter)..."
+                            className="w-full text-lg p-3 pl-12 border-2 border-border rounded-lg focus:border-primary focus:ring-4 focus:ring-ring/20 transition-all font-mono"
+                            disabled={isChecking}
+                        />
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                            {isChecking ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -149,6 +151,6 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
                     }}
                 />
             )}
-        </div>
+        </>
     );
 }

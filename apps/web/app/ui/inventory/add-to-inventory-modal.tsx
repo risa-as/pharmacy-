@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -19,7 +20,10 @@ interface AddToInventoryModalProps {
 
 export default function AddToInventoryModal({ drug, branches, onClose }: AddToInventoryModalProps) {
     const [loading, setLoading] = useState(false);
+    const [mounted, setMounted] = useState(false);
     const router = useRouter();
+
+    useEffect(() => { setMounted(true); }, []);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -60,8 +64,10 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
         }
     };
 
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    if (!mounted) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={onClose}>
             <div
                 className="bg-card rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
@@ -189,6 +195,7 @@ export default function AddToInventoryModal({ drug, branches, onClose }: AddToIn
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

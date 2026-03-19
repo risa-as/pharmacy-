@@ -89,7 +89,7 @@ export default async function Page({
     };
 
     return (
-        <div className="glass-card w-full p-6">
+        <div className="glass-card w-full p-6" style={{backdropFilter: 'none', WebkitBackdropFilter: 'none'}}>
             <div className="flex w-full items-center justify-between mb-8">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
                     <Package className="w-7 h-7 text-primary" />

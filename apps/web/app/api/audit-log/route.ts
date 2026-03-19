@@ -36,9 +36,25 @@ export async function GET(req: NextRequest) {
                     where: { organizationId },
                     select: { id: true },
                 });
-                auditScope = { branchId: { in: branches.map((b: any) => b.id) } };
+                const branchIds = branches.map((b: any) => b.id);
+                // Also include entries with branchId=null where userId belongs to the org
+                const orgUserIds = await prisma.user.findMany({
+                    where: { branch: { organizationId } },
+                    select: { id: true },
+                }).then((us: any[]) => us.map((u: any) => u.id));
+                auditScope = {
+                    OR: [
+                        { branchId: { in: branchIds } },
+                        { branchId: null, userId: { in: orgUserIds } },
+                    ],
+                };
             } else if (user.branchId) {
-                auditScope = { branchId: user.branchId };
+                auditScope = {
+                    OR: [
+                        { branchId: user.branchId },
+                        { branchId: null, userId: user.id },
+                    ],
+                };
             }
         }
 

@@ -17,6 +17,13 @@ export default auth((req) => {
         return Response.redirect(new URL("/login", nextUrl));
     }
 
+    // Skip root page SSR entirely for authenticated users — redirect straight to
+    // dashboard via fast middleware (avoids the 15+ second auth() cold-start call
+    // in app/page.tsx that caused a blank white screen on first load).
+    if (req.auth && nextUrl.pathname === "/") {
+        return Response.redirect(new URL("/dashboard", nextUrl));
+    }
+
     // SUPER_ADMIN must not access pharmacy operations routes
     if (role === "SUPER_ADMIN" && isPharmacyOnlyRoute(nextUrl.pathname)) {
         return Response.redirect(new URL("/dashboard", nextUrl));

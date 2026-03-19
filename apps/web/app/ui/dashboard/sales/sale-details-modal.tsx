@@ -3,7 +3,8 @@
 import { X, Printer, Calendar, User, MapPin, ShoppingBag, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import SaleReturnModal from "./sale-return-modal";
 
 interface SaleDetailsModalProps {
@@ -15,16 +16,19 @@ interface SaleDetailsModalProps {
 
 export default function SaleDetailsModal({ sale, isOpen, onClose, settings }: SaleDetailsModalProps) {
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
-    if (!isOpen || !sale) return null;
+    useEffect(() => { setMounted(true); }, []);
+
+    if (!isOpen || !sale || !mounted) return null;
 
     const handlePrint = () => {
         window.print();
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+            <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-border bg-muted/30">
                     <div>
@@ -170,6 +174,7 @@ export default function SaleDetailsModal({ sale, isOpen, onClose, settings }: Sa
                     onClose(); // Optional: close both if needed, but let's just close the return modal.
                 }}
             />
-        </div>
+        </div>,
+        document.body
     );
 }

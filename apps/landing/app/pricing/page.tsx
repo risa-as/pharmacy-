@@ -27,15 +27,9 @@ async function getPlans(): Promise<Plan[]> {
   }
 }
 
-/** Map a DB plan name to Arabic display name */
+/** Return display name — DB already stores Arabic names, fall back to name as-is */
 function planDisplayName(name: string): string {
-  const map: Record<string, string> = {
-    FREE:         'الباقة المجانية',
-    BASIC:        'الباقة الأساسية',
-    PROFESSIONAL: 'الباقة الاحترافية',
-    ENTERPRISE:   'باقة الشركات',
-  };
-  return map[name] ?? name;
+  return name;
 }
 
 /** Build human-readable feature list from plan limits */
@@ -87,15 +81,20 @@ function buildFeatures(plan: Plan): string[] {
 }
 
 function formatPrice(price: number): string {
+  // Price of 0 means custom/contact-for-pricing
+  if (price === 0) return 'مخصص';
   return price.toLocaleString('en-US');
 }
 
 export default async function PricingPage() {
   const plans = await getPlans();
 
-  // Separate ENTERPRISE from the rest (shown as custom-price card)
-  const regularPlans = plans.filter(p => p.name !== 'FREE' && p.name !== 'ENTERPRISE');
-  const enterprise   = plans.find(p => p.name === 'ENTERPRISE');
+  // Sort: paid plans first (ascending price), free/custom plans (price=0) last
+  const sorted = [...plans].sort((a, b) => {
+    if (a.price === 0 && b.price !== 0) return 1;
+    if (a.price !== 0 && b.price === 0) return -1;
+    return a.price - b.price;
+  });
 
   return (
     <main className="flex-grow pt-32 pb-20 bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
@@ -112,45 +111,31 @@ export default async function PricingPage() {
 
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-24">
-          {regularPlans.map((plan, idx) => (
-            <PricingCard
-              key={plan.id}
-              title={planDisplayName(plan.name)}
-              price={formatPrice(plan.price)}
-              isPopular={plan.isPopular}
-              description={
-                plan.name === 'BASIC'
-                  ? 'مناسبة للصيدليات الفردية والمسائية ذات وتيرة العمل المتوسطة.'
-                  : plan.name === 'PROFESSIONAL'
-                  ? 'الخيار المثالي للصيدليات النشطة وتوفير ميزات إدارية متقدمة.'
-                  : `باقة ${planDisplayName(plan.name)}`
-              }
-              features={buildFeatures(plan)}
-              delay={idx * 100}
-            />
-          ))}
+          {sorted.map((plan, idx) => {
+            // Generate description based on position among paid plans
+            const paidPlans = sorted.filter(p => p.price > 0);
+            const paidIdx   = paidPlans.indexOf(plan);
+            const descriptions = [
+              'مناسبة للصيدليات الفردية والمسائية ذات وتيرة العمل المتوسطة.',
+              'الخيار المثالي للصيدليات النشطة وتوفير ميزات إدارية متقدمة.',
+            ];
+            const description = plan.price === 0
+              ? 'مصممة للسلاسل الصيدلانية والمذاخر المركزية أو المستشفيات الخاصة.'
+              : (descriptions[paidIdx] ?? `باقة ${planDisplayName(plan.name)}`);
 
-          {/* Enterprise card — always custom pricing */}
-          <PricingCard
-            title={enterprise ? planDisplayName(enterprise.name) : 'باقة الشركات'}
-            price="مخصص"
-            period=""
-            description="مصممة للسلاسل الصيدلانية، المذاخر المركزية أو المستشفيات الخاصة."
-            features={
-              enterprise
-                ? buildFeatures(enterprise)
-                : [
-                    'عدد غير محدود من الفروع',
-                    'عدد غير محدود من أجهزة الكاشير',
-                    'إدارة المخزن المركزي وصرفيات الفروع',
-                    'ربط بين الفروع ومعرفة نواقص كل فرع',
-                    'سيرفر مخصص مع نسخ احتياطي دوري',
-                    'مدير حساب مخصص متوفر 24/7',
-                  ]
-            }
-            ctaText="تواصل للمبيعات"
-            delay={regularPlans.length * 100}
-          />
+            return (
+              <PricingCard
+                key={plan.id}
+                title={planDisplayName(plan.name)}
+                price={formatPrice(plan.price)}
+                isPopular={plan.isPopular}
+                description={description}
+                features={buildFeatures(plan)}
+                ctaText={plan.price === 0 ? 'تواصل للمبيعات' : undefined}
+                delay={idx * 100}
+              />
+            );
+          })}
         </div>
 
         {/* FAQ Section */}

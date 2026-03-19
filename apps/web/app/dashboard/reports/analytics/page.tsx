@@ -88,7 +88,7 @@ export default async function AnalyticsPage({
 
     const stagnantInventories = await prisma.inventory.findMany({
         where: {
-            ...tenantWhere,
+            ...tenantBranchWhere,
             drugId: { notIn: recentlySoldDrugIds.length > 0 ? recentlySoldDrugIds : ['__none__'] },
             batches: { some: { quantity: { gt: 0 } } }
         },

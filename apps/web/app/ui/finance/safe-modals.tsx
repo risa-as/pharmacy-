@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { createSafe, createTransaction, transferFunds } from '@/app/lib/actions/finance-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,10 @@ export function AddSafeModal({ branchId }: { branchId: string }) {
     const [balance, setBalance] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [mounted, setMounted] = useState(false);
     const router = useRouter();
+
+    useEffect(() => { setMounted(true); }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -46,8 +50,8 @@ export function AddSafeModal({ branchId }: { branchId: string }) {
                 صندوق جديد
             </Button>
 
-            {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" dir="rtl">
+            {isOpen && mounted && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm" dir="rtl">
                     <div className="bg-card p-6 rounded-xl w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200">
                         <button onClick={() => setIsOpen(false)} className="absolute top-4 left-4 text-muted-foreground hover:text-destructive">
                             <X className="w-5 h-5" />
@@ -92,7 +96,8 @@ export function AddSafeModal({ branchId }: { branchId: string }) {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );
@@ -106,7 +111,10 @@ export function TransferModal({ safes }: { safes: any[] }) {
     const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [mounted, setMounted] = useState(false);
     const router = useRouter();
+
+    useEffect(() => { setMounted(true); }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -145,8 +153,8 @@ export function TransferModal({ safes }: { safes: any[] }) {
                 تحويل داخلي
             </Button>
 
-            {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" dir="rtl">
+            {isOpen && mounted && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm" dir="rtl">
                     <div className="bg-card p-6 rounded-xl w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200">
                         <button onClick={() => setIsOpen(false)} className="absolute top-4 left-4 text-muted-foreground hover:text-destructive">
                             <X className="w-5 h-5" />
@@ -194,7 +202,8 @@ export function TransferModal({ safes }: { safes: any[] }) {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );
@@ -207,7 +216,10 @@ export function VoucherModal({ safes, type }: { safes: any[], type: 'IN' | 'OUT'
     const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [mounted, setMounted] = useState(false);
     const router = useRouter();
+
+    useEffect(() => { setMounted(true); }, []);
 
     const isReciept = type === 'IN';
 
@@ -243,8 +255,8 @@ export function VoucherModal({ safes, type }: { safes: any[], type: 'IN' | 'OUT'
                 {isReciept ? 'سند قبض' : 'سند صرف'}
             </Button>
 
-            {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" dir="rtl">
+            {isOpen && mounted && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm" dir="rtl">
                     <div className="bg-card p-6 rounded-xl w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200">
                         <button onClick={() => setIsOpen(false)} className="absolute top-4 left-4 text-muted-foreground hover:text-destructive">
                             <X className="w-5 h-5" />
@@ -283,7 +295,8 @@ export function VoucherModal({ safes, type }: { safes: any[], type: 'IN' | 'OUT'
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Undo2, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -16,6 +17,9 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
     const [isLoading, setIsLoading] = useState(false);
     const [notes, setNotes] = useState("");
     const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => { setMounted(true); }, []);
 
     // Calculate previously returned quantities if any
     const returnedItems = useMemo(() => {
@@ -95,8 +99,10 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" dir="rtl">
+    if (!isOpen || !sale || !mounted) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" dir="rtl">
             <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-border bg-destructive/10 text-destructive">
@@ -217,6 +223,7 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

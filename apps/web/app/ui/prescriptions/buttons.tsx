@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Pencil, XCircle } from "lucide-react";
-import { deletePrescription, cancelPrescription } from "@/app/lib/actions/prescription";
+import { Pencil, XCircle, CheckCircle } from "lucide-react";
+import { deletePrescription, cancelPrescription, dispensePrescription } from "@/app/lib/actions/prescription";
 
 export function UpdatePrescription({ id }: { id: string }) {
     return (
@@ -29,6 +29,24 @@ export function DeletePrescription({ id }: { id: string }) {
             description="الوصفة"
             className="rounded-lg border border-border hover:border-border"
         />
+    );
+}
+
+export function DispensePrescription({ id, itemIds }: { id: string; itemIds: string[] }) {
+    const handleDispense = async () => {
+        if (confirm("هل تريد صرف جميع أدوية هذه الوصفة؟")) {
+            await dispensePrescription(id, itemIds);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleDispense}
+            className="rounded-lg border border-border p-2 hover:bg-success/10 hover:border-success/30 transition-colors"
+            title="صرف الوصفة"
+        >
+            <CheckCircle className="w-4 h-4 text-success" />
+        </button>
     );
 }
 

@@ -245,7 +245,7 @@ export default function DrugImportPage() {
                         </button>
                     </div>
                     <div className="overflow-x-auto max-h-[400px]">
-                        <table className="w-full text-sm">
+                        <table className="w-full text-sm" dir="rtl">
                             <thead className="bg-muted text-muted-foreground text-xs sticky top-0">
                                 <tr>
                                     <th className="p-3 text-right font-medium">#</th>
@@ -262,7 +262,7 @@ export default function DrugImportPage() {
                                     <tr key={i} className="hover:bg-primary/10/30">
                                         <td className="p-3 text-muted-foreground">{i + 1}</td>
                                         <td className="p-3 font-medium text-foreground">{row.name}</td>
-                                        <td className="p-3 text-muted-foreground" dir="ltr">{row.barcode || "—"}</td>
+                                        <td className="p-3 text-muted-foreground">{row.barcode || "—"}</td>
                                         <td className="p-3 text-muted-foreground">{formatIQD(row.price)}</td>
                                         <td className="p-3 text-muted-foreground">{formatIQD(row.cost)}</td>
                                         <td className="p-3 text-muted-foreground">{row.quantity}</td>

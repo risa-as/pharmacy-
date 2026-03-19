@@ -99,8 +99,11 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
     const [error, setError] = useState("");
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [supplierId, setSupplierId] = useState("");
+    const [mounted, setMounted] = useState(false);
 
     const router = useRouter();
+
+    useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
         fetch("/api/suppliers")
@@ -136,8 +139,10 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
         }
     };
 
+    if (!mounted) return null;
+
     return createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
             <div
                 className="bg-card rounded-xl p-6 w-full max-w-md shadow-xl"
                 onClick={(e) => e.stopPropagation()}

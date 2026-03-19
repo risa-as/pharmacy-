@@ -8,9 +8,7 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function ExpensesPage() {
-    // Hardcoded branchId for now
-    const branchId = 'branch-1';
-    const expenses = await getExpenses(branchId);
+    const expenses = await getExpenses();
 
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">

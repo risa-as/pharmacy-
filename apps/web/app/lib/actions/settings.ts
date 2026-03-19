@@ -4,6 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/app/lib/audit";
 
 
 // --- Company Settings ---
@@ -70,6 +71,15 @@ export async function updateCompanySettings(formData: FormData) {
                 }
             });
         }
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'SETTING',
+            details: JSON.stringify({ name, currency }),
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
 
         revalidatePath("/dashboard/settings");
         return { success: true, message: "تم حفظ الإعدادات بنجاح" };

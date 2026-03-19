@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/app/lib/audit';
 
 // ===================== كشف حساب المورد =====================
 
@@ -104,7 +105,7 @@ export async function getSupplierLedger(supplierId: string) {
     const payments = await prisma.supplierPayment.findMany({
         where: { supplierId, branchId: { in: orgBranchIds } },
         include: { branch: { select: { name: true } } },
-        orderBy: { date: 'desc' },
+        orderBy: { createdAt: 'desc' },
     });
 
     // دمج وترتيب بالتاريخ
@@ -133,7 +134,7 @@ export async function getSupplierLedger(supplierId: string) {
         ...payments.map((p: any) => ({
             id: p.id,
             type: 'payment' as const,
-            date: p.date,
+            date: p.createdAt,
             amount: p.amount,
             description: p.notes || `دفعة ${p.method === 'CASH' ? 'نقدي' : p.method === 'CHECK' ? 'شيك' : 'حوالة'}`,
             branch: p.branch?.name || '',
@@ -142,18 +143,8 @@ export async function getSupplierLedger(supplierId: string) {
         })),
     ];
 
-    // ترتيب بالتاريخ (الأقدم أولاً لحساب الرصيد التراكمي)
-    entries.sort((a: any, b: any) => {
-        const dayA = a.date.toISOString().split('T')[0];
-        const dayB = b.date.toISOString().split('T')[0];
-
-        if (dayA === dayB) {
-            // في نفس اليوم: نضع المشتريات قبل الدفعات لتجنب ظهور رصيد بالسالب
-            if (a.type === 'purchase' && b.type === 'payment') return -1;
-            if (a.type === 'payment' && b.type === 'purchase') return 1;
-        }
-        return a.date.getTime() - b.date.getTime();
-    });
+    // ترتيب زمني صارم (الأقدم أولاً) لحساب الرصيد التراكمي بشكل صحيح
+    entries.sort((a: any, b: any) => a.date.getTime() - b.date.getTime());
 
     // حساب الرصيد التراكمي
     let running = 0;
@@ -221,6 +212,15 @@ export async function recordSupplierPayment(data: {
                 where: { id: supplierId },
                 data: { balance: { decrement: amount } },
             });
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'SUPPLIER_PAYMENT',
+            details: JSON.stringify({ supplierId, amount, method }),
+            branchId,
         });
 
         revalidatePath(`/dashboard/suppliers/${supplierId}`);

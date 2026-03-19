@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { prisma } from "@/app/lib/prisma";
 import { FileText, Plus, Clock, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
-import { UpdatePrescription, DeletePrescription, CancelPrescription } from "@/app/ui/prescriptions/buttons";
+import { UpdatePrescription, DeletePrescription, CancelPrescription, DispensePrescription } from "@/app/ui/prescriptions/buttons";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
@@ -126,6 +126,12 @@ export default async function PrescriptionsPage() {
                                     <td className="px-4 py-3">
                                         <div className="flex gap-2">
                                             <UpdatePrescription id={prescription.id} />
+                                            {(prescription.status === "PENDING" || prescription.status === "PARTIALLY_DISPENSED") && (
+                                                <DispensePrescription
+                                                    id={prescription.id}
+                                                    itemIds={prescription.items.map((i: any) => i.id)}
+                                                />
+                                            )}
                                             {prescription.status === "PENDING" && (
                                                 <CancelPrescription id={prescription.id} />
                                             )}

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/app/lib/audit";
 
 
 const SupplierSchema = z.object({
@@ -40,7 +41,7 @@ export async function createSupplier(prevState: any, formData: FormData) {
     const { name, email, phone, address } = validatedFields.data;
 
     try {
-        await prisma.supplier.create({
+        const newSupplier = await prisma.supplier.create({
             data: {
                 name,
                 email: email || null,
@@ -48,6 +49,15 @@ export async function createSupplier(prevState: any, formData: FormData) {
                 address: address || null,
                 organizationId: tenantCtx.organizationId,
             },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'SUPPLIER',
+            entityId: newSupplier.id,
+            details: JSON.stringify({ name }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
     } catch (error) {
         return {
@@ -86,6 +96,15 @@ export async function deleteSupplier(id: string) {
 
         await prisma.supplier.delete({
             where: { id },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'SUPPLIER',
+            entityId: id,
+            details: JSON.stringify({ name: supplier.name }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
         revalidatePath("/dashboard/suppliers");
     } catch (error) {
@@ -143,6 +162,15 @@ export async function updateSupplier(id: string, prevState: any, formData: FormD
                 phone: phone || null,
                 address: address || null,
             },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'SUPPLIER',
+            entityId: id,
+            details: JSON.stringify({ name }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
     } catch (error) {
         return {

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@faramace/ui";
 import { useState, useEffect } from "react";
 import {
-  Home,
+  LayoutDashboard,
   Package,
   Users,
   Store,
@@ -108,7 +108,7 @@ const controlTowerSections: NavSection[] = [
 const sections: NavSection[] = [
   {
     label: "",
-    links: [{ name: "الرئيسية", href: "/dashboard", icon: Home }],
+    links: [{ name: "الرئيسية", href: "/dashboard", icon: LayoutDashboard }],
   },
   {
     label: "",
@@ -173,8 +173,10 @@ const sections: NavSection[] = [
           { name: "التقارير", href: "/dashboard/reports" },
           { name: "التقارير المتقدمة", href: "/dashboard/reports/analytics", plan: 'pro' },
           { name: "مقارنة الفروع", href: "/dashboard/reports/branch-comparison", plan: 'pro' },
+          { name: "المصاريف", href: "/dashboard/expenses" },
           { name: "الفريق", href: "/dashboard/users" },
           { name: "الصلاحيات", href: "/dashboard/users/permissions", plan: 'pro' },
+          { name: "الفروع", href: "/dashboard/branches", plan: 'pro' },
         ],
 
       },

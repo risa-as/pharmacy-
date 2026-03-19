@@ -119,7 +119,7 @@ export default async function BatchesPage({
                                         <td className="px-4 py-3 text-muted-foreground">{batch.inventory.branch?.name || "غير محدد"}</td>
                                         <td className="px-4 py-3 text-muted-foreground">{batch.supplier?.name || <span className="text-muted-foreground/50">—</span>}</td>
                                         <td className="px-4 py-3 font-mono text-sm text-muted-foreground">{batch.batchNumber}</td>
-                                        <td className="px-4 py-3 font-bold text-foreground" dir="ltr">{formatCurrency(batch.costPrice)}</td>
+                                        <td className="px-4 py-3 font-bold text-foreground text-right"><span dir="ltr">{formatCurrency(batch.costPrice)}</span></td>
                                         <td className="px-4 py-3 font-bold text-foreground">{batch.quantity}</td>
                                         <td className="px-4 py-3 text-muted-foreground">{expiryDate.toLocaleDateString("ar-IQ")}</td>
                                         <td className="px-4 py-3">

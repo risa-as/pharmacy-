@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { logAudit } from "@/app/lib/audit";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
     try {
@@ -113,6 +114,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
                 console.error('[receive] Expiry trigger failed:', triggerErr);
             }
         })();
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'PURCHASE',
+            entityId: id,
+            details: JSON.stringify({ event: 'received', branchId: purchase.branchId, itemCount: items.length }),
+            branchId: purchase.branchId,
+        });
 
         return NextResponse.json({ success: true });
 

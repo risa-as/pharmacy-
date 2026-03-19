@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/app/lib/audit';
 
 export async function getLowStockInventory(branchId?: string) {
     const tenantCtx = await getTenantContext();
@@ -88,6 +89,16 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
                     }))
                 }
             }
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'PURCHASE',
+            entityId: purchase.id,
+            details: JSON.stringify({ supplierId, branchId, total, itemCount: items.length }),
+            branchId,
         });
 
         revalidatePath('/dashboard/purchases');

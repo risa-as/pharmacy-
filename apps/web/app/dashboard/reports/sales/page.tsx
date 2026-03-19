@@ -7,6 +7,7 @@ import SalesChart from "@/app/ui/dashboard/sales-chart";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from "next/server";
+import { ExportPDFButton, ExportExcelButton } from "@/app/ui/reports/export-buttons";
 
 export default async function SalesReportPage({
     searchParams,
@@ -80,10 +81,19 @@ export default async function SalesReportPage({
                         تقرير المبيعات
                     </h1>
                 </div>
-                <button className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90">
-                    <Download className="h-4 w-4" />
-                    تصدير PDF
-                </button>
+                <div className="flex gap-2">
+                    <ExportExcelButton
+                        filename="sales-report"
+                        headers={["الفرع", "عدد الأصناف", "المبلغ", "التاريخ"]}
+                        data={sales.map((s: any) => [
+                            s.branch.name,
+                            s.items.length,
+                            s.total.toFixed(2),
+                            new Date(s.createdAt).toLocaleDateString("ar-IQ"),
+                        ])}
+                    />
+                    <ExportPDFButton />
+                </div>
             </div>
 
             {/* Branch Filter */}

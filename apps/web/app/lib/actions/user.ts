@@ -84,7 +84,7 @@ export async function createUser(prevState: any, formData: FormData) {
             entity: 'USER',
             entityId: newUser.id,
             details: JSON.stringify({ name, email, role }),
-            branchId: branchId ?? undefined,
+            branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
         });
     } catch (error) {
         console.error("Error creating user:", error);
@@ -100,6 +100,8 @@ export async function updateUser(
     prevState: any,
     formData: FormData,
 ) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     const passwordValue = formData.get("password");
 
     const validatedFields = UpdateUser.safeParse({
@@ -137,6 +139,15 @@ export async function updateUser(
             where: { id },
             data: updateData,
         });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'USER',
+            entityId: id,
+            details: JSON.stringify({ name, email, role }),
+            branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
+        });
     } catch (error) {
         console.error("Error updating user:", error);
         return { message: "خطأ في قاعدة البيانات: فشل في تحديث المستخدم." };
@@ -147,10 +158,23 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: string) {
+    const tenantCtx = await getTenantContext();
     try {
+        const user = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
         await prisma.user.delete({
             where: { id },
         });
+        if (!(tenantCtx instanceof NextResponse)) {
+            await logAudit({
+                userId: tenantCtx.user.id,
+                userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+                action: 'DELETE',
+                entity: 'USER',
+                entityId: id,
+                details: JSON.stringify({ name: user?.name, email: user?.email }),
+                branchId: tenantCtx.user.branchId ?? undefined,
+            });
+        }
         revalidatePath("/dashboard/users");
     } catch (error) {
         console.error("Error deleting user:", error);

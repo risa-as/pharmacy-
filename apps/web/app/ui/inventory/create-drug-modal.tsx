@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -16,7 +17,10 @@ interface CreateDrugModalProps {
 export default function CreateDrugModal({ initialBarcode, branches, onClose }: CreateDrugModalProps) {
     const [loading, setLoading] = useState(false);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [mounted, setMounted] = useState(false);
     const router = useRouter();
+
+    useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
         fetch("/api/suppliers")
@@ -68,8 +72,10 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
         }
     };
 
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    if (!mounted) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={onClose}>
             <div
                 className="bg-card rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
@@ -249,6 +255,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

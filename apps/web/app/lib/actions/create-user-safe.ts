@@ -6,6 +6,9 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
 import bcrypt from "bcryptjs";
 import { checkPlanLimit } from "@/app/lib/saas-guards";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
+import { logAudit } from "@/app/lib/audit";
 
 const UserSchema = z.object({
     id: z.string(),
@@ -19,6 +22,8 @@ const UserSchema = z.object({
 const CreateUser = UserSchema.omit({ id: true });
 
 export async function createUser(prevState: any, formData: FormData) {
+    const tenantCtx = await getTenantContext();
+
     const validatedFields = CreateUser.safeParse({
         name: formData.get("name"),
         email: formData.get("email"),
@@ -68,7 +73,7 @@ export async function createUser(prevState: any, formData: FormData) {
         // تشفير كلمة المرور
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        await prisma.user.create({
+        const newUser = await prisma.user.create({
             data: {
                 name,
                 email,
@@ -77,6 +82,18 @@ export async function createUser(prevState: any, formData: FormData) {
                 branchId: branchId || null,
             },
         });
+
+        if (!(tenantCtx instanceof NextResponse)) {
+            await logAudit({
+                userId: tenantCtx.user.id,
+                userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+                action: 'CREATE',
+                entity: 'USER',
+                entityId: newUser.id,
+                details: JSON.stringify({ name, email, role }),
+                branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
+            });
+        }
     } catch (error) {
         console.error("Error creating user:", error);
         return { message: "خطأ في قاعدة البيانات: فشل في إنشاء المستخدم." };

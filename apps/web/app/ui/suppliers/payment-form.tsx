@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { CreditCard, X, Loader2 } from 'lucide-react';
 import { recordSupplierPayment } from '@/app/lib/actions/supplier-ledger-actions';
@@ -45,7 +46,7 @@ function PaymentModal({
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [error, setError] = useState('');
-
+    const [mounted, setMounted] = useState(false);
     const [form, setForm] = useState({
         amount: '',
         method: 'CASH',
@@ -54,6 +55,10 @@ function PaymentModal({
         notes: '',
         date: new Date().toISOString().split('T')[0],
     });
+
+    useEffect(() => { setMounted(true); }, []);
+
+    if (!mounted) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -85,8 +90,8 @@ function PaymentModal({
         });
     };
 
-    return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    return createPortal(
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
             <div
                 className="bg-card rounded-2xl w-full max-w-md shadow-2xl"
                 dir="rtl"
@@ -228,5 +233,5 @@ function PaymentModal({
                 </form>
             </div>
         </div>
-    );
+    , document.body);
 }

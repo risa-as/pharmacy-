@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { logAudit } from "@/app/lib/audit";
 
 export async function POST(req: Request) {
     try {
@@ -80,6 +81,16 @@ export async function POST(req: Request) {
                 console.error('[create-purchase] New-purchase trigger failed:', triggerErr);
             }
         })();
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'PURCHASE',
+            entityId: purchase.id,
+            details: JSON.stringify({ branchId, supplierId, total, itemCount: items.length }),
+            branchId,
+        });
 
         return NextResponse.json({ success: true, purchaseId: purchase.id });
     } catch (error) {

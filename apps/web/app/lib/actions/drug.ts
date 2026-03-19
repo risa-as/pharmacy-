@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/app/lib/audit";
 
 
 const DrugSchema = z.object({
@@ -46,7 +47,7 @@ export async function createDrug(prevState: any, formData: FormData) {
     const { barcode, tradeName, scientificName, origin, isActive } = validatedFields.data;
 
     try {
-        await prisma.globalDrug.create({
+        const newDrug = await prisma.globalDrug.create({
             data: {
                 barcode,
                 tradeName,
@@ -55,6 +56,15 @@ export async function createDrug(prevState: any, formData: FormData) {
                 isActive: isActive ?? true,
                 organizationId: tenantCtx.organizationId,
             },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'DRUG',
+            entityId: newDrug.id,
+            details: JSON.stringify({ barcode, tradeName, scientificName }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
     } catch (error: any) {
         if (error.code === 'P2002') {
@@ -103,6 +113,16 @@ export async function deleteDrug(id: string) {
             await tx.globalDrug.delete({
                 where: { id },
             });
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'DRUG',
+            entityId: id,
+            details: JSON.stringify({ tradeName: drug.tradeName }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
 
         revalidatePath("/dashboard/drugs");
@@ -160,6 +180,15 @@ export async function updateDrug(
                 origin: origin || null,
                 isActive: isActive ?? true,
             },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'DRUG',
+            entityId: id,
+            details: JSON.stringify({ barcode, tradeName, scientificName, isActive }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
     } catch (error: any) {
         if (error.code === 'P2002') {

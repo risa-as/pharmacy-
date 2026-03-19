@@ -19,7 +19,7 @@ export default async function ShortagesPage({
     const { tenantBranchWhere, organizationId } = tenantCtx;
 
     if (organizationId) {
-        const upgrade = await requireFeature(organizationId, 'interBranchTransfers');
+        const upgrade = await requireFeature(organizationId, 'productMovement');
         if (upgrade) return <UpgradeRequired {...upgrade} />;
     }
 

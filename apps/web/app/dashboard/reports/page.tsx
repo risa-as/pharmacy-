@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, FileSpreadsheet, FileText, User, AlertTriangle, DollarSign, Package, AlertOctagon } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, FileSpreadsheet, User, AlertTriangle, DollarSign, AlertOctagon } from "lucide-react";
 import Link from "next/link";
-import ExportReports from "@/app/ui/reports/export-reports";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
@@ -113,7 +112,6 @@ export default async function ReportsPage() {
                     <BarChart3 className="w-7 h-7 text-primary" />
                     التقارير والإحصائيات
                 </h1>
-                <ExportReports />
             </div>
 
             {/* التقارير المتاحة */}
@@ -144,42 +142,6 @@ export default async function ReportsPage() {
                 })}
             </div>
 
-            {/* خيارات التصدير */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-primary">
-                <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                    <Download className="w-5 h-5 text-primary" />
-                    تصدير البيانات
-                </h2>
-                <div className="grid gap-4 sm:grid-cols-3">
-                    <button className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary hover:shadow-md transition-all">
-                        <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
-                            <FileSpreadsheet className="w-5 h-5 text-success" />
-                        </div>
-                        <div className="text-right">
-                            <div className="font-bold text-foreground">Excel</div>
-                            <div className="text-xs text-muted-foreground">تصدير جدول البيانات</div>
-                        </div>
-                    </button>
-                    <button className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-red-300 hover:shadow-md transition-all">
-                        <div className="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center">
-                            <FileText className="w-5 h-5 text-destructive" />
-                        </div>
-                        <div className="text-right">
-                            <div className="font-bold text-foreground">PDF</div>
-                            <div className="text-xs text-muted-foreground">تقرير قابل للطباعة</div>
-                        </div>
-                    </button>
-                    <button className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-purple-300 hover:shadow-md transition-all">
-                        <div className="w-10 h-10 bg-info rounded-lg flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-info" />
-                        </div>
-                        <div className="text-right">
-                            <div className="font-bold text-foreground">تقرير مخصص</div>
-                            <div className="text-xs text-muted-foreground">اختر الفترة والبيانات</div>
-                        </div>
-                    </button>
-                </div>
-            </div>
         </div>
     );
 }

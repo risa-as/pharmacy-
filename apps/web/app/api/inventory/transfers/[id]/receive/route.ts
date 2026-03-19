@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { logAudit } from "@/app/lib/audit";
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
     try {
@@ -86,6 +87,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                     });
                 }
             }
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'TRANSFER',
+            entityId: transferId,
+            details: JSON.stringify({ event: 'received', fromBranchId: transfer.fromBranchId, toBranchId: branchId }),
+            branchId,
         });
 
         return NextResponse.json({ success: true, message: "Transfer received and inventory updated" });

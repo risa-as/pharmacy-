@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { ExportExcelButton } from "@/app/ui/reports/export-buttons";
 
 export default async function InventoryReportPage({
     searchParams,
@@ -64,10 +65,18 @@ export default async function InventoryReportPage({
                         تقرير المخزون
                     </h1>
                 </div>
-                <button className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-bold text-success-foreground transition-colors hover:bg-success/90">
-                    <Download className="h-4 w-4" />
-                    تصدير Excel
-                </button>
+                <ExportExcelButton
+                    filename="inventory-report"
+                    headers={["الصنف", "الفرع", "الكمية", "حد الأمان", "السعر", "الحالة"]}
+                    data={inventoryWithQuantity.map((item: any) => [
+                        item.drug.tradeName,
+                        item.branch.name,
+                        item.currentQuantity,
+                        item.minStock,
+                        item.price.toFixed(2),
+                        item.currentQuantity === 0 ? "نفاد" : item.currentQuantity <= item.minStock ? "منخفض" : "جيد",
+                    ])}
+                />
             </div>
 
             {/* Branch Filter */}
