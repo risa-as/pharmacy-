@@ -1051,7 +1051,12 @@ export async function syncProducts() {
                             where: { id: { in: collisionInventoryIds } }
                         });
                     }
-                    await tx.globalDrug.delete({ where: { id: collision.id } });
+                    // Cannot delete: collision drug may have FK references from SaleItems, DrugInteractions, etc.
+                    // Instead, neutralise the barcode so the upsert below can claim it.
+                    await tx.globalDrug.update({
+                        where: { id: collision.id },
+                        data: { barcode: `__REPLACED_${collision.id}`, isActive: false }
+                    });
                 }
 
                 await tx.globalDrug.upsert({

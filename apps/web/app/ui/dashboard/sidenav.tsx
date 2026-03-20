@@ -55,10 +55,15 @@ interface NavLink {
   href: string;
   icon: any;
   /** 'pro' or 'enterprise' — shows a lock badge and keeps the link so UpgradeRequired page is shown */
-  plan?: 'pro' | 'enterprise';
-  subLinks?: { name: string; href: string; activeFor?: string[]; excludeFor?: string[]; plan?: 'pro' | 'enterprise' }[];
+  plan?: "pro" | "enterprise";
+  subLinks?: {
+    name: string;
+    href: string;
+    activeFor?: string[];
+    excludeFor?: string[];
+    plan?: "pro" | "enterprise";
+  }[];
 }
-
 
 interface NavSection {
   label: string;
@@ -132,15 +137,30 @@ const sections: NavSection[] = [
       {
         name: "المخزون والمبيعات",
         href: "#",
-        icon: ShoppingCart, // Package or ShoppingCart
+        icon: ShoppingCart,
         subLinks: [
-          // RESTORED: /dashboard/inventory was previously missing from the sidebar
           { name: "المخزون", href: "/dashboard/inventory" },
-          // Inventory sub-tools (Stocktakes, etc) → accessible inside the Inventory page
-          { name: "المبيعات", href: "/dashboard/sales", activeFor: ["/dashboard/invoices", "/dashboard/returns", "/dashboard/payments"] },
-          // Invoices, Returns, Payments → tabs inside Sales page
-          { name: "نقطة البيع (مؤقت)", href: "/dashboard/pos-temp" },
+          {
+            name: "المبيعات",
+            href: "/dashboard/sales",
+            activeFor: [
+              "/dashboard/invoices",
+              "/dashboard/returns",
+              "/dashboard/payments",
+            ],
+          },
+          // { name: "نقطة البيع (مؤقت)", href: "/dashboard/pos-temp" },
           { name: "دفتر الديون", href: "/dashboard/debts" },
+          {
+            name: "حركة المنتجات",
+            href: "/dashboard/inventory/product-movement",
+            plan: "pro",
+          },
+          {
+            name: "تحويلات بين الفروع",
+            href: "/dashboard/inventory/transfers",
+            plan: "enterprise",
+          },
         ],
       },
     ],
@@ -153,12 +173,29 @@ const sections: NavSection[] = [
         href: "#",
         icon: Users,
         subLinks: [
-          { name: "المرضى", href: "/dashboard/patients", activeFor: ["/dashboard/loyalty"] },
-          { name: "الموردون", href: "/dashboard/suppliers", plan: 'pro' },
-          { name: "المشتريات", href: "/dashboard/purchases", excludeFor: ["/dashboard/purchases/smart-order"] },
+          {
+            name: "المرضى",
+            href: "/dashboard/patients",
+            activeFor: ["/dashboard/loyalty"],
+          },
+          { name: "الموردون", href: "/dashboard/suppliers" },
+          {
+            name: "المشتريات",
+            href: "/dashboard/purchases",
+            excludeFor: ["/dashboard/purchases/smart-order"],
+          },
           { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order" },
+          {
+            name: "إدارة المستودعات",
+            href: "/dashboard/warehouses",
+            plan: "enterprise",
+          },
+          {
+            name: "سوق الأدوية",
+            href: "/dashboard/marketplace",
+            plan: "enterprise",
+          },
         ],
-
       },
     ],
   },
@@ -170,15 +207,37 @@ const sections: NavSection[] = [
         href: "#",
         icon: BarChart3,
         subLinks: [
-          { name: "التقارير", href: "/dashboard/reports" },
-          { name: "التقارير المتقدمة", href: "/dashboard/reports/analytics", plan: 'pro' },
-          { name: "مقارنة الفروع", href: "/dashboard/reports/branch-comparison", plan: 'pro' },
+          {
+            name: "التقارير",
+            href: "/dashboard/reports",
+            excludeFor: [
+              "/dashboard/reports/analytics",
+              "/dashboard/reports/branch-comparison",
+            ],
+          },
+          {
+            name: "التقارير المتقدمة",
+            href: "/dashboard/reports/analytics",
+            plan: "enterprise",
+          },
+          {
+            name: "مقارنة الفروع",
+            href: "/dashboard/reports/branch-comparison",
+            plan: "enterprise",
+          },
           { name: "المصاريف", href: "/dashboard/expenses" },
-          { name: "الفريق", href: "/dashboard/users" },
-          { name: "الصلاحيات", href: "/dashboard/users/permissions", plan: 'pro' },
-          { name: "الفروع", href: "/dashboard/branches", plan: 'pro' },
+          {
+            name: "الفريق",
+            href: "/dashboard/users",
+            excludeFor: ["/dashboard/users/permissions"],
+          },
+          {
+            name: "الصلاحيات",
+            href: "/dashboard/users/permissions",
+            plan: "pro",
+          },
+          { name: "إدارة الفروع", href: "/dashboard/branches", plan: "pro" },
         ],
-
       },
     ],
   },
@@ -227,7 +286,7 @@ export default function SideNav({
   userPermissions?: UserPermissions | null;
   userRole?: string;
 }) {
-  const pathname = usePathname() ?? '';
+  const pathname = usePathname() ?? "";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openAccordions, setOpenAccordions] = useState<string[]>([]);
@@ -258,7 +317,9 @@ export default function SideNav({
 
   const toggleAccordion = (name: string) => {
     setOpenAccordions((prev) =>
-      prev.includes(name) ? prev.filter((n: any) => n !== name) : [...prev, name],
+      prev.includes(name)
+        ? prev.filter((n: any) => n !== name)
+        : [...prev, name],
     );
   };
 
@@ -379,9 +440,12 @@ export default function SideNav({
                   pathname === link.href ||
                   (link.href !== "#" && pathname.startsWith(link.href + "/"));
                 const isChildActive =
-                  link.subLinks?.some((sub: any) =>
-                    pathname.startsWith(sub.href) ||
-                    sub.activeFor?.some((p: string) => pathname.startsWith(p))
+                  link.subLinks?.some(
+                    (sub: any) =>
+                      pathname.startsWith(sub.href) ||
+                      sub.activeFor?.some((p: string) =>
+                        pathname.startsWith(p),
+                      ),
                   ) || false;
                 const isActive = isExactActive || isChildActive;
                 const isExpanded = openAccordions.includes(link.name);
@@ -428,14 +492,18 @@ export default function SideNav({
                         <div className="overflow-hidden">
                           <div className="flex flex-col gap-1 pr-9 pl-3 pt-1">
                             {link.subLinks.map((subLink: any) => {
-                              const isExcluded = subLink.excludeFor?.some((p: string) => pathname.startsWith(p));
-                              const isSubActive = !isExcluded && (
-                                pathname === subLink.href ||
-                                pathname.startsWith(subLink.href + "/") ||
-                                subLink.activeFor?.some((p: string) => pathname.startsWith(p))
+                              const isExcluded = subLink.excludeFor?.some(
+                                (p: string) => pathname.startsWith(p),
                               );
+                              const isSubActive =
+                                !isExcluded &&
+                                (pathname === subLink.href ||
+                                  pathname.startsWith(subLink.href + "/") ||
+                                  subLink.activeFor?.some((p: string) =>
+                                    pathname.startsWith(p),
+                                  ));
                               return (
-                                 <Link
+                                <Link
                                   key={subLink.name}
                                   href={subLink.href}
                                   onClick={() => setMobileOpen(false)}
@@ -454,18 +522,17 @@ export default function SideNav({
                                   <span className="truncate flex-1">
                                     {subLink.name}
                                   </span>
-                                  {subLink.plan === 'pro' && (
+                                  {subLink.plan === "pro" && (
                                     <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary font-bold shrink-0">
                                       <Lock className="w-2.5 h-2.5" /> Pro
                                     </span>
                                   )}
-                                  {subLink.plan === 'enterprise' && (
+                                  {subLink.plan === "enterprise" && (
                                     <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-warning/10 text-warning font-bold shrink-0">
                                       <Lock className="w-2.5 h-2.5" /> Ent
                                     </span>
                                   )}
                                 </Link>
-
                               );
                             })}
                           </div>
@@ -508,8 +575,8 @@ export default function SideNav({
             onClick={() => setMobileOpen(false)}
             className={cn(
               "flex flex-1 h-9 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
-              (pathname.startsWith("/dashboard/settings") && !pathname.startsWith("/dashboard/settings/billing")) ||
-                pathname.startsWith("/dashboard/branches") ||
+              (pathname.startsWith("/dashboard/settings") &&
+                !pathname.startsWith("/dashboard/settings/billing")) ||
                 pathname.startsWith("/dashboard/finance") ||
                 pathname.startsWith("/dashboard/expenses") ||
                 pathname.startsWith("/dashboard/organizations") ||

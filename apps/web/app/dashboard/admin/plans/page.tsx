@@ -137,8 +137,8 @@ export default function AdminPlansPage() {
                                 return (
                                     <tr key={plan.id} className="border-b border-border hover:bg-muted/20 transition-colors">
                                         <td className="py-3 px-4 font-semibold text-foreground">{plan.name}</td>
-                                        <td className="py-3 px-4 text-primary font-bold" dir="ltr">
-                                            {Number(plan.price).toLocaleString('en-US')} IQD
+                                        <td className="py-3 px-4 text-primary font-bold text-right">
+                                            <span dir="ltr">{Number(plan.price).toLocaleString('en-US')} IQD</span>
                                         </td>
                                         <td className="py-3 px-4">
                                             {plan.maxBranches === -1 ? 'غير محدود' : plan.maxBranches}

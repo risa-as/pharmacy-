@@ -36,7 +36,7 @@ export default function SyncFailuresTab() {
             const listener = () => fetchFailures();
             window.ipcRenderer.on('sync-failure-recorded', listener);
             return () => {
-                window.ipcRenderer.removeListener('sync-failure-recorded', listener);
+                window.ipcRenderer.off('sync-failure-recorded', listener);
             };
         }
     }, []);

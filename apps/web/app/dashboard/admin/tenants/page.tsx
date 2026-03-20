@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2, Calendar, Banknote } from 'lucide-react';
 import { suspendOrganization, reactivateOrganization } from '@/app/lib/actions/organization-suspension';
 import { recordManualPayment } from '@/app/lib/actions/billing';
@@ -24,6 +25,9 @@ export default function TenantsPage() {
     const [manualPayDialog, setManualPayDialog] = useState<{ open: boolean; tenantId: string; tenantName: string } | null>(null);
     const [manualForm, setManualForm] = useState({ amount: '', months: '1', method: 'BANK_TRANSFER', reference: '', note: '' });
     const [manualSaving, setManualSaving] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
         Promise.all([
@@ -214,8 +218,68 @@ export default function TenantsPage() {
         alert('تم نسخ المفتاح');
     };
 
+    const manualPayModal = mounted && manualPayDialog ? createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" dir="rtl">
+            <div className="bg-card rounded-2xl shadow-xl border w-full max-w-md p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                    <h2 className="font-bold text-lg">تجديد يدوي — {manualPayDialog.tenantName}</h2>
+                    <button onClick={() => setManualPayDialog(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+                </div>
+                <p className="text-sm text-muted-foreground">سجّل دفعة تم استلامها خارج النظام (تحويل بنكي، كاش، إلخ)</p>
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1">المبلغ (دينار عراقي) *</label>
+                        <input type="number" value={manualForm.amount} onChange={e => setManualForm({ ...manualForm, amount: e.target.value })}
+                            placeholder="مثال: 50000" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1">مدة التجديد (أشهر)</label>
+                        <select value={manualForm.months} onChange={e => setManualForm({ ...manualForm, months: e.target.value })}
+                            className="w-full border rounded-lg px-3 py-2 text-sm bg-muted">
+                            <option value="1">شهر واحد</option>
+                            <option value="3">3 أشهر</option>
+                            <option value="6">6 أشهر</option>
+                            <option value="12">سنة كاملة (12 شهر)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1">طريقة الدفع</label>
+                        <select value={manualForm.method} onChange={e => setManualForm({ ...manualForm, method: e.target.value })}
+                            className="w-full border rounded-lg px-3 py-2 text-sm bg-muted">
+                            <option value="BANK_TRANSFER">تحويل بنكي</option>
+                            <option value="MANUAL">نقداً / يدوي</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1">رقم مرجعي (اختياري)</label>
+                        <input value={manualForm.reference} onChange={e => setManualForm({ ...manualForm, reference: e.target.value })}
+                            placeholder="رقم الحوالة أو رقم الوصل" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1">ملاحظات (اختياري)</label>
+                        <input value={manualForm.note} onChange={e => setManualForm({ ...manualForm, note: e.target.value })}
+                            placeholder="أي تفاصيل إضافية" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" />
+                    </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                    <button onClick={handleManualPayment} disabled={manualSaving || !manualForm.amount}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                        {manualSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Banknote className="w-4 h-4" />}
+                        {manualSaving ? 'جاري التسجيل...' : 'تأكيد استلام الدفعة'}
+                    </button>
+                    <button onClick={() => setManualPayDialog(null)} className="px-4 py-2.5 border rounded-xl text-sm text-muted-foreground hover:bg-muted">
+                        إلغاء
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    ) : null;
+
     return (
-        <div className="glass-card p-6 space-y-6" dir="rtl">
+        <>
+        {manualPayModal}
+        <div className="glass-card p-6 space-y-6" dir="rtl" style={{backdropFilter: 'none', WebkitBackdropFilter: 'none'}}>
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
                 <button onClick={() => {
@@ -372,7 +436,9 @@ export default function TenantsPage() {
                                         <td className="py-3 px-4 text-foreground">max {t.maxBranches}</td>
                                         <td className="py-3 px-4 text-foreground">max {t.maxUsers}</td>
                                         <td className="py-3 px-4 font-bold text-success" dir="ltr">
-                                            {t.monthlyPrice === 0 ? 'مجاني' : `${Number(t.monthlyPrice).toLocaleString('en-US')} IQD/شهر`}
+                                            {t.monthlyPrice === 0
+                                                ? (plan.name?.toUpperCase() === 'FREE' ? 'مجاني' : 'مخصص')
+                                                : `${Number(t.monthlyPrice).toLocaleString('en-US')} IQD/شهر`}
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`text-xs px-2 py-0.5 rounded-full ${t.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
@@ -472,62 +538,7 @@ export default function TenantsPage() {
                 </div>
             )}
 
-            {manualPayDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" dir="rtl">
-                    <div className="bg-card rounded-2xl shadow-xl border w-full max-w-md p-6 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="font-bold text-lg">تجديد يدوي — {manualPayDialog.tenantName}</h2>
-                            <button onClick={() => setManualPayDialog(null)} className="text-muted-foreground hover:text-foreground">✕</button>
-                        </div>
-                        <p className="text-sm text-muted-foreground">سجّل دفعة تم استلامها خارج النظام (تحويل بنكي، كاش، إلخ)</p>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-xs text-muted-foreground block mb-1">المبلغ (دينار عراقي) *</label>
-                                <input type="number" value={manualForm.amount} onChange={e => setManualForm({ ...manualForm, amount: e.target.value })}
-                                    placeholder="مثال: 50000" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
-                            </div>
-                            <div>
-                                <label className="text-xs text-muted-foreground block mb-1">مدة التجديد (أشهر)</label>
-                                <select value={manualForm.months} onChange={e => setManualForm({ ...manualForm, months: e.target.value })}
-                                    className="w-full border rounded-lg px-3 py-2 text-sm bg-muted">
-                                    <option value="1">شهر واحد</option>
-                                    <option value="3">3 أشهر</option>
-                                    <option value="6">6 أشهر</option>
-                                    <option value="12">سنة كاملة (12 شهر)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-xs text-muted-foreground block mb-1">طريقة الدفع</label>
-                                <select value={manualForm.method} onChange={e => setManualForm({ ...manualForm, method: e.target.value })}
-                                    className="w-full border rounded-lg px-3 py-2 text-sm bg-muted">
-                                    <option value="BANK_TRANSFER">تحويل بنكي</option>
-                                    <option value="MANUAL">نقداً / يدوي</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-xs text-muted-foreground block mb-1">رقم مرجعي (اختياري)</label>
-                                <input value={manualForm.reference} onChange={e => setManualForm({ ...manualForm, reference: e.target.value })}
-                                    placeholder="رقم الحوالة أو رقم الوصل" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
-                            </div>
-                            <div>
-                                <label className="text-xs text-muted-foreground block mb-1">ملاحظات (اختياري)</label>
-                                <input value={manualForm.note} onChange={e => setManualForm({ ...manualForm, note: e.target.value })}
-                                    placeholder="أي تفاصيل إضافية" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" />
-                            </div>
-                        </div>
-                        <div className="flex gap-2 pt-2">
-                            <button onClick={handleManualPayment} disabled={manualSaving || !manualForm.amount}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                                {manualSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Banknote className="w-4 h-4" />}
-                                {manualSaving ? 'جاري التسجيل...' : 'تأكيد استلام الدفعة'}
-                            </button>
-                            <button onClick={() => setManualPayDialog(null)} className="px-4 py-2.5 border rounded-xl text-sm text-muted-foreground hover:bg-muted">
-                                إلغاء
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
+        </>
     );
 }

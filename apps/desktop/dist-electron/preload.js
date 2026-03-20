@@ -1,1 +1,32 @@
-"use strict";const n=require("electron");n.contextBridge.exposeInMainWorld("ipcRenderer",{on(...e){const[r,t]=e;return n.ipcRenderer.on(r,(i,...c)=>t(i,...c))},off(...e){const[r,...t]=e;return n.ipcRenderer.off(r,...t)},send(...e){const[r,...t]=e;return n.ipcRenderer.send(r,...t)},invoke(...e){const[r,...t]=e;return n.ipcRenderer.invoke(r,...t)}});n.contextBridge.exposeInMainWorld("electronTheme",{getTheme:()=>n.ipcRenderer.invoke("theme:get"),setTheme:e=>n.ipcRenderer.invoke("theme:set",e)});n.contextBridge.exposeInMainWorld("electronLicense",{getHardwareId:()=>n.ipcRenderer.invoke("get-hardware-id"),activate:e=>n.ipcRenderer.invoke("license:activate",e),verify:e=>n.ipcRenderer.invoke("license:verify",e),saveTenantContext:e=>n.ipcRenderer.invoke("license:save-tenant-context",e)});
+"use strict";
+const electron = require("electron");
+electron.contextBridge.exposeInMainWorld("ipcRenderer", {
+  on(...args) {
+    const [channel, listener] = args;
+    return electron.ipcRenderer.on(channel, (event, ...args2) => listener(event, ...args2));
+  },
+  off(...args) {
+    const [channel, ...omit] = args;
+    return electron.ipcRenderer.off(channel, ...omit);
+  },
+  send(...args) {
+    const [channel, ...omit] = args;
+    return electron.ipcRenderer.send(channel, ...omit);
+  },
+  invoke(...args) {
+    const [channel, ...omit] = args;
+    return electron.ipcRenderer.invoke(channel, ...omit);
+  }
+  // You can expose other APTs you need here.
+  // ...
+});
+electron.contextBridge.exposeInMainWorld("electronTheme", {
+  getTheme: () => electron.ipcRenderer.invoke("theme:get"),
+  setTheme: (v) => electron.ipcRenderer.invoke("theme:set", v)
+});
+electron.contextBridge.exposeInMainWorld("electronLicense", {
+  getHardwareId: () => electron.ipcRenderer.invoke("get-hardware-id"),
+  activate: (payload) => electron.ipcRenderer.invoke("license:activate", payload),
+  verify: (payload) => electron.ipcRenderer.invoke("license:verify", payload),
+  saveTenantContext: (context) => electron.ipcRenderer.invoke("license:save-tenant-context", context)
+});

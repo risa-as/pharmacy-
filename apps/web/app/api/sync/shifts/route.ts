@@ -92,18 +92,23 @@ export async function POST(req: NextRequest) {
                         }
                     });
                 } else {
+                    // Guard: branch must exist in cloud before we can create a shift
+                    const shiftBranch = await tx.branch.findUnique({ where: { id: shift.branchId }, select: { id: true } });
+                    if (!shiftBranch) {
+                        console.warn(`[Shift Sync] Branch ${shift.branchId} not yet in cloud — skipping shift ${shift.id}`);
+                        continue;
+                    }
+
                     // Ensure the safe exists in cloud (desktop may have auto-created it locally)
                     let resolvedSafeId = shift.safeId ?? null;
                     if (resolvedSafeId) {
                         const safeExists = await tx.safe.findUnique({ where: { id: resolvedSafeId }, select: { id: true } });
                         if (!safeExists) {
-                            try {
-                                await tx.safe.create({
-                                    data: { id: resolvedSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId }
-                                });
-                            } catch {
-                                // Safe was created concurrently — safe to ignore
-                            }
+                            await tx.safe.upsert({
+                                where: { id: resolvedSafeId },
+                                update: {},
+                                create: { id: resolvedSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId }
+                            });
                         }
                     }
                     // Create new
