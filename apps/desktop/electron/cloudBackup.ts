@@ -25,7 +25,9 @@ export async function uploadBackup(filePath: string, branchId: string = "default
         form.append('branchId', branchId);
 
         // Should fetch the setting from DB preferably, but for now we hardcode/env
-        const targetUrl = process.env.CLOUD_API_URL || "http://127.0.0.1:3000/api/backup/upload";
+        const targetUrl = process.env.VITE_CLOUD_API_URL
+            ? `${process.env.VITE_CLOUD_API_URL}/backup/upload`
+            : process.env.CLOUD_API_URL || "http://127.0.0.1:3000/api/backup/upload";
 
         const response = await fetch(targetUrl, {
             method: 'POST',

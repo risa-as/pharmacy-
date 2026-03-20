@@ -7,6 +7,7 @@ type PricingCardProps = {
   period?: string;
   description: string;
   features: string[];
+  inheritedFrom?: string;
   isPopular?: boolean;
   ctaText?: string;
   delay?: number;
@@ -18,6 +19,7 @@ export default function PricingCard({
   period = 'شهرياً',
   description,
   features,
+  inheritedFrom,
   isPopular = false,
   ctaText = 'اختر الباقة',
   delay = 0
@@ -49,6 +51,23 @@ export default function PricingCard({
       <div className="flex-grow">
         <div className="h-px bg-slate-100 dark:bg-slate-800 w-full mb-6"></div>
         <ul className="space-y-4 mb-8">
+          {inheritedFrom && (
+            <li className="flex items-start gap-3">
+              <div className="mt-1 shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
+                <Check size={12} strokeWidth={3} />
+              </div>
+              <span className="text-emerald-700 dark:text-emerald-400 font-bold leading-relaxed">
+                كل مميزات {inheritedFrom}
+              </span>
+            </li>
+          )}
+          {inheritedFrom && features.length > 0 && (
+            <li className="flex items-center gap-2 pt-1">
+              <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
+              <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium whitespace-nowrap">إضافةً إلى</span>
+              <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
+            </li>
+          )}
           {features.map((feature, idx) => (
             <li key={idx} className="flex items-start gap-3">
               <div className={`mt-1 shrink-0 flex items-center justify-center w-5 h-5 rounded-full ${isPopular ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>

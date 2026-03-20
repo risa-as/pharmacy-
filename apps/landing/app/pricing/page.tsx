@@ -32,59 +32,47 @@ function planDisplayName(name: string): string {
   return name;
 }
 
-/** Build human-readable feature list from plan limits */
-function buildFeatures(plan: Plan): string[] {
+/** Tier-0 (Basic): full feature list */
+function buildBasicFeatures(plan: Plan): string[] {
   const list: string[] = [];
-
-  if (plan.maxBranches < 0) {
-    list.push("عدد غير محدود من الفروع");
-  } else {
-    list.push(
-      plan.maxBranches === 1
-        ? "فرع واحد (صيدلية واحدة)"
-        : `حتى ${plan.maxBranches} فروع`,
-    );
-  }
-
-  if (plan.maxDevices < 0) {
-    list.push("عدد غير محدود من أجهزة الكاشير");
-  } else if (plan.maxDevices === 1) {
-    list.push("1 جهاز كاشير (صندوق)");
-  } else {
-    list.push(`حتى ${plan.maxDevices} أجهزة كاشير`);
-  }
-
-  if (plan.maxMobileUsers < 0) {
-    list.push("عدد غير محدود من تطبيقات الموبايل");
-  } else if (plan.maxMobileUsers === 1) {
-    list.push("1 تطبيق موبايل للمدير");
-  } else {
-    list.push(`حتى ${plan.maxMobileUsers} تطبيقات موبايل`);
-  }
-
-  if (plan.maxUsers < 0) {
-    list.push("عدد غير محدود من المستخدمين");
-  } else {
-    list.push(`حتى ${plan.maxUsers} مستخدم`);
-  }
-
-  // ثابت لجميع الخطط
+  list.push(plan.maxBranches === 1 ? "فرع واحد (صيدلية واحدة)" : `حتى ${plan.maxBranches} فروع`);
+  list.push(plan.maxDevices === 1 ? "1 جهاز كاشير (صندوق)" : `حتى ${plan.maxDevices} أجهزة كاشير`);
+  list.push(plan.maxMobileUsers === 1 ? "1 تطبيق موبايل للمدير" : `حتى ${plan.maxMobileUsers} تطبيقات موبايل`);
+  list.push(`حتى ${plan.maxUsers} مستخدم`);
   list.push("إدارة الموردين والمشتريات");
+  list.push("تقارير يومية وشهرية أساسية");
+  list.push("دعم فني خلال أوقات الدوام");
+  return list;
+}
 
-  // Feature flags
+/** Tier-1 (Professional): only what's NEW vs basic */
+function buildProfessionalExtras(plan: Plan): string[] {
+  const list: string[] = [];
+  list.push(`حتى ${plan.maxBranches} فروع`);
+  list.push(`حتى ${plan.maxDevices} أجهزة كاشير`);
+  list.push(`حتى ${plan.maxMobileUsers} تطبيقات موبايل`);
+  list.push(`حتى ${plan.maxUsers} مستخدم`);
   const f = plan.features as Record<string, boolean> | null;
   if (f?.productMovement) list.push("تتبع حركة المواد التفصيلي");
   if (f?.granularPermissions) list.push("مستويات صلاحيات متعددة");
   if (f?.branchManagement) list.push("إدارة الفروع المتعددة");
+  return list;
+}
+
+/** Tier-2 (Enterprise): only what's NEW vs professional */
+function buildEnterpriseExtras(plan: Plan): string[] {
+  const list: string[] = [];
+  list.push("عدد غير محدود من الفروع");
+  list.push("عدد غير محدود من أجهزة الكاشير");
+  list.push("عدد غير محدود من المستخدمين");
+  list.push("عدد غير محدود من تطبيقات الموبايل");
+  const f = plan.features as Record<string, boolean> | null;
   if (f?.advancedReports) list.push("لوحة التحليل المتقدم");
   if (f?.branchComparison) list.push("مقارنة أداء الفروع");
   if (f?.warehouseManagement) list.push("إدارة المخزن المركزي");
   if (f?.interBranchTransfers) list.push("التحويل بين الفروع");
   if (f?.marketplace) list.push("الوصول للمتجر الإلكتروني");
-
-  if (!f?.advancedReports) list.push("تقارير يومية وشهرية أساسية");
-  list.push("دعم فني خلال أوقات الدوام");
-
+  list.push("دعم فني متقدم على مدار الساعة");
   return list;
 }
 
@@ -119,9 +107,9 @@ export default async function PricingPage() {
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-24">
           {sorted.map((plan, idx) => {
-            // Generate description based on position among paid plans
             const paidPlans = sorted.filter((p) => p.price > 0);
             const paidIdx = paidPlans.indexOf(plan);
+
             const descriptions = [
               "مناسبة للصيدليات الفردية والمسائية ذات وتيرة العمل المتوسطة.",
               "الخيار المثالي للصيدليات النشطة وتوفير ميزات إدارية متقدمة.",
@@ -129,8 +117,32 @@ export default async function PricingPage() {
             const description =
               plan.price === 0
                 ? "مصممة للسلاسل الصيدلانية والمذاخر المركزية أو المستشفيات الخاصة."
-                : (descriptions[paidIdx] ??
-                  `باقة ${planDisplayName(plan.name)}`);
+                : (descriptions[paidIdx] ?? `باقة ${planDisplayName(plan.name)}`);
+
+            // Tier 0 (cheapest paid) = Basic — full list
+            // Tier 1 (second paid)   = Professional — inherits Basic + extras
+            // Tier 2 (price = 0)     = Enterprise   — inherits Professional + extras
+            let features: string[];
+            let inheritedFrom: string | undefined;
+
+            if (plan.price === 0) {
+              // Enterprise
+              const professionalName = paidPlans[1]
+                ? planDisplayName(paidPlans[1].name)
+                : "الباقة الاحترافية";
+              inheritedFrom = `الباقة ${professionalName}`;
+              features = buildEnterpriseExtras(plan);
+            } else if (paidIdx === 0) {
+              // Basic
+              features = buildBasicFeatures(plan);
+            } else {
+              // Professional (or any mid-tier)
+              const basicName = paidPlans[0]
+                ? planDisplayName(paidPlans[0].name)
+                : "الباقة الأساسية";
+              inheritedFrom = `الباقة ${basicName}`;
+              features = buildProfessionalExtras(plan);
+            }
 
             return (
               <PricingCard
@@ -139,7 +151,8 @@ export default async function PricingPage() {
                 price={formatPrice(plan.price)}
                 isPopular={plan.isPopular}
                 description={description}
-                features={buildFeatures(plan)}
+                features={features}
+                inheritedFrom={inheritedFrom}
                 ctaText={plan.price === 0 ? "تواصل للمبيعات" : undefined}
                 delay={idx * 100}
               />
