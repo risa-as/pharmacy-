@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, ipcMain, shell, powerMonitor } from "electron";
+﻿import { app, BrowserWindow, ipcMain, shell, powerMonitor, Menu } from "electron";
 import {
   loadOfflineToken,
   verifyAndDecodeToken,
@@ -7,7 +7,7 @@ import {
 import { getDeviceIdentity } from "../src/utils/hardware";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { prisma } from "./db";
+import { prisma, runMigrations } from "./db";
 import bcrypt from "bcryptjs";
 import {
   startSyncService,
@@ -36,13 +36,23 @@ import store from "./store";
 import { getApiCandidates, setApiBaseUrl } from "./api-config";
 import crypto from "crypto";
 
+// These globals are baked in at build time by vite.config.ts define.
+declare const __ZAINCASH_MERCHANT_ID__: string;
+declare const __ZAINCASH_SECRET__: string;
+declare const __ZAINCASH_BASE_URL__: string;
+declare const __BACKUP_SECRET_KEY__: string;
+declare const __OFFLINE_TOKEN_PUBLIC_KEY__: string;
+
 // Zain Cash Configuration
 const ZAINCASH_MERCHANT_ID =
+  (typeof __ZAINCASH_MERCHANT_ID__ !== "undefined" && __ZAINCASH_MERCHANT_ID__) ||
   process.env.ZAINCASH_MERCHANT_ID || "5ffacf6612b5777c6d44d6d6";
 const ZAINCASH_SECRET =
+  (typeof __ZAINCASH_SECRET__ !== "undefined" && __ZAINCASH_SECRET__) ||
   process.env.ZAINCASH_SECRET ||
   "$2y$10$hBbAZo2GfSSvyqAyV2SaqOfYnjJLUGwdahiZYuy2CI3af8v1YIDC6";
 const ZAINCASH_BASE_URL =
+  (typeof __ZAINCASH_BASE_URL__ !== "undefined" && __ZAINCASH_BASE_URL__) ||
   process.env.ZAINCASH_BASE_URL || "https://test.zaincash.iq";
 
 function generateZainCashToken(payload: object): string {
@@ -69,10 +79,15 @@ let win: BrowserWindow | null;
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 
 function createWindow() {
+  // Remove default Electron menu — it can intercept keyboard shortcuts on Windows
+  // and prevent characters from reaching focused input elements.
+  Menu.setApplicationMenu(null);
+
   win = new BrowserWindow({
     icon: path.join(publicPath, "electron-vite.svg"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      spellcheck: false,        // Prevents IME/spellcheck interference with Arabic input on Windows
     },
   });
 
@@ -734,7 +749,14 @@ async function checkOfflineSubscription(): Promise<void> {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Apply any missing schema changes before anything else touches the DB
+  try {
+    await runMigrations();
+  } catch (e) {
+    console.error('[DB Migration] Failed:', e);
+  }
+
   createWindow();
   setPendingSyncActions(getPendingSyncActions());
 
@@ -1287,7 +1309,6 @@ ipcMain.handle("get-shift-summary", async (_, { userId }) => {
     // startingCash + all IN transactions on this safe since shift start - all OUT transactions
     let expectedCash = activeShift.startingCash;
     if (activeShift.safeId) {
-      // @ts-ignore
       const txns = await prisma.transaction.findMany({
         where: {
           safeId: activeShift.safeId,
@@ -1339,7 +1360,6 @@ ipcMain.handle("clock-out", async (_, { userId, actualCash }) => {
     // Calculate expected cash: startingCash + IN transactions - OUT transactions since shift start
     let expectedCash = activeShift.startingCash;
     if (activeShift.safeId) {
-      // @ts-ignore
       const txns = await prisma.transaction.findMany({
         where: {
           safeId: activeShift.safeId,
@@ -2862,7 +2882,8 @@ ipcMain.handle("retry-sync-failure", async (_event, failureData) => {
     } else if (
       entityType === "ADD-INVENTORY" ||
       entityType === "DELETE-INVENTORY" ||
-      entityType === "UPDATE-INVENTORY"
+      entityType === "UPDATE-INVENTORY" ||
+      entityType === "ADD-BATCH"
     ) {
       // Push to pending actions
       const existingQueue = getPendingSyncActions();

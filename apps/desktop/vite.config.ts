@@ -15,15 +15,17 @@ export default defineConfig(({ mode }) => {
                 main: {
                     entry: 'electron/main.ts',
                     vite: {
-                        // Bake env vars into dist-electron/main.js at build time
+                        // Bake env vars as global constants into dist-electron/main.js at build time.
+                        // Using __VAR__ globals (not process.env.*) because vite-plugin-electron
+                        // does NOT reliably replace process.env.* in the main process build.
                         define: {
-                            'process.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || ''),
-                            'process.env.VITE_CLOUD_API_URL': JSON.stringify(env.VITE_CLOUD_API_URL || ''),
-                            'process.env.BACKUP_SECRET_KEY': JSON.stringify(env.BACKUP_SECRET_KEY || ''),
-                            'process.env.ZAINCASH_MERCHANT_ID': JSON.stringify(env.ZAINCASH_MERCHANT_ID || ''),
-                            'process.env.ZAINCASH_SECRET': JSON.stringify(env.ZAINCASH_SECRET || ''),
-                            'process.env.ZAINCASH_BASE_URL': JSON.stringify(env.ZAINCASH_BASE_URL || ''),
-                            'process.env.OFFLINE_TOKEN_PUBLIC_KEY': JSON.stringify(env.OFFLINE_TOKEN_PUBLIC_KEY || ''),
+                            __API_URL__: JSON.stringify(env.VITE_API_URL || ''),
+                            __CLOUD_API_URL__: JSON.stringify(env.VITE_CLOUD_API_URL || ''),
+                            __BACKUP_SECRET_KEY__: JSON.stringify(env.BACKUP_SECRET_KEY || ''),
+                            __ZAINCASH_MERCHANT_ID__: JSON.stringify(env.ZAINCASH_MERCHANT_ID || ''),
+                            __ZAINCASH_SECRET__: JSON.stringify(env.ZAINCASH_SECRET || ''),
+                            __ZAINCASH_BASE_URL__: JSON.stringify(env.ZAINCASH_BASE_URL || ''),
+                            __OFFLINE_TOKEN_PUBLIC_KEY__: JSON.stringify(env.OFFLINE_TOKEN_PUBLIC_KEY || ''),
                         },
                         build: {
                             rollupOptions: {

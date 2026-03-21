@@ -1769,6 +1769,7 @@ export async function pushAddBatchToCloud(data: {
     drugId?: string;
     branchId?: string;
     supplierId?: string | null;
+    costPrice?: number;
 }, options?: { actionId?: string }): Promise<boolean> {
     try {
         if (!await checkConnection()) return false;
@@ -1793,6 +1794,7 @@ export async function pushAddBatchToCloud(data: {
                 drugId: data.drugId || null,
                 branchId: data.branchId || null,
                 supplierId: data.supplierId ?? null,
+                costPrice: data.costPrice ?? 0,
             })
         });
 
@@ -1803,7 +1805,7 @@ export async function pushAddBatchToCloud(data: {
             let errorMessage = `HTTP ${response.status}`;
             errorMessage = body?.message || errorMessage;
             console.error("[CloudSync] Failed to push batch:", errorMessage);
-            return false;
+            throw new Error(errorMessage);
         }
 
         if (isAckSuccess(ack)) {
@@ -1815,7 +1817,7 @@ export async function pushAddBatchToCloud(data: {
         return true;
     } catch (error) {
         console.error("[CloudSync] Error pushing batch:", error);
-        return false;
+        throw error;
     }
 }
 

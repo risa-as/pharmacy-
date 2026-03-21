@@ -3,6 +3,9 @@ import fs from 'fs';
 import formData from 'form-data';
 import fetch from 'node-fetch'; // Electron uses Node's fetch or compatible
 
+declare const __CLOUD_API_URL__: string;
+declare const __BACKUP_SECRET_KEY__: string;
+
 // Store the interval ID to clear it if needed
 let backupInterval: NodeJS.Timeout | null = null;
 const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 Hours
@@ -25,16 +28,18 @@ export async function uploadBackup(filePath: string, branchId: string = "default
         form.append('branchId', branchId);
 
         // Should fetch the setting from DB preferably, but for now we hardcode/env
-        const targetUrl = process.env.VITE_CLOUD_API_URL
-            ? `${process.env.VITE_CLOUD_API_URL}/backup/upload`
-            : process.env.CLOUD_API_URL || "http://127.0.0.1:3000/api/backup/upload";
+        const cloudBase = (typeof __CLOUD_API_URL__ !== "undefined" && __CLOUD_API_URL__)
+            || process.env.CLOUD_API_URL
+            || "http://127.0.0.1:3000/api";
+        const targetUrl = `${cloudBase}/backup/upload`;
 
         const response = await fetch(targetUrl, {
             method: 'POST',
             body: form,
             headers: {
                 ...form.getHeaders(),
-                "x-backup-secret": process.env.BACKUP_SECRET_KEY || "R$i1999s$a"
+                "x-backup-secret": (typeof __BACKUP_SECRET_KEY__ !== "undefined" && __BACKUP_SECRET_KEY__)
+                    || process.env.BACKUP_SECRET_KEY || "R$i1999s$a"
             }
         });
 

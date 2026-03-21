@@ -1,6 +1,40 @@
+import { useState, useEffect } from "react";
 import { ShoppingCart, Eraser, AlertTriangle, TicketPercent, X, Gift, Banknote, CreditCard, Smartphone, Plus, Minus, Trash2 } from "lucide-react";
 import { formatIQD } from "./pos-utils";
 import type { CartItem, DrugInteraction, Patient } from "./pos-types";
+
+/**
+ * Controlled number input that allows intermediate empty/partial states while typing.
+ * A plain controlled <input type="number"> with strict validation rejects the empty
+ * string that appears when the user clears the field to retype, causing the input
+ * to feel "frozen". This component holds local display state and only propagates
+ * valid, committed values to the parent.
+ */
+function QuantityInput({ value, max, onChange }: { value: number; max: number; onChange: (v: number) => void }) {
+    const [display, setDisplay] = useState(String(value));
+
+    // Sync when the parent value changes externally (e.g. via +/- buttons)
+    useEffect(() => { setDisplay(String(value)); }, [value]);
+
+    return (
+        <input
+            type="number"
+            min="1"
+            max={max}
+            value={display}
+            onChange={(e) => {
+                setDisplay(e.target.value);
+                const val = parseInt(e.target.value, 10);
+                if (!isNaN(val) && val >= 1 && val <= max) onChange(val);
+            }}
+            onBlur={() => {
+                const val = parseInt(display, 10);
+                if (isNaN(val) || val < 1 || val > max) setDisplay(String(value));
+            }}
+            className="w-10 text-center font-black text-foreground text-sm tabular-nums bg-transparent outline-none border-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+    );
+}
 
 interface Props {
     cart: CartItem[];
@@ -146,16 +180,10 @@ export default function POSCart({
                                     >
                                         <Plus className="h-3.5 w-3.5" />
                                     </button>
-                                    <input
-                                        type="number" min="1" max={item.stock}
+                                    <QuantityInput
                                         value={item.quantity}
-                                        onChange={(e) => {
-                                            const val = parseInt(e.target.value);
-                                            if (!isNaN(val) && val > 0 && val <= item.stock) {
-                                                onSetItemQuantity(item.id, val);
-                                            }
-                                        }}
-                                        className="w-10 text-center font-black text-foreground text-sm tabular-nums bg-transparent outline-none border-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        max={item.stock}
+                                        onChange={(val) => onSetItemQuantity(item.id, val)}
                                     />
                                     <button
                                         onClick={() => onUpdateQuantity(item.id, -1)}

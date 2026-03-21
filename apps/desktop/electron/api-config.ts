@@ -1,3 +1,8 @@
+// These globals are replaced at build time by vite.config.ts define.
+// In dev mode they fall back to empty string → localCandidates are used.
+declare const __API_URL__: string;
+declare const __CLOUD_API_URL__: string;
+
 function normalizeApiBase(url: string): string {
   return url.replace(/\/+$/, "");
 }
@@ -7,29 +12,19 @@ function unique(values: string[]): string[] {
 }
 
 function computeApiCandidates(): string[] {
-  const envCandidates = [
-    process.env.VITE_API_URL,
-    process.env.VITE_CLOUD_API_URL,
-  ].filter(Boolean) as string[];
+  // __API_URL__ is baked in at build time (e.g. "https://app.faramace.com/api")
+  // In dev it is "" so we fall through to localCandidates.
+  const builtInUrl: string = typeof __API_URL__ !== "undefined" ? __API_URL__ : "";
 
-  const localCandidates = [
+  if (builtInUrl) {
+    return unique([builtInUrl]);
+  }
+
+  // Dev fallback
+  return unique([
     "http://127.0.0.1:3000/api",
     "http://localhost:3000/api",
-  ];
-
-  // If a URL is explicitly configured via env var, always use it (even in dev)
-  if (envCandidates.length > 0) {
-    return unique([...envCandidates]);
-  }
-
-  const isDev =
-    !!process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV !== "production";
-
-  if (isDev) {
-    return unique([...localCandidates]);
-  }
-
-  return unique([...localCandidates]);
+  ]);
 }
 
 const API_CANDIDATES = computeApiCandidates();
