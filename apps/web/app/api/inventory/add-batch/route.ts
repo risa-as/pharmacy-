@@ -82,7 +82,24 @@ export async function POST(req: Request) {
             }
 
             if (!inventory) {
-                throw new Error("Inventory record not found");
+                // Auto-create inventory if drug+branch is known (e.g. local-only records syncing up for the first time)
+                if (drugId && branchId) {
+                    const drug = await tx.globalDrug.findUnique({ where: { id: drugId }, select: { id: true } });
+                    if (!drug) throw new Error(`Drug not found: ${drugId}`);
+                    inventory = await tx.inventory.create({
+                        data: {
+                            drugId,
+                            branchId,
+                            price: Number(costPrice) || 0,
+                            cost: Number(costPrice) || 0,
+                            minStock: 0,
+                            maxStock: 1000,
+                        }
+                    });
+                    console.log(`[Add-Batch API] Auto-created inventory for drug=${drugId} branch=${branchId}`);
+                } else {
+                    throw new Error("Inventory record not found and insufficient data to create one");
+                }
             }
 
             // Auto-generate an 8-char alphanumeric batch number
