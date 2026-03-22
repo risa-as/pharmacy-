@@ -26,6 +26,10 @@
             "!node_modules/**/*.md",
             "!node_modules/**/*.map"
         ],
+        "asarUnpack": [
+            "node_modules/.prisma/**/*",
+            "node_modules/@prisma/client/query-engine*"
+        ],
         "extraResources": [
             {
                 "from": "prisma",

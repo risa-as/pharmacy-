@@ -114,6 +114,11 @@ export default function InventoryPage({ user }: { user: any }) {
     // Supplier for create-drug modal (batchData.supplierId is used for add-batch modal)
     const [createDrugSupplierId, setCreateDrugSupplierId] = useState("");
 
+    // Packet price calculator state (create-drug modal)
+    const [packetPrice, setPacketPrice] = useState<number>(0);
+    const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
+    const computedCostPrice = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+
     useEffect(() => {
         ipcInvoke('get-local-suppliers')
             .then((result: any) => { if (Array.isArray(result)) setSuppliers(result); })
@@ -401,12 +406,13 @@ export default function InventoryPage({ user }: { user: any }) {
         e.preventDefault();
         if (!showCreateDrugModal) return;
         const formData = new FormData(e.currentTarget);
+        const stripCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
         const data = {
             barcode: showCreateDrugModal,
             tradeName: formData.get('tradeName'),
             scientificName: formData.get('scientificName'),
             price: formData.get('price'),
-            costPrice: formData.get('costPrice'),
+            costPrice: stripCost,
             quantity: formData.get('quantity'),
             minStock: formData.get('minStock'),
             maxStock: formData.get('maxStock'),
@@ -420,7 +426,7 @@ export default function InventoryPage({ user }: { user: any }) {
                 await ipcInvoke('add-to-inventory-local', {
                     drugId: res.drug.id,
                     branchId: user.branchId,
-                    costPrice: formData.get('costPrice'),
+                    costPrice: stripCost,
                     price: formData.get('price'),
                     quantity: formData.get('quantity'),
                     minStock: formData.get('minStock'),
@@ -431,6 +437,8 @@ export default function InventoryPage({ user }: { user: any }) {
                 });
                 setShowCreateDrugModal(null);
                 setCreateDrugSupplierId("");
+                setPacketPrice(0);
+                setStripsPerPacket(1);
                 fetchInventory();
                 setUploadToast({ type: "success", message: "تم إضافة الدواء بنجاح ✓" });
             }
@@ -465,20 +473,40 @@ export default function InventoryPage({ user }: { user: any }) {
         const pending = Number(syncHealth?.pendingCount ?? pendingSyncCount ?? 0);
         const failed = Number(syncHealth?.failedCount ?? 0);
         const inProgress = Boolean(syncHealth?.inProgress);
+        const topErr = syncHealth?.topError ?? null;
+
+        // Classify error type to avoid showing scary messages for simple offline state
+        const isOfflineError = !!topErr && (
+            topErr.toLowerCase().includes('retries') ||
+            topErr.toLowerCase().includes('fetch') ||
+            topErr.toLowerCase().includes('network') ||
+            topErr.toLowerCase().includes('abort') ||
+            topErr.toLowerCase().includes('timeout')
+        );
+        const friendlyError = isOfflineError
+            ? 'الإنترنت غير متاح — سيُعاد المحاولة تلقائياً'
+            : topErr
+                ? 'سيُعاد المحاولة تلقائياً'
+                : null;
+
         const status = inProgress
             ? "جاري الرفع"
             : pending === 0
                 ? "مستقر"
-                : failed > 0
-                    ? "بحاجة متابعة"
-                    : "ينتظر المزامنة";
+                : isOfflineError
+                    ? "غير متصل"
+                    : failed > 0
+                        ? "بحاجة متابعة"
+                        : "ينتظر المزامنة";
         const statusClass = inProgress
             ? "bg-primary/10 text-primary border-primary/30"
             : pending === 0
                 ? "bg-success/10 text-success border-success/30"
-                : failed > 0
-                    ? "bg-warning/10 text-warning border-warning/30"
-                    : "bg-muted text-muted-foreground border-border";
+                : isOfflineError
+                    ? "bg-muted text-muted-foreground border-border"
+                    : failed > 0
+                        ? "bg-warning/10 text-warning border-warning/30"
+                        : "bg-muted text-muted-foreground border-border";
 
         return {
             pending,
@@ -488,7 +516,8 @@ export default function InventoryPage({ user }: { user: any }) {
             statusClass,
             oldestAge: formatDuration(syncHealth?.oldestPendingAgeSec),
             nextRetry: formatDuration(syncHealth?.nextRetryInSec),
-            topError: syncHealth?.topError || null,
+            topError: friendlyError,
+            isOffline: isOfflineError,
             autoRetryInterval: formatDuration(syncHealth?.autoRetryIntervalSec ?? null),
         };
     }, [syncHealth, pendingSyncCount]);
@@ -563,10 +592,12 @@ export default function InventoryPage({ user }: { user: any }) {
                 </div>
 
                 {syncHealthView.topError && (
-                    <div className="mb-4 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
-                        <p className="text-[10px] text-warning font-bold">آخر سبب فشل</p>
-                        <p className="text-xs text-foreground truncate font-semibold">{syncHealthView.topError}</p>
-                        <p className="text-[10px] text-warning/80 mt-1">التحديث التلقائي كل {syncHealthView.autoRetryInterval}</p>
+                    <div className={`mb-4 rounded-xl border px-3 py-2 flex items-center gap-2 ${syncHealthView.isOffline ? 'border-border/50 bg-muted/30' : 'border-warning/20 bg-warning/5'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${syncHealthView.isOffline ? 'bg-muted-foreground/40' : 'bg-warning/60'}`} />
+                        <p className={`text-xs truncate ${syncHealthView.isOffline ? 'text-muted-foreground' : 'text-foreground/70'}`}>
+                            {syncHealthView.topError}
+                            <span className="opacity-50 mr-1">· كل {syncHealthView.autoRetryInterval}</span>
+                        </p>
                     </div>
                 )}
 
@@ -1092,9 +1123,43 @@ export default function InventoryPage({ user }: { user: any }) {
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر الجمهور</label>
                                     <input type="number" step="0.01" name="price" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر التكلفة</label>
-                                    <input type="number" step="0.01" name="costPrice" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                {/* Packet price calculator */}
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">حساب سعر التكلفة من الباكيت</label>
+                                    <div className="grid grid-cols-2 gap-3 mb-2">
+                                        <div>
+                                            <label className="block text-[11px] text-muted-foreground mb-1">سعر الباكيت</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={packetPrice || ""}
+                                                onChange={e => setPacketPrice(parseFloat(e.target.value) || 0)}
+                                                placeholder="0"
+                                                className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={stripsPerPacket || ""}
+                                                onChange={e => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
+                                                placeholder="1"
+                                                className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5">
+                                        <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                                        <span className="text-sm font-bold text-primary tabular-nums mr-auto">
+                                            {packetPrice > 0 && stripsPerPacket > 0
+                                                ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCostPrice.toLocaleString('en', { maximumFractionDigits: 2 })}`
+                                                : '—'}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">الكمية الافتتاحية</label>
@@ -1168,7 +1233,7 @@ export default function InventoryPage({ user }: { user: any }) {
                                         <Save className="w-4 h-4" />
                                         حفظ وإضافة للمخزون
                                     </button>
-                                    <button type="button" onClick={() => setShowCreateDrugModal(null)} className="flex-1 bg-muted text-foreground py-3 rounded-xl font-bold hover:bg-muted/80 transition-all text-sm">إلغاء</button>
+                                    <button type="button" onClick={() => { setShowCreateDrugModal(null); setPacketPrice(0); setStripsPerPacket(1); }} className="flex-1 bg-muted text-foreground py-3 rounded-xl font-bold hover:bg-muted/80 transition-all text-sm">إلغاء</button>
                                 </div>
                             </form>
                         </div>

@@ -18,6 +18,9 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
     const [loading, setLoading] = useState(false);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [mounted, setMounted] = useState(false);
+    const [packetPrice, setPacketPrice] = useState<number>(0);
+    const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
+    const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
     const router = useRouter();
 
     useEffect(() => { setMounted(true); }, []);
@@ -45,7 +48,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                     origin: formData.get("origin"),
                     branchId: formData.get("branchId"),
                     price: parseFloat(formData.get("price") as string),
-                    cost: parseFloat(formData.get("cost") as string),
+                    cost: computedCost,
                     minStock: parseInt(formData.get("minStock") as string, 10),
                     maxStock: parseInt(formData.get("maxStock") as string, 10),
                     quantity: parseInt(formData.get("quantity") as string, 10),
@@ -151,7 +154,7 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 col-span-2">
-                            <div>
+                            <div className="col-span-2">
                                 <label className="block text-sm font-bold text-foreground mb-1">سعر البيع</label>
                                 <input
                                     type="number"
@@ -162,16 +165,44 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                                     className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-bold text-foreground mb-1">سعر الكلفة</label>
-                                <input
-                                    type="number"
-                                    name="cost"
-                                    required
-                                    min="0"
-                                    step="any"
-                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
-                                />
+                        </div>
+
+                        {/* Packet price calculator */}
+                        <div className="col-span-2">
+                            <label className="block text-sm font-bold text-foreground mb-2">سعر التكلفة (من الباكيت)</label>
+                            <div className="grid grid-cols-2 gap-3 mb-2">
+                                <div>
+                                    <label className="block text-xs text-muted-foreground mb-1">سعر الباكيت</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        value={packetPrice || ""}
+                                        onChange={e => setPacketPrice(parseFloat(e.target.value) || 0)}
+                                        placeholder="0"
+                                        className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        value={stripsPerPacket || ""}
+                                        onChange={e => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
+                                        placeholder="1"
+                                        className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
+                                <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                                <span className="text-sm font-bold text-primary mr-auto tabular-nums">
+                                    {packetPrice > 0
+                                        ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString('en', { maximumFractionDigits: 2 })}`
+                                        : '—'}
+                                </span>
                             </div>
                         </div>
 
