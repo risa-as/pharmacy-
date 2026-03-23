@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState } from "react-dom";
 import { createInventory } from "@/app/lib/actions/inventory";
 import Link from "next/link";
@@ -20,31 +21,38 @@ interface Drug {
 export default function CreateInventoryForm({ branches, drugs }: { branches: Branch[]; drugs: Drug[] }) {
     const initialState: any = { message: "", errors: {} };
     const [state, dispatch] = useFormState(createInventory, initialState);
+    const [packetPrice, setPacketPrice] = useState<number>(0);
+    const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
+    const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
 
     return (
         <form action={dispatch} className="space-y-6">
             {/* الفرع */}
-            <div>
-                <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-foreground">
-                    الفرع
-                </label>
-                <select
-                    id="branchId"
-                    name="branchId"
-                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-                    required
-                >
-                    <option value="">اختر الفرع</option>
-                    {branches.map((branch: any) => (
-                        <option key={branch.id} value={branch.id}>
-                            {branch.name}
-                        </option>
-                    ))}
-                </select>
-                {state.errors?.branchId && (
-                    <p className="mt-1 text-sm text-destructive">{state.errors.branchId}</p>
-                )}
-            </div>
+            {branches.length === 1 ? (
+                <input type="hidden" name="branchId" value={branches[0].id} />
+            ) : (
+                <div>
+                    <label htmlFor="branchId" className="mb-2 block text-sm font-bold text-foreground">
+                        الفرع
+                    </label>
+                    <select
+                        id="branchId"
+                        name="branchId"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                        required
+                    >
+                        <option value="">اختر الفرع</option>
+                        {branches.map((branch: any) => (
+                            <option key={branch.id} value={branch.id}>
+                                {branch.name}
+                            </option>
+                        ))}
+                    </select>
+                    {state.errors?.branchId && (
+                        <p className="mt-1 text-sm text-destructive">{state.errors.branchId}</p>
+                    )}
+                </div>
+            )}
 
             {/* الدواء */}
             <div>
@@ -70,35 +78,61 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
             </div>
 
             {/* السعر والتكلفة */}
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label htmlFor="price" className="mb-2 block text-sm font-bold text-foreground">
-                        سعر البيع
-                    </label>
-                    <input
-                        type="number"
-                        id="price"
-                        name="price"
-                        step="0.01"
-                        min="0"
-                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-                        required
-                    />
+            <div>
+                <label htmlFor="price" className="mb-2 block text-sm font-bold text-foreground">
+                    سعر البيع
+                </label>
+                <input
+                    type="number"
+                    id="price"
+                    name="price"
+                    step="0.01"
+                    min="0"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                    required
+                />
+            </div>
+
+            {/* حاسبة سعر التكلفة من الباكيت */}
+            <div>
+                <label className="mb-2 block text-sm font-bold text-foreground">
+                    سعر التكلفة (من الباكيت)
+                </label>
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                    <div>
+                        <label className="block text-xs text-muted-foreground mb-1">سعر الباكيت</label>
+                        <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={packetPrice || ""}
+                            onChange={e => setPacketPrice(parseFloat(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
+                        <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={stripsPerPacket || ""}
+                            onChange={e => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
+                            placeholder="1"
+                            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                        />
+                    </div>
                 </div>
-                <div>
-                    <label htmlFor="cost" className="mb-2 block text-sm font-bold text-foreground">
-                        سعر الشراء
-                    </label>
-                    <input
-                        type="number"
-                        id="cost"
-                        name="cost"
-                        step="0.01"
-                        min="0"
-                        className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-                        required
-                    />
+                <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5 mb-1">
+                    <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                    <span className="text-sm font-bold text-primary mr-auto tabular-nums">
+                        {packetPrice > 0
+                            ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString('en', { maximumFractionDigits: 2 })}`
+                            : '—'}
+                    </span>
                 </div>
+                <input type="hidden" name="cost" value={computedCost} />
             </div>
 
             {/* الحد الأدنى والأقصى */}

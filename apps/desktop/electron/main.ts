@@ -1189,9 +1189,10 @@ app.whenReady().then(async () => {
       }
     } catch (error) {
       console.error("Login error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„",
+        error: `خطأ: ${msg}`,
       };
     }
   });

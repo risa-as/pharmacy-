@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
-import { Plus, Users, Mail, Phone, MapPin, FileText } from "lucide-react";
+import { Plus, Users, Mail, Phone, MapPin, FileText, ShoppingCart, AlertTriangle } from "lucide-react";
 import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -37,8 +37,30 @@ export default async function Page() {
         // Do NOT fall back to unscoped query — return empty list instead
     }
 
+    // تنبيه الديون الكبيرة
+    const debtAlerts = suppliers.filter((s: any) => s.computedBalance > 0);
+    const totalDebt = debtAlerts.reduce((sum: number, s: any) => sum + s.computedBalance, 0);
+
     return (
         <div className="glass-card w-full p-6">
+            {/* تنبيه الديون */}
+            {debtAlerts.length > 0 && (
+                <div className="mb-6 flex items-start gap-3 rounded-xl bg-warning/10 border border-warning/30 px-5 py-4">
+                    <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                    <div>
+                        <p className="font-bold text-foreground text-sm">
+                            يوجد {debtAlerts.length} {debtAlerts.length === 1 ? 'مورد' : 'موردين'} بمبالغ مستحقة
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                            إجمالي المستحقات:{' '}
+                            <span className="font-bold text-warning" dir="ltr">
+                                {totalDebt.toLocaleString('en')} د.ع
+                            </span>
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="flex w-full items-center justify-between mb-8">
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
                     <Users className="w-7 h-7 text-primary" />
@@ -142,6 +164,13 @@ export default async function Page() {
                                                     title="كشف حساب"
                                                 >
                                                     <FileText className="w-4 h-4 text-primary" />
+                                                </Link>
+                                                <Link
+                                                    href={`/dashboard/suppliers/${supplier.id}/purchases`}
+                                                    className="rounded-lg border border-border p-2 hover:bg-success/10 hover:border-success transition-colors"
+                                                    title="فواتير الشراء"
+                                                >
+                                                    <ShoppingCart className="w-4 h-4 text-success" />
                                                 </Link>
                                                 <UpdateSupplier id={supplier.id} />
                                                 <DeleteSupplier id={supplier.id} />

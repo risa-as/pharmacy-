@@ -657,7 +657,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                     </Link>
 
                     {/* Expiring */}
-                    <Link href="/dashboard/inventory/batches"
+                    <Link href="/dashboard/batches"
                         className={`rounded-xl border p-4 flex items-center gap-3 hover:shadow-md transition-all ${d.expiringCount > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-card'}`}>
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${d.expiringCount > 0 ? 'bg-destructive/10' : 'bg-muted'}`}>
                             <CalendarX className={`w-5 h-5 ${d.expiringCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
@@ -906,7 +906,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                         </Link>
                     )}
                     {d.expiringCount > 0 && (
-                        <Link href="/dashboard/inventory/batches"
+                        <Link href="/dashboard/batches"
                             className="flex items-center gap-3 bg-destructive/5 border border-destructive/30 rounded-xl p-4 hover:shadow-md transition-shadow">
                             <div className="w-10 h-10 bg-destructive/10 rounded-xl flex items-center justify-center shrink-0">
                                 <CalendarX className="w-5 h-5 text-destructive" />

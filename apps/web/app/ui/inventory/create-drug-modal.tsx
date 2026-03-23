@@ -134,24 +134,26 @@ export default function CreateDrugModal({ initialBarcode, branches, onClose }: C
                             />
                         </div>
 
-                        <div className="col-span-2">
-                            <label className="block text-sm font-bold text-foreground mb-1">الفرع</label>
-                            <select
-                                name="branchId"
-                                required
-                                defaultValue=""
-                                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
-                            >
-                                <option value="" disabled>
-                                    اختر الفرع...
-                                </option>
-                                {branches.map((branch: any) => (
-                                    <option key={branch.id} value={branch.id}>
-                                        {branch.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                        {branches.length === 1 ? (
+                            <input type="hidden" name="branchId" value={branches[0].id} />
+                        ) : (
+                            <div className="col-span-2">
+                                <label className="block text-sm font-bold text-foreground mb-1">الفرع</label>
+                                <select
+                                    name="branchId"
+                                    required
+                                    defaultValue=""
+                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
+                                >
+                                    <option value="" disabled>اختر الفرع...</option>
+                                    {branches.map((branch: any) => (
+                                        <option key={branch.id} value={branch.id}>
+                                            {branch.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-4 col-span-2">
                             <div className="col-span-2">
