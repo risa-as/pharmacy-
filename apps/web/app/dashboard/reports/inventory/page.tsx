@@ -43,7 +43,8 @@ export default async function InventoryReportPage({
     const lowStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity <= i.minStock).length;
     const outOfStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity === 0).length;
     const healthyStock = inventoryWithQuantity.filter((i: any) => i.currentQuantity > i.minStock).length;
-    const totalValue = inventoryWithQuantity.reduce((acc: any, item: any) => acc + (item.currentQuantity * item.price), 0);
+    const totalSaleValue = inventoryWithQuantity.reduce((acc: any, item: any) => acc + (item.currentQuantity * item.price), 0);
+    const totalCostValue = inventoryWithQuantity.reduce((acc: any, item: any) => acc + (item.currentQuantity * item.cost), 0);
 
     // Check for expiring batches
     const thirtyDaysFromNow = new Date();
@@ -67,13 +68,15 @@ export default async function InventoryReportPage({
                 </div>
                 <ExportExcelButton
                     filename="inventory-report"
-                    headers={["الصنف", "الفرع", "الكمية", "حد الأمان", "السعر", "الحالة"]}
+                    headers={["الصنف", "الفرع", "الكمية", "الحد الأدنى", "الحد الأقصى", "سعر البيع", "سعر الشراء", "الحالة"]}
                     data={inventoryWithQuantity.map((item: any) => [
                         item.drug.tradeName,
-                        item.branch.name,
+                        item.branch?.name ?? "—",
                         item.currentQuantity,
                         item.minStock,
-                        item.price.toFixed(2),
+                        item.maxStock,
+                        (item.price ?? 0).toFixed(2),
+                        (item.cost ?? 0).toFixed(2),
                         item.currentQuantity === 0 ? "نفاد" : item.currentQuantity <= item.minStock ? "منخفض" : "جيد",
                     ])}
                 />
@@ -85,26 +88,30 @@ export default async function InventoryReportPage({
             </div>
 
             {/* إحصائيات */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
                 <div className="bg-card rounded-xl border border-border p-4">
-                    <div className="text-3xl font-bold text-foreground">{totalItems}</div>
-                    <div className="text-sm text-muted-foreground">إجمالي الأصناف</div>
+                    <div className="text-xl font-bold text-foreground">{totalItems}</div>
+                    <div className="text-xs text-muted-foreground">إجمالي الأصناف</div>
                 </div>
                 <div className="bg-success/10 rounded-xl border border-green-200 p-4">
-                    <div className="text-3xl font-bold text-success">{healthyStock}</div>
-                    <div className="text-sm text-success">مخزون جيد</div>
+                    <div className="text-xl font-bold text-success">{healthyStock}</div>
+                    <div className="text-xs text-success">مخزون جيد</div>
                 </div>
                 <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
-                    <div className="text-3xl font-bold text-warning">{lowStock}</div>
-                    <div className="text-sm text-warning">مخزون منخفض</div>
+                    <div className="text-xl font-bold text-warning">{lowStock}</div>
+                    <div className="text-xs text-warning">مخزون منخفض</div>
                 </div>
                 <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
-                    <div className="text-3xl font-bold text-destructive">{outOfStock}</div>
-                    <div className="text-sm text-destructive">نفاد المخزون</div>
+                    <div className="text-xl font-bold text-destructive">{outOfStock}</div>
+                    <div className="text-xs text-destructive">نفاد المخزون</div>
                 </div>
                 <div className="bg-primary/10 rounded-xl border border-primary p-4">
-                    <div className="text-3xl font-bold text-primary">{totalValue.toLocaleString()}</div>
-                    <div className="text-sm text-primary">قيمة المخزون</div>
+                    <div className="text-lg font-bold text-primary tabular-nums">{totalSaleValue.toLocaleString()}</div>
+                    <div className="text-xs text-primary">قيمة المخزون (بيع)</div>
+                </div>
+                <div className="bg-purple-500/10 rounded-xl border border-purple-400/40 p-4">
+                    <div className="text-lg font-bold text-purple-600 tabular-nums">{totalCostValue.toLocaleString()}</div>
+                    <div className="text-xs text-purple-600">قيمة المخزون (شراء)</div>
                 </div>
             </div>
 
@@ -152,8 +159,10 @@ export default async function InventoryReportPage({
                                 <th className="px-4 py-3 text-right font-bold">الصنف</th>
                                 <th className="px-4 py-3 text-right font-bold">الفرع</th>
                                 <th className="px-4 py-3 text-right font-bold">الكمية</th>
-                                <th className="px-4 py-3 text-right font-bold">حد الأمان (Min)</th>
-                                <th className="px-4 py-3 text-right font-bold">السعر</th>
+                                <th className="px-4 py-3 text-right font-bold">الحد الأدنى</th>
+                                <th className="px-4 py-3 text-right font-bold">الحد الأقصى</th>
+                                <th className="px-4 py-3 text-right font-bold">سعر البيع</th>
+                                <th className="px-4 py-3 text-right font-bold">سعر الشراء</th>
                                 <th className="px-4 py-3 text-right font-bold">الحالة</th>
                             </tr>
                         </thead>
@@ -172,7 +181,9 @@ export default async function InventoryReportPage({
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">{item.minStock}</td>
-                                        <td className="px-4 py-3 text-muted-foreground">{item.price.toFixed(2)}</td>
+                                        <td className="px-4 py-3 text-muted-foreground">{item.maxStock}</td>
+                                        <td className="px-4 py-3 text-muted-foreground">{(item.price ?? 0).toFixed(2)}</td>
+                                        <td className="px-4 py-3 text-muted-foreground">{(item.cost ?? 0).toFixed(2)}</td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${isOut ? "bg-destructive/10 text-destructive" :
                                                 isLow ? "bg-warning/20 text-warning" :

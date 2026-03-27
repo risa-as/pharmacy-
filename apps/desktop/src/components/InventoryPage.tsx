@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Save, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, ChevronDown, Zap } from "lucide-react";
 import SyncHealthDashboard from "./SyncHealthDashboard";
+import SyncFailuresPanel from "./SyncFailuresPanel";
 
 function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
     return Promise.race([
@@ -71,6 +72,7 @@ export default function InventoryPage({ user }: { user: any }) {
     const [stockFilter, setStockFilter] = useState<StockFilter>('all');
     const barcodeInputRef = useRef<HTMLInputElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const syncingRef = useRef(false); // guard: prevent overlapping sync button clicks
 
     // Quick-Sale Toggle State
     const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>({});
@@ -89,6 +91,10 @@ export default function InventoryPage({ user }: { user: any }) {
             setTogglingQuickSale(null);
         }
     };
+
+    const [dlqCount, setDlqCount] = useState(0);
+    const [showDLQ, setShowDLQ] = useState(false);
+    const [syncDebugLog, setSyncDebugLog] = useState<string | null>(null);
 
     // Modal States
     const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
@@ -247,10 +253,13 @@ export default function InventoryPage({ user }: { user: any }) {
         if (window.ipcRenderer) {
             setLoading(true);
             try {
+                // Use direct invoke (no 12s timeout wrapper) — these are local
+                // SQLite queries that should be fast, and the timeout was causing
+                // silent failures when called after sync completion.
                 const [data, pending, health] = await Promise.all([
-                    ipcInvoke('get-inventory-items', { searchTerm: "", user }),
-                    ipcInvoke('get-pending-sync-count'),
-                    ipcInvoke('get-sync-health')
+                    window.ipcRenderer.invoke('get-inventory-items', { searchTerm: "", user }),
+                    window.ipcRenderer.invoke('get-pending-sync-count'),
+                    window.ipcRenderer.invoke('get-sync-health')
                 ]);
                 setItems(data);
                 if (Array.isArray(data)) {
@@ -290,30 +299,56 @@ export default function InventoryPage({ user }: { user: any }) {
         }
     };
 
-    const handleSync = async () => {
-        if (window.ipcRenderer) {
-            setLoading(true);
-            try {
-                const res = await ipcInvoke('sync-inventory');
-                if (res.success) {
-                    await fetchInventory();
-                    setUploadToast({ type: "success", message: "تمت المزامنة بنجاح ✓" });
-                } else {
-                    const errorMsg = res.error || "";
-                    if (errorMsg.includes("database") || errorMsg.includes("Neon")) {
-                        setUploadToast({ type: "error", message: "السيرفر مضغوط حالياً. يرجى المحاولة لاحقاً." });
-                    } else if (errorMsg.includes("fetch") || errorMsg.includes("network")) {
-                        setUploadToast({ type: "error", message: "خطأ في الاتصال بالانترنت." });
-                    } else {
-                        setUploadToast({ type: "error", message: "فشلت المزامنة: " + (res.error || "خطأ غير معروف") });
-                    }
+    const handleSync = () => {
+        if (!window.ipcRenderer || syncingRef.current) return;
+        syncingRef.current = true;
+        setLoading(true);
+
+        // Listen for the async completion signal BEFORE invoking.
+        // The event now carries result data so we can show accurate toasts.
+        window.ipcRenderer.once('sync-inventory-done', (result: any) => {
+            syncingRef.current = false;
+            clearTimeout(safetyTimer);
+
+            // Always refresh UI from local DB after sync
+            fetchInventory().finally(() => setLoading(false));
+
+            // Show toast based on actual results
+            if (result?.success) {
+                const pullCount = result?.pull?.count ?? '?';
+                setUploadToast({ type: "success", message: `تمت المزامنة بنجاح ✓ (${pullCount} منتج)` });
+            } else {
+                const pullReason = result?.pull?.reason || '';
+                const pushErr = result?.push?.error || '';
+                let msg = "فشلت المزامنة";
+                if (pullReason === 'offline' || pushErr.includes('offline')) {
+                    msg = "تعذر الاتصال بالسيرفر";
+                } else if (pullReason === 'no_branch_id') {
+                    msg = "لم يتم تحديد الفرع";
+                } else if (pullReason === 'lock_timeout') {
+                    msg = "المزامنة مشغولة، حاول مرة أخرى";
+                } else if (pullReason) {
+                    // Show enough of the error to be useful for diagnosis
+                    msg = `فشلت المزامنة: ${pullReason.substring(0, 200)}`;
                 }
-            } catch (error) {
-                setUploadToast({ type: "error", message: "تعذر الاتصال بالسيرفر." });
-            } finally {
-                setLoading(false);
+                setUploadToast({ type: "error", message: msg });
             }
-        }
+        });
+
+        // Safety: release the spinner after 3 minutes if the done event never fires
+        const safetyTimer = setTimeout(() => {
+            syncingRef.current = false;
+            setLoading(false);
+        }, 3 * 60_000);
+
+        // Fire the IPC — returns immediately (sync runs in background)
+        window.ipcRenderer.invoke('sync-inventory')
+            .catch(() => {
+                clearTimeout(safetyTimer);
+                syncingRef.current = false;
+                setLoading(false);
+                setUploadToast({ type: "error", message: "تعذر الاتصال بالسيرفر." });
+            });
     };
 
     useEffect(() => {
@@ -330,7 +365,9 @@ export default function InventoryPage({ user }: { user: any }) {
 
     useEffect(() => {
         if (!uploadToast) return;
-        const timer = setTimeout(() => setUploadToast(null), 3200);
+        // Error toasts stay longer so the user can read the message
+        const duration = uploadToast.type === 'error' ? 10_000 : 3200;
+        const timer = setTimeout(() => setUploadToast(null), duration);
         return () => clearTimeout(timer);
     }, [uploadToast]);
 
@@ -351,6 +388,20 @@ export default function InventoryPage({ user }: { user: any }) {
         };
         window.ipcRenderer.on('sync-health-updated', onSyncHealthUpdated as any);
         return () => { window.ipcRenderer.off('sync-health-updated', onSyncHealthUpdated as any); };
+    }, []);
+
+    // Track DLQ (failed sync) count
+    useEffect(() => {
+        const refreshDlq = async () => {
+            try {
+                const n = await ipcInvoke<number>('get-sync-failures-count');
+                setDlqCount(typeof n === 'number' ? n : 0);
+            } catch { /* ignore */ }
+        };
+        refreshDlq();
+        const onFailure = () => refreshDlq();
+        window.ipcRenderer.on('sync-failure-recorded', onFailure as any);
+        return () => { window.ipcRenderer.off('sync-failure-recorded', onFailure as any); };
     }, []);
 
     const handleDelete = async () => {
@@ -544,6 +595,18 @@ export default function InventoryPage({ user }: { user: any }) {
 
                     <div className="flex gap-2 mt-4 items-center">
                         <SyncHealthDashboard />
+                        {dlqCount > 0 && (
+                            <button
+                                onClick={() => setShowDLQ(true)}
+                                className="flex items-center gap-2 bg-warning/10 border border-warning/30 text-warning hover:bg-warning/20 px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
+                            >
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>تعديلات فاشلة</span>
+                                <span className="min-w-5 h-5 px-1.5 rounded-full bg-warning text-warning-foreground text-[10px] flex items-center justify-center font-black">
+                                    {dlqCount}
+                                </span>
+                            </button>
+                        )}
                         {pendingSyncCount > 0 && (
                             <button
                                 onClick={handleUploadPending}
@@ -590,6 +653,28 @@ export default function InventoryPage({ user }: { user: any }) {
                         <p className="text-sm font-black text-foreground">{syncHealthView.nextRetry}</p>
                     </div>
                 </div>
+                {/* Debug log viewer */}
+                <button
+                    onClick={async () => {
+                        try {
+                            const log = await window.ipcRenderer.invoke('get-sync-debug-log');
+                            setSyncDebugLog(log);
+                        } catch { setSyncDebugLog('(error reading log)'); }
+                    }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground underline mb-2"
+                >
+                    عرض سجل المزامنة
+                </button>
+                {syncDebugLog !== null && (
+                    <div className="mb-4 p-3 bg-muted rounded-xl border border-border relative">
+                        <button onClick={() => setSyncDebugLog(null)} className="absolute top-2 left-2 text-muted-foreground hover:text-foreground">
+                            <X className="w-4 h-4" />
+                        </button>
+                        <pre className="text-[10px] font-mono text-foreground whitespace-pre-wrap max-h-48 overflow-y-auto" dir="ltr">
+                            {syncDebugLog}
+                        </pre>
+                    </div>
+                )}
 
                 {syncHealthView.topError && (
                     <div className={`mb-4 rounded-xl border px-3 py-2 flex items-center gap-2 ${syncHealthView.isOffline ? 'border-border/50 bg-muted/30' : 'border-warning/20 bg-warning/5'}`}>
@@ -950,6 +1035,11 @@ export default function InventoryPage({ user }: { user: any }) {
                     </div>
                 )
             }
+
+            {/* ======= DLQ PANEL ======= */}
+            {showDLQ && (
+                <SyncFailuresPanel onClose={() => { setShowDLQ(false); ipcInvoke<number>('get-sync-failures-count').then(n => setDlqCount(typeof n === 'number' ? n : 0)).catch(() => {}); }} />
+            )}
 
             {/* ======= DELETE MODAL ======= */}
             {

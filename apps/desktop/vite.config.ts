@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
                         },
                         build: {
                             rollupOptions: {
-                                external: ['node-fetch', '@prisma/client', '.prisma/client', 'electron-store'],
+                                external: ['node-fetch', '@prisma/client', '.prisma/client', 'electron-store', /\.prisma[\\/]desktop-client/],
                             },
                         },
                     },

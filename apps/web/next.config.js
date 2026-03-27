@@ -2,6 +2,9 @@
 const nextConfig = {
     transpilePackages: ["@faramace/ui"],
 
+    // ── Standalone build (portable, no node_modules needed on target machine)
+    output: 'standalone',
+
     // ── Performance ─────────────────────────────────────────────────────────
     compress: true,           // gzip / brotli for all responses
     poweredByHeader: false,   // remove X-Powered-By (saves bytes + security)

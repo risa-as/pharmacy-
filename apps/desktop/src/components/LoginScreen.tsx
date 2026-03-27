@@ -5,7 +5,7 @@ function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
     return Promise.race([
         window.ipcRenderer.invoke(channel, ...args) as Promise<T>,
         new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error(`IPC timeout (${channel})`)), 12000)
+            setTimeout(() => reject(new Error(`IPC timeout (${channel})`)), 25000)
         ),
     ]);
 }
@@ -43,7 +43,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                 setError(result.error || 'البريد الإلكتروني أو كلمة المرور غير صحيحة');
             }
         } catch (err) {
-            setError('حدث خطأ في الاتصال بالنظام');
+            const msg = err instanceof Error ? err.message : String(err);
+            setError(`خطأ: ${msg}`);
             console.error(err);
         } finally {
             setIsLoading(false);

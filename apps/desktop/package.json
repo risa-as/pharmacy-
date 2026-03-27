@@ -4,7 +4,7 @@
     "main": "dist-electron/main.js",
     "scripts": {
         "dev": "vite",
-        "build": "tsc && vite build && electron-builder",
+        "build": "prisma generate && tsc && vite build && electron-builder",
         "preview": "vite preview",
         "lint": "eslint .",
         "prisma:seed-interactions": "node prisma/seed-interactions.js"
@@ -37,6 +37,13 @@
                 "filter": [
                     "**/*"
                 ]
+            },
+            {
+                "from": "node_modules/.prisma/desktop-client",
+                "to": "app.asar.unpacked/node_modules/.prisma/desktop-client",
+                "filter": [
+                    "query_engine-windows.dll.node"
+                ]
             }
         ],
         "win": {
@@ -61,7 +68,8 @@
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
             "createStartMenuShortcut": true,
-            "shortcutName": "Faramace POS"
+            "shortcutName": "Faramace POS",
+            "include": "build/installer.nsh"
         },
         "portable": {
             "splashImage": null

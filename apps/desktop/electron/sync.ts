@@ -1,9 +1,18 @@
 import { prisma } from './db';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, app } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import store from './store';
 import { buildApiUrl, getApiCandidates, setApiBaseUrl } from './api-config';
 import { storeOfflineToken } from './offline-token';
+
+// Debug log file — written to userData so the user can share it for troubleshooting.
+const SYNC_LOG_PATH = path.join(app.getPath('userData'), 'sync-debug.log');
+function syncLog(msg: string) {
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    try { fs.appendFileSync(SYNC_LOG_PATH, line); } catch { /* ignore */ }
+}
 
 class SyncClientError extends Error {
     constructor(message: string, public status: number, public payload?: any) {
@@ -966,15 +975,44 @@ export async function syncSuppliers() {
     }
 }
 
-export async function syncProducts() {
+export type SyncProductsResult = {
+    success: boolean;
+    reason?: string;
+    count?: number;
+};
+
+export async function syncProducts(): Promise<SyncProductsResult> {
     const taskName = "products";
-    if (!beginSyncTask(taskName)) return;
+
+    // If another syncProducts is already running, wait for it to finish
+    // (up to 60s) instead of silently returning.  This is critical for
+    // the manual-sync button so it doesn't skip the pull.
+    if (!beginSyncTask(taskName)) {
+        console.log('[Sync] syncProducts lock held — waiting for current run to finish…');
+        const waitStart = Date.now();
+        const WAIT_LIMIT_MS = 60_000;
+        while (runningSyncTasks.has(taskName)) {
+            if (Date.now() - waitStart > WAIT_LIMIT_MS) {
+                console.warn('[Sync] syncProducts wait timed out after 60 s');
+                return { success: false, reason: 'lock_timeout' };
+            }
+            await new Promise(r => setTimeout(r, 500));
+        }
+        // Lock released — acquire it ourselves
+        if (!beginSyncTask(taskName)) {
+            return { success: false, reason: 'lock_contention' };
+        }
+    }
 
     try {
-        if (!await checkConnection()) return;
+        if (!await checkConnection()) {
+            return { success: false, reason: 'offline' };
+        }
 
-        const branchId = getBranchId();
-        if (!branchId) return;
+        const branchId = String(getBranchId() || '').trim();
+        if (!branchId) {
+            return { success: false, reason: 'no_branch_id' };
+        }
 
         console.log(`[Sync] Starting product snapshot sync for branch: ${branchId}`);
 
@@ -1012,7 +1050,7 @@ export async function syncProducts() {
         // This protects against transient server errors returning an empty snapshot.
         if (drugs.length === 0) {
             console.log('[Sync] Cloud returned 0 products — skipping local inventory deletion to prevent data loss.');
-            return;
+            return { success: true, reason: 'empty_cloud', count: 0 };
         }
 
         const fetchedDrugIds: string[] = [];
@@ -1020,9 +1058,18 @@ export async function syncProducts() {
         const hasCompleteInventoryIds =
             drugs.every((drug) => String(drug?.inventoryId || '').trim().length > 0);
 
+        // Use generous timeout — large inventories (hundreds of drugs+batches)
+        // can exceed Prisma's 5s default.
         await prisma.$transaction(async (tx) => {
             for (const drug of drugs) {
                 if (!drug?.id) continue;
+              try {
+                // Guard against null/undefined on required String fields —
+                // Prisma rejects null for non-optional columns (Invalid invocation).
+                const safeBarcode = String(drug.barcode ?? `NOBARCODE_${drug.id}`);
+                const safeTradeName = String(drug.tradeName ?? 'Unknown');
+                const safeScientificName = String(drug.scientificName ?? '');
+
                 const cloudInventoryId = String(drug.inventoryId || '').trim();
                 fetchedDrugIds.push(drug.id);
                 if (cloudInventoryId) {
@@ -1031,13 +1078,13 @@ export async function syncProducts() {
 
                 const collision = await tx.globalDrug.findFirst({
                     where: {
-                        barcode: drug.barcode,
+                        barcode: safeBarcode,
                         id: { not: drug.id }
                     }
                 });
 
                 if (collision) {
-                    console.log(`[Sync] Barcode collision '${drug.barcode}'. Replacing local ID ${collision.id} with cloud ID ${drug.id}.`);
+                    console.log(`[Sync] Barcode collision '${safeBarcode}'. Replacing local ID ${collision.id} with cloud ID ${drug.id}.`);
                     const collisionInventories = await tx.inventory.findMany({
                         where: { drugId: collision.id },
                         select: { id: true }
@@ -1051,8 +1098,6 @@ export async function syncProducts() {
                             where: { id: { in: collisionInventoryIds } }
                         });
                     }
-                    // Cannot delete: collision drug may have FK references from SaleItems, DrugInteractions, etc.
-                    // Instead, neutralise the barcode so the upsert below can claim it.
                     await tx.globalDrug.update({
                         where: { id: collision.id },
                         data: { barcode: `__REPLACED_${collision.id}`, isActive: false }
@@ -1062,18 +1107,18 @@ export async function syncProducts() {
                 await tx.globalDrug.upsert({
                     where: { id: drug.id },
                     update: {
-                        barcode: drug.barcode,
-                        tradeName: drug.tradeName,
-                        scientificName: drug.scientificName,
+                        barcode: safeBarcode,
+                        tradeName: safeTradeName,
+                        scientificName: safeScientificName,
                         price: Number(drug.price || 0),
                         isActive: true,
                         isQuickSale: drug.isQuickSale ?? false,
                     },
                     create: {
                         id: drug.id,
-                        barcode: drug.barcode,
-                        tradeName: drug.tradeName,
-                        scientificName: drug.scientificName,
+                        barcode: safeBarcode,
+                        tradeName: safeTradeName,
+                        scientificName: safeScientificName,
                         price: Number(drug.price || 0),
                         isActive: true,
                         isQuickSale: drug.isQuickSale ?? false,
@@ -1094,36 +1139,59 @@ export async function syncProducts() {
                                 : 0
                 );
 
-                const inventoryPayload = {
-                    quantity: Number(drug.stock || 0),
-                    branchId,
-                    costPrice: cloudCost,
-                    minStock: Number(drug.minStock || 10),
-                    maxStock: Number(drug.maxStock || 100)
+                // Prefer the record whose ID matches the cloud ID; fall back to first local record.
+                // This prevents creating duplicate inventory records when IDs diverge
+                // (e.g. item created on desktop then re-created on web with a different UUID).
+                const existingByCloudId = branchInventories.find((row) => row.id === cloudInventoryId);
+                const existingInventory = existingByCloudId || branchInventories[0] || null;
+
+                // If the local record has unsaved edits (syncPending=true), the user has
+                // changed costPrice/minStock/maxStock on desktop but those changes haven't
+                // reached the cloud yet. Overwriting them here would destroy the pending edit.
+                // Only sync those fields from cloud once the push succeeds (syncPending=false).
+                const hasPendingLocalEdits = !!existingInventory?.syncPending;
+
+                // Remove orphan duplicates created by previous buggy syncs
+                if (branchInventories.length > 1 && existingInventory) {
+                    const orphanIds = branchInventories
+                        .map((r) => r.id)
+                        .filter((id) => id !== existingInventory.id);
+                    await tx.batch.deleteMany({ where: { inventoryId: { in: orphanIds } } });
+                    await tx.inventory.deleteMany({ where: { id: { in: orphanIds } } });
+                }
+
+                const safeCost = isNaN(cloudCost) ? 0 : cloudCost;
+                const safeMinStock = drug.minStock != null ? Math.round(Number(drug.minStock)) : 10;
+                const safeMaxStock = drug.maxStock != null ? Math.round(Number(drug.maxStock)) : 100;
+                const safeQuantity = Math.round(Number(drug.stock || 0));
+
+                const cloudEditableFields = {
+                    costPrice: safeCost,
+                    minStock: isNaN(safeMinStock) ? 10 : safeMinStock,
+                    maxStock: isNaN(safeMaxStock) ? 100 : safeMaxStock,
                 };
 
-                let targetInventoryId = cloudInventoryId || branchInventories[0]?.id || '';
-                if (targetInventoryId) {
-                    const existingById = branchInventories.find((row) => row.id === targetInventoryId);
-                    if (existingById) {
-                        await tx.inventory.update({
-                            where: { id: existingById.id },
-                            data: inventoryPayload
-                        });
-                    } else {
-                        await tx.inventory.create({
-                            data: {
-                                id: targetInventoryId,
-                                drugId: drug.id,
-                                ...inventoryPayload
-                            }
-                        });
-                    }
+                let targetInventoryId: string;
+                if (existingInventory) {
+                    await tx.inventory.update({
+                        where: { id: existingInventory.id },
+                        data: {
+                            quantity: isNaN(safeQuantity) ? 0 : safeQuantity,
+                            branchId,
+                            // Skip editable fields if local has unsaved changes (syncPending=true)
+                            ...(hasPendingLocalEdits ? {} : cloudEditableFields),
+                        }
+                    });
+                    targetInventoryId = existingInventory.id;
                 } else {
+                    // New record: always use full cloud payload (no local edits exist yet)
                     const newInv = await tx.inventory.create({
                         data: {
+                            id: cloudInventoryId || undefined,
                             drugId: drug.id,
-                            ...inventoryPayload
+                            quantity: isNaN(safeQuantity) ? 0 : safeQuantity,
+                            branchId,
+                            ...cloudEditableFields,
                         }
                     });
                     targetInventoryId = newInv.id;
@@ -1131,23 +1199,31 @@ export async function syncProducts() {
 
                 // Sync Batches
                 if (drug.batches && Array.isArray(drug.batches) && targetInventoryId) {
+                    // Filter out batches with missing IDs — Prisma requires a
+                    // non-null primary key for upsert's `where` clause.
+                    const validBatches = drug.batches.filter(b => b && typeof b.id === 'string' && b.id.trim().length > 0);
+
                     const existingBatches = await tx.batch.findMany({
                         where: { inventoryId: targetInventoryId }, select: { id: true }
                     });
 
-                    const cloudBatchIds = drug.batches.map(b => b.id);
+                    const cloudBatchIds = validBatches.map(b => b.id);
                     const staleBatchIds = existingBatches.map(b => b.id).filter(id => !cloudBatchIds.includes(id));
 
                     if (staleBatchIds.length > 0) {
                         await tx.batch.deleteMany({ where: { id: { in: staleBatchIds } } });
                     }
 
-                    for (const b of drug.batches) {
+                    for (const b of validBatches) {
+                        // Guard against invalid dates — use epoch fallback
+                        const parsedDate = new Date(b.expiryDate);
+                        const safeExpiryDate = isNaN(parsedDate.getTime()) ? new Date(0) : parsedDate;
+
                         const batchPayload = {
                             inventoryId: targetInventoryId,
                             batchNumber: String(b.batchNumber || ''),
-                            quantity: Number(b.quantity || 0),
-                            expiryDate: new Date(b.expiryDate),
+                            quantity: Math.round(Number(b.quantity || 0)),
+                            expiryDate: safeExpiryDate,
                             costPrice: Number(b.costPrice || 0)
                         };
 
@@ -1174,6 +1250,10 @@ export async function syncProducts() {
                         where: { id: { in: duplicateInventoryIds } }
                     });
                 }
+              } catch (drugErr) {
+                console.error(`[Sync] Failed to process drug id=${drug.id} barcode=${drug.barcode}:`, drugErr);
+                // Continue with remaining drugs instead of aborting the whole transaction
+              }
             }
 
             // Remove local inventory rows deleted remotely for this branch.
@@ -1241,11 +1321,36 @@ export async function syncProducts() {
                 },
                 data: { isActive: false }
             });
-        });
+        }, { timeout: 120_000 });
+
+        // After a successful pull, clear syncPending for ALL inventory items.
+        // This is safe because:
+        //   1. During the pull above, editable fields were preserved for syncPending=true items
+        //   2. The push action (if it existed) has already been processed or is still queued
+        //   3. On the NEXT pull, syncPending=false lets cloud values through — by then
+        //      the cloud will have committed any pushed writes
+        // If the push permanently fails (DLQ), we still want cloud values to eventually
+        // win to avoid permanent data divergence.
+        try {
+            await prisma.inventory.updateMany({
+                where: { syncPending: true },
+                data: { syncPending: false },
+            });
+        } catch { /* non-critical */ }
 
         console.log(`[Sync] Product snapshot sync completed. ${drugs.length} cloud product(s) processed.`);
-    } catch (error) {
+        return { success: true, count: drugs.length };
+    } catch (error: any) {
         console.error("[Sync] Product sync error:", error);
+        // Include Prisma's detailed meta if available (field name, model, etc.)
+        let reason = error instanceof Error ? error.message : String(error);
+        if (error?.meta) {
+            reason += ' | meta: ' + JSON.stringify(error.meta);
+        }
+        if (error?.code) {
+            reason = `[${error.code}] ${reason}`;
+        }
+        return { success: false, reason };
     } finally {
         endSyncTask(taskName);
     }
@@ -1834,14 +1939,32 @@ export async function pushUpdateInventoryToCloud(data: {
     maxStock?: number;
 }, options?: { actionId?: string }): Promise<boolean> {
     try {
-        if (!await checkConnection()) return false;
+        if (!await checkConnection()) {
+            syncLog(`✗ pushUpdateInventory: checkConnection FAILED — offline`);
+            return false;
+        }
 
-        console.log(`[CloudSync] Pushing inventory update: inventoryId=${data.inventoryId}`);
+        const targetUrl = buildApiUrl('/inventory/update-item');
+        const payload = {
+            inventoryId: data.inventoryId,
+            drugId: data.drugId,
+            branchId: data.branchId || null,
+            price: data.price,
+            costPrice: data.costPrice,
+            minStock: data.minStock,
+            maxStock: data.maxStock
+        };
+
+        console.log(`[CloudSync] ▶ PUSH inventory update to ${targetUrl}`);
+        console.log(`[CloudSync]   payload:`, JSON.stringify(payload));
+        syncLog(`▶ PUSH to ${targetUrl}`);
+        syncLog(`  payload: ${JSON.stringify(payload)}`);
+
         const idempotencyKey = options?.actionId
             ? buildIdempotencyKey('update-inventory', options.actionId)
             : buildIdempotencyKey('update-inventory', data.inventoryId);
 
-        const response = await fetchWithRetry(buildApiUrl('/inventory/update-item'), {
+        const response = await fetchWithRetry(targetUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1849,35 +1972,65 @@ export async function pushUpdateInventoryToCloud(data: {
             },
             body: JSON.stringify({
                 clientActionId: idempotencyKey,
-                inventoryId: data.inventoryId,
-                drugId: data.drugId,
-                branchId: data.branchId || null,
-                price: data.price,
-                costPrice: data.costPrice,
-                minStock: data.minStock,
-                maxStock: data.maxStock
+                ...payload
             })
         });
 
-        const body = await parseResponseBody<{ message?: string; ack?: SyncAckPayload }>(response);
+        const body = await parseResponseBody<{
+            message?: string;
+            ack?: SyncAckPayload;
+            success?: boolean;
+            data?: { id?: string; minStock?: number; maxStock?: number; cost?: number; price?: number };
+        }>(response);
         const ack = body?.ack;
+
+        console.log(`[CloudSync]   response status=${response.status} ok=${response.ok}`);
+        console.log(`[CloudSync]   response body:`, JSON.stringify(body));
+        syncLog(`  response: status=${response.status} ok=${response.ok}`);
+        syncLog(`  body: ${JSON.stringify(body)}`);
 
         if (!response.ok) {
             let errorMessage = `HTTP ${response.status}`;
             errorMessage = body?.message || errorMessage;
-            console.error("[CloudSync] Failed to push inventory update:", errorMessage);
+            console.error("[CloudSync] ✗ PUSH FAILED:", errorMessage);
+            syncLog(`  ✗ FAILED: ${errorMessage}`);
             return false;
         }
 
+        // Verify: compare what we sent with what the cloud returned
+        if (body?.data) {
+            const cloud = body.data;
+            const mismatches: string[] = [];
+            if (data.minStock !== undefined && cloud.minStock !== data.minStock)
+                mismatches.push(`minStock: sent=${data.minStock} cloud=${cloud.minStock}`);
+            if (data.maxStock !== undefined && cloud.maxStock !== data.maxStock)
+                mismatches.push(`maxStock: sent=${data.maxStock} cloud=${cloud.maxStock}`);
+            if (data.costPrice !== undefined && cloud.cost !== data.costPrice)
+                mismatches.push(`cost: sent=${data.costPrice} cloud=${cloud.cost}`);
+            if (mismatches.length > 0) {
+                console.error(`[CloudSync] ⚠ MISMATCH after push! ${mismatches.join(', ')}`);
+                syncLog(`  ⚠ MISMATCH! ${mismatches.join(', ')}`);
+            } else {
+                console.log(`[CloudSync] ✓ Verified: cloud values match sent values`);
+                syncLog(`  ✓ Verified OK`);
+            }
+        }
+
         if (isAckSuccess(ack)) {
-            console.log(`[CloudSync] Inventory update acknowledged (${ack?.status ?? 'processed'}) [key=${ack?.idempotencyKey ?? idempotencyKey}]`);
+            console.log(`[CloudSync] ✓ PUSH acknowledged (${ack?.status ?? 'processed'}) [key=${ack?.idempotencyKey ?? idempotencyKey}]`);
             return true;
         }
 
-        console.log("[CloudSync] Inventory update pushed successfully.");
+        console.log("[CloudSync] ✓ PUSH succeeded.");
         return true;
     } catch (error) {
         console.error("[CloudSync] Error pushing inventory update:", error);
+        syncLog(`  ✗ EXCEPTION: ${error instanceof Error ? error.message : String(error)}`);
+        // Re-throw network/transient errors so _doSyncActions can detect them
+        // and skip the DLQ / bypass backoff on the next retry attempt.
+        if (error instanceof Error && /retries|fetch|network|abort|timeout|econnrefused|enotfound/i.test(error.message)) {
+            throw error;
+        }
         return false;
     }
 }
