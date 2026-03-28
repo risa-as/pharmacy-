@@ -1274,7 +1274,7 @@ app.whenReady().then(async () => {
       if (!user)
         return {
           success: false,
-          error: "ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط؛ظٹط± ظ…ظˆط¬ظˆط¯",
+          error: "البريد الإلكتروني غير موجود",
         };
 
       // Verify password
@@ -1294,7 +1294,7 @@ app.whenReady().then(async () => {
       } else {
         return {
           success: false,
-          error: "ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط± ط؛ظٹط± طµط­ظٹط­ط©",
+          error: "كلمة المرور غير صحيحة",
         };
       }
     } catch (error) {
@@ -1677,6 +1677,7 @@ ipcMain.handle("get-products", async (_, arg: any) => {
         costPrice,
         barcode: p.barcode,
         stock: totalStock,
+        minStock: p.inventory[0]?.minStock ?? 1,
         nearestExpiry: nearestBatch?.expiryDate || null,
         isQuickSale: p.isQuickSale ?? false,
       };

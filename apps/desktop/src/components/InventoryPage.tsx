@@ -54,7 +54,7 @@ type SyncHealth = {
 
 type SortField = 'name' | 'quantity' | 'price' | 'costPrice' | 'profit';
 type SortDir = 'asc' | 'desc';
-type StockFilter = 'all' | 'low' | 'good' | 'over';
+type StockFilter = 'all' | 'out' | 'low' | 'good' | 'over';
 
 export default function InventoryPage({ user }: { user: any }) {
     const isAdmin = user?.role === 'ADMIN';
@@ -104,6 +104,9 @@ export default function InventoryPage({ user }: { user: any }) {
     const [showAddToInventoryModal, setShowAddToInventoryModal] = useState<any | null>(null);
 
     // Form States for Add Batch
+    const [batchPacketPrice, setBatchPacketPrice] = useState(0);
+    const [batchStripsPerPacket, setBatchStripsPerPacket] = useState(1);
+    const batchComputedCost = batchStripsPerPacket > 0 ? batchPacketPrice / batchStripsPerPacket : 0;
     const [batchData, setBatchData] = useState({
         quantity: 0,
         costPrice: 0,
@@ -167,9 +170,9 @@ export default function InventoryPage({ user }: { user: any }) {
     const stats = useMemo(() => {
         const totalItems = items.length;
         const totalStock = items.reduce((a, b) => a + b.quantity, 0);
-        const lowStockCount = items.filter(i => i.quantity <= i.minStock && i.quantity > 0).length;
+        const lowStockCount = items.filter(i => i.quantity < i.minStock && i.quantity > 0).length;
         const outOfStockCount = items.filter(i => i.quantity <= 0).length;
-        const overStockCount = items.filter(i => i.quantity >= i.maxStock).length;
+        const overStockCount = items.filter(i => i.quantity > i.maxStock).length;
         const totalCostValue = items.reduce((a, b) => a + (b.costPrice * b.quantity), 0);
         const totalRetailValue = items.reduce((a, b) => a + (b.drug.price * b.quantity), 0);
         const totalProfit = totalRetailValue - totalCostValue;
@@ -191,9 +194,10 @@ export default function InventoryPage({ user }: { user: any }) {
         }
 
         // Stock filter
-        if (stockFilter === 'low') result = result.filter(i => i.quantity <= i.minStock);
-        else if (stockFilter === 'good') result = result.filter(i => i.quantity > i.minStock && i.quantity < i.maxStock);
-        else if (stockFilter === 'over') result = result.filter(i => i.quantity >= i.maxStock);
+        if (stockFilter === 'out') result = result.filter(i => i.quantity <= 0);
+        else if (stockFilter === 'low') result = result.filter(i => i.quantity > 0 && i.quantity < i.minStock);
+        else if (stockFilter === 'good') result = result.filter(i => i.quantity >= i.minStock && i.quantity <= i.maxStock);
+        else if (stockFilter === 'over') result = result.filter(i => i.quantity > i.maxStock);
 
         // Sort
         result.sort((a, b) => {
@@ -442,10 +446,13 @@ export default function InventoryPage({ user }: { user: any }) {
         try {
             await ipcInvoke('add-inventory-batch', {
                 inventoryId: showBatchModal.id,
-                ...batchData
+                ...batchData,
+                costPrice: batchPacketPrice > 0 ? batchComputedCost : batchData.costPrice,
             });
             setShowBatchModal(null);
             setBatchData({ quantity: 0, costPrice: 0, expiryDate: "", supplierId: "" });
+            setBatchPacketPrice(0);
+            setBatchStripsPerPacket(1);
             fetchInventory();
             setUploadToast({ type: "success", message: "تمت إضافة الدفعة بنجاح ✓" });
         } catch (error) {
@@ -786,9 +793,10 @@ export default function InventoryPage({ user }: { user: any }) {
                 <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl p-1">
                     {([
                         { key: 'all' as StockFilter, label: 'الكل', count: items.length },
-                        { key: 'low' as StockFilter, label: 'نقص', count: items.filter(i => i.quantity <= i.minStock).length },
-                        { key: 'good' as StockFilter, label: 'جيد', count: items.filter(i => i.quantity > i.minStock && i.quantity < i.maxStock).length },
-                        { key: 'over' as StockFilter, label: 'فائض', count: items.filter(i => i.quantity >= i.maxStock).length },
+                        { key: 'out' as StockFilter, label: 'نفد', count: items.filter(i => i.quantity <= 0).length },
+                        { key: 'low' as StockFilter, label: 'نقص', count: items.filter(i => i.quantity > 0 && i.quantity < i.minStock).length },
+                        { key: 'good' as StockFilter, label: 'جيد', count: items.filter(i => i.quantity >= i.minStock && i.quantity <= i.maxStock).length },
+                        { key: 'over' as StockFilter, label: 'فائض', count: items.filter(i => i.quantity > i.maxStock).length },
                     ]).map(f => (
                         <button
                             key={f.key}
@@ -862,9 +870,9 @@ export default function InventoryPage({ user }: { user: any }) {
                             <tbody className="divide-y divide-border/30">
                                 {filteredItems.map((item) => {
                                     const stockPct = getStockPercent(item);
-                                    const isLow = item.quantity <= item.minStock;
-                                    const isOver = item.quantity >= item.maxStock;
                                     const isOut = item.quantity <= 0;
+                                    const isLow = !isOut && item.quantity < item.minStock;
+                                    const isOver = item.quantity > item.maxStock;
                                     const profit = (item.drug.price - item.costPrice) * item.quantity;
                                     const profitPerUnit = item.drug.price - item.costPrice;
                                     const profitMargin = item.drug.price > 0 ? Math.round((profitPerUnit / item.drug.price) * 100) : 0;
@@ -1121,8 +1129,23 @@ export default function InventoryPage({ user }: { user: any }) {
                                     <input type="number" placeholder="0" value={batchData.quantity || ""} onChange={(e) => setBatchData({ ...batchData, quantity: parseInt(e.target.value) || 0 })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر شراء الدفعة (التكلفة للعلبة)</label>
-                                    <input type="number" step="0.01" placeholder="0" value={batchData.costPrice || ""} onChange={(e) => setBatchData({ ...batchData, costPrice: parseFloat(e.target.value) || 0 })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر التكلفة (من الباكيت)</label>
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                        <div>
+                                            <label className="block text-[10px] text-muted-foreground mb-1">سعر الباكيت</label>
+                                            <input type="number" min="0" step="any" value={batchPacketPrice || ""} onChange={(e) => setBatchPacketPrice(parseFloat(e.target.value) || 0)} placeholder="0" className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-muted-foreground mb-1">عدد الأشرطة</label>
+                                            <input type="number" min="1" step="1" value={batchStripsPerPacket || ""} onChange={(e) => setBatchStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))} placeholder="1" className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-3 py-2">
+                                        <span className="text-[10px] text-muted-foreground">التكلفة للشريط:</span>
+                                        <span className="text-xs font-bold text-primary mr-auto tabular-nums">
+                                            {batchPacketPrice > 0 ? `${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })}` : "—"}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">تاريخ انتهاء الصلاحية</label>
@@ -1258,11 +1281,11 @@ export default function InventoryPage({ user }: { user: any }) {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأدنى</label>
-                                        <input type="number" name="minStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="minStock" defaultValue="1" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأعلى</label>
-                                        <input type="number" name="maxStock" defaultValue="100" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="maxStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                 </div>
                                 <div>
@@ -1351,11 +1374,11 @@ export default function InventoryPage({ user }: { user: any }) {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأدنى</label>
-                                        <input type="number" name="minStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="minStock" defaultValue="1" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأعلى</label>
-                                        <input type="number" name="maxStock" defaultValue="100" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="maxStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                 </div>
                                 <div className="flex gap-3 pt-3">

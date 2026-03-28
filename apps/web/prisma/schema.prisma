@@ -179,7 +179,7 @@ model Inventory {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   maxStock  Int        @default(1000)
-  minStock  Int        @default(0)
+  minStock  Int        @default(1)
   batches   Batch[]
   branch    Branch     @relation(fields: [branchId], references: [id])
 

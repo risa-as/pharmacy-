@@ -103,7 +103,7 @@ export default function EditForm({
                         id="price"
                         name="price"
                         type="number"
-                        step="0.01"
+                        step="any"
                         min="0"
                         defaultValue={inventory.price}
                         className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -121,7 +121,7 @@ export default function EditForm({
                         id="cost"
                         name="cost"
                         type="number"
-                        step="0.01"
+                        step="any"
                         min="0"
                         defaultValue={inventory.cost}
                         className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
