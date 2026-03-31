@@ -28,7 +28,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     { path: '/dashboard/inventory/bulk-pricing', permission: 'canBulkEditPrice' },
     { path: '/dashboard/inventory/transfers', permission: 'canTransferStock' },
     { path: '/dashboard/inventory/stocktakes', permission: 'canDoStocktake' },
-    { path: '/dashboard/inventory/margin-warnings', permission: 'canEditPrice' },
+    { path: '/dashboard/inventory/margin-warnings', permission: 'canViewInventory' },
     { path: '/dashboard/inventory/barcode-print', permission: 'canViewInventory' },
     { path: '/dashboard/inventory/shortages', permission: 'canViewInventory' },
     { path: '/dashboard/inventory/product-movement', permission: 'canViewInventory' },
@@ -48,6 +48,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     { path: '/dashboard/reports/employees', permission: 'canViewEmployeeReport' },
     { path: '/dashboard/reports/audit-log', permission: 'canViewAuditLog' },
     { path: '/dashboard/reports/branch-comparison', permission: 'canViewProfitReport' },
+    { path: '/dashboard/reports/margins', permission: 'canViewProfitReport' },
     { path: '/dashboard/reports/shifts', permission: 'canViewReports' },
     { path: '/dashboard/reports', permission: 'canViewReports' },
 
@@ -67,7 +68,9 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     { path: '/dashboard/branches', permission: 'canManageBranches' },
     { path: '/dashboard/settings', permission: 'canChangeSettings' },
     { path: '/dashboard/alerts', permission: 'canViewReports' },
-    { path: '/dashboard/notifications', permission: 'canManageUsers' },
+
+    // Batches
+    { path: '/dashboard/batches', permission: 'canViewInventory' },
 
     // Debts
     { path: '/dashboard/debts', permission: 'canViewDebts' },

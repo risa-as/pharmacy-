@@ -21,6 +21,7 @@ const UpdateBranch = BranchSchema;
 export async function createBranch(prevState: any, formData: FormData) {
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+  if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لإدارة الفروع." };
 
   const validatedFields = CreateBranch.safeParse({
     name: formData.get("name"),
@@ -72,6 +73,7 @@ export async function updateBranch(
 ) {
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+  if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لتعديل الفروع." };
 
   const validatedFields = UpdateBranch.safeParse({
     id: id,
@@ -109,6 +111,7 @@ export async function updateBranch(
 export async function deleteBranch(id: string) {
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+  if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لحذف الفروع." };
 
   try {
     await prisma.branch.delete({

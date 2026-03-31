@@ -1,9 +1,16 @@
 import { AlertTriangle, Package, Clock, Bell } from "lucide-react";
 import { getAllAlerts, getAlertStats, AlertItem } from "@/app/lib/alerts";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 
 export default async function AlertsPage() {
-    const alerts = await getAllAlerts();
-    const stats = await getAlertStats();
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const { organizationId, tenantBranchWhere } = tenantCtx;
+    const branchId = (tenantBranchWhere as any)?.branchId;
+
+    const alerts = await getAllAlerts(branchId, organizationId);
+    const stats = await getAlertStats(branchId, organizationId);
 
     const getAlertIcon = (type: AlertItem['type']) => {
         switch (type) {

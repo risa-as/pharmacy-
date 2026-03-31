@@ -44,6 +44,7 @@ import {
   ShoppingBag,
   ChevronDown,
   Lock,
+  Loader2,
 } from "lucide-react";
 
 import { handleSignOut } from "@/app/lib/actions/auth-actions";
@@ -139,7 +140,11 @@ const sections: NavSection[] = [
         href: "#",
         icon: ShoppingCart,
         subLinks: [
-          { name: "المخزون", href: "/dashboard/inventory" },
+          {
+            name: "المخزون",
+            href: "/dashboard/inventory",
+            excludeFor: ["/dashboard/inventory/product-movement"],
+          },
           {
             name: "المبيعات",
             href: "/dashboard/sales",
@@ -290,6 +295,7 @@ export default function SideNav({
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openAccordions, setOpenAccordions] = useState<string[]>([]);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -605,10 +611,23 @@ export default function SideNav({
       )}
 
       {/* Sign Out */}
-      <form action={handleSignOut} className="mt-2 px-0.5">
-        <button className="flex h-9 w-full items-center gap-2.5 rounded-lg bg-destructive/10 px-3 text-[13px] font-bold text-destructive hover:bg-destructive/20 transition-colors">
-          <LogOut className="w-[18px] h-[18px]" />
-          <span>تسجيل الخروج</span>
+      <form
+        action={handleSignOut}
+        onSubmit={() => setSigningOut(true)}
+        className="mt-2 px-0.5"
+      >
+        <button
+          disabled={signingOut}
+          className="group flex h-9 w-full items-center gap-2.5 rounded-lg bg-destructive/10 px-3 text-[13px] font-bold text-destructive hover:bg-destructive hover:text-white transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          {signingOut ? (
+            <Loader2 className="w-[18px] h-[18px] shrink-0 animate-spin" />
+          ) : (
+            <LogOut className="w-[18px] h-[18px] shrink-0 transition-transform duration-200 group-hover:-translate-x-1" />
+          )}
+          <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
+            {signingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
+          </span>
         </button>
       </form>
     </>

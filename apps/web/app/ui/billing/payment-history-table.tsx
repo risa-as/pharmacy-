@@ -71,7 +71,7 @@ export default function PaymentHistoryTable({ transactions }: PaymentHistoryTabl
                                         {format(txn.initiatedAt, "d MMM yyyy", { locale: ar })}
                                     </td>
                                     <td className="px-4 py-3 font-medium text-foreground">
-                                        {txn.amount.toLocaleString("ar-IQ")}{" "}
+                                        {txn.amount.toLocaleString("en-US")}{" "}
                                         <span className="text-xs text-muted-foreground">{txn.currency}</span>
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground">

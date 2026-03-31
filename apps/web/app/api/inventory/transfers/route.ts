@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canTransferStock) {
+            return NextResponse.json({ error: "ليس لديك صلاحية لتحويل المخزون بين الأفرع." }, { status: 403 });
+        }
 
         const guard = await checkTransferAccess(tenantCtx);
         if (guard) return guard;

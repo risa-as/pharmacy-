@@ -318,7 +318,7 @@ const roleLabels: Record<string, string> = {
 };
 
 function fmt(v: number) {
-    return new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v);
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);
 }
 
 /* ─────────────────────────────────────────────
@@ -851,37 +851,34 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
             </div>
 
             {/* Today Summary */}
-            <div className="relative rounded-2xl overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-info/10 to-success/10 pointer-events-none" />
-                <div className="relative p-4">
-                    <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
-                        <BarChart3 className="w-3.5 h-3.5" /> ملخص الوردية
-                    </p>
-                    <div className="grid sm:grid-cols-3 gap-3">
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
-                            <div className="flex items-center gap-2 mb-1">
-                                <ShoppingCart className="w-4 h-4 text-primary" />
-                                <span className="text-xs text-muted-foreground">مبيعات اليوم</span>
-                            </div>
-                            <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.revenue)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                            <p className="text-xs text-muted-foreground mt-1">{d.today.salesCount} فاتورة</p>
+            <div className="rounded-2xl border border-border bg-card p-4">
+                <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5" /> ملخص الوردية
+                </p>
+                <div className="grid sm:grid-cols-3 gap-3">
+                    <div className="bg-muted rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <ShoppingCart className="w-4 h-4 text-primary" />
+                            <span className="text-xs text-muted-foreground">مبيعات اليوم</span>
                         </div>
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
-                            <div className="flex items-center gap-2 mb-1">
-                                <Undo2 className="w-4 h-4 text-warning" />
-                                <span className="text-xs text-muted-foreground">المرتجعات</span>
-                            </div>
-                            <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.returns)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                            <p className="text-xs text-muted-foreground mt-1">{d.today.returnsCount} مرتجع</p>
+                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.revenue)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
+                        <p className="text-xs text-muted-foreground mt-1">{d.today.salesCount} فاتورة</p>
+                    </div>
+                    <div className="bg-muted rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Undo2 className="w-4 h-4 text-warning" />
+                            <span className="text-xs text-muted-foreground">المرتجعات</span>
                         </div>
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
-                            <div className="flex items-center gap-2 mb-1">
-                                <TrendingUp className="w-4 h-4 text-success" />
-                                <span className="text-xs text-muted-foreground">الصافي</span>
-                            </div>
-                            <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.net)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                            <p className="text-xs text-muted-foreground mt-1">بعد المرتجعات</p>
+                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.returns)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
+                        <p className="text-xs text-muted-foreground mt-1">{d.today.returnsCount} مرتجع</p>
+                    </div>
+                    <div className="bg-muted rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-4 h-4 text-success" />
+                            <span className="text-xs text-muted-foreground">الصافي</span>
                         </div>
+                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.net)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
+                        <p className="text-xs text-muted-foreground mt-1">بعد المرتجعات</p>
                     </div>
                 </div>
             </div>

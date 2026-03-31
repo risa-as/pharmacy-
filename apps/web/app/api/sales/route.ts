@@ -29,12 +29,20 @@ export async function POST(request: Request) {
         if (tenantCtx instanceof NextResponse) return tenantCtx;
         const { user } = tenantCtx;
 
+        if (!tenantCtx.userPermissions.canSell) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لإتمام عمليات البيع.' }, { status: 403 });
+        }
+
         if (!user || (!user.branchId && user.role !== 'SUPER_ADMIN')) {
             return NextResponse.json({ message: 'Unauthorized or No Branch Assigned' }, { status: 401 });
         }
 
         const body = await request.json();
         const { items, totalAmount, patientId, discount, paymentMethod } = body;
+
+        if (discount && discount > 0 && !tenantCtx.userPermissions.canApplyDiscount) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لتطبيق الخصم.' }, { status: 403 });
+        }
 
         // 1. Extract Idempotency Key
         const idempotencyKey = String(request.headers.get('x-idempotency-key') || body.clientActionId || '').trim();

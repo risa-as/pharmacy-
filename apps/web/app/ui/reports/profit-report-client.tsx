@@ -41,7 +41,7 @@ export default function ProfitReportClient({ branches, defaultBranchId, defaultP
     }, [fetchReport]);
 
     const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('ar-IQ', { style: 'decimal', maximumFractionDigits: 0 }).format(val) + ' د.ع';
+        return new Intl.NumberFormat('en-US', { style: 'decimal', maximumFractionDigits: 0 }).format(val) + ' د.ع';
     };
 
     if (loading) {

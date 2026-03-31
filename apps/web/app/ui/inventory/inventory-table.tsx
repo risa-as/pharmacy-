@@ -26,7 +26,7 @@ interface InventoryItem {
   }[];
 }
 
-export default function InventoryTable({ items }: { items: InventoryItem[] }) {
+export default function InventoryTable({ items, canEditDrug = true, canDeleteDrug = true, canAddDrug = true }: { items: InventoryItem[]; canEditDrug?: boolean; canDeleteDrug?: boolean; canAddDrug?: boolean }) {
   const [selectedInventory, setSelectedInventory] = useState<{
     id: string;
     drugName: string;
@@ -178,20 +178,22 @@ export default function InventoryTable({ items }: { items: InventoryItem[] }) {
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() =>
-                          setSelectedInventory({
-                            id: item.id,
-                            drugName: item.drug.tradeName,
-                          })
-                        }
-                        className="flex items-center gap-1 text-primary hover:text-primary hover:bg-primary/10 px-2 py-1 rounded-lg text-sm font-medium"
-                      >
-                        <Plus className="w-4 h-4" />
-                        إضافة دفعة
-                      </button>
-                      <UpdateInventory id={item.id} />
-                      <DeleteInventory id={item.id} />
+                      {canAddDrug && (
+                        <button
+                          onClick={() =>
+                            setSelectedInventory({
+                              id: item.id,
+                              drugName: item.drug.tradeName,
+                            })
+                          }
+                          className="flex items-center gap-1 text-primary hover:text-primary hover:bg-primary/10 px-2 py-1 rounded-lg text-sm font-medium"
+                        >
+                          <Plus className="w-4 h-4" />
+                          إضافة دفعة
+                        </button>
+                      )}
+                      {canEditDrug && <UpdateInventory id={item.id} />}
+                      {canDeleteDrug && <DeleteInventory id={item.id} />}
                     </div>
                   </td>
                 </tr>

@@ -8,7 +8,7 @@
 export type CurrencyCode = 'IQD' | 'USD';
 
 const CURRENCY_CONFIG: Record<CurrencyCode, { symbol: string; label: string; locale: string; decimals: number }> = {
-    IQD: { symbol: 'د.ع', label: 'دينار عراقي', locale: 'ar-IQ', decimals: 0 },
+    IQD: { symbol: 'د.ع', label: 'دينار عراقي', locale: 'en-US', decimals: 0 },
     USD: { symbol: '$', label: 'دولار أمريكي', locale: 'en-US', decimals: 2 },
 };
 

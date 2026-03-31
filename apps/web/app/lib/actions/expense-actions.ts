@@ -29,6 +29,7 @@ export async function getExpenses() {
 export async function createExpense(data: { amount: number, category: string, description?: string, date?: Date }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    if (!tenantCtx.userPermissions.canCreateExpense) return { success: false, error: 'ليس لديك صلاحية لإنشاء مصروفات.' };
 
     const { user } = tenantCtx;
 

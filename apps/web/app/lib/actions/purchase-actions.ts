@@ -69,6 +69,9 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return { success: false, error: 'Unauthorized Session' };
+        if (!tenantCtx.userPermissions.canCreatePurchase) {
+            return { success: false, error: 'ليس لديك صلاحية لإنشاء طلبات الشراء.' };
+        }
         const { tenantBranchWhere } = tenantCtx;
 
         // Optionally enforce that branchId matches `tenantBranchWhere` if this is not admin...

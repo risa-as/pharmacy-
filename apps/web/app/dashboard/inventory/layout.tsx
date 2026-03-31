@@ -52,11 +52,6 @@ const TABS: HubTab[] = [
     icon: <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />,
   },
   {
-    name: "حركة منتج",
-    href: "/dashboard/inventory/product-movement",
-    icon: <Activity className="w-3.5 h-3.5 shrink-0" />,
-  },
-  {
     name: "تحذيرات الهامش",
     href: "/dashboard/inventory/margin-warnings",
     icon: <TrendingDown className="w-3.5 h-3.5 shrink-0" />,
@@ -88,7 +83,7 @@ export default function InventoryLayout({
       <HubTabNav
         tabs={TABS}
         actions={ACTIONS}
-        skipOnPatterns={["/create", "/edit"]}
+        skipOnPatterns={["/create", "/edit", "/product-movement"]}
       />
       {children}
     </>

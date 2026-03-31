@@ -107,6 +107,9 @@ export async function createPurchase(data: {
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    if (!tenantCtx.userPermissions.canCreatePurchase) {
+        return { success: false, error: 'ليس لديك صلاحية لإنشاء فواتير الشراء.' };
+    }
 
     try {
         const { supplierId, branchId, invoiceNumber, items } = data;

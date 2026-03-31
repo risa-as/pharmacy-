@@ -24,6 +24,7 @@ const CreateInventory = InventorySchema.omit({ id: true });
 export async function createInventory(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canAddDrug) return { message: "ليس لديك صلاحية لإضافة أدوية للمخزون." };
 
     const validatedFields = CreateInventory.safeParse({
         branchId: formData.get("branchId"),
@@ -88,6 +89,7 @@ export async function updateInventory(
 ) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لتعديل المخزون." };
 
     const validatedFields = InventorySchema.safeParse({
         id: id,
@@ -134,6 +136,7 @@ export async function updateInventory(
 export async function deleteInventory(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canDeleteDrug) return { message: "ليس لديك صلاحية لحذف الأدوية من المخزون." };
 
     try {
         // حذف الدفعات أولاً
@@ -170,6 +173,7 @@ function generateBatchNumber(): string {
 export async function addBatch(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canAddDrug) return { message: "ليس لديك صلاحية لإضافة دفعات للمخزون." };
 
     const inventoryId = formData.get("inventoryId") as string;
     const batchNumber = generateBatchNumber();
@@ -241,6 +245,7 @@ export async function updateBatchQuantity(batchId: string, newQuantity: number) 
 export async function deleteBatch(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لحذف الدفعات." };
 
     try {
         await prisma.batch.delete({ where: { id } });

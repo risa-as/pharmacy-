@@ -31,6 +31,7 @@ export async function getCompanySettings() {
 export async function updateCompanySettings(formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canChangeSettings) return { success: false, message: "ليس لديك صلاحية لتغيير الإعدادات." };
 
     try {
         const name = formData.get("name") as string;

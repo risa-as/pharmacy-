@@ -15,7 +15,7 @@ interface Debtor {
 }
 
 function formatIQD(amount: number) {
-    return new Intl.NumberFormat("ar-IQ").format(Math.round(amount)) + " د.ع";
+    return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " د.ع";
 }
 
 function debtAgeDays(date: Date | string | null): number | null {

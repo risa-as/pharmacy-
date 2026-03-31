@@ -143,7 +143,7 @@ export default async function Page() {
                                             {supplier.computedBalance > 0 ? (
                                                 <div className="flex items-center gap-1">
                                                     <span className="font-bold text-warning">
-                                                        {supplier.computedBalance.toLocaleString('ar-IQ')}
+                                                        {supplier.computedBalance.toLocaleString('en-US')}
                                                     </span>
                                                     <span className="text-xs text-muted-foreground">د.ع</span>
                                                 </div>

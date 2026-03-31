@@ -113,7 +113,7 @@ function parseExcel(buffer: ArrayBuffer): ImportRow[] {
 }
 
 function formatIQD(n: number) {
-    return new Intl.NumberFormat("ar-IQ").format(Math.round(n)) + " د.ع";
+    return new Intl.NumberFormat("en-US").format(Math.round(n)) + " د.ع";
 }
 
 export default function DrugImportPage() {

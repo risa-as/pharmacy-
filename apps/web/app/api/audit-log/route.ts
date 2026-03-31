@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
 
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewAuditLog) {
+            return NextResponse.json({ error: "ليس لديك صلاحية لعرض سجل التدقيق." }, { status: 403 });
+        }
         const { user, organizationId } = tenantCtx;
 
         // AuditLog has branchId directly (no branch relation), so build custom scope

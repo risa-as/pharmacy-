@@ -2,10 +2,15 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma"; // Adjust import if needed
+import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export async function GET(req: Request) {
     try {
-        // In a real app, verify admin session here
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canBackup) {
+            return NextResponse.json({ success: false, message: "ليس لديك صلاحية للنسخ الاحتياطي." }, { status: 403 });
+        }
 
         // Use default branch for now, matching the upload logic
         const branchId = "default";

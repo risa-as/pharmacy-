@@ -40,7 +40,7 @@ export default async function ShortagesPage({
             ...item,
             currentStock: item.batches.reduce((sum: number, b: any) => sum + b.quantity, 0),
         }))
-        .filter((item: any) => item.currentStock <= item.minStock);
+        .filter((item: any) => item.currentStock < item.minStock);
 
     return (
         <div className="glass-card w-full p-6">

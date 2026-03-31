@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { headers } from 'next/headers';
 import { cache } from 'react';
+import { getUserPermissions, UserPermissions } from '@/app/lib/permissions';
 
 export interface TenantContext {
     user: {
@@ -16,6 +17,10 @@ export interface TenantContext {
     organizationId?: string;
     tenantWhere: Record<string, any>;
     tenantBranchWhere: Record<string, any>;
+    /** Use this when querying the Branch model directly (uses `id` not `branchId`) */
+    branchModelWhere: Record<string, any>;
+    /** Merged permissions (role defaults + per-user overrides) */
+    userPermissions: UserPermissions;
 }
 
 // Lazily encoded once per process; throws only at request time, not at build time.
@@ -44,12 +49,14 @@ export const getTenantContext = cache(
         let organizationId: string | undefined;
         let branchId: string | undefined;
         let userId: string;
+        let permissionsOverride: string | null = null;
 
         if (session?.user) {
             role = session.user.role || 'CASHIER';
             organizationId = (session.user as any).organizationId as string | undefined;
             branchId = session.user.branchId as string | undefined;
             userId = session.user.id!;
+            permissionsOverride = (session.user as any).permissions ?? null;
         } else {
             // Fallback: Bearer JWT token (mobile app)
             const headersList = await headers();
@@ -74,23 +81,29 @@ export const getTenantContext = cache(
 
         let tenantWhere: Record<string, any> = {};
         let tenantBranchWhere: Record<string, any> = {};
+        let branchModelWhere: Record<string, any> = {};
 
         if (isSuperAdmin) {
             tenantWhere = {};
             tenantBranchWhere = {};
+            branchModelWhere = {};
         } else if (isAdmin) {
             if (!organizationId) {
                 return NextResponse.json({ error: "Organization not found for Admin user" }, { status: 403 });
             }
             tenantWhere = { organizationId };
             tenantBranchWhere = { branch: { organizationId } };
+            branchModelWhere = { organizationId };
         } else {
             if (!branchId) {
                 return NextResponse.json({ error: "Branch not assigned to user" }, { status: 403 });
             }
             tenantWhere = { branchId };
             tenantBranchWhere = { branchId };
+            branchModelWhere = { id: branchId };
         }
+
+        const userPermissions = getUserPermissions({ role, permissions: permissionsOverride });
 
         return {
             user: {
@@ -104,6 +117,8 @@ export const getTenantContext = cache(
             organizationId,
             tenantWhere,
             tenantBranchWhere,
+            branchModelWhere,
+            userPermissions,
         };
     }
 );

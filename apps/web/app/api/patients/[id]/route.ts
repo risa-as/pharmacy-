@@ -49,6 +49,9 @@ export async function PATCH(
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canEditPatient) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لتعديل بيانات المرضى.' }, { status: 403 });
+        }
 
         const body = await req.json();
         const patient = await prisma.patient.update({

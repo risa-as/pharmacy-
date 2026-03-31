@@ -14,6 +14,10 @@ export async function POST(
         if (tenantCtx instanceof NextResponse) return tenantCtx;
         const { user } = tenantCtx;
 
+        if (!tenantCtx.userPermissions.canProcessReturn) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لمعالجة المرتجعات.' }, { status: 403 });
+        }
+
         if (!user.branchId && user.role !== 'SUPER_ADMIN') {
             return NextResponse.json({ message: 'No Branch Assigned' }, { status: 403 });
         }

@@ -25,7 +25,7 @@ export default function BranchComparisonClient() {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const fmt = (v: number) => new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v) + ' د.ع';
+    const fmt = (v: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v) + ' د.ع';
 
     const handleExport = () => {
         if (!data?.comparison) return;

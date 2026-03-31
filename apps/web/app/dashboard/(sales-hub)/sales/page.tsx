@@ -33,6 +33,7 @@ export default async function SalesPage({
                 items: { include: { drug: true } },
                 branch: true,
                 user: true,
+                returns: { include: { items: { include: { drug: true } } } },
             },
             take: PAGE_SIZE,
             skip: (page - 1) * PAGE_SIZE,

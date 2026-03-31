@@ -7,7 +7,7 @@ import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 
 function formatIQD(amount: number) {
-    return new Intl.NumberFormat("ar-IQ").format(Math.round(amount)) + " د.ع";
+    return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " د.ع";
 }
 
 export default async function DebtDetailPage({

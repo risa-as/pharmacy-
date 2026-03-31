@@ -5,7 +5,7 @@ import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import DebtorsTable from "@/app/ui/debts/debtors-table";
 
 function formatIQD(amount: number) {
-    return new Intl.NumberFormat("ar-IQ").format(Math.round(amount)) + " د.ع";
+    return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " د.ع";
 }
 
 export default async function DebtsPage({

@@ -28,6 +28,7 @@ const UpdateUser = UserSchema.omit({ password: true }).extend({
 export async function createUser(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canManageUsers) return { message: "ليس لديك صلاحية لإدارة المستخدمين." };
 
     const validatedFields = CreateUser.safeParse({
         name: formData.get("name"),
@@ -102,6 +103,7 @@ export async function updateUser(
 ) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canManageUsers) return { message: "ليس لديك صلاحية لتعديل المستخدمين." };
     const passwordValue = formData.get("password");
 
     const validatedFields = UpdateUser.safeParse({
@@ -159,6 +161,9 @@ export async function updateUser(
 
 export async function deleteUser(id: string) {
     const tenantCtx = await getTenantContext();
+    if (!(tenantCtx instanceof NextResponse) && !tenantCtx.userPermissions.canManageUsers) {
+        return { message: "ليس لديك صلاحية لحذف المستخدمين." };
+    }
     try {
         const user = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
         await prisma.user.delete({

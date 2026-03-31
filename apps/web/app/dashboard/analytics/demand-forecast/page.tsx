@@ -17,7 +17,7 @@ export default function DemandForecastPage() {
             .finally(() => setLoading(false));
     }, [days]);
 
-    const fmt = (v: number) => new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v);
+    const fmt = (v: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);
 
     const urgencyBadge = (urgency: string) => {
         switch (urgency) {

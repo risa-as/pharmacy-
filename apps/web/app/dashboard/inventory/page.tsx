@@ -90,9 +90,9 @@ async function getInventory(
     };
 }
 
-async function getBranches(tenantWhere: any) {
+async function getBranches(branchModelWhere: any) {
     return await prisma.branch.findMany({
-        where: tenantWhere,
+        where: branchModelWhere,
         select: { id: true, name: true },
     });
 }
@@ -109,16 +109,18 @@ export default async function Page({
 }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
-    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+    const { tenantBranchWhere, branchModelWhere } = tenantCtx;
 
     const query = searchParams?.query || "";
     const currentPage = Number(searchParams?.page) || 1;
     const branchId = searchParams?.branch;
     const status = searchParams?.status || "";
 
+    const { canAddDrug, canEditDrug, canDeleteDrug } = tenantCtx.userPermissions;
+
     const [{ items, totalPages, counts }, branches] = await Promise.all([
         getInventory(currentPage, query, status, tenantBranchWhere, branchId),
-        getBranches(tenantWhere),
+        getBranches(branchModelWhere),
     ]);
 
     const buildPageUrl = (page: number) => {
@@ -137,13 +139,15 @@ export default async function Page({
                     <Package className="w-7 h-7 text-primary" />
                     جرد المخزون
                 </h1>
-                <Link
-                    href="/dashboard/inventory/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                    <Plus className="h-5 w-5" />
-                    إضافة للمخزون
-                </Link>
+                {canAddDrug && (
+                    <Link
+                        href="/dashboard/inventory/create"
+                        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                        <Plus className="h-5 w-5" />
+                        إضافة للمخزون
+                    </Link>
+                )}
             </div>
 
             {/* Branch Filter */}
@@ -168,7 +172,7 @@ export default async function Page({
 
             <div className="mt-4 flow-root">
                 <div className="overflow-x-auto">
-                    <InventoryTable items={items} />
+                    <InventoryTable items={items} canEditDrug={canEditDrug} canDeleteDrug={canDeleteDrug} canAddDrug={canAddDrug} />
 
                     {/* Pagination */}
                     <div className="flex justify-center items-center gap-4 mt-6">

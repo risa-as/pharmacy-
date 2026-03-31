@@ -40,7 +40,7 @@ export default async function ExpiredDamagedPage({
 
     const expiredValue = expired.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
     const expiringSoonValue = expiringSoon.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
-    const fmt = (v: number) => new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 0 }).format(v);
+    const fmt = (v: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
 
     const allAlerts = [
         ...expired.map((b: any) => ({ ...b, status: "expired" as const })),

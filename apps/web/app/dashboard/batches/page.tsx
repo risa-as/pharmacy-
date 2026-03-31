@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { prisma } from "@/app/lib/prisma";
 import { Box } from "lucide-react";
-import { formatCurrency } from "@/app/lib/utils/currency";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import BatchTable from "@/app/ui/batches/batch-table";
 import { NextResponse } from "next/server";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import BatchSearch from "@/app/ui/batches/batch-search";
@@ -140,82 +140,24 @@ export default async function BatchesPage({
             <p>{query ? "لا توجد نتائج للبحث" : "لا توجد دفعات مسجلة"}</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-muted text-muted-foreground text-sm border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-center font-bold w-12">#</th>
-                <th className="px-4 py-3 text-right font-bold">الدواء</th>
-                <th className="px-4 py-3 text-right font-bold">الفرع</th>
-                <th className="px-4 py-3 text-right font-bold">المورد</th>
-                <th className="px-4 py-3 text-right font-bold">رقم الدفعة</th>
-                <th className="px-4 py-3 text-right font-bold">
-                  سعر الشراء (للوحدة)
-                </th>
-                <th className="px-4 py-3 text-right font-bold">الكمية</th>
-                <th className="px-4 py-3 text-right font-bold">
-                  تاريخ الانتهاء
-                </th>
-                <th className="px-4 py-3 text-right font-bold">الحالة</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {batches.map((batch: any, index: number) => {
-                const drug = batch.inventory.drug;
-                const expiryDate = new Date(batch.expiryDate);
-                const isExpired = expiryDate < now;
-                const isExpiringSoon =
-                  expiryDate >= now && expiryDate <= thirtyDaysFromNow;
-
-                let statusClass = "bg-success/10 text-success";
-                let statusText = "صالح";
-                if (isExpired) {
-                  statusClass = "bg-destructive/10 text-destructive";
-                  statusText = "منتهي";
-                } else if (isExpiringSoon) {
-                  statusClass = "bg-warning/20 text-warning";
-                  statusText = "قريب الانتهاء";
-                }
-
-                return (
-                  <tr key={batch.id} className="hover:bg-muted">
-                    <td className="px-4 py-3 text-center text-sm text-muted-foreground font-mono">
-                      {(currentPage - 1) * PAGE_SIZE + index + 1}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-foreground">
-                      {drug?.tradeName || "غير معروف"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {batch.inventory.branch?.name || "غير محدد"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {batch.supplier?.name || (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
-                      {batch.batchNumber}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-foreground text-right">
-                      <span dir="ltr">{formatCurrency(batch.costPrice)}</span>
-                    </td>
-                    <td className="px-4 py-3 font-bold text-foreground">
-                      {batch.quantity}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {expiryDate.toLocaleDateString("ar-IQ")}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${statusClass}`}
-                      >
-                        {statusText}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <BatchTable
+            batches={batches.map((b: any) => ({
+              id: b.id,
+              batchNumber: b.batchNumber,
+              costPrice: b.costPrice,
+              quantity: b.quantity,
+              expiryDate: b.expiryDate.toISOString(),
+              createdAt: b.createdAt.toISOString(),
+              supplierId: b.supplierId,
+              inventory: {
+                branch: b.inventory.branch ? { name: b.inventory.branch.name } : null,
+                drug: b.inventory.drug ? { id: b.inventory.drug.id, tradeName: b.inventory.drug.tradeName, barcode: b.inventory.drug.barcode } : null,
+              },
+              supplier: b.supplier ? { name: b.supplier.name } : null,
+            }))}
+            currentPage={currentPage}
+            pageSize={PAGE_SIZE}
+          />
         )}
       </div>
 

@@ -25,6 +25,7 @@ const PatientSchema = z.object({
 export async function createPatient(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لإضافة مرضى." };
 
     const validatedFields = PatientSchema.safeParse({
         name: formData.get("name"),
@@ -93,6 +94,7 @@ export async function createPatient(prevState: any, formData: FormData) {
 export async function updatePatient(id: string, prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لتعديل بيانات المرضى." };
 
     // Authorization check
     const existingPatient = await prisma.patient.findFirst({
@@ -162,6 +164,7 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
 export async function deletePatient(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لحذف المرضى." };
 
     try {
         // التحقق من وجود ارتباطات

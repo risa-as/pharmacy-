@@ -34,7 +34,7 @@ export default async function ReturnInvoicePage({
         hour: '2-digit', minute: '2-digit'
     });
 
-    const fmt = (v: number) => new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v);
+    const fmt = (v: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);
 
     return (
         <div className="p-6" dir="rtl">

@@ -10,6 +10,9 @@ export async function POST(req: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canCreatePurchase) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لإنشاء طلبات الشراء.' }, { status: 403 });
+        }
 
         const body = await req.json();
         const { branchId, supplierId, items } = body;
@@ -71,7 +74,7 @@ export async function POST(req: Request) {
                     await sendAndPersistNotification({
                         type: 'NEW_PURCHASE',
                         title: 'طلب شراء جديد',
-                        body: `تم إنشاء طلب شراء جديد بقيمة ${total.toLocaleString('ar-IQ')} د.ع`,
+                        body: `تم إنشاء طلب شراء جديد بقيمة ${total.toLocaleString('en-US')} د.ع`,
                         targetUserIds: managers.map((m: any) => m.id),
                         branchId,
                         data: { purchaseId: purchase.id },

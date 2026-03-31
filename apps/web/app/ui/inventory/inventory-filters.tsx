@@ -1,15 +1,16 @@
 "use client";
 
+import { useTransition } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { useDebouncedCallback } from "use-debounce";
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 interface Counts {
   total: number;
   shortage: number;
   good: number;
   surplus: number;
-  low?: number; // 0 < stock < minStock (اختياري — يُعرض فقط إذا مُرِّر)
+  low?: number;
 }
 
 const BASE_TABS = [
@@ -54,6 +55,7 @@ export default function InventoryFilters({
   currentStatus: string;
   currentQuery: string;
 }) {
+  const [isPending, startTransition] = useTransition();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { replace } = useRouter();
@@ -69,7 +71,7 @@ export default function InventoryFilters({
     params.delete("status");
     if (term) params.set("query", term);
     else params.delete("query");
-    replace(`${pathname}?${params.toString()}`);
+    startTransition(() => replace(`${pathname}?${params.toString()}`));
   }, 300);
 
   const handleStatus = (status: string) => {
@@ -77,7 +79,7 @@ export default function InventoryFilters({
     params.set("page", "1");
     if (status) params.set("status", status);
     else params.delete("status");
-    replace(`${pathname}?${params.toString()}`);
+    startTransition(() => replace(`${pathname}?${params.toString()}`));
   };
 
   const getCount = (key: string) => {
@@ -106,13 +108,18 @@ export default function InventoryFilters({
       </div>
 
       {/* Status Tabs */}
-      <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-1 shrink-0">
+      <div
+        className={`flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-1 shrink-0 transition-opacity duration-200 ${
+          isPending ? "opacity-60 pointer-events-none" : ""
+        }`}
+      >
         {tabs.map((tab) => {
           const isActive = currentStatus === tab.key;
           return (
             <button
               key={tab.key}
               onClick={() => handleStatus(tab.key)}
+              disabled={isPending}
               className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-all ${
                 isActive ? tab.activeColor : `${tab.color} hover:bg-background`
               }`}
@@ -130,9 +137,16 @@ export default function InventoryFilters({
         })}
       </div>
 
-      {/* Result Count */}
-      <span className="text-sm text-muted-foreground font-medium shrink-0 whitespace-nowrap">
-        {displayCount} نتيجة
+      {/* Result Count / Loading */}
+      <span className="text-sm text-muted-foreground font-medium shrink-0 whitespace-nowrap flex items-center gap-1.5">
+        {isPending ? (
+          <>
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            جاري التحميل...
+          </>
+        ) : (
+          `${displayCount} نتيجة`
+        )}
       </span>
     </div>
   );
