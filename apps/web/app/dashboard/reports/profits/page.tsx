@@ -15,20 +15,22 @@ function parseDateParam(val: string | string[] | undefined) {
 }
 
 function buildDateRange(from?: string, to?: string, fromTime?: string, toTime?: string) {
-    const now = new Date();
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
     let start: Date, end: Date, label: string;
     if (from && to) {
-        start = new Date(from);
-        end = new Date(to);
+        const [fy, fm, fd] = from.split('-').map(Number);
+        const [ty, tm, td] = to.split('-').map(Number);
+        // Parse as Baghdad dates → convert to UTC (full days for DB; time-of-day filtered in JS)
+        start = new Date(Date.UTC(fy, fm - 1, fd, 0, 0, 0, 0) - IRAQ_OFFSET);
+        end   = new Date(Date.UTC(ty, tm - 1, td, 23, 59, 59, 999) - IRAQ_OFFSET);
         label = fromTime || toTime ? `${from} — ${to} (${fromTime || "00:00"} → ${toTime || "23:59"})` : `${from} — ${to}`;
     } else {
-        start = new Date(now); start.setDate(start.getDate() - 6);
-        end = new Date(now);
+        const todayUtcIraq = Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate());
+        end   = new Date(todayUtcIraq + 24 * 60 * 60 * 1000 - 1 - IRAQ_OFFSET);
+        start = new Date(todayUtcIraq - 6 * 24 * 60 * 60 * 1000 - IRAQ_OFFSET);
         label = "آخر 7 أيام";
     }
-    // Always full days for DB query — time filtering is done in JS post-processing
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
     return { start, end, label };
 }
 

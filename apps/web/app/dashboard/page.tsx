@@ -77,10 +77,12 @@ async function getSuperAdminData() {
 }
 
 async function getAdminData(organizationId: string, branchId?: string) {
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const in90Days = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const todayStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate()) - IRAQ_OFFSET);
+    const monthStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), 1) - IRAQ_OFFSET);
+    const in90Days = new Date(todayStart.getTime() + 90 * 24 * 60 * 60 * 1000);
 
     const orgBranchWhere = { branch: { organizationId } };
     const orgWhere = { organizationId };
@@ -268,9 +270,10 @@ async function getAdminData(organizationId: string, branchId?: string) {
 }
 
 async function getEmployeeData(branchId?: string) {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
+    const todayStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate()) - IRAQ_OFFSET);
+    const in30Days = new Date(todayStart.getTime() + 30 * 24 * 60 * 60 * 1000);
     const branchWhere = branchId ? { branchId } : {};
 
     const [drugCount, inventoryCount, todaySales, todayReturns, expiringCount, alerts] = await Promise.all([

@@ -15,16 +15,19 @@ function parseDateParam(val: string | string[] | undefined) {
 }
 
 function buildDateRange(from?: string, to?: string) {
-    const now = new Date();
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
     let start: Date, end: Date;
     if (from && to) {
-        start = new Date(from); end = new Date(to);
+        const [fy, fm, fd] = from.split('-').map(Number);
+        const [ty, tm, td] = to.split('-').map(Number);
+        start = new Date(Date.UTC(fy, fm - 1, fd, 0, 0, 0, 0) - IRAQ_OFFSET);
+        end   = new Date(Date.UTC(ty, tm - 1, td, 23, 59, 59, 999) - IRAQ_OFFSET);
     } else {
-        start = new Date(now); start.setDate(start.getDate() - 6);
-        end = new Date(now);
+        const todayUtcIraq = Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate());
+        end   = new Date(todayUtcIraq + 24 * 60 * 60 * 1000 - 1 - IRAQ_OFFSET);
+        start = new Date(todayUtcIraq - 6 * 24 * 60 * 60 * 1000 - IRAQ_OFFSET);
     }
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
     return { start, end };
 }
 
