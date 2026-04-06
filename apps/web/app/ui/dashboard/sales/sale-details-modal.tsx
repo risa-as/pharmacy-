@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Printer, Calendar, User, MapPin, ShoppingBag, Undo2 } from "lucide-react";
+import { X, Printer, Calendar, User, MapPin, ShoppingBag, Undo2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { useState, useEffect } from "react";
@@ -38,6 +38,12 @@ export default function SaleDetailsModal({ sale, isOpen, onClose, settings }: Sa
                         </h2>
                         <div className="flex items-center gap-3 mt-1">
                             <p className="text-sm text-muted-foreground">رقم الفاتورة: <span className="font-mono font-bold text-foreground">{sale.id}</span></p>
+                            {sale.hasPriceOverride && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 border border-amber-300">
+                                    <Pencil className="w-2.5 h-2.5" />
+                                    يحتوي على سعر معدّل يدوياً
+                                </span>
+                            )}
                             {sale.returns && sale.returns.length > 0 && (
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${sale.returns.reduce((sum: number, r: any) => sum + r.total, 0) >= sale.total
                                         ? "bg-destructive/10 text-destructive"

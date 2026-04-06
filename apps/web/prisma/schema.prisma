@@ -237,14 +237,15 @@ model SyncActionLog {
 }
 
 model Sale {
-  id           String        @id @default(uuid())
-  branchId     String
-  safeId       String? // The safe where the cash for this sale went
-  patientId    String? // Linked to CRM
-  total        Float
-  discount     Float         @default(0)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id               String        @id @default(uuid())
+  branchId         String
+  safeId           String? // The safe where the cash for this sale went
+  patientId        String? // Linked to CRM
+  total            Float
+  discount         Float         @default(0)
+  hasPriceOverride Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
   branch       Branch        @relation(fields: [branchId], references: [id])
   safe         Safe?         @relation(fields: [safeId], references: [id])
   patient      Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)

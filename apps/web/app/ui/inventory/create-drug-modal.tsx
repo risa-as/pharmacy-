@@ -186,7 +186,7 @@ export default function CreateDrugModal({
             <div className="grid grid-cols-2 gap-4 col-span-2">
               <div className="col-span-2">
                 <label className="block text-sm font-bold text-foreground mb-1">
-                  سعر البيع
+                  سعر الجمهور
                 </label>
                 <input
                   type="number"

@@ -9,7 +9,7 @@ import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import BatchSearch from "@/app/ui/batches/batch-search";
 import Link from "next/link";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 1000;
 
 export default async function BatchesPage({
   searchParams,
@@ -64,7 +64,7 @@ export default async function BatchesPage({
   const [batches, filteredTotal] = await Promise.all([
     prisma.batch.findMany({
       where: searchFilter,
-      orderBy: { expiryDate: "asc" },
+      orderBy: { createdAt: "desc" },
       include: {
         inventory: {
           include: {
@@ -150,8 +150,16 @@ export default async function BatchesPage({
               createdAt: b.createdAt.toISOString(),
               supplierId: b.supplierId,
               inventory: {
-                branch: b.inventory.branch ? { name: b.inventory.branch.name } : null,
-                drug: b.inventory.drug ? { id: b.inventory.drug.id, tradeName: b.inventory.drug.tradeName, barcode: b.inventory.drug.barcode } : null,
+                branch: b.inventory.branch
+                  ? { name: b.inventory.branch.name }
+                  : null,
+                drug: b.inventory.drug
+                  ? {
+                      id: b.inventory.drug.id,
+                      tradeName: b.inventory.drug.tradeName,
+                      barcode: b.inventory.drug.barcode,
+                    }
+                  : null,
               },
               supplier: b.supplier ? { name: b.supplier.name } : null,
             }))}

@@ -14,16 +14,35 @@ function parseDateParam(val: string | string[] | undefined) {
     return typeof val === "string" ? val : undefined;
 }
 
-function buildDateRange(from?: string, to?: string) {
+function buildDateRange(from?: string, to?: string, fromTime?: string, toTime?: string) {
     const now = new Date();
+    let start: Date, end: Date, label: string;
     if (from && to) {
-        const start = new Date(from); start.setHours(0, 0, 0, 0);
-        const end = new Date(to); end.setHours(23, 59, 59, 999);
-        return { start, end, label: `${from} — ${to}` };
+        start = new Date(from);
+        end = new Date(to);
+        label = fromTime || toTime ? `${from} — ${to} (${fromTime || "00:00"} → ${toTime || "23:59"})` : `${from} — ${to}`;
+    } else {
+        start = new Date(now); start.setDate(start.getDate() - 6);
+        end = new Date(now);
+        label = "آخر 7 أيام";
     }
-    const start = new Date(now); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
-    const end = new Date(now); end.setHours(23, 59, 59, 999);
-    return { start, end, label: "آخر 7 أيام" };
+    // Always full days for DB query — time filtering is done in JS post-processing
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end, label };
+}
+
+function filterByTimeOfDay<T extends { createdAt: Date | string }>(items: T[], fromTime?: string, toTime?: string): T[] {
+    if (!fromTime && !toTime) return items;
+    const toMinutes = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const fromMin = fromTime ? toMinutes(fromTime) : 0;
+    const toMin = toTime ? toMinutes(toTime) : 23 * 60 + 59;
+    const crossesMidnight = fromMin > toMin;
+    return items.filter(item => {
+        const d = new Date(item.createdAt);
+        const min = d.getHours() * 60 + d.getMinutes();
+        return crossesMidnight ? (min >= fromMin || min <= toMin) : (min >= fromMin && min <= toMin);
+    });
 }
 
 function getDaysBetween(start: Date, end: Date) {
@@ -51,7 +70,9 @@ export default async function ProfitsReportPage({
     const branchId = parseDateParam(searchParams.branch);
     const fromParam = parseDateParam(searchParams.from);
     const toParam = parseDateParam(searchParams.to);
-    const { start, end, label: periodLabel } = buildDateRange(fromParam, toParam);
+    const fromTimeParam = parseDateParam(searchParams.fromTime);
+    const toTimeParam = parseDateParam(searchParams.toTime);
+    const { start, end, label: periodLabel } = buildDateRange(fromParam, toParam, fromTimeParam, toTimeParam);
 
     const branchWhere = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
@@ -60,7 +81,7 @@ export default async function ProfitsReportPage({
     sixMonthsAgo.setHours(0, 0, 0, 0);
 
     // ── Run ALL queries in parallel ──────────────────────────────────────────
-    const [sales, expenses, inventoryRaw, pendingTotal, monthlySales, monthlyExpenses] = await Promise.all([
+    const [salesRaw, expenses, inventoryRaw, pendingTotal, monthlySales, monthlyExpenses] = await Promise.all([
         // Period sales — only fields needed for COGS + revenue
         prisma.sale.findMany({
             where: { createdAt: { gte: start, lte: end }, ...branchWhere },
@@ -102,6 +123,9 @@ export default async function ProfitsReportPage({
             select: { amount: true, date: true },
         }),
     ]);
+
+    // Filter period sales by time-of-day if specified
+    const sales = filterByTimeOfDay(salesRaw, fromTimeParam, toTimeParam);
 
     // ── Build cost map ───────────────────────────────────────────────────────
     const costMap = new Map<string, number>();
@@ -191,7 +215,10 @@ export default async function ProfitsReportPage({
                     baseUrl="/dashboard/reports/profits"
                     currentFrom={fromParam}
                     currentTo={toParam}
+                    currentFromTime={fromTimeParam}
+                    currentToTime={toTimeParam}
                     extraParams={extraParams}
+                    showTimeFilter
                 />
                 <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/profits" />
             </div>

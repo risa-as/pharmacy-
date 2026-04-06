@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, TrendingUp } from "lucide-react";
+import { Eye, TrendingUp, Pencil } from "lucide-react";
 import SaleDetailsModal from "./sale-details-modal"; // Import the modal
 
 interface SalesTableProps {
@@ -30,13 +30,19 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                         {sales.map((sale: any, index: any) => (
                             <tr
                                 key={sale.id}
-                                className="hover:bg-muted/50 cursor-pointer transition-colors group"
+                                className={`cursor-pointer transition-colors group ${sale.hasPriceOverride ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-muted/50'}`}
                                 onClick={() => setSelectedSale(sale)}
                             >
                                 <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
                                 <td className="px-4 py-3">
-                                    <div className="text-foreground">
+                                    <div className="text-foreground flex items-center gap-2">
                                         {new Date(sale.createdAt).toLocaleDateString('ar-IQ')}
+                                        {sale.hasPriceOverride && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300">
+                                                <Pencil className="w-2.5 h-2.5" />
+                                                سعر معدّل
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
                                         {new Date(sale.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
