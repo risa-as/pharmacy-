@@ -272,6 +272,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
 async function getEmployeeData(branchId?: string) {
     const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
     const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
+    const now = new Date();
     const todayStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate()) - IRAQ_OFFSET);
     const in30Days = new Date(todayStart.getTime() + 30 * 24 * 60 * 60 * 1000);
     const branchWhere = branchId ? { branchId } : {};
