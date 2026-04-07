@@ -20,14 +20,16 @@ export default async function ReturnInvoicePage({
                 }
             },
             sale: { select: { id: true, total: true, createdAt: true } },
-            branch: { select: { name: true } }
+            branch: { select: { name: true, organizationId: true } }
         }
     });
 
     if (!returnData) notFound();
 
-    // Get company settings for header
-    const settings = await prisma.companySettings.findFirst();
+    // Get company settings for header — scoped to this record's organization
+    const settings = await prisma.companySettings.findFirst({
+        where: { organizationId: returnData.branch?.organizationId ?? undefined },
+    });
 
     const formatDate = (d: Date) => d.toLocaleDateString('ar-IQ', {
         year: 'numeric', month: '2-digit', day: '2-digit',

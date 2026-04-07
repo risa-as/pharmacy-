@@ -109,7 +109,16 @@ export default function SaleDetailsModal({ sale, isOpen, onClose, settings }: Sa
                                             {item.drug?.tradeName || item.name || 'غير معروف'}
                                         </td>
                                         <td className="px-4 py-3 text-center text-muted-foreground">{item.quantity}</td>
-                                        <td className="px-4 py-3 text-center text-muted-foreground">{item.price.toLocaleString()}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            {item.originalPrice != null && item.originalPrice !== item.price ? (
+                                                <div className="flex flex-col items-center gap-0.5">
+                                                    <span className="line-through text-muted-foreground/50 text-xs">{item.originalPrice.toLocaleString()}</span>
+                                                    <span className="font-bold text-amber-600">{item.price.toLocaleString()}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-muted-foreground">{item.price.toLocaleString()}</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3 text-center font-bold text-foreground">{(item.quantity * item.price).toLocaleString()}</td>
                                     </tr>
                                 ))}

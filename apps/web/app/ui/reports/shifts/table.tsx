@@ -1,3 +1,12 @@
+const BAGHDAD_TZ = 'Asia/Baghdad';
+
+function fmtTime(d: Date | string) {
+    return new Date(d).toLocaleTimeString('ar-IQ', { timeZone: BAGHDAD_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmtDate(d: Date | string) {
+    return new Date(d).toLocaleDateString('ar-IQ', { timeZone: BAGHDAD_TZ });
+}
+
 export default function ShiftsTable({
     shifts,
     creditSales,
@@ -21,7 +30,7 @@ export default function ShiftsTable({
                                             <div className="mb-2 flex items-center">
                                                 <p className="font-bold text-foreground">{shift.user?.name || 'مستخدم محذوف'}</p>
                                             </div>
-                                            <p className="text-sm text-muted-foreground">{new Date(shift.startTime).toLocaleString('ar-IQ')}</p>
+                                            <p className="text-sm text-muted-foreground">{fmtTime(shift.startTime)} — {fmtDate(shift.startTime)}</p>
                                         </div>
                                         <div>
                                             {shift.status === 'CLOSED' ? (
@@ -87,14 +96,14 @@ export default function ShiftsTable({
                                             </div>
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" dir="ltr">
-                                            {new Date(shift.startTime).toLocaleTimeString('ar-IQ')} <br />
-                                            <span className="text-xs">{new Date(shift.startTime).toLocaleDateString('ar-IQ')}</span>
+                                            {fmtTime(shift.startTime)} <br />
+                                            <span className="text-xs">{fmtDate(shift.startTime)}</span>
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" dir="ltr">
                                             {shift.endTime ? (
                                                 <>
-                                                    {new Date(shift.endTime).toLocaleTimeString('ar-IQ')} <br />
-                                                    <span className="text-xs">{new Date(shift.endTime).toLocaleDateString('ar-IQ')}</span>
+                                                    {fmtTime(shift.endTime)} <br />
+                                                    <span className="text-xs">{fmtDate(shift.endTime)}</span>
                                                 </>
                                             ) : '-'}
                                         </td>

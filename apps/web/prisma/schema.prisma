@@ -30,6 +30,7 @@ model Organization {
   paymentTransactions PaymentTransaction[]
   customDrugs        GlobalDrug[] @relation("OrganizationCustomDrugs")
   suppliers          Supplier[]   @relation("OrganizationSuppliers")
+  companySettings    CompanySettings?
 
   plan               SubscriptionPlan? @relation(fields: [planId], references: [id])
 }
@@ -274,14 +275,15 @@ enum PaymentMethod {
 }
 
 model SaleItem {
-  id       String     @id @default(uuid())
-  saleId   String
-  drugId   String
-  quantity Int
-  price    Float
-  cost     Float      @default(0)
-  sale     Sale       @relation(fields: [saleId], references: [id])
-  drug     GlobalDrug @relation(fields: [drugId], references: [id])
+  id            String     @id @default(uuid())
+  saleId        String
+  drugId        String
+  quantity      Int
+  price         Float
+  originalPrice Float?
+  cost          Float      @default(0)
+  sale          Sale       @relation(fields: [saleId], references: [id])
+  drug          GlobalDrug @relation(fields: [drugId], references: [id])
 
   @@index([saleId])
   @@index([drugId])
@@ -532,8 +534,9 @@ enum DiscountType {
 
 // ==================== الإعدادات العامة ====================
 model CompanySettings {
-  id                     String   @id @default(uuid())
-  name                   String   @default("Pharmacy System")
+  id                     String        @id @default(uuid())
+  organizationId         String?       @unique
+  name                   String        @default("Pharmacy System")
   phone                  String?
   address                String?
   email                  String?
@@ -542,15 +545,17 @@ model CompanySettings {
   taxNumber              String?
   facebookUrl            String?
   instagramUrl           String?
-  currency               String   @default("IQD")
-  loyaltyEnabled         Boolean  @default(false)
-  loyaltyPointsPerDinar  Float    @default(0.01)
-  loyaltyRedemptionValue Float    @default(2.5)
-  loyaltyMinRedemption   Int      @default(500)
-  maxDiscountPercent     Float    @default(10)
-  minProfitMargin        Float    @default(5) // Minimum profit margin percentage - warn if selling below this
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  currency               String        @default("IQD")
+  loyaltyEnabled         Boolean       @default(false)
+  loyaltyPointsPerDinar  Float         @default(0.01)
+  loyaltyRedemptionValue Float         @default(2.5)
+  loyaltyMinRedemption   Int           @default(500)
+  maxDiscountPercent     Float         @default(10)
+  minProfitMargin        Float         @default(5) // Minimum profit margin percentage - warn if selling below this
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  organization           Organization? @relation(fields: [organizationId], references: [id])
 }
 
 // ==================== برنامج الولاء ====================

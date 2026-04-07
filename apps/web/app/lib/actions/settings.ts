@@ -10,14 +10,21 @@ import { logAudit } from "@/app/lib/audit";
 // --- Company Settings ---
 
 export async function getCompanySettings() {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+    const organizationId = tenantCtx.organizationId;
+    if (!organizationId) return null;
+
     try {
-        const settings = await prisma.companySettings.findFirst();
+        const settings = await prisma.companySettings.findFirst({
+            where: { organizationId }
+        });
         if (!settings) {
-            // Create default if not exists
             return await prisma.companySettings.create({
                 data: {
                     name: "Pharmacy System",
-                    currency: "IQD"
+                    currency: "IQD",
+                    organizationId
                 }
             });
         }
@@ -33,6 +40,9 @@ export async function updateCompanySettings(formData: FormData) {
     if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canChangeSettings) return { success: false, message: "ليس لديك صلاحية لتغيير الإعدادات." };
 
+    const organizationId = tenantCtx.organizationId;
+    if (!organizationId) return { success: false, message: "تعذر تحديد المؤسسة." };
+
     try {
         const name = formData.get("name") as string;
         const phone = formData.get("phone") as string;
@@ -45,12 +55,12 @@ export async function updateCompanySettings(formData: FormData) {
         const maxDiscountPercent = parseFloat(formData.get("maxDiscountPercent") as string) || 10;
         const currency = (formData.get("currency") as string) || "IQD";
 
-        // Logo URL might serve as a hidden input or handled separately if using UploadThing directly in client
-        // For now, let's assume it's passed if we have a simple text input or if we handle upload separately
         const logoUrl = formData.get("logoUrl") as string;
 
-        // Check if settings exist
-        const existing = await prisma.companySettings.findFirst();
+        // Filter strictly by organizationId to ensure complete isolation
+        const existing = await prisma.companySettings.findFirst({
+            where: { organizationId }
+        });
 
         if (existing) {
             await prisma.companySettings.update({
@@ -59,15 +69,16 @@ export async function updateCompanySettings(formData: FormData) {
                     name, phone, address, email, website,
                     taxNumber, facebookUrl, instagramUrl,
                     maxDiscountPercent, currency,
-                    logoUrl: logoUrl || existing.logoUrl // Keep old logo if not provided
+                    logoUrl: logoUrl || existing.logoUrl
                 }
             });
         } else {
             await prisma.companySettings.create({
                 data: {
+                    organizationId,
                     name, phone, address, email, website,
                     taxNumber, facebookUrl, instagramUrl,
-                    maxDiscountPercent,
+                    maxDiscountPercent, currency,
                     logoUrl
                 }
             });

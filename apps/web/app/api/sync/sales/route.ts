@@ -20,7 +20,8 @@ const SyncSaleSchema = z.object({
     items: z.array(z.object({
         drugId: z.string(),
         quantity: z.number(),
-        price: z.number()
+        price: z.number(),
+        originalPrice: z.number().nullable().optional(),
     })),
     // Patient snapshot sent by desktop for credit sales so cloud can upsert before FK check
     patient: z.object({
@@ -85,6 +86,8 @@ export async function POST(req: NextRequest) {
 
                     const saleItemsData = [];
 
+                    console.log(`[SyncSales DEBUG] sale ${sale.id} items:`, JSON.stringify(sale.items.map((i: any) => ({ drugId: i.drugId, price: i.price, originalPrice: i.originalPrice }))));
+
                     // Update Inventory (FIFO Deduction from Batches) and Calculate Cost
                     for (const item of sale.items) {
                         let itemTotalCost = 0;
@@ -125,6 +128,7 @@ export async function POST(req: NextRequest) {
                             drugId: item.drugId,
                             quantity: item.quantity,
                             price: item.price,
+                            originalPrice: item.originalPrice ?? null,
                             cost: unitCost
                         });
                     }
