@@ -40,7 +40,7 @@ export async function GET(req: Request) {
         });
 
         // Fetch only drugs referenced in this inventory result (avoids full-table scan)
-        const drugIds = [...new Set(inventory.map((item: any) => item.drugId))];
+        const drugIds = Array.from(new Set(inventory.map((item: any) => item.drugId)));
         const drugs = drugIds.length > 0
             ? await prisma.globalDrug.findMany({ where: { id: { in: drugIds } } })
             : [];
