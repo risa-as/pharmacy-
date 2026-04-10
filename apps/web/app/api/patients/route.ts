@@ -16,11 +16,10 @@ export async function GET(req: Request) {
         const query = searchParams.get('query');
         const { user } = tenantCtx;
 
-        // Build branch filter: include branch-specific patients AND null-branch patients
-        // (null-branch patients are synced from desktop without explicit branch assignment)
-        const branchFilter = user.branchId
-            ? { OR: [{ branchId: user.branchId }, { branchId: null }] }
-            : tenantBranchWhere;
+        // Scope patients to the user's branch (or org for admins).
+        // We intentionally exclude null-branchId patients from the web dashboard
+        // to prevent cross-org data leakage (null-branch patients are legacy sync artifacts).
+        const branchFilter = tenantBranchWhere;
 
         const where: any = query
             ? {

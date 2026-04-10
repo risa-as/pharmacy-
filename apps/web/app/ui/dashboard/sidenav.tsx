@@ -101,6 +101,12 @@ const controlTowerSections: NavSection[] = [
   {
     label: "",
     links: [
+      { name: "قاعدة الأدوية العالمية", href: "/dashboard/admin/drugs", icon: Pill },
+    ],
+  },
+  {
+    label: "",
+    links: [
       { name: "الإعدادات", href: "/dashboard/settings", icon: SettingsIcon },
     ],
   },

@@ -48,6 +48,7 @@ export async function fetchReportData(
                     },
                 },
                 orderBy: { createdAt: "desc" },
+                take: 5000,
             });
 
             // Return flattened structure for detailed report
@@ -79,6 +80,7 @@ export async function fetchReportData(
                     }
                 },
                 orderBy: { createdAt: "desc" },
+                take: 5000,
             });
 
             const flattenedData = data.flatMap((purchase: any) =>

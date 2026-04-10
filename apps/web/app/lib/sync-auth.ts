@@ -20,10 +20,14 @@ export interface SyncUser {
     email?: string;
 }
 
-const SYNC_SECRET = process.env.SYNC_TOKEN_SECRET || 'faramace-sync-secret-key';
+const SYNC_SECRET = process.env.SYNC_TOKEN_SECRET;
+if (!SYNC_SECRET) {
+    console.error("CRITICAL: SYNC_TOKEN_SECRET env var is not set — sync authentication is insecure");
+}
+const _SYNC_SECRET = SYNC_SECRET || 'faramace-sync-secret-key';
 
 function verifySyncToken(token: string, userId: string, branchId: string, orgId: string, role: string): boolean {
-    const expected = crypto.createHmac('sha256', SYNC_SECRET)
+    const expected = crypto.createHmac('sha256', _SYNC_SECRET)
         .update(`${userId}:${branchId}:${orgId}:${role}`)
         .digest('hex');
     return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));

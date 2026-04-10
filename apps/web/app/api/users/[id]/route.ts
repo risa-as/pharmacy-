@@ -19,6 +19,18 @@ export async function PATCH(
         const { id } = await params;
         const body = await req.json();
 
+        // Verify target user belongs to caller's org (prevents cross-tenant update)
+        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const targetUser = await prisma.user.findUnique({
+                where: { id },
+                select: { branch: { select: { organizationId: true } } },
+            });
+            const targetOrgId = targetUser?.branch?.organizationId;
+            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+        }
+
         // Only allow updating specific fields
         const allowedFields: Record<string, any> = {};
 
@@ -73,13 +85,21 @@ export async function GET(
                 email: true,
                 role: true,
                 permissions: true,
-                branch: { select: { name: true } }
+                branch: { select: { name: true, organizationId: true } }
             }
         });
 
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-        return NextResponse.json({ user });
+        // Verify target user belongs to caller's org
+        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const targetOrgId = user.branch?.organizationId;
+            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
+                return NextResponse.json({ error: "User not found" }, { status: 404 });
+            }
+        }
+
+        return NextResponse.json({ user: { ...user, branch: user.branch ? { name: user.branch.name } : null } });
     } catch (e: any) {
         return NextResponse.json({ error: e.message }, { status: 500 });
     }

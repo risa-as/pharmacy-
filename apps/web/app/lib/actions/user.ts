@@ -125,6 +125,18 @@ export async function updateUser(
     const { name, email, password, role, branchId } = validatedFields.data;
 
     try {
+        // Verify target user belongs to caller's org (prevents cross-tenant update)
+        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const targetUser = await prisma.user.findUnique({
+                where: { id },
+                select: { branch: { select: { organizationId: true } } },
+            });
+            const targetOrgId = targetUser?.branch?.organizationId;
+            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
+                return { message: "غير مصرح: لا يمكنك تعديل مستخدم من منظمة أخرى." };
+            }
+        }
+
         const updateData: any = {
             name,
             email,
@@ -161,25 +173,35 @@ export async function updateUser(
 
 export async function deleteUser(id: string) {
     const tenantCtx = await getTenantContext();
-    if (!(tenantCtx instanceof NextResponse) && !tenantCtx.userPermissions.canManageUsers) {
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canManageUsers) {
         return { message: "ليس لديك صلاحية لحذف المستخدمين." };
     }
     try {
-        const user = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: { name: true, email: true, branch: { select: { organizationId: true } } },
+        });
+
+        // Verify target user belongs to caller's org
+        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const targetOrgId = user?.branch?.organizationId;
+            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
+                return { message: "غير مصرح: لا يمكنك حذف مستخدم من منظمة أخرى." };
+            }
+        }
         await prisma.user.delete({
             where: { id },
         });
-        if (!(tenantCtx instanceof NextResponse)) {
-            await logAudit({
-                userId: tenantCtx.user.id,
-                userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
-                action: 'DELETE',
-                entity: 'USER',
-                entityId: id,
-                details: JSON.stringify({ name: user?.name, email: user?.email }),
-                branchId: tenantCtx.user.branchId ?? undefined,
-            });
-        }
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'USER',
+            entityId: id,
+            details: JSON.stringify({ name: user?.name, email: user?.email }),
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
         revalidatePath("/dashboard/users");
     } catch (error) {
         console.error("Error deleting user:", error);
@@ -200,8 +222,19 @@ export async function getUsers() {
 }
 
 export async function getUserById(id: string) {
-    return await prisma.user.findUnique({
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+
+    const user = await prisma.user.findUnique({
         where: { id },
         include: { branch: true },
     });
+
+    // Verify the user belongs to the caller's org (skip for SUPER_ADMIN)
+    if (user && tenantCtx.user.role !== 'SUPER_ADMIN') {
+        const targetOrgId = user.branch?.organizationId;
+        if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) return null;
+    }
+
+    return user;
 }
