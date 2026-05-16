@@ -210,7 +210,7 @@ export default async function SlowMoversPage({
                                         {item.neverSold ? (
                                             <span className="text-warning font-bold">لم تُباع مطلقاً</span>
                                         ) : (
-                                            new Date(item.lastSaleDate!).toLocaleDateString("ar-IQ")
+                                            new Date(item.lastSaleDate!).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })
                                         )}
                                     </td>
                                     <td className="px-4 py-3">

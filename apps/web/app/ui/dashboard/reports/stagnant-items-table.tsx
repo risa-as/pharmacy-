@@ -88,7 +88,7 @@ export default function StagnantItemsTable({ items, currentPeriod }: StagnantIte
                                     {item.lastSaleDate ? (
                                         <div className="flex items-center gap-2">
                                             <Calendar className="w-3 h-3" />
-                                            {new Date(item.lastSaleDate).toLocaleDateString('ar-IQ')}
+                                            {new Date(item.lastSaleDate).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                         </div>
                                     ) : (
                                         <span className="text-muted-foreground/60">لا يوجد مبيعات</span>

@@ -36,7 +36,7 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                                 <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
                                 <td className="px-4 py-3">
                                     <div className="text-foreground flex items-center gap-2">
-                                        {new Date(sale.createdAt).toLocaleDateString('ar-IQ')}
+                                        {new Date(sale.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                         {sale.hasPriceOverride && (
                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300">
                                                 <Pencil className="w-2.5 h-2.5" />
@@ -45,7 +45,7 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                                         )}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
-                                        {new Date(sale.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                                        {new Date(sale.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Baghdad' })}
                                     </div>
                                 </td>
                                 <td className="px-4 py-3 text-muted-foreground">

@@ -112,12 +112,13 @@ export default async function DebtDetailPage({
                                     )}
                                     <div>
                                         <p className="text-sm font-medium text-foreground">
-                                            فاتورة بتاريخ {new Date(sale.createdAt).toLocaleDateString("ar-IQ")}
+                                            فاتورة بتاريخ {new Date(sale.createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
                                             {new Date(sale.createdAt).toLocaleTimeString("ar-IQ", {
                                                 hour: "2-digit",
                                                 minute: "2-digit",
+                                                timeZone: "Asia/Baghdad",
                                             })}
                                         </p>
                                     </div>
@@ -148,7 +149,7 @@ export default async function DebtDetailPage({
                                         {sale.payments.map((p: any) => (
                                             <div key={p.id} className="flex justify-between text-xs text-success py-1">
                                                 <span>
-                                                    ✓ {formatIQD(p.amount)} — {new Date(p.createdAt).toLocaleDateString("ar-IQ")}
+                                                    ✓ {formatIQD(p.amount)} — {new Date(p.createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                                     {p.note && <span className="text-muted-foreground mr-2">({p.note})</span>}
                                                 </span>
                                             </div>

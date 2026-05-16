@@ -132,7 +132,7 @@ export default function StocktakeForm({ stocktakeId, initialData, isCompleted }:
                                         <td className="p-3 font-medium text-foreground">{item.drugName}</td>
                                         <td className="p-3 text-muted-foreground font-mono text-xs">{item.barcode}</td>
                                         <td className="p-3 text-muted-foreground">
-                                            {new Date(item.expiryDate).toLocaleDateString('en-GB')}
+                                            {new Date(item.expiryDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Baghdad' })}
                                         </td>
                                         <td className="p-3 text-muted-foreground font-mono">{item.costPrice.toLocaleString()}</td>
                                         <td className="p-3 font-bold text-muted-foreground bg-muted/20">{item.systemQuantity}</td>

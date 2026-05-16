@@ -246,7 +246,7 @@ export default async function PaymentsPage({
                       className="px-4 py-3 text-muted-foreground text-sm"
                       suppressHydrationWarning
                     >
-                      {new Date(payment.createdAt).toLocaleDateString("ar-IQ")}
+                      {new Date(payment.createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                     </td>
                   </tr>
                 );

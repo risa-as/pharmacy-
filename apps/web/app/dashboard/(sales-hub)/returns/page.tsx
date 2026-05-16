@@ -107,10 +107,10 @@ export default async function ReturnsPage({
                                         <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
                                         <td className="px-4 py-3">
                                             <div className="text-foreground">
-                                                {new Date(ret.createdAt).toLocaleDateString('ar-IQ')}
+                                                {new Date(ret.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                             </div>
                                             <div className="text-xs text-muted-foreground">
-                                                {new Date(ret.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(ret.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Baghdad' })}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">

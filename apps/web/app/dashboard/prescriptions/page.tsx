@@ -113,7 +113,7 @@ export default async function PrescriptionsPage() {
                                         {prescription.doctorName || "-"}
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
-                                        {new Date(prescription.createdAt).toLocaleDateString("ar-IQ")}
+                                        {new Date(prescription.createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                     </td>
                                     <td className="px-4 py-3 font-bold">
                                         {prescription.items.length} صنف

@@ -206,10 +206,10 @@ async function getAdminData(organizationId: string, branchId?: string) {
     for (let i = 0; i < 7; i++) {
         const d = new Date(todayStart);
         d.setDate(d.getDate() - (6 - i));
-        dayMap[d.toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric' })] = 0;
+        dayMap[d.toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' })] = 0;
     }
     for (const s of rawWeeklySales) {
-        const label = new Date(s.createdAt).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric' });
+        const label = new Date(s.createdAt).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' });
         if (label in dayMap) dayMap[label] += s.total || 0;
     }
     const weeklySalesChart = Object.entries(dayMap).map(([day, amount]: any) => ({ day, amount }));
@@ -335,7 +335,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     const isSuperAdmin = role === 'SUPER_ADMIN';
     const organizationId = ((session?.user as any)?.organizationId as string) || undefined;
     const branchId = (session?.user?.branchId as string) || undefined;
-    const dateLabel = new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const dateLabel = new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Baghdad' });
 
     /* ══════════════════════════════
        SUPER_ADMIN DASHBOARD
@@ -474,7 +474,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                                         )}
                                     </div>
                                     <span className="text-xs text-muted-foreground">
-                                        {new Date(org.createdAt).toLocaleDateString('ar-IQ')}
+                                        {new Date(org.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                     </span>
                                 </div>
                             ))}

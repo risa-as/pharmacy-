@@ -129,7 +129,7 @@ export default async function SupplierLedgerPage({ params }: { params: { id: str
                         {ledger.map((entry: any) => (
                             <tr key={entry.id} className="hover:bg-muted transition-colors">
                                 <td className="px-6 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                                    {new Date(entry.date).toLocaleDateString('ar-IQ')}
+                                    {new Date(entry.date).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                 </td>
                                 <td className="px-6 py-3 whitespace-nowrap">
                                     {entry.type === 'purchase' ? (

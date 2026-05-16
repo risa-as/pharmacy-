@@ -202,7 +202,7 @@ export default async function ExpiryReportPage({
                                             </td>
                                             <td className="px-4 py-3 font-bold">{batch.quantity}</td>
                                             <td className="px-4 py-3 text-sm">
-                                                {new Date(batch.expiryDate).toLocaleDateString("ar-IQ")}
+                                                {new Date(batch.expiryDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span

@@ -98,7 +98,7 @@ export default async function Page({
                                             {invoice.total.toFixed(2)}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-muted-foreground" suppressHydrationWarning>
-                                            {new Date(invoice.createdAt).toLocaleDateString('ar-EG')}
+                                            {new Date(invoice.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="flex justify-end gap-2">

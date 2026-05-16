@@ -109,7 +109,7 @@ export default async function AlertsPage() {
 
                             {alert.expiryDate && (
                                 <div className="text-sm opacity-70">
-                                    {new Date(alert.expiryDate).toLocaleDateString('ar-IQ')}
+                                    {new Date(alert.expiryDate).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                 </div>
                             )}
                         </div>

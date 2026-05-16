@@ -185,7 +185,7 @@ export default async function ProductMovementPage({
                                     {movements.map((m: any, idx: any) => (
                                         <tr key={idx} className="hover:bg-muted">
                                             <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
-                                                {new Date(m.date).toLocaleDateString("ar-IQ", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                                {new Date(m.date).toLocaleDateString("ar-IQ", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Baghdad" })}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold ${m.type === "شراء" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>

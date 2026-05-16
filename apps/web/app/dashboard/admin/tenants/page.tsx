@@ -211,7 +211,7 @@ export default function TenantsPage() {
         }
     };
 
-    const formatDate = (d: string) => new Date(d).toLocaleDateString('ar-IQ');
+    const formatDate = (d: string) => new Date(d).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' });
 
     const handleCopy = (key: string) => {
         navigator.clipboard.writeText(key);
@@ -451,7 +451,7 @@ export default function TenantsPage() {
                                                 const isFuture = d > new Date();
                                                 return (
                                                     <div className="flex flex-col gap-0.5">
-                                                        <span className="text-xs text-foreground">{d.toLocaleDateString('ar-IQ')}</span>
+                                                        <span className="text-xs text-foreground">{d.toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}</span>
                                                         <span className={`text-xs px-1.5 py-0.5 rounded-full w-fit ${isFuture ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                                                             {isFuture ? 'ساري' : 'منتهي'}
                                                         </span>

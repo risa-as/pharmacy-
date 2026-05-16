@@ -86,7 +86,7 @@ export default async function SupplierPurchasesPage({ params }: { params: { id: 
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
-                                    {new Date(p.createdAt).toLocaleDateString('ar-IQ')}
+                                    {new Date(p.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                 </td>
                                 <td className="px-6 py-4 text-sm text-muted-foreground">
                                     {p.branch?.name || '—'}

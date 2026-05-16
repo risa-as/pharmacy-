@@ -33,7 +33,8 @@ export default async function ReturnInvoicePage({
 
     const formatDate = (d: Date) => d.toLocaleDateString('ar-IQ', {
         year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit'
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'Asia/Baghdad',
     });
 
     const fmt = (v: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);

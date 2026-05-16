@@ -129,12 +129,12 @@ export default function BatchTable({ batches, currentPage, pageSize }: BatchTabl
                                     {batch.quantity}
                                 </td>
                                 <td className="px-4 py-3 text-muted-foreground">
-                                    {expiryDate.toLocaleDateString('ar-IQ')}
+                                    {expiryDate.toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                 </td>
                                 <td className="px-4 py-3">
                                     <div className="text-xs text-muted-foreground leading-tight">
-                                        <div>{new Date(batch.createdAt).toLocaleDateString('ar-IQ')}</div>
-                                        <div className="text-[10px] text-muted-foreground/60">{new Date(batch.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}</div>
+                                        <div>{new Date(batch.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}</div>
+                                        <div className="text-[10px] text-muted-foreground/60">{new Date(batch.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Baghdad' })}</div>
                                     </div>
                                 </td>
                                 <td className="px-4 py-3">

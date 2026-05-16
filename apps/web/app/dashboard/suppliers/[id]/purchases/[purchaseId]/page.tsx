@@ -97,6 +97,7 @@ export default async function PurchaseDetailPage({
                                         year: 'numeric',
                                         month: 'long',
                                         day: 'numeric',
+                                        timeZone: 'Asia/Baghdad',
                                     })}
                                 </span>
                             </div>
@@ -131,7 +132,7 @@ export default async function PurchaseDetailPage({
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground text-xs" dir="ltr">
                                         {item.expiryDate
-                                            ? new Date(item.expiryDate).toLocaleDateString('ar-IQ')
+                                            ? new Date(item.expiryDate).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })
                                             : '—'}
                                     </td>
                                     <td className="px-4 py-3 text-center font-bold text-foreground">

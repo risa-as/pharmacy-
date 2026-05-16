@@ -37,9 +37,11 @@ function filterByTimeOfDay<T extends { createdAt: Date | string }>(items: T[], f
     const fromMin = fromTime ? toMinutes(fromTime) : 0;
     const toMin = toTime ? toMinutes(toTime) : 23 * 60 + 59;
     const crossesMidnight = fromMin > toMin;
+    const IRAQ_OFFSET_MS = 3 * 60 * 60 * 1000;
     return items.filter(item => {
         const d = new Date(item.createdAt);
-        const min = d.getHours() * 60 + d.getMinutes();
+        const iraqTime = new Date(d.getTime() + IRAQ_OFFSET_MS);
+        const min = iraqTime.getUTCHours() * 60 + iraqTime.getUTCMinutes();
         // e.g. 21:00 → 09:00: match if min >= 1260 OR min <= 540
         return crossesMidnight ? (min >= fromMin || min <= toMin) : (min >= fromMin && min <= toMin);
     });
@@ -49,7 +51,7 @@ function getDaysBetween(start: Date, end: Date) {
     const days: string[] = [];
     const cur = new Date(start); cur.setHours(0, 0, 0, 0);
     const endDay = new Date(end); endDay.setHours(0, 0, 0, 0);
-    while (cur <= endDay) { days.push(cur.toLocaleDateString("en-GB")); cur.setDate(cur.getDate() + 1); }
+    while (cur <= endDay) { days.push(cur.toLocaleDateString("en-GB", { timeZone: "Asia/Baghdad" })); cur.setDate(cur.getDate() + 1); }
     return days;
 }
 
@@ -90,7 +92,7 @@ export default async function SalesReportPage({
     const days = getDaysBetween(start, end);
     const salesByDay = new Map<string, number>(days.map(d => [d, 0]));
     sales.forEach((sale: any) => {
-        const key = new Date(sale.createdAt).toLocaleDateString("en-GB");
+        const key = new Date(sale.createdAt).toLocaleDateString("en-GB", { timeZone: "Asia/Baghdad" });
         if (salesByDay.has(key)) salesByDay.set(key, (salesByDay.get(key) || 0) + sale.total);
     });
     const chartData = Array.from(salesByDay.entries()).map(([day, amount]) => ({ day, amount }));
@@ -126,7 +128,7 @@ export default async function SalesReportPage({
                             s.branch?.name || "غير محدد",
                             s.items.length,
                             s.total.toFixed(2),
-                            new Date(s.createdAt).toLocaleString("ar-IQ"),
+                            new Date(s.createdAt).toLocaleString("ar-IQ", { timeZone: "Asia/Baghdad" }),
                         ])}
                     />
                     <ExportPDFButton />
@@ -224,8 +226,8 @@ export default async function SalesReportPage({
                                     <td className="px-4 py-3 text-muted-foreground">{sale.items.length}</td>
                                     <td className="px-4 py-3 font-bold text-success">{sale.total.toLocaleString()} د.ع</td>
                                     <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
-                                        <div>{new Date(sale.createdAt).toLocaleDateString("ar-IQ")}</div>
-                                        <div className="text-xs opacity-70">{new Date(sale.createdAt).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}</div>
+                                        <div>{new Date(sale.createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}</div>
+                                        <div className="text-xs opacity-70">{new Date(sale.createdAt).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Baghdad" })}</div>
                                     </td>
                                 </tr>
                             ))}

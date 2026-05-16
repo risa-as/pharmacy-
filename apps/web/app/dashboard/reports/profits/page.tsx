@@ -40,9 +40,11 @@ function filterByTimeOfDay<T extends { createdAt: Date | string }>(items: T[], f
     const fromMin = fromTime ? toMinutes(fromTime) : 0;
     const toMin = toTime ? toMinutes(toTime) : 23 * 60 + 59;
     const crossesMidnight = fromMin > toMin;
+    const IRAQ_OFFSET_MS = 3 * 60 * 60 * 1000;
     return items.filter(item => {
         const d = new Date(item.createdAt);
-        const min = d.getHours() * 60 + d.getMinutes();
+        const iraqTime = new Date(d.getTime() + IRAQ_OFFSET_MS);
+        const min = iraqTime.getUTCHours() * 60 + iraqTime.getUTCMinutes();
         return crossesMidnight ? (min >= fromMin || min <= toMin) : (min >= fromMin && min <= toMin);
     });
 }
@@ -51,7 +53,7 @@ function getDaysBetween(start: Date, end: Date) {
     const days: string[] = [];
     const cur = new Date(start); cur.setHours(0, 0, 0, 0);
     const endDay = new Date(end); endDay.setHours(0, 0, 0, 0);
-    while (cur <= endDay) { days.push(cur.toLocaleDateString("en-GB")); cur.setDate(cur.getDate() + 1); }
+    while (cur <= endDay) { days.push(cur.toLocaleDateString("en-GB", { timeZone: "Asia/Baghdad" })); cur.setDate(cur.getDate() + 1); }
     return days;
 }
 
@@ -165,7 +167,7 @@ export default async function ProfitsReportPage({
     const days = getDaysBetween(start, end);
     const profitByDay = new Map<string, number>(days.map((d) => [d, 0]));
     for (const sale of sales) {
-        const key = new Date(sale.createdAt).toLocaleDateString("en-GB");
+        const key = new Date(sale.createdAt).toLocaleDateString("en-GB", { timeZone: "Asia/Baghdad" });
         if (profitByDay.has(key)) {
             let saleCost = 0;
             for (const item of sale.items) {
@@ -181,7 +183,7 @@ export default async function ProfitsReportPage({
     for (let i = 5; i >= 0; i--) {
         const d = new Date(); d.setMonth(d.getMonth() - i);
         const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        const monthLabel = d.toLocaleDateString("ar-IQ", { month: "long", year: "numeric" });
+        const monthLabel = d.toLocaleDateString("ar-IQ", { month: "long", year: "numeric", timeZone: "Asia/Baghdad" });
 
         const rev = monthlySales
             .filter((s: any) => {

@@ -91,7 +91,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                                 <span className="text-xs text-muted-foreground">تاريخ الميلاد</span>
                                 <p className="font-bold" suppressHydrationWarning>
                                     {patient.dateOfBirth
-                                        ? new Date(patient.dateOfBirth).toLocaleDateString("ar-IQ")
+                                        ? new Date(patient.dateOfBirth).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })
                                         : "غير محدد"
                                     }
                                 </p>
@@ -178,7 +178,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                                         نسبة التغطية: {policy.coverageRate}%
                                     </div>
                                     <div className="text-xs text-primary mt-1" suppressHydrationWarning>
-                                        تنتهي: {new Date(policy.expiryDate).toLocaleDateString("ar-IQ")}
+                                        تنتهي: {new Date(policy.expiryDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                     </div>
                                 </div>
                             ))}
@@ -213,7 +213,7 @@ export default async function PatientDetailsPage({ params }: { params: { id: str
                                 <div key={prescription.id} className="p-3 border rounded-lg hover:bg-muted">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-muted-foreground" suppressHydrationWarning>
-                                            {new Date(prescription.createdAt).toLocaleDateString("ar-IQ")}
+                                            {new Date(prescription.createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                         </span>
                                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${statusColors[prescription.status]}`}>
                                             {statusLabels[prescription.status]}

@@ -203,7 +203,7 @@ export default function CreateTransferForm({
                                         <td className="px-4 py-3 font-bold">{item.tradeName}</td>
                                         <td className="px-4 py-3">
                                             <span className="font-mono text-muted-foreground bg-muted px-2 py-1 rounded text-xs ml-2">{item.batchNumber}</span>
-                                            <span className="text-muted-foreground text-xs">تنتهي: {new Date(item.expiryDate).toLocaleDateString('en-GB')}</span>
+                                            <span className="text-muted-foreground text-xs">تنتهي: {new Date(item.expiryDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Baghdad' })}</span>
                                         </td>
                                         <td className="px-4 py-3">
                                             <input
