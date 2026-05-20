@@ -1,26 +1,30 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
+const fs = require('fs');
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
-// Shared design tokens — explicit entry ensures Metro hot-reloads on token changes
-const sharedRoot = path.resolve(projectRoot, '../../packages/shared');
+
+// Detect monorepo: workspace root node_modules exist (local dev / CI with full repo)
+const hasWorkspaceModules = fs.existsSync(path.join(workspaceRoot, 'node_modules'));
 
 const config = getDefaultConfig(projectRoot);
 
-// 1. Watch all files in the monorepo + explicit shared package for design tokens
-config.watchFolders = [workspaceRoot, sharedRoot];
+if (hasWorkspaceModules) {
+    // Local dev / CI with full monorepo — resolve from both roots
+    config.watchFolders = [workspaceRoot];
+    config.resolver.nodeModulesPaths = [
+        path.resolve(projectRoot, 'node_modules'),
+        path.resolve(workspaceRoot, 'node_modules'),
+    ];
+    config.resolver.disableHierarchicalLookup = true;
+} else {
+    // EAS cloud build — only local node_modules are available
+    config.resolver.nodeModulesPaths = [
+        path.resolve(projectRoot, 'node_modules'),
+    ];
+}
 
-// 2. Resolve packages from project and workspace root
-config.resolver.nodeModulesPaths = [
-    path.resolve(projectRoot, 'node_modules'),
-    path.resolve(workspaceRoot, 'node_modules'),
-];
-
-// 3. Force resolving nested modules to the folders below
-config.resolver.disableHierarchicalLookup = true;
-
-// 4. Exclude irrelevant folders manually using simple regex
 config.resolver.blockList = [
     /.*\/apps\/web\/.next\/.*/,
     /.*\/apps\/desktop\/dist\/.*/,
