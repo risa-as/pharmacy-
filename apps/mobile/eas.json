@@ -13,7 +13,7 @@
             "android": {
                 "buildType": "apk"
             },
-            "node": "18.18.0",
+            "node": "20.19.4",
             "env": {
                 "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
             }
@@ -22,7 +22,7 @@
             "android": {
                 "buildType": "app-bundle"
             },
-            "node": "18.18.0",
+            "node": "20.19.4",
             "env": {
                 "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
             }
