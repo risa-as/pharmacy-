@@ -31,7 +31,6 @@
         "backgroundColor": "#22C55E"
       },
       "package": "com.faramace.mobile",
-      "newArchEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECEIVE_BOOT_COMPLETED",
