@@ -5,13 +5,11 @@ const fs = require('fs');
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
-// Detect monorepo: workspace root node_modules exist (local dev / CI with full repo)
 const hasWorkspaceModules = fs.existsSync(path.join(workspaceRoot, 'node_modules'));
 
 const config = getDefaultConfig(projectRoot);
 
 if (hasWorkspaceModules) {
-    // Local dev / CI with full monorepo — resolve from both roots
     config.watchFolders = [workspaceRoot];
     config.resolver.nodeModulesPaths = [
         path.resolve(projectRoot, 'node_modules'),
@@ -19,7 +17,6 @@ if (hasWorkspaceModules) {
     ];
     config.resolver.disableHierarchicalLookup = true;
 } else {
-    // EAS cloud build — only local node_modules are available
     config.resolver.nodeModulesPaths = [
         path.resolve(projectRoot, 'node_modules'),
     ];
