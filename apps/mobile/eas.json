@@ -14,7 +14,7 @@
                 "buildType": "apk"
             },
             "node": "20.19.4",
-            "prebuildCommand": "sh -c 'npx expo prebuild --clean --no-install --platform android && chmod +x android/gradlew'",
+            "prebuildCommand": "prebuild --clean --no-install",
             "env": {
                 "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
             }
@@ -24,7 +24,7 @@
                 "buildType": "app-bundle"
             },
             "node": "20.19.4",
-            "prebuildCommand": "sh -c 'npx expo prebuild --clean --no-install --platform android && chmod +x android/gradlew'",
+            "prebuildCommand": "prebuild --clean --no-install",
             "env": {
                 "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
             }
