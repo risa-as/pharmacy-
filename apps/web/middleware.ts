@@ -54,5 +54,8 @@ export const config = {
     // Include API routes so the grace-period write-block (T022) can intercept
     // blocked operations. Static assets, image optimization, and sync routes
     // (which use raw request bodies) are excluded to avoid body-stream conflicts.
-    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/sync|api/mobile|api/public).*)"],
+    // api/auth/login and api/auth/change-password are custom endpoints (not NextAuth
+    // actions) — excluding them prevents NextAuth middleware from intercepting and
+    // returning a non-JSON response instead of the route handler's response.
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/sync|api/mobile|api/public|api/auth/login|api/auth/change-password).*)"],
 };
