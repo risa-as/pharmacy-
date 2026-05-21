@@ -16,12 +16,14 @@ interface Branch {
 interface BranchSelectorProps {
     selectedBranchId: string | null;
     onSelectBranch: (branchId: string | null) => void;
+    /** When true, renders nothing if only one branch exists (filter is meaningless). */
+    hideIfSingle?: boolean;
 }
 
 const ALL_OPTION: Branch & { id: null } = { id: null as any, name: 'الكل' };
 const PILL_THRESHOLD = 6; // show pills for ≤ this many branches (incl. "الكل")
 
-export const BranchSelector = ({ selectedBranchId, onSelectBranch }: BranchSelectorProps) => {
+export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle }: BranchSelectorProps) => {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
@@ -35,12 +37,16 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch }: BranchSelec
             .finally(() => setLoading(false));
     }, []);
 
+    // Hide entirely when single-branch and caller opts in
+    if (hideIfSingle && !loading && branches.length <= 1) return null;
+
     const selectedBranch = selectedBranchId ? branches.find(b => b.id === selectedBranchId) : null;
     const selectedLabel = selectedBranch?.name ?? 'الكل';
     const options = [ALL_OPTION as unknown as Branch, ...branches];
     const usePills = options.length <= PILL_THRESHOLD;
 
     if (loading) {
+        if (hideIfSingle) return null; // avoid flicker before we know the count
         return (
             <View style={{ height: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
                 <ActivityIndicator size="small" color={C.primary} />

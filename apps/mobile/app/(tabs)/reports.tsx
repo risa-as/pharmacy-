@@ -16,8 +16,6 @@ import { useSyncStatus } from '../../context/SyncContext';
 import { formatDate } from '../../utils/date';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const CHART_H    = 160;
-const CHART_TOP  = 18;  // top padding inside chart canvas
 
 type Period = 'daily' | 'weekly' | 'monthly';
 const PERIODS: { key: Period; label: string }[] = [
@@ -26,153 +24,111 @@ const PERIODS: { key: Period; label: string }[] = [
     { key: 'monthly', label: 'شهري' },
 ];
 
-// ── Catmull-Rom spline ─────────────────────────────────────────────────────────
-type Pt = { x: number; y: number };
-
-function catmullRom(p0: Pt, p1: Pt, p2: Pt, p3: Pt, t: number): Pt {
-    const t2 = t * t, t3 = t2 * t;
-    return {
-        x: 0.5*(2*p1.x+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
-        y: 0.5*(2*p1.y+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
-    };
-}
-
-function buildSpline(pts: Pt[], steps: number): Pt[] {
-    if (pts.length < 2) return pts;
-    const out: Pt[] = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-        const p0 = pts[Math.max(0, i-1)], p1 = pts[i];
-        const p2 = pts[i+1], p3 = pts[Math.min(pts.length-1, i+2)];
-        for (let s = 0; s < steps; s++) out.push(catmullRom(p0, p1, p2, p3, s/steps));
-    }
-    out.push(pts[pts.length - 1]);
-    return out;
-}
-
-// ── Smooth area chart ──────────────────────────────────────────────────────────
+// ── Bar Chart ──────────────────────────────────────────────────────────────────
 interface ChartPoint { label: string; value: number; }
 
-function SmoothChart({ data, color, isDark }: { data: ChartPoint[]; color: string; isDark: boolean }) {
+const BAR_AREA_H = 130; // height of bars
+const BAR_LABEL_H = 24; // height reserved above bars for value labels
+
+function abbreviate(n: number): string {
+    if (n === 0) return '';
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
+    return String(n);
+}
+
+function BarChart({ data, color, isDark }: { data: ChartPoint[]; color: string; isDark: boolean }) {
     const C = Colors(isDark);
-    // card has 20px screen padding + 20px internal padding on each side
-    const chartW = SCREEN_W - 80;
-    const usableH = CHART_H - CHART_TOP - 8;
-
-    if (data.length < 2) {
-        return (
-            <View style={{ height: CHART_H, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
-                <Text style={{ color: C.mutedForeground }}>لا توجد بيانات كافية</Text>
-            </View>
-        );
-    }
-
     const max = Math.max(...data.map(d => d.value), 1);
-    const steps = data.length <= 7 ? 14 : data.length <= 14 ? 8 : 4;
-
-    const ctrlPts: Pt[] = data.map((d, i) => ({
-        x: (i / (data.length - 1)) * chartW,
-        y: CHART_TOP + (1 - d.value / max) * usableH,
-    }));
-    const curve = buildSpline(ctrlPts, steps);
-    const segW = chartW / Math.max(curve.length - 1, 1) + 0.5;
-
-    // Show at most 7 x-axis labels
-    const labelStep = Math.max(1, Math.ceil(data.length / 7));
+    const maxIdx = data.reduce((mi, d, i, arr) => d.value > arr[mi].value ? i : mi, 0);
 
     return (
         <View style={{ paddingHorizontal: 20 }}>
-            {/* Canvas */}
-            <View style={{ height: CHART_H, position: 'relative', overflow: 'hidden' }}>
-
-                {/* Horizontal grid lines */}
-                {[0.25, 0.5, 0.75].map(frac => (
-                    <View key={frac} style={{
-                        position: 'absolute', left: 0, right: 0,
-                        top: CHART_TOP + (1 - frac) * usableH,
-                        height: 1, backgroundColor: C.border, opacity: 0.5,
-                    }} />
-                ))}
-
-                {/* Area fill: vertical column under each spline point */}
-                {curve.map((pt, i) => (
-                    <View key={`a${i}`} style={{
-                        position: 'absolute',
-                        left: pt.x, top: pt.y,
-                        width: segW, height: CHART_H - pt.y,
-                        backgroundColor: color, opacity: 0.07,
-                    }} />
-                ))}
-
-                {/* Curve line segments */}
-                {curve.slice(0, -1).map((pt, i) => {
-                    const nx = curve[i + 1];
-                    const dx = nx.x - pt.x, dy = nx.y - pt.y;
-                    const len = Math.sqrt(dx*dx + dy*dy);
-                    if (len < 0.4) return null;
-                    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+            {/* Bars row */}
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-end', height: BAR_AREA_H + BAR_LABEL_H, gap: data.length > 14 ? 2 : 6 }}>
+                {data.map((d, i) => {
+                    const isMax = i === maxIdx;
+                    const barH = d.value > 0 ? Math.max(6, (d.value / max) * BAR_AREA_H) : 0;
                     return (
-                        <View key={`l${i}`} style={{
-                            position: 'absolute',
-                            left: (pt.x + nx.x)/2 - len/2,
-                            top:  (pt.y + nx.y)/2 - 1.5,
-                            width: len, height: 3,
-                            backgroundColor: color, borderRadius: 1.5,
-                            transform: [{ rotate: `${angle}deg` }],
-                        }} />
+                        <View
+                            key={i}
+                            style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: BAR_AREA_H + BAR_LABEL_H }}
+                        >
+                            {/* Value label sits above bar, pinned to bar top */}
+                            <Text
+                                style={{
+                                    color: isMax ? color : C.mutedForeground,
+                                    fontSize: data.length > 14 ? 7 : 9,
+                                    fontWeight: isMax ? '700' : '400',
+                                    marginBottom: 3,
+                                    height: BAR_LABEL_H,
+                                    textAlignVertical: 'bottom',
+                                }}
+                            >
+                                {abbreviate(d.value)}
+                            </Text>
+                            {/* Bar */}
+                            <View style={{
+                                width: '100%',
+                                height: barH,
+                                backgroundColor: isMax ? color : `${color}55`,
+                                borderTopLeftRadius: 5,
+                                borderTopRightRadius: 5,
+                            }} />
+                        </View>
                     );
                 })}
-
-                {/* Dots at original data points */}
-                {ctrlPts.map((pt, i) => (
-                    <View key={`d${i}`} style={{
-                        position: 'absolute',
-                        left: pt.x - 5, top: pt.y - 5,
-                        width: 10, height: 10, borderRadius: 5,
-                        backgroundColor: color,
-                        borderWidth: 2.5,
-                        borderColor: isDark ? C.card : '#fff',
-                        elevation: 2,
-                    }} />
-                ))}
-
             </View>
-
             {/* X-axis labels */}
-            <View style={{ flexDirection: 'row-reverse', marginTop: 10 }}>
-                {data.map((d, i) => (
-                    <View key={i} style={{ flex: 1, alignItems: 'center' }}>
-                        {i % labelStep === 0 && (
-                            <Text style={{ color: C.mutedForeground, fontSize: 10, textAlign: 'center' }}>
-                                {d.label}
-                            </Text>
-                        )}
-                    </View>
-                ))}
+            <View style={{ flexDirection: 'row-reverse', marginTop: 6, gap: data.length > 14 ? 2 : 6 }}>
+                {data.map((d, i) => {
+                    // Show at most 8 labels; always show first and last
+                    const step = Math.max(1, Math.ceil(data.length / 8));
+                    const show = i % step === 0 || i === data.length - 1;
+                    return (
+                        <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+                            {show && (
+                                <Text style={{ color: C.mutedForeground, fontSize: data.length > 14 ? 8 : 10, textAlign: 'center' }}>
+                                    {d.label}
+                                </Text>
+                            )}
+                        </View>
+                    );
+                })}
             </View>
         </View>
     );
 }
 
-// ── KPI tile ───────────────────────────────────────────────────────────────────
-function KpiTile({ label, value, icon, color, bg }: {
-    label: string; value: string | number;
+// ── Stat row inside the hero card ──────────────────────────────────────────────
+function StatRow({ label, value, color }: { label: string; value: string; color: string }) {
+    return (
+        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ color, fontSize: 14, fontWeight: '700' }}>{value}</Text>
+            <Text style={{ color, fontSize: 12, fontWeight: '500', opacity: 0.75 }}>{label}</Text>
+        </View>
+    );
+}
+
+// ── KPI chip (small pill) ──────────────────────────────────────────────────────
+function KpiChip({ icon, label, value, color, bg }: {
     icon: keyof typeof Ionicons.glyphMap;
+    label: string; value: string | number;
     color: string; bg: string;
 }) {
     return (
-        <View style={{ flex: 1, backgroundColor: bg, borderRadius: 18, padding: 16, alignItems: 'flex-end', gap: 8 }}>
-            <View style={{ backgroundColor: `${color}20`, borderRadius: 10, padding: 8 }}>
-                <Ionicons name={icon} size={18} color={color} />
+        <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: bg, borderRadius: 14, padding: 12 }}>
+            <View style={{ backgroundColor: `${color}20`, borderRadius: 8, padding: 6 }}>
+                <Ionicons name={icon} size={15} color={color} />
             </View>
-            <Text
-                numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}
-                style={{ color, fontSize: 18, fontWeight: '900', textAlign: 'right' }}
-            >
-                {typeof value === 'number' ? value.toLocaleString('en-US') : value}
-            </Text>
-            <Text style={{ color: `${color}99`, fontSize: 11, fontWeight: '600', textAlign: 'right' }}>
-                {label}
-            </Text>
+            <View style={{ flex: 1 }}>
+                <Text style={{ color, fontSize: 13, fontWeight: '800', textAlign: 'right' }}>
+                    {typeof value === 'number' ? value.toLocaleString('en-US') : value}
+                </Text>
+                <Text style={{ color: `${color}AA`, fontSize: 10, fontWeight: '500', textAlign: 'right', marginTop: 1 }}>
+                    {label}
+                </Text>
+            </View>
         </View>
     );
 }
@@ -185,10 +141,10 @@ export default function ReportsScreen() {
     const router = useRouter();
     const C = Colors(isDarkMode);
 
-    const [report, setReport]           = useState<any>(null);
-    const [loading, setLoading]         = useState(true);
-    const [refreshing, setRefreshing]   = useState(false);
-    const [period, setPeriod]           = useState<Period>('daily');
+    const [report, setReport]         = useState<any>(null);
+    const [loading, setLoading]       = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [period, setPeriod]         = useState<Period>('daily');
     const [selectedBranch, setSelectedBranch] = useState<string | null>(authBranchId);
 
     const fetchReport = useCallback(async () => {
@@ -214,9 +170,9 @@ export default function ReportsScreen() {
     const chartData = useMemo<ChartPoint[]>(() => {
         if (!Array.isArray(report?.chart)) return [];
         const opts: Intl.DateTimeFormatOptions =
-            period === 'monthly'  ? { day: 'numeric' } :
-            period === 'weekly'   ? { day: 'numeric', month: 'short' } :
-                                    { weekday: 'short' };
+            period === 'monthly' ? { day: 'numeric' } :
+            period === 'weekly'  ? { day: 'numeric', month: 'short' } :
+                                   { weekday: 'short' };
         return report.chart.map((item: any) => ({
             label: item.date ? formatDate(item.date, opts) : '',
             value: item.amount ?? 0,
@@ -238,9 +194,17 @@ export default function ReportsScreen() {
         return r > 0 ? (p / r) * 100 : 0;
     }, [report]);
 
-    const periodLabel = PERIODS.find(p => p.key === period)?.label ?? '';
+    // Profit bar: what fraction of revenue is kept as profit
+    const profitBarPct = useMemo(() => {
+        const r = report?.revenue ?? 0, p = report?.profit ?? 0;
+        return r > 0 ? Math.max(0, Math.min(1, p / r)) : 0;
+    }, [report]);
 
-    // All hooks done — safe to branch here
+    const periodLabel = PERIODS.find(p => p.key === period)?.label ?? '';
+    const profit = report?.profit ?? 0;
+    const profitPositive = profit >= 0;
+
+    // All hooks called — safe to branch
     if (isPharmacist) {
         return (
             <View style={{ flex: 1, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
@@ -281,7 +245,7 @@ export default function ReportsScreen() {
                             shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
                         }}
                     >
-                        <Ionicons name="bar-chart" size={22} color="#fff" />
+                        <Ionicons name="stats-chart" size={22} color="#fff" />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -314,94 +278,127 @@ export default function ReportsScreen() {
                 </View>
             </View>
 
-            {/* ── Branch selector ────────────────────────────────────────────── */}
+            {/* ── Branch selector (hidden for single-branch pharmacies) ────── */}
             <View style={{ paddingHorizontal: 20 }}>
-                <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} />
+                <BranchSelector
+                    selectedBranchId={selectedBranch}
+                    onSelectBranch={setSelectedBranch}
+                    hideIfSingle
+                />
             </View>
 
             {/* ── Loading skeleton ───────────────────────────────────────────── */}
             {loading && !refreshing ? (
                 <View style={{ paddingHorizontal: 20, gap: 16, marginTop: 4 }}>
-                    <Skeleton height={190} radius={24} />
+                    <Skeleton height={220} radius={20} />
                     <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
-                        <Skeleton height={96} radius={18} style={{ flex: 1 }} />
-                        <Skeleton height={96} radius={18} style={{ flex: 1 }} />
+                        <Skeleton height={80} radius={16} style={{ flex: 1 }} />
+                        <Skeleton height={80} radius={16} style={{ flex: 1 }} />
                     </View>
-                    <Skeleton height={240} radius={20} />
+                    <Skeleton height={220} radius={20} />
                 </View>
             ) : (
-                <View style={{ paddingHorizontal: 20, gap: 20, marginTop: 4 }}>
+                <View style={{ paddingHorizontal: 20, gap: 16, marginTop: 4 }}>
 
-                    {/* ── Hero net-profit card ───────────────────────────────── */}
+                    {/* ── Financial summary card (distinct from dashboard) ──── */}
                     <View style={{
-                        backgroundColor: C.primary, borderRadius: 24, padding: 22,
-                        shadowColor: C.primary, shadowOffset: { width: 0, height: 8 },
-                        shadowOpacity: 0.35, shadowRadius: 16, elevation: 10,
+                        backgroundColor: C.card,
+                        borderRadius: 20,
+                        borderWidth: 1, borderColor: C.border,
+                        overflow: 'hidden',
+                        shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+                        shadowOpacity: isDarkMode ? 0.3 : 0.08, shadowRadius: 10,
+                        elevation: 4,
                     }}>
-                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, fontWeight: '500' }}>
-                                صافي الربح ({periodLabel})
+                        {/* Coloured header strip */}
+                        <View style={{
+                            backgroundColor: profitPositive ? C.success : C.danger,
+                            paddingHorizontal: 20, paddingVertical: 12,
+                            flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center',
+                        }}>
+                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
+                                التحليل المالي — {periodLabel}
                             </Text>
-                            <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, padding: 6 }}>
-                                <Ionicons name="trending-up" size={18} color="#fff" />
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5 }}>
+                                <Ionicons
+                                    name={profitPositive ? 'trending-up' : 'trending-down'}
+                                    size={16} color="#fff"
+                                />
+                                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600' }}>
+                                    {profitMargin.toFixed(1)}% هامش
+                                </Text>
                             </View>
                         </View>
 
-                        <Text style={{ color: '#fff', fontSize: 38, fontWeight: '900', textAlign: 'right', marginBottom: 20 }}>
-                            {(report?.profit ?? 0).toLocaleString('en-US')}
-                            {'  '}
-                            <Text style={{ fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.7)' }}>د.ع</Text>
-                        </Text>
-
-                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                            {[
-                                { label: 'الإيرادات', value: (report?.revenue  ?? 0).toLocaleString('en-US'), icon: 'arrow-up-circle'   as const },
-                                { label: 'المصروفات', value: (report?.expenses ?? 0).toLocaleString('en-US'), icon: 'arrow-down-circle' as const },
-                                { label: 'العمليات',  value: String(report?.transactions ?? 0),               icon: 'receipt'          as const },
-                            ].map(m => (
-                                <View key={m.label} style={{
-                                    flex: 1, backgroundColor: 'rgba(255,255,255,0.14)',
-                                    borderRadius: 14, padding: 12, alignItems: 'center', gap: 4,
+                        <View style={{ padding: 20, gap: 16 }}>
+                            {/* Net profit – large number */}
+                            <View style={{ alignItems: 'flex-end' }}>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12, marginBottom: 4 }}>
+                                    صافي الربح
+                                </Text>
+                                <Text style={{
+                                    color: profitPositive ? C.success : C.danger,
+                                    fontSize: 36, fontWeight: '900',
                                 }}>
-                                    <Ionicons name={m.icon} size={16} color="rgba(255,255,255,0.8)" />
-                                    <Text
-                                        numberOfLines={1} adjustsFontSizeToFit
-                                        style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}
-                                    >
-                                        {m.value}
+                                    {Math.abs(profit).toLocaleString('en-US')}
+                                    {'  '}
+                                    <Text style={{ fontSize: 16, fontWeight: '600' }}>د.ع</Text>
+                                </Text>
+                            </View>
+
+                            {/* Revenue / Expenses split bar */}
+                            <View style={{ gap: 6 }}>
+                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
+                                    <Text style={{ color: C.success, fontSize: 13, fontWeight: '700' }}>
+                                        {(report?.revenue ?? 0).toLocaleString('en-US')}
                                     </Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600' }}>
-                                        {m.label}
+                                    <Text style={{ color: C.danger, fontSize: 13, fontWeight: '700' }}>
+                                        {(report?.expenses ?? 0).toLocaleString('en-US')}
                                     </Text>
                                 </View>
-                            ))}
+                                {/* Visual bar */}
+                                <View style={{ height: 8, borderRadius: 4, backgroundColor: C.dangerBg, overflow: 'hidden', flexDirection: 'row-reverse' }}>
+                                    <View style={{
+                                        width: `${profitBarPct * 100}%`,
+                                        backgroundColor: C.success,
+                                        borderRadius: 4,
+                                    }} />
+                                </View>
+                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
+                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>الإيرادات</Text>
+                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>المصروفات</Text>
+                                </View>
+                            </View>
+
+                            {/* Divider */}
+                            <View style={{ height: 1, backgroundColor: C.border }} />
+
+                            {/* Transaction stats */}
+                            <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                                <KpiChip
+                                    icon="receipt"
+                                    label="عدد العمليات"
+                                    value={report?.transactions ?? 0}
+                                    color={C.info}
+                                    bg={C.infoBg}
+                                />
+                                <KpiChip
+                                    icon="calculator"
+                                    label="متوسط الفاتورة"
+                                    value={avgSale}
+                                    color={C.warning}
+                                    bg={C.warningBg}
+                                />
+                            </View>
                         </View>
                     </View>
 
-                    {/* ── Secondary KPIs ───────────────────────────────────────── */}
-                    <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
-                        <KpiTile
-                            label="متوسط الفاتورة"
-                            value={avgSale}
-                            icon="calculator"
-                            color={C.info}
-                            bg={C.infoBg}
-                        />
-                        <KpiTile
-                            label="هامش الربح"
-                            value={`${profitMargin.toFixed(1)}%`}
-                            icon="pie-chart"
-                            color={profitMargin >= 0 ? C.success : C.danger}
-                            bg={profitMargin >= 0 ? C.successBg : C.dangerBg}
-                        />
-                    </View>
-
-                    {/* ── Smooth spline chart ───────────────────────────────────── */}
+                    {/* ── Bar chart card ────────────────────────────────────────── */}
                     {chartData.length >= 2 && (
                         <View style={{
-                            backgroundColor: C.card, borderRadius: 20,
+                            backgroundColor: C.card,
+                            borderRadius: 20, borderWidth: 1, borderColor: C.border,
                             paddingVertical: 20,
-                            borderWidth: 1, borderColor: C.border,
                             shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
                             shadowOpacity: isDarkMode ? 0.25 : 0.06,
                             shadowRadius: 8, elevation: 2,
@@ -411,37 +408,35 @@ export default function ReportsScreen() {
                                 flexDirection: 'row-reverse', justifyContent: 'space-between',
                                 alignItems: 'center', paddingHorizontal: 20, marginBottom: 16,
                             }}>
-                                <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15 }}>
-                                    أداء الفترة
-                                </Text>
-                                {bestDay && (
-                                    <View style={{
-                                        flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-                                        backgroundColor: C.successBg, borderRadius: 10,
-                                        paddingHorizontal: 10, paddingVertical: 5,
-                                    }}>
-                                        <Ionicons name="star" size={11} color={C.success} />
-                                        <Text style={{ color: C.success, fontSize: 11, fontWeight: '700' }}>
-                                            أعلى: {bestDay.label}
+                                <View>
+                                    <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }}>
+                                        المبيعات خلال الفترة
+                                    </Text>
+                                    {bestDay && (
+                                        <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
+                                            أعلى: {bestDay.label} ({bestDay.value.toLocaleString('en-US')} د.ع)
                                         </Text>
-                                    </View>
-                                )}
+                                    )}
+                                </View>
+                                <View style={{ backgroundColor: C.primaryMuted, borderRadius: 10, padding: 8 }}>
+                                    <Ionicons name="bar-chart" size={18} color={C.primary} />
+                                </View>
                             </View>
 
-                            <SmoothChart data={chartData} color={C.primary} isDark={isDarkMode} />
+                            <BarChart data={chartData} color={C.primary} isDark={isDarkMode} />
                         </View>
                     )}
 
-                    {/* ── Best day insight ──────────────────────────────────────── */}
+                    {/* ── Best-day trophy card ──────────────────────────────────── */}
                     {bestDay && bestDay.value > 0 && (
                         <View style={{
                             flexDirection: 'row-reverse', alignItems: 'center',
                             backgroundColor: C.primaryMuted,
-                            borderRadius: 16, padding: 16, gap: 12,
+                            borderRadius: 16, padding: 14, gap: 12,
                             borderWidth: 1, borderColor: `${C.primary}30`,
                         }}>
-                            <View style={{ backgroundColor: `${C.primary}25`, borderRadius: 12, padding: 10 }}>
-                                <Ionicons name="trophy" size={22} color={C.primary} />
+                            <View style={{ backgroundColor: `${C.primary}20`, borderRadius: 12, padding: 10 }}>
+                                <Ionicons name="trophy" size={20} color={C.primary} />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={{ color: C.foreground, fontWeight: '700', textAlign: 'right', fontSize: 13 }}>
