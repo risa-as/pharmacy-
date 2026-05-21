@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-neverBuiltDependencies:
-  - expo
-  - nativewind
-  - react-native-css-interop
-
 importers:
 
   .:
