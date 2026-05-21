@@ -89,6 +89,20 @@ function _cacheTTL(endpoint: string): number {
     }
     return 0;
 }
+
+// ─── Per-path request timeout ─────────────────────────────────────────────────
+// Weekly / monthly reports aggregate large date ranges on the server and can
+// exceed the default 8 s limit. Override per path prefix as needed.
+const _TIMEOUT_MS: Array<[string, number]> = [
+    ['/reports', 25_000],  // 25 s — aggregation queries can be slow
+];
+function _requestTimeout(endpoint: string): number {
+    const path = endpoint.split('?')[0];
+    for (const [prefix, ms] of _TIMEOUT_MS) {
+        if (path.startsWith(prefix)) return ms;
+    }
+    return 8_000; // default
+}
 function _clearRelatedCache(endpoint: string) {
     const path = endpoint.split('?')[0];
     for (const key of _responseCache.keys()) {
@@ -185,6 +199,7 @@ async function fetchOnce<T>(
     token: string | null,
     baseUrl: string,
     noAutoLogout = false,
+    timeoutMs = 8_000,
 ): Promise<T> {
     // Short-circuit immediately if the session has already expired.
     if (sessionExpired) {
@@ -205,7 +220,7 @@ async function fetchOnce<T>(
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
         const response = await fetch(`${baseUrl}${cleanEndpoint}`, {
@@ -272,12 +287,13 @@ async function request<T>(
 
     const MAX_RETRIES = 2;
     const BACKOFF_MS = [300, 800];
+    const timeoutMs = _requestTimeout(endpoint);
 
     const execute = async (): Promise<T> => {
         let lastError: unknown;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-                const result = await fetchOnce<T>(endpoint, options, token, baseUrl, noAutoLogout);
+                const result = await fetchOnce<T>(endpoint, options, token, baseUrl, noAutoLogout, timeoutMs);
                 // Store in response cache on success
                 if (isGet) {
                     const ttl = _cacheTTL(endpoint);

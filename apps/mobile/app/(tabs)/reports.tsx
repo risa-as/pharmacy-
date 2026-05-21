@@ -32,8 +32,8 @@ const BAR_LABEL_H = 24; // height reserved above bars for value labels
 
 function abbreviate(n: number): string {
     if (n === 0) return '';
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} مليون`;
+    if (n >= 1_000)     return `${(n / 1_000).toFixed(0)} ألف`;
     return String(n);
 }
 
