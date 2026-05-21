@@ -14,7 +14,7 @@ export default function TenantsPage() {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1 });
+    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50 });
     const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
     const [provisionResult, setProvisionResult] = useState<{
@@ -88,6 +88,7 @@ export default function TenantsPage() {
                 maxUsers: form.maxUsers,
                 maxDevices: form.maxDevices,
                 maxMobileUsers: form.maxMobileUsers,
+                aiDailyLimit: form.aiDailyLimit,
             } : form;
 
             const res = await fetch(url, {
@@ -112,7 +113,7 @@ export default function TenantsPage() {
                 }
                 setShowForm(false);
                 setEditingId(null);
-                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1 });
+                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50 });
             } else {
                 const data = await res.json();
                 alert(data.error || 'حدث خطأ');
@@ -159,6 +160,7 @@ export default function TenantsPage() {
             maxUsers: tenant.maxUsers,
             maxDevices: tenant.maxDevices ?? plan?.maxDevices ?? 1,
             maxMobileUsers: tenant.maxMobileUsers ?? plan?.maxMobileUsers ?? 1,
+            aiDailyLimit: tenant.aiDailyLimit ?? 50,
         });
         setShowForm(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -284,7 +286,7 @@ export default function TenantsPage() {
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
                 <button onClick={() => {
                     setEditingId(null);
-                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1 });
+                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50 });
                     setShowForm(!showForm);
                 }}
                     className="flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors shadow-sm">
@@ -346,6 +348,11 @@ export default function TenantsPage() {
                             <div>
                                 <label className="block text-xs text-muted-foreground mb-1">حد موبايل (تجاوز، ‎-1 = غير محدود)</label>
                                 <input type="number" value={form.maxMobileUsers} onChange={e => setForm({ ...form, maxMobileUsers: Number(e.target.value) })}
+                                    className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                            </div>
+                            <div className="col-span-2">
+                                <label className="block text-xs text-muted-foreground mb-1">🤖 حد المساعد الذكي اليومي (رسالة/يوم)</label>
+                                <input type="number" min="0" value={form.aiDailyLimit} onChange={e => setForm({ ...form, aiDailyLimit: Number(e.target.value) })}
                                     className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
                             </div>
                         </div>
@@ -412,6 +419,7 @@ export default function TenantsPage() {
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">المالك</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الفروع</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">المستخدمين</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">🤖 حد AI/يوم</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">السعر</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الحالة</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الاشتراك</th>
@@ -435,6 +443,11 @@ export default function TenantsPage() {
                                         <td className="py-3 px-4 text-muted-foreground text-xs">{t.ownerEmail}</td>
                                         <td className="py-3 px-4 text-foreground">max {t.maxBranches}</td>
                                         <td className="py-3 px-4 text-foreground">max {t.maxUsers}</td>
+                                        <td className="py-3 px-4">
+                                            <span className="text-xs font-bold text-violet-600 bg-violet-500/10 px-2 py-0.5 rounded-full">
+                                                {t.aiDailyLimit ?? 50} رسالة
+                                            </span>
+                                        </td>
                                         <td className="py-3 px-4 font-bold text-success" dir="ltr">
                                             {t.monthlyPrice === 0
                                                 ? (plan.name?.toUpperCase() === 'FREE' ? 'مجاني' : 'مخصص')

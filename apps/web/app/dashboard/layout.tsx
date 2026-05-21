@@ -12,6 +12,7 @@ import dynamicImport from "next/dynamic";
 
 const ElectronSessionSync = dynamicImport(() => import("../ui/electron-session-sync"), { ssr: false });
 const OnboardingTour = dynamicImport(() => import("../ui/dashboard/onboarding-tour"), { ssr: false });
+const AIAssistantPanel = dynamicImport(() => import("../ui/ai-assistant/AIAssistantPanel"), { ssr: false });
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
         <div className="flex h-screen flex-col md:flex-row md:overflow-hidden">
             <ElectronSessionSync />
             <OnboardingTour />
+            {userRole === 'ADMIN' && <AIAssistantPanel />}
             {/* Desktop sidebar takes layout space; SideNav also renders mobile drawer with fixed positioning */}
             <div className="hidden md:block w-full flex-none md:w-64 print:hidden">
                 <SideNav settings={settings} userPermissions={userPermissions} userRole={userRole} />

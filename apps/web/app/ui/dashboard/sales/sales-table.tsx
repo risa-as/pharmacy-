@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, TrendingUp, Pencil } from "lucide-react";
+import { Eye, TrendingUp, Pencil, Tag } from "lucide-react";
 import SaleDetailsModal from "./sale-details-modal"; // Import the modal
 
 interface SalesTableProps {
@@ -18,7 +18,7 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                 <table className="w-full">
                     <thead className="bg-card/50 text-muted-foreground text-sm">
                         <tr>
-                            <th className="px-4 py-3 text-right font-bold">#</th>
+                            <th className="px-4 py-3 text-right font-bold">رقم الفاتورة</th>
                             <th className="px-4 py-3 text-right font-bold">التاريخ</th>
                             <th className="px-4 py-3 text-right font-bold">الفرع</th>
                             <th className="px-4 py-3 text-right font-bold">الأصناف</th>
@@ -33,14 +33,22 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                                 className={`cursor-pointer transition-colors group ${sale.hasPriceOverride ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-muted/50'}`}
                                 onClick={() => setSelectedSale(sale)}
                             >
-                                <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
+                                <td className="px-4 py-3 font-mono font-bold text-primary">
+                                    #{String(sale.invoiceNumber ?? index + 1).padStart(4, '0')}
+                                </td>
                                 <td className="px-4 py-3">
-                                    <div className="text-foreground flex items-center gap-2">
+                                    <div className="text-foreground flex items-center gap-1.5 flex-wrap">
                                         {new Date(sale.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                         {sale.hasPriceOverride && (
                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300">
                                                 <Pencil className="w-2.5 h-2.5" />
                                                 سعر معدّل
+                                            </span>
+                                        )}
+                                        {sale.discount > 0 && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-300">
+                                                <Tag className="w-2.5 h-2.5" />
+                                                خصم
                                             </span>
                                         )}
                                     </div>

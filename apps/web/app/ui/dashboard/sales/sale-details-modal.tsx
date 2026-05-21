@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Printer, Calendar, User, MapPin, ShoppingBag, Undo2, Pencil } from "lucide-react";
+import { X, Printer, Calendar, User, MapPin, ShoppingBag, Undo2, Pencil, Tag } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { useState, useEffect } from "react";
@@ -36,12 +36,23 @@ export default function SaleDetailsModal({ sale, isOpen, onClose, settings }: Sa
                             <ShoppingBag className="w-6 h-6 text-primary" />
                             تفاصيل الطلب
                         </h2>
-                        <div className="flex items-center gap-3 mt-1">
-                            <p className="text-sm text-muted-foreground">رقم الفاتورة: <span className="font-mono font-bold text-foreground">{sale.id}</span></p>
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            <p className="text-sm text-muted-foreground">
+                                رقم الفاتورة:
+                                <span className="font-mono font-bold text-primary text-base mr-1">
+                                    #{sale.invoiceNumber != null ? String(sale.invoiceNumber).padStart(4, '0') : sale.id.slice(0, 8)}
+                                </span>
+                            </p>
                             {sale.hasPriceOverride && (
                                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 border border-amber-300">
                                     <Pencil className="w-2.5 h-2.5" />
-                                    يحتوي على سعر معدّل يدوياً
+                                    سعر معدّل يدوياً
+                                </span>
+                            )}
+                            {sale.discount > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-100 text-green-700 border border-green-300">
+                                    <Tag className="w-2.5 h-2.5" />
+                                    تم تطبيق خصم
                                 </span>
                             )}
                             {sale.returns && sale.returns.length > 0 && (
@@ -124,32 +135,47 @@ export default function SaleDetailsModal({ sale, isOpen, onClose, settings }: Sa
                                 ))}
                             </tbody>
                             <tfoot className="bg-muted/30 font-bold text-foreground border-t border-border">
-                                <tr>
-                                    <td colSpan={3} className="px-4 py-3 text-left">الإجمالي الأساسي</td>
-                                    <td className="px-4 py-3 text-center text-foreground">{sale.total.toLocaleString()} د.ع</td>
-                                </tr>
-                                {sale.returns && sale.returns.length > 0 && (
-                                    <>
-                                        <tr>
-                                            <td colSpan={3} className="px-4 py-3 text-left">إجمالي المرتجعات</td>
-                                            <td className="px-4 py-3 text-center text-destructive">
-                                                - {sale.returns.reduce((sum: number, r: any) => sum + r.total, 0).toLocaleString()} د.ع
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td colSpan={3} className="px-4 py-3 text-left">الصافي</td>
-                                            <td className="px-4 py-3 text-center text-primary text-lg">
-                                                {(sale.total - sale.returns.reduce((sum: number, r: any) => sum + r.total, 0)).toLocaleString()} د.ع
-                                            </td>
-                                        </tr>
-                                    </>
-                                )}
-                                {(!sale.returns || sale.returns.length === 0) && (
-                                    <tr>
-                                        <td colSpan={3} className="px-4 py-3 text-left">الإجمالي النهائي</td>
-                                        <td className="px-4 py-3 text-center text-primary text-lg">{sale.total.toLocaleString()} د.ع</td>
-                                    </tr>
-                                )}
+                                {(() => {
+                                    const itemsSubtotal = sale.items?.reduce((s: number, i: any) => s + i.quantity * i.price, 0) ?? 0;
+                                    const discountAmount = Math.round(itemsSubtotal - sale.total);
+                                    const returnsTotal = sale.returns?.reduce((s: number, r: any) => s + r.total, 0) ?? 0;
+                                    const hasDiscount = discountAmount > 0;
+                                    const hasReturns = returnsTotal > 0;
+                                    return (
+                                        <>
+                                            {hasDiscount && (
+                                                <>
+                                                    <tr>
+                                                        <td colSpan={3} className="px-4 py-3 text-left text-muted-foreground font-normal">المجموع قبل الخصم</td>
+                                                        <td className="px-4 py-3 text-center text-muted-foreground font-normal">{itemsSubtotal.toLocaleString()} د.ع</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td colSpan={3} className="px-4 py-3 text-left text-success">
+                                                            الخصم {`(${Math.round((discountAmount / itemsSubtotal) * 100)}%)`}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center text-success">- {discountAmount.toLocaleString()} د.ع</td>
+                                                    </tr>
+                                                </>
+                                            )}
+                                            <tr>
+                                                <td colSpan={3} className="px-4 py-3 text-left">الإجمالي{hasReturns ? ' قبل الاسترجاع' : ' النهائي'}</td>
+                                                <td className={`px-4 py-3 text-center ${hasReturns ? 'text-foreground' : 'text-primary text-lg'}`}>{sale.total.toLocaleString()} د.ع</td>
+                                            </tr>
+                                            {hasReturns && (
+                                                <>
+                                                    <tr>
+                                                        <td colSpan={3} className="px-4 py-3 text-left text-destructive font-normal">إجمالي المرتجعات</td>
+                                                        <td className="px-4 py-3 text-center text-destructive font-normal">- {returnsTotal.toLocaleString()} د.ع</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td colSpan={3} className="px-4 py-3 text-left">الصافي النهائي</td>
+                                                        <td className="px-4 py-3 text-center text-primary text-lg">{(sale.total - returnsTotal).toLocaleString()} د.ع</td>
+                                                    </tr>
+                                                </>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </tfoot>
                         </table>
                     </div>
