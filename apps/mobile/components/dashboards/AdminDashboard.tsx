@@ -13,6 +13,7 @@ import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Skeleton } from '../ui/Skeleton';
 import { BranchSelector } from '../BranchSelector';
+import { formatDate, formatTime } from '../../utils/date';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 56) / 2;
@@ -64,7 +65,7 @@ function KpiCard({ title, value, icon, variant, route }: KpiCardProps) {
                     minimumFontScale={0.65}
                     style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'center', alignSelf: 'stretch' }}
                 >
-                    {typeof value === 'number' ? value.toLocaleString('ar-EG') : value}
+                    {typeof value === 'number' ? value.toLocaleString('en-US') : value}
                 </Text>
                 <Text
                     numberOfLines={1}
@@ -141,7 +142,7 @@ export function AdminDashboard() {
                         لوحة المدير
                     </Text>
                     <Text style={{ color: C.mutedForeground, fontSize: 12, marginTop: 2, textAlign: 'right' }}>
-                        {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
                     </Text>
                 </View>
                 <View style={{ backgroundColor: C.primaryMuted, borderRadius: 6, padding: 10 }}>
@@ -231,7 +232,7 @@ export function AdminDashboard() {
                                             <View style={{ flex: 1 }}>
                                                 <Text style={{ color: C.foreground, fontWeight: '600', textAlign: 'right', fontSize: 13 }}>
                                                     {sale.createdAt
-                                        ? new Date(sale.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+                                        ? formatTime(sale.createdAt, { hour: '2-digit', minute: '2-digit' })
                                         : '--:--'}
                                                 </Text>
                                                 {sale.paymentMethod && (

@@ -14,6 +14,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
+import { formatDate } from '../../utils/date';
 
 type Period = 'daily' | 'weekly' | 'monthly';
 
@@ -89,7 +90,7 @@ export default function ReportsScreen() {
                         التقارير المالية
                     </Text>
                     <Text style={{ color: C.mutedForeground, fontSize: 12, marginTop: 2, textAlign: 'right' }}>
-                        {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
                     </Text>
                 </View>
                 <TouchableOpacity
@@ -156,7 +157,7 @@ export default function ReportsScreen() {
                             صافي ربح ({periodLabel})
                         </Text>
                         <Text style={{ color: C.foreground, fontSize: 34, fontWeight: '900' }}>
-                            {(report?.profit ?? 0).toLocaleString('ar-EG')}
+                            {(report?.profit ?? 0).toLocaleString('en-US')}
                             <Text style={{ fontSize: 16, fontWeight: '600', color: C.mutedForeground }}> د.ع</Text>
                         </Text>
                     </Card>
@@ -199,7 +200,7 @@ export default function ReportsScreen() {
                                     return (
                                         <View key={idx} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
                                             <Text style={{ color: C.foreground, fontSize: 11, fontWeight: '600', width: 52, textAlign: 'right' }}>
-                                                {new Date(item.date).toLocaleDateString('ar-EG', { weekday: 'short' })}
+                                                {formatDate(item.date, { weekday: 'short' })}
                                             </Text>
                                             <View style={{ flex: 1, height: 8, backgroundColor: C.border, borderRadius: 4, overflow: 'hidden', flexDirection: 'row-reverse' }}>
                                                 <View style={{ width: `${pct}%`, height: '100%', backgroundColor: C.primary, borderRadius: 4 }} />

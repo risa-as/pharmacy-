@@ -15,6 +15,7 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { useSyncStatus } from '../../context/SyncContext';
+import { formatDate } from '../../utils/date';
 
 interface Debtor {
     id: string;
@@ -101,7 +102,7 @@ export default function DebtsScreen() {
                 </View>
 
                 <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginBottom: 10 }}>
-                    آخر تحديث: {new Date(item.updatedAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}
+                    آخر تحديث: {formatDate(item.updatedAt, { day: 'numeric', month: 'short' })}
                 </Text>
 
                 {/* Pay Now button or inline form */}

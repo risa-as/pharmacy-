@@ -10,6 +10,7 @@ import { Colors } from '../../constants/colors';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { formatDate } from '../../utils/date';
 
 type Category = 'ALL' | 'RENT' | 'SALARY' | 'UTILITIES' | 'SUPPLIES' | 'OTHER';
 
@@ -167,7 +168,7 @@ export default function ExpensesScreen() {
                                             {expense.description}
                                         </Text>
                                         <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 3 }}>
-                                            {new Date(expense.date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' })}
+                                            {formatDate(expense.date, { day: 'numeric', month: 'long' })}
                                         </Text>
                                     </View>
                                     <View style={{ alignItems: 'flex-end', gap: 6 }}>

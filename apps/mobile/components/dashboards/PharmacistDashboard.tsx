@@ -9,6 +9,7 @@ import { Colors } from '../../constants/colors';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Skeleton } from '../ui/Skeleton';
+import { formatDate, iraqDateString, todayIraq } from '../../utils/date';
 
 interface Alert {
     id: string;
@@ -47,9 +48,9 @@ export function PharmacistDashboard() {
                 apiService.getSales().catch(() => [] as Sale[]),
                 apiService.getAlerts(branchId ?? undefined).catch(() => [] as Alert[]),
             ]);
-            const today = new Date().toDateString();
+            const today = todayIraq();
             const todaySales = (salesData as Sale[]).filter(s =>
-                s.createdAt && new Date(s.createdAt).toDateString() === today
+                s.createdAt && iraqDateString(s.createdAt) === today
             );
             setSales(todaySales);
             setAlerts((alertsData as Alert[]).slice(0, 3));
@@ -98,7 +99,7 @@ export function PharmacistDashboard() {
                     مرحباً، {user?.name ?? 'الصيدلاني'} 👋
                 </Text>
                 <Text style={{ color: C.mutedForeground, fontSize: 12, marginTop: 2, textAlign: 'right' }}>
-                    {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
                 </Text>
             </View>
 
@@ -112,7 +113,7 @@ export function PharmacistDashboard() {
                     <View style={{ flex: 1, backgroundColor: C.primaryMuted, borderRadius: 6, padding: 14, alignItems: 'center' }}>
                         <Ionicons name="cash" size={22} color={C.primary} />
                         <Text style={{ color: C.primary, fontSize: 20, fontWeight: '900', marginTop: 6 }}>
-                            {todayRevenue.toLocaleString('ar-EG')}
+                            {todayRevenue.toLocaleString('en-US')}
                         </Text>
                         <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 2 }}>إجمالي اليوم</Text>
                     </View>

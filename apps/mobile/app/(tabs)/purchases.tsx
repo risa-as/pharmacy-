@@ -13,6 +13,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
+import { formatDate } from '../../utils/date';
 
 type BadgeVariantType = 'success' | 'warning' | 'danger' | 'info' | 'default';
 type StatusKey = 'COMPLETED' | 'PENDING' | 'CANCELLED' | 'RECEIVED';
@@ -136,9 +137,7 @@ export default function PurchasesScreen() {
         const { label, variant, color } = getStatus(purchase.status);
         const accentColor = color(C);
         const isPending = purchase.status === 'PENDING';
-        const dateStr = new Date(purchase.createdAt).toLocaleDateString('ar-EG', {
-            day: 'numeric', month: 'short', year: 'numeric',
-        });
+        const dateStr = formatDate(purchase.createdAt, { day: 'numeric', month: 'short', year: 'numeric' });
         const refId = purchase.id.slice(0, 8).toUpperCase();
 
         return (
@@ -236,7 +235,7 @@ export default function PurchasesScreen() {
                             سجل المشتريات
                         </Text>
                         <Text style={{ color: C.mutedForeground, fontSize: 12, marginTop: 2, textAlign: 'right' }}>
-                            {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
                         </Text>
                     </View>
                     <View style={{ backgroundColor: C.primaryMuted, borderRadius: 8, padding: 10 }}>
