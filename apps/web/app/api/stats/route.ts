@@ -13,8 +13,13 @@ export async function GET(request: NextRequest) {
         const { searchParams } = request.nextUrl;
         const branchId = searchParams.get('branchId');
 
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        // Iraq timezone (UTC+3): compute today's midnight in UTC
+        const IRAQ_MS = 3 * 60 * 60 * 1000;
+        const iraqNow = new Date(Date.now() + IRAQ_MS);
+        const todayStart = new Date(
+            Date.UTC(iraqNow.getUTCFullYear(), iraqNow.getUTCMonth(), iraqNow.getUTCDate())
+            - IRAQ_MS
+        );
 
         const branchFilter = { ...tenantBranchWhere, ...(branchId && { branchId }) };
 
