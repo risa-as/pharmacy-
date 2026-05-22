@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { auth } from "@/auth";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import DeletePurchaseButton from './[id]/components/delete-button';
 
 export default async function PurchasesPage({
     searchParams,
@@ -80,17 +81,25 @@ export default async function PurchasesPage({
                                                 "bg-warning/20 text-warning": purchase.status === 'PENDING',
                                                 "bg-success/10 text-success": purchase.status === 'COMPLETED',
                                                 "bg-destructive/10 text-destructive": purchase.status === 'CANCELLED',
+                                                "bg-info/10 text-info": purchase.status === 'RECEIVED',
                                             }
                                         )}>
-                                            {purchase.status === 'PENDING' ? 'قيد الانتظار' :
-                                                purchase.status === 'COMPLETED' ? 'مكتمل' :
-                                                    purchase.status}
+                                            {purchase.status === 'PENDING'   ? 'قيد الانتظار' :
+                                             purchase.status === 'COMPLETED' ? 'مكتمل' :
+                                             purchase.status === 'CANCELLED' ? 'ملغى' :
+                                             purchase.status === 'RECEIVED'  ? 'تم الاستلام' :
+                                             purchase.status}
                                         </span>
                                     </TableCell>
                                     <TableCell>
-                                        <Link href={`/dashboard/purchases/${purchase.id}`}>
-                                            <Button variant="ghost" size="sm">عرض</Button>
-                                        </Link>
+                                        <div className="flex items-center gap-2">
+                                            <Link href={`/dashboard/purchases/${purchase.id}`}>
+                                                <Button variant="ghost" size="sm">عرض</Button>
+                                            </Link>
+                                            {(purchase.status === 'PENDING' || purchase.status === 'CANCELLED') && (
+                                                <DeletePurchaseButton purchaseId={purchase.id} />
+                                            )}
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))

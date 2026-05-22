@@ -9,6 +9,7 @@ import { ar } from 'date-fns/locale';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import PurchasePrintButton from './components/print-button';
+import CancelPurchaseButton from './components/cancel-button';
 
 import PrintHeader from '@/app/ui/components/print-header';
 
@@ -63,9 +64,12 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
                     </a>
                     <PurchasePrintButton />
                     {purchase.status === 'PENDING' && (
-                        <Link href={`/dashboard/purchases/${params.id}/receive`}>
-                            <Button>استلام المواد</Button>
-                        </Link>
+                        <>
+                            <Link href={`/dashboard/purchases/${params.id}/receive`}>
+                                <Button>استلام المواد</Button>
+                            </Link>
+                            <CancelPurchaseButton purchaseId={params.id} size="default" />
+                        </>
                     )}
                 </div>
             </div>

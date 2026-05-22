@@ -175,6 +175,67 @@ export async function getPurchaseDetails(id: string) {
     };
 }
 
+export async function deletePurchase(purchaseId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+
+    const purchase = await prisma.purchase.findFirst({
+        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
+    });
+
+    if (!purchase) return { success: false, error: 'الطلب غير موجود' };
+    if (purchase.status === 'COMPLETED' || purchase.status === 'RECEIVED') {
+        return { success: false, error: 'لا يمكن حذف الطلبات المكتملة' };
+    }
+
+    await prisma.purchaseItem.deleteMany({ where: { purchaseId } });
+    await prisma.purchase.delete({ where: { id: purchaseId } });
+
+    await logAudit({
+        userId: tenantCtx.user.id,
+        userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+        action: 'DELETE',
+        entity: 'PURCHASE',
+        entityId: purchaseId,
+        details: JSON.stringify({ status: purchase.status }),
+        branchId: purchase.branchId,
+    });
+
+    revalidatePath('/dashboard/purchases');
+    return { success: true };
+}
+
+export async function cancelPurchase(purchaseId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+
+    const purchase = await prisma.purchase.findFirst({
+        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
+    });
+
+    if (!purchase) return { success: false, error: 'الطلب غير موجود' };
+    if (purchase.status !== 'PENDING') return { success: false, error: 'يمكن إلغاء الطلبات المعلقة فقط' };
+
+    await prisma.purchase.update({
+        where: { id: purchaseId },
+        data: { status: 'CANCELLED' },
+    });
+
+    await logAudit({
+        userId: tenantCtx.user.id,
+        userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+        action: 'UPDATE',
+        entity: 'PURCHASE',
+        entityId: purchaseId,
+        details: JSON.stringify({ status: 'CANCELLED' }),
+        branchId: purchase.branchId,
+    });
+
+    revalidatePath('/dashboard/purchases');
+    revalidatePath(`/dashboard/purchases/${purchaseId}`);
+    return { success: true };
+}
+
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) throw new Error("غير مصرح");
