@@ -4,6 +4,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
 import { prisma } from "@/app/lib/prisma";
+import { getSubscriptionState } from "@/app/lib/subscription-state";
 
 async function getUser(email: string) {
     try {
@@ -33,8 +34,26 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                     if (!user) return null;
 
                     const passwordsMatch = await bcrypt.compare(password, user.password);
+                    if (!passwordsMatch) return null;
 
-                    if (passwordsMatch) return user;
+                    // Compute subscription state at login time so middleware can enforce it
+                    let subscriptionState = "active";
+                    const orgId = user.branch?.organizationId;
+                    if (orgId) {
+                        try {
+                            const org = await prisma.organization.findUnique({
+                                where: { id: orgId },
+                                select: { subscriptionEndsAt: true, isSuspended: true },
+                            });
+                            if (org) {
+                                subscriptionState = getSubscriptionState(org).state;
+                            }
+                        } catch {
+                            // Non-blocking — default to active
+                        }
+                    }
+
+                    return { ...user, subscriptionState };
                 }
                 return null;
             },

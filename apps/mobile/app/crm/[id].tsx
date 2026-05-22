@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { crmService, Patient } from '../../services/crm';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors } from '../../constants/colors';
+import { formatDate } from '../../utils/date';
 
 export default function CRMDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -121,7 +122,7 @@ export default function CRMDetailScreen() {
                                     {sale.total.toFixed(2)} د.ع
                                 </Text>
                                 <Text style={{ color: C.mutedForeground }}>
-                                    {new Date(sale.createdAt).toLocaleDateString()}
+                                    {formatDate(sale.createdAt)}
                                 </Text>
                             </View>
                         ))

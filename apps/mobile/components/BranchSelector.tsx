@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, FlatList, ActivityIndicator } from 'react-native';
+import {
+    View, Text, TouchableOpacity, Modal, FlatList,
+    ActivityIndicator, ScrollView,
+} from 'react-native';
 import { apiService } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../constants/colors';
@@ -13,9 +16,14 @@ interface Branch {
 interface BranchSelectorProps {
     selectedBranchId: string | null;
     onSelectBranch: (branchId: string | null) => void;
+    /** When true, renders nothing if only one branch exists (filter is meaningless). */
+    hideIfSingle?: boolean;
 }
 
-export const BranchSelector = ({ selectedBranchId, onSelectBranch }: BranchSelectorProps) => {
+const ALL_OPTION: Branch & { id: null } = { id: null as any, name: 'الكل' };
+const PILL_THRESHOLD = 6; // show pills for ≤ this many branches (incl. "الكل")
+
+export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle }: BranchSelectorProps) => {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
@@ -23,133 +31,191 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch }: BranchSelec
     const C = Colors(isDarkMode);
 
     useEffect(() => {
-        const fetchBranches = async () => {
-            try {
-                const data = await apiService.getBranches();
-                setBranches(data);
-            } catch (error) {
-                console.error('Failed to fetch branches', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchBranches();
+        apiService.getBranches()
+            .then(setBranches)
+            .catch(() => {})
+            .finally(() => setLoading(false));
     }, []);
 
+    // Hide entirely when single-branch and caller opts in
+    if (hideIfSingle && !loading && branches.length <= 1) return null;
+
     const selectedBranch = selectedBranchId ? branches.find(b => b.id === selectedBranchId) : null;
-    const selectedLabel = selectedBranch ? selectedBranch.name : 'الكل';
+    const selectedLabel = selectedBranch?.name ?? 'الكل';
+    const options = [ALL_OPTION as unknown as Branch, ...branches];
+    const usePills = options.length <= PILL_THRESHOLD;
 
     if (loading) {
+        if (hideIfSingle) return null; // avoid flicker before we know the count
         return (
-            <View style={{ height: 48, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+            <View style={{ height: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
                 <ActivityIndicator size="small" color={C.primary} />
             </View>
         );
     }
 
-    const options = [{ id: null as string | null, name: 'الكل' }, ...branches];
+    // ── Pill mode (≤ PILL_THRESHOLD options) ──────────────────────────────────
+    if (usePills) {
+        return (
+            <View style={{ marginBottom: 20 }}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ flexDirection: 'row-reverse', gap: 8, paddingHorizontal: 2 }}
+                >
+                    {options.map((option) => {
+                        const isSelected = (option.id ?? null) === selectedBranchId;
+                        return (
+                            <TouchableOpacity
+                                key={option.id ?? 'all'}
+                                onPress={() => onSelectBranch(option.id ?? null)}
+                                activeOpacity={0.75}
+                                style={{
+                                    flexDirection: 'row-reverse',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    paddingHorizontal: 16,
+                                    paddingVertical: 9,
+                                    borderRadius: 24,
+                                    backgroundColor: isSelected ? C.primary : C.card,
+                                    borderWidth: 1.5,
+                                    borderColor: isSelected ? C.primary : C.border,
+                                    shadowColor: isSelected ? C.primary : 'transparent',
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.2,
+                                    shadowRadius: 4,
+                                    elevation: isSelected ? 3 : 0,
+                                }}
+                            >
+                                {option.id === null
+                                    ? <Ionicons name="layers" size={14} color={isSelected ? '#fff' : C.mutedForeground} />
+                                    : <Ionicons name="business" size={14} color={isSelected ? '#fff' : C.mutedForeground} />
+                                }
+                                <Text style={{
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? '700' : '500',
+                                    color: isSelected ? '#fff' : C.foreground,
+                                }}>
+                                    {option.name}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+            </View>
+        );
+    }
 
+    // ── Dropdown mode (many branches) ─────────────────────────────────────────
     return (
-        <View style={{ marginBottom: 16, alignSelf: 'flex-end' }}>
+        <View style={{ marginBottom: 20 }}>
             <TouchableOpacity
                 style={{
                     flexDirection: 'row-reverse',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    backgroundColor: C.card,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: C.border,
+                    alignSelf: 'flex-start',
                     gap: 8,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    borderRadius: 24,
+                    backgroundColor: selectedBranchId ? C.primaryMuted : C.card,
+                    borderWidth: 1.5,
+                    borderColor: selectedBranchId ? C.primary : C.border,
                 }}
                 onPress={() => setModalVisible(true)}
-                activeOpacity={0.7}
+                activeOpacity={0.75}
             >
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="business" size={20} color={C.mutedForeground} />
-                    <Text style={{ fontSize: 16, color: C.foreground, fontWeight: '500' }}>
-                        الفرع: {selectedLabel}
-                    </Text>
-                </View>
-                <Ionicons name="chevron-down" size={20} color={C.mutedForeground} />
+                <Ionicons name="business" size={15} color={selectedBranchId ? C.primary : C.mutedForeground} />
+                <Text style={{ fontSize: 13, fontWeight: '600', color: selectedBranchId ? C.primary : C.foreground }}>
+                    {selectedLabel}
+                </Text>
+                <Ionicons name="chevron-down" size={14} color={selectedBranchId ? C.primary : C.mutedForeground} />
             </TouchableOpacity>
 
+            {/* Bottom-sheet modal */}
             <Modal
                 visible={modalVisible}
                 transparent
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setModalVisible(false)}
             >
                 <TouchableOpacity
-                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}
                     activeOpacity={1}
                     onPress={() => setModalVisible(false)}
-                >
-                    <View style={{
-                        backgroundColor: C.card,
-                        borderRadius: 20,
-                        padding: 20,
-                        maxHeight: '60%',
-                        borderWidth: 1,
-                        borderColor: C.border,
-                    }}>
-                        {/* Header */}
-                        <View style={{
-                            flexDirection: 'row-reverse',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: 16,
-                            paddingBottom: 16,
-                            borderBottomWidth: 1,
-                            borderBottomColor: C.border,
-                        }}>
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: C.foreground }}>اختر الفرع</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <Ionicons name="close" size={24} color={C.mutedForeground} />
-                            </TouchableOpacity>
-                        </View>
+                />
+                <View style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    backgroundColor: C.card,
+                    borderTopLeftRadius: 28,
+                    borderTopRightRadius: 28,
+                    paddingHorizontal: 20,
+                    paddingBottom: 40,
+                    maxHeight: '65%',
+                    borderTopWidth: 1,
+                    borderColor: C.border,
+                }}>
+                    {/* Handle */}
+                    <View style={{ width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 20 }} />
 
-                        <FlatList
-                            data={options}
-                            keyExtractor={item => item.id ?? 'all'}
-                            renderItem={({ item }) => {
-                                const isSelected = selectedBranchId === (item.id ?? null);
-                                return (
-                                    <TouchableOpacity
-                                        style={{
-                                            flexDirection: 'row-reverse',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            paddingVertical: 14,
-                                            paddingHorizontal: 12,
-                                            borderRadius: 12,
-                                            marginBottom: 8,
-                                            backgroundColor: isSelected ? C.primaryMuted : 'transparent',
-                                        }}
-                                        onPress={() => {
-                                            onSelectBranch(item.id ?? null);
-                                            setModalVisible(false);
-                                        }}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Text style={{
-                                            fontSize: 16,
-                                            fontWeight: isSelected ? '700' : '500',
-                                            color: isSelected ? C.primary : C.foreground,
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: C.foreground }}>اختر الفرع</Text>
+                        <TouchableOpacity
+                            onPress={() => setModalVisible(false)}
+                            style={{ backgroundColor: C.border, borderRadius: 20, padding: 6 }}
+                        >
+                            <Ionicons name="close" size={18} color={C.mutedForeground} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <FlatList
+                        data={options}
+                        keyExtractor={item => item.id ?? 'all'}
+                        showsVerticalScrollIndicator={false}
+                        renderItem={({ item }) => {
+                            const isSelected = selectedBranchId === (item.id ?? null);
+                            return (
+                                <TouchableOpacity
+                                    style={{
+                                        flexDirection: 'row-reverse',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        paddingVertical: 14,
+                                        paddingHorizontal: 16,
+                                        borderRadius: 14,
+                                        marginBottom: 6,
+                                        backgroundColor: isSelected ? C.primaryMuted : 'transparent',
+                                        borderWidth: 1.5,
+                                        borderColor: isSelected ? C.primary : 'transparent',
+                                    }}
+                                    onPress={() => { onSelectBranch(item.id ?? null); setModalVisible(false); }}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                                        <View style={{
+                                            backgroundColor: isSelected ? C.primary : C.border,
+                                            borderRadius: 8,
+                                            padding: 7,
                                         }}>
+                                            <Ionicons
+                                                name={item.id === null ? 'layers' : 'business'}
+                                                size={16}
+                                                color={isSelected ? '#fff' : C.mutedForeground}
+                                            />
+                                        </View>
+                                        <Text style={{ fontSize: 15, fontWeight: isSelected ? '700' : '500', color: isSelected ? C.primary : C.foreground }}>
                                             {item.name}
                                         </Text>
-                                        {isSelected && (
-                                            <Ionicons name="checkmark-circle" size={20} color={C.primary} />
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            }}
-                        />
-                    </View>
-                </TouchableOpacity>
+                                    </View>
+                                    {isSelected && <Ionicons name="checkmark-circle" size={22} color={C.primary} />}
+                                </TouchableOpacity>
+                            );
+                        }}
+                    />
+                </View>
             </Modal>
         </View>
     );

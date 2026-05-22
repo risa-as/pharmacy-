@@ -16,6 +16,9 @@ export async function POST(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canBulkEditPrice) {
+            return NextResponse.json({ error: "ليس لديك صلاحية لتعديل الأسعار بالجملة." }, { status: 403 });
+        }
 
         const body = await req.json();
         const branchId = body.branchId || tenantCtx.user.branchId;

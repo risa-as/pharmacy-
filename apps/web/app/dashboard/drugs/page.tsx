@@ -57,6 +57,7 @@ export default async function Page({
     if (tenantCtx instanceof NextResponse) redirect("/login");
 
     const organizationId = tenantCtx.organizationId;
+    const isSuperAdmin = tenantCtx.user.role === 'SUPER_ADMIN';
     const query = searchParams?.query || "";
     const currentPage = Number(searchParams?.page) || 1;
     const { drugs, total } = await getDrugs(query, currentPage, organizationId);
@@ -139,16 +140,27 @@ export default async function Page({
                                             {drug.origin || '-'}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-right">
-                                            {drug.isActive ? (
-                                                <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-1 text-xs font-medium text-success ring-1 ring-inset ring-green-600/20">نشط</span>
-                                            ) : (
-                                                <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive ring-1 ring-inset ring-red-600/20">غير نشط</span>
-                                            )}
+                                            <div className="flex flex-col gap-1 items-start">
+                                                {drug.isActive ? (
+                                                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-1 text-xs font-medium text-success ring-1 ring-inset ring-green-600/20">نشط</span>
+                                                ) : (
+                                                    <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive ring-1 ring-inset ring-red-600/20">غير نشط</span>
+                                                )}
+                                                {!drug.organizationId && (
+                                                    <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500 ring-1 ring-inset ring-blue-500/20">عالمي</span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-right">
                                             <div className="flex gap-2">
-                                                <UpdateDrug id={drug.id} />
-                                                <DeleteDrug id={drug.id} />
+                                                {(isSuperAdmin || drug.organizationId === organizationId) ? (
+                                                    <>
+                                                        <UpdateDrug id={drug.id} />
+                                                        <DeleteDrug id={drug.id} />
+                                                    </>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground py-2 px-1">للقراءة فقط</span>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

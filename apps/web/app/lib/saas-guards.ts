@@ -143,6 +143,8 @@ export async function getPlanFeatures(organizationId: string): Promise<PlanFeatu
       advancedReports: raw.advancedReports ?? false,
       supplierManagement: raw.supplierManagement ?? false,
       granularPermissions: raw.granularPermissions ?? false,
+      branchManagement: raw.branchManagement ?? false,
+      branchComparison: raw.branchComparison ?? false,
       warehouseManagement: raw.warehouseManagement ?? false,
       interBranchTransfers: raw.interBranchTransfers ?? false,
       marketplace: raw.marketplace ?? false,
@@ -164,6 +166,8 @@ export async function checkFeatureAccess(
   const allowed = features[flag];
 
   const enterpriseFlags: (keyof PlanFeatureFlags)[] = [
+    "advancedReports",
+    "branchComparison",
     "warehouseManagement",
     "interBranchTransfers",
     "marketplace",

@@ -3,76 +3,70 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-    console.log('Seeding default subscription plans...');
+    console.log('Seeding subscription plans...');
 
     const plans = [
+        // ─── الخطة الأساسية ────────────────────────────────────────────────
         {
-            name: 'FREE',
-            price: 0,
-            maxBranches: 1,
-            maxUsers: 3,
-            maxDevices: 1,
-            maxMobileUsers: 1,
-            isActive: true,
-            features: {
-                advancedReports: false,
-                productMovement: false,
-                supplierManagement: false,
-                granularPermissions: false,
-                warehouseManagement: false,
-                interBranchTransfers: false,
-                marketplace: false,
-            },
-        },
-        {
-            name: 'BASIC',
-            price: 20000,
+            name: 'أساسي',
+            price: 30000,
             maxBranches: 1,
             maxUsers: 5,
             maxDevices: 1,
             maxMobileUsers: 1,
             isActive: true,
+            isPopular: false,
             features: {
                 advancedReports: false,
                 productMovement: false,
                 supplierManagement: false,
                 granularPermissions: false,
+                branchManagement: false,
+                branchComparison: false,
                 warehouseManagement: false,
                 interBranchTransfers: false,
                 marketplace: false,
             },
         },
+        // ─── الخطة الاحترافية (الأكثر طلباً) ──────────────────────────────
         {
-            name: 'PROFESSIONAL',
-            price: 40000,
-            maxBranches: 5,
-            maxUsers: 20,
+            name: 'احترافي',
+            price: 55000,
+            maxBranches: 3,
+            maxUsers: 10,
             maxDevices: 3,
             maxMobileUsers: 3,
             isActive: true,
+            isPopular: true,
             features: {
-                advancedReports: true,
+                advancedReports: false,
                 productMovement: true,
                 supplierManagement: true,
                 granularPermissions: true,
+                branchManagement: true,
+                branchComparison: false,
                 warehouseManagement: false,
                 interBranchTransfers: false,
                 marketplace: false,
             },
         },
+        // ─── خطة المؤسسات (Custom Pricing — تواصل معنا) ───────────────────
         {
-            name: 'ENTERPRISE',
-            price: 80000,
-            maxBranches: -1,
+            name: 'مؤسسات',
+            price: 0,          // 0 = سعر مخصص (تواصل معنا)
+            maxBranches: -1,   // -1 = غير محدود
             maxUsers: -1,
             maxDevices: -1,
             maxMobileUsers: -1,
             isActive: true,
+            isPopular: false,
             features: {
                 advancedReports: true,
                 productMovement: true,
                 supplierManagement: true,
                 granularPermissions: true,
+                branchManagement: true,
+                branchComparison: true,
                 warehouseManagement: true,
                 interBranchTransfers: true,
                 marketplace: true,

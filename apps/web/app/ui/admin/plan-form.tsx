@@ -7,10 +7,11 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 const ALL_FLAGS = [
-    { key: 'advancedReports', label: 'التقارير المتقدمة', tier: 'Pro' },
     { key: 'productMovement', label: 'حركة المنتجات', tier: 'Pro' },
-    { key: 'supplierManagement', label: 'إدارة الموردين', tier: 'Pro' },
     { key: 'granularPermissions', label: 'الصلاحيات التفصيلية', tier: 'Pro' },
+    { key: 'branchManagement', label: 'إدارة الفروع', tier: 'Pro' },
+    { key: 'advancedReports', label: 'التقارير المتقدمة', tier: 'Enterprise' },
+    { key: 'branchComparison', label: 'مقارنة الفروع', tier: 'Enterprise' },
     { key: 'warehouseManagement', label: 'إدارة المستودعات', tier: 'Enterprise' },
     { key: 'interBranchTransfers', label: 'التحويلات بين الفروع', tier: 'Enterprise' },
     { key: 'marketplace', label: 'السوق الإلكتروني', tier: 'Enterprise' },

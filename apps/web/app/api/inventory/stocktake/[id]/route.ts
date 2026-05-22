@@ -9,6 +9,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canDoStocktake) {
+            return NextResponse.json({ error: "ليس لديك صلاحية لتحديث الجرد." }, { status: 403 });
+        }
 
         const { id } = params;
         const body = await req.json();
@@ -119,6 +122,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canDoStocktake) {
+            return NextResponse.json({ error: "ليس لديك صلاحية لإلغاء الجرد." }, { status: 403 });
+        }
 
         const { id } = params;
 

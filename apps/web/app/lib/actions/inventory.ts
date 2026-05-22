@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/app/lib/audit";
 
 
 const InventorySchema = z.object({
@@ -23,6 +24,7 @@ const CreateInventory = InventorySchema.omit({ id: true });
 export async function createInventory(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canAddDrug) return { message: "ليس لديك صلاحية لإضافة أدوية للمخزون." };
 
     const validatedFields = CreateInventory.safeParse({
         branchId: formData.get("branchId"),
@@ -52,7 +54,7 @@ export async function createInventory(prevState: any, formData: FormData) {
             return { message: "هذا الدواء موجود بالفعل في مخزون هذا الفرع." };
         }
 
-        await prisma.inventory.create({
+        const inv = await prisma.inventory.create({
             data: {
                 branchId,
                 drugId,
@@ -61,6 +63,15 @@ export async function createInventory(prevState: any, formData: FormData) {
                 minStock,
                 maxStock,
             },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'INVENTORY',
+            entityId: inv.id,
+            details: JSON.stringify({ drugId, branchId, price, cost }),
+            branchId,
         });
     } catch (error) {
         console.error("Error creating inventory:", error);
@@ -78,6 +89,7 @@ export async function updateInventory(
 ) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لتعديل المخزون." };
 
     const validatedFields = InventorySchema.safeParse({
         id: id,
@@ -103,6 +115,15 @@ export async function updateInventory(
             where: { id },
             data: { branchId, drugId, price, cost, minStock, maxStock },
         });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'INVENTORY',
+            entityId: id,
+            details: JSON.stringify({ price, cost, minStock, maxStock }),
+            branchId,
+        });
     } catch (error) {
         console.error("Error updating inventory:", error);
         return { message: "خطأ في قاعدة البيانات: فشل في تحديث المخزون." };
@@ -115,6 +136,7 @@ export async function updateInventory(
 export async function deleteInventory(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canDeleteDrug) return { message: "ليس لديك صلاحية لحذف الأدوية من المخزون." };
 
     try {
         // حذف الدفعات أولاً
@@ -125,6 +147,16 @@ export async function deleteInventory(id: string) {
         await prisma.inventory.delete({
             where: { id },
         });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'INVENTORY',
+            entityId: id,
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
+
         revalidatePath("/dashboard/inventory");
     } catch (error) {
         console.error("Error deleting inventory:", error);
@@ -141,6 +173,7 @@ function generateBatchNumber(): string {
 export async function addBatch(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canAddDrug) return { message: "ليس لديك صلاحية لإضافة دفعات للمخزون." };
 
     const inventoryId = formData.get("inventoryId") as string;
     const batchNumber = generateBatchNumber();
@@ -154,7 +187,7 @@ export async function addBatch(prevState: any, formData: FormData) {
     }
 
     try {
-        await prisma.batch.create({
+        const batch = await prisma.batch.create({
             data: {
                 inventoryId,
                 batchNumber,
@@ -163,6 +196,15 @@ export async function addBatch(prevState: any, formData: FormData) {
                 expiryDate,
                 supplierId,
             },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'BATCH',
+            entityId: batch.id,
+            details: JSON.stringify({ inventoryId, batchNumber, quantity, costPrice, expiryDate }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
     } catch (error) {
         console.error("Error adding batch:", error);
@@ -183,6 +225,15 @@ export async function updateBatchQuantity(batchId: string, newQuantity: number) 
             where: { id: batchId },
             data: { quantity: newQuantity },
         });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'BATCH',
+            entityId: batchId,
+            details: JSON.stringify({ newQuantity }),
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
         revalidatePath("/dashboard/inventory");
     } catch (error) {
         console.error("Error updating batch:", error);
@@ -194,9 +245,18 @@ export async function updateBatchQuantity(batchId: string, newQuantity: number) 
 export async function deleteBatch(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لحذف الدفعات." };
 
     try {
         await prisma.batch.delete({ where: { id } });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'BATCH',
+            entityId: id,
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
         revalidatePath("/dashboard/inventory");
     } catch (error) {
         console.error("Error deleting batch:", error);

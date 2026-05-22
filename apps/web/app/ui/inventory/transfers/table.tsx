@@ -102,7 +102,7 @@ export default async function TransfersTable({
                                             <TransferStatus status={transfer.status} />
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" dir="ltr">
-                                            {new Date(transfer.createdAt).toLocaleString('ar-IQ')}
+                                            {new Date(transfer.createdAt).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-3 text-right">
                                             {isPendingReceive ? (

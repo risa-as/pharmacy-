@@ -33,11 +33,11 @@ export default async function PurchasesReportPage() {
     for (let i = 29; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        spendingByDay.set(d.toLocaleDateString('en-GB'), 0);
+        spendingByDay.set(d.toLocaleDateString('en-GB', { timeZone: "Asia/Baghdad" }), 0);
     }
 
     purchases.forEach((p: any) => {
-        const key = new Date(p.createdAt).toLocaleDateString('en-GB');
+        const key = new Date(p.createdAt).toLocaleDateString('en-GB', { timeZone: "Asia/Baghdad" });
         spendingByDay.set(key, (spendingByDay.get(key) || 0) + p.total);
     });
 

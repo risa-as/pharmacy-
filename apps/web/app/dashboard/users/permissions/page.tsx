@@ -20,6 +20,10 @@ export default async function PermissionsPage() {
     }
 
     const users = await prisma.user.findMany({
+        where: {
+            role: { not: 'SUPER_ADMIN' },
+            ...(organizationId ? { branch: { organizationId } } : {}),
+        },
         select: {
             id: true,
             name: true,

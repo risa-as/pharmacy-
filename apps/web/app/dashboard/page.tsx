@@ -77,10 +77,12 @@ async function getSuperAdminData() {
 }
 
 async function getAdminData(organizationId: string, branchId?: string) {
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const in90Days = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const todayStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate()) - IRAQ_OFFSET);
+    const monthStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), 1) - IRAQ_OFFSET);
+    const in90Days = new Date(todayStart.getTime() + 90 * 24 * 60 * 60 * 1000);
 
     const orgBranchWhere = { branch: { organizationId } };
     const orgWhere = { organizationId };
@@ -204,10 +206,10 @@ async function getAdminData(organizationId: string, branchId?: string) {
     for (let i = 0; i < 7; i++) {
         const d = new Date(todayStart);
         d.setDate(d.getDate() - (6 - i));
-        dayMap[d.toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric' })] = 0;
+        dayMap[d.toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' })] = 0;
     }
     for (const s of rawWeeklySales) {
-        const label = new Date(s.createdAt).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric' });
+        const label = new Date(s.createdAt).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' });
         if (label in dayMap) dayMap[label] += s.total || 0;
     }
     const weeklySalesChart = Object.entries(dayMap).map(([day, amount]: any) => ({ day, amount }));
@@ -268,9 +270,11 @@ async function getAdminData(organizationId: string, branchId?: string) {
 }
 
 async function getEmployeeData(branchId?: string) {
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const todayStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate()) - IRAQ_OFFSET);
+    const in30Days = new Date(todayStart.getTime() + 30 * 24 * 60 * 60 * 1000);
     const branchWhere = branchId ? { branchId } : {};
 
     const [drugCount, inventoryCount, todaySales, todayReturns, expiringCount, alerts] = await Promise.all([
@@ -318,7 +322,7 @@ const roleLabels: Record<string, string> = {
 };
 
 function fmt(v: number) {
-    return new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v);
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);
 }
 
 /* ─────────────────────────────────────────────
@@ -331,7 +335,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     const isSuperAdmin = role === 'SUPER_ADMIN';
     const organizationId = ((session?.user as any)?.organizationId as string) || undefined;
     const branchId = (session?.user?.branchId as string) || undefined;
-    const dateLabel = new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const dateLabel = new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Baghdad' });
 
     /* ══════════════════════════════
        SUPER_ADMIN DASHBOARD
@@ -470,7 +474,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                                         )}
                                     </div>
                                     <span className="text-xs text-muted-foreground">
-                                        {new Date(org.createdAt).toLocaleDateString('ar-IQ')}
+                                        {new Date(org.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                     </span>
                                 </div>
                             ))}
@@ -657,7 +661,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                     </Link>
 
                     {/* Expiring */}
-                    <Link href="/dashboard/inventory/batches"
+                    <Link href="/dashboard/batches"
                         className={`rounded-xl border p-4 flex items-center gap-3 hover:shadow-md transition-all ${d.expiringCount > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-card'}`}>
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${d.expiringCount > 0 ? 'bg-destructive/10' : 'bg-muted'}`}>
                             <CalendarX className={`w-5 h-5 ${d.expiringCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
@@ -851,37 +855,34 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
             </div>
 
             {/* Today Summary */}
-            <div className="relative rounded-2xl overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-info/10 to-success/10 pointer-events-none" />
-                <div className="relative p-4">
-                    <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
-                        <BarChart3 className="w-3.5 h-3.5" /> ملخص الوردية
-                    </p>
-                    <div className="grid sm:grid-cols-3 gap-3">
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
-                            <div className="flex items-center gap-2 mb-1">
-                                <ShoppingCart className="w-4 h-4 text-primary" />
-                                <span className="text-xs text-muted-foreground">مبيعات اليوم</span>
-                            </div>
-                            <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.revenue)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                            <p className="text-xs text-muted-foreground mt-1">{d.today.salesCount} فاتورة</p>
+            <div className="rounded-2xl border border-border bg-card p-4">
+                <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5" /> ملخص الوردية
+                </p>
+                <div className="grid sm:grid-cols-3 gap-3">
+                    <div className="bg-muted rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <ShoppingCart className="w-4 h-4 text-primary" />
+                            <span className="text-xs text-muted-foreground">مبيعات اليوم</span>
                         </div>
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
-                            <div className="flex items-center gap-2 mb-1">
-                                <Undo2 className="w-4 h-4 text-warning" />
-                                <span className="text-xs text-muted-foreground">المرتجعات</span>
-                            </div>
-                            <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.returns)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                            <p className="text-xs text-muted-foreground mt-1">{d.today.returnsCount} مرتجع</p>
+                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.revenue)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
+                        <p className="text-xs text-muted-foreground mt-1">{d.today.salesCount} فاتورة</p>
+                    </div>
+                    <div className="bg-muted rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Undo2 className="w-4 h-4 text-warning" />
+                            <span className="text-xs text-muted-foreground">المرتجعات</span>
                         </div>
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
-                            <div className="flex items-center gap-2 mb-1">
-                                <TrendingUp className="w-4 h-4 text-success" />
-                                <span className="text-xs text-muted-foreground">الصافي</span>
-                            </div>
-                            <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.net)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                            <p className="text-xs text-muted-foreground mt-1">بعد المرتجعات</p>
+                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.returns)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
+                        <p className="text-xs text-muted-foreground mt-1">{d.today.returnsCount} مرتجع</p>
+                    </div>
+                    <div className="bg-muted rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-4 h-4 text-success" />
+                            <span className="text-xs text-muted-foreground">الصافي</span>
                         </div>
+                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.net)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
+                        <p className="text-xs text-muted-foreground mt-1">بعد المرتجعات</p>
                     </div>
                 </div>
             </div>
@@ -906,7 +907,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                         </Link>
                     )}
                     {d.expiringCount > 0 && (
-                        <Link href="/dashboard/inventory/batches"
+                        <Link href="/dashboard/batches"
                             className="flex items-center gap-3 bg-destructive/5 border border-destructive/30 rounded-xl p-4 hover:shadow-md transition-shadow">
                             <div className="w-10 h-10 bg-destructive/10 rounded-xl flex items-center justify-center shrink-0">
                                 <CalendarX className="w-5 h-5 text-destructive" />

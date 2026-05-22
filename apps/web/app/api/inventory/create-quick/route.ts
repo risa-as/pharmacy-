@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { validateSyncUser } from "@/app/lib/sync-auth";
 
 type AckStatus = "processed" | "duplicate" | "noop";
 
@@ -26,6 +27,9 @@ function makeAck(status: AckStatus, idempotencyKey: string) {
 
 export async function POST(req: Request) {
     try {
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
+
         const body = await req.json();
         const idempotencyKey = readIdempotencyKey(req, body);
 
@@ -80,19 +84,33 @@ export async function POST(req: Request) {
         const parsedMax = Number.parseInt(String(maxStock ?? 100), 10) || 100;
 
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            const branch = await tx.branch.findUnique({
+                where: { id: branchId },
+                select: { id: true, organizationId: true },
+            });
+            if (!branch) throw new Error("Branch not found");
+
+            // Resolve the org: prefer syncUser's org, fall back to branch's org
+            const organizationId = syncUser.organizationId ?? branch.organizationId ?? null;
+
             let drug = await tx.globalDrug.findFirst({
                 where: id ? { id } : { barcode }
             });
 
             if (drug) {
-                drug = await tx.globalDrug.update({
-                    where: { id: drug.id },
-                    data: {
-                        tradeName,
-                        scientificName: scientificName || tradeName,
-                        origin: origin || drug.origin || "unknown",
-                    }
-                });
+                // Global drugs (organizationId: null) are read-only — use as-is without modifying.
+                // Only update drug details if it belongs to this org.
+                if (drug.organizationId === organizationId && organizationId) {
+                    drug = await tx.globalDrug.update({
+                        where: { id: drug.id },
+                        data: {
+                            tradeName,
+                            scientificName: scientificName || tradeName,
+                            origin: origin || drug.origin || "unknown",
+                        }
+                    });
+                }
+                // else: global drug — skip update, just use the existing record
             } else {
                 drug = await tx.globalDrug.create({
                     data: {
@@ -102,12 +120,10 @@ export async function POST(req: Request) {
                         scientificName: scientificName || tradeName,
                         origin: origin || "unknown",
                         isQuickSale: isQuickSale === true,
+                        organizationId,
                     }
                 });
             }
-
-            const branch = await tx.branch.findUnique({ where: { id: branchId } });
-            if (!branch) throw new Error("Branch not found");
 
             let inventory = inventoryId
                 ? await tx.inventory.findUnique({ where: { id: inventoryId } })

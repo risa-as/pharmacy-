@@ -5,6 +5,7 @@ import { AlertTriangle, Clock, CheckCircle, XCircle, Package } from "lucide-reac
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import ExpiryPeriodFilter from "@/app/ui/reports/expiry-period-filter";
 
 export default async function ExpiryReportPage({
     searchParams,
@@ -12,16 +13,23 @@ export default async function ExpiryReportPage({
     searchParams: { [key: string]: string | string[] | undefined };
 }) {
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
+    const totalDays = typeof searchParams.days === "string" ? Math.max(1, parseInt(searchParams.days) || 30) : 30;
+    const criticalDays = Math.ceil(totalDays / 2);   // النصف الأول = حرجة
+    const warningDays = totalDays;                    // النصف الثاني حتى نهاية الفترة = تحذيرية
 
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
     const { tenantBranchWhere } = tenantCtx;
 
     const now = new Date();
-    const in30Days = new Date();
-    in30Days.setDate(in30Days.getDate() + 30);
-    const in90Days = new Date();
-    in90Days.setDate(in90Days.getDate() + 90);
+    const inCriticalDays = new Date();
+    inCriticalDays.setDate(inCriticalDays.getDate() + criticalDays);
+    const inWarningDays = new Date();
+    inWarningDays.setDate(inWarningDays.getDate() + warningDays);
+
+    // legacy aliases
+    const in30Days = inCriticalDays;
+    const in90Days = inWarningDays;
 
     // Fetch all batches with their drug info, filtered by branch
     const batches = await prisma.batch.findMany({
@@ -74,7 +82,7 @@ export default async function ExpiryReportPage({
             value: expiredValue,
         },
         {
-            title: "حرجة (أقل من 30 يوم)",
+            title: `حرجة (أقل من ${criticalDays} يوم)`,
             icon: AlertTriangle,
             items: critical,
             count: critical.length,
@@ -86,7 +94,7 @@ export default async function ExpiryReportPage({
             value: criticalValue,
         },
         {
-            title: "تحذيرية (30-90 يوم)",
+            title: `تحذيرية (${criticalDays}-${warningDays} يوم)`,
             icon: Clock,
             items: warning,
             count: warning.length,
@@ -98,7 +106,7 @@ export default async function ExpiryReportPage({
             value: warning.reduce((s: any, b: any) => s + b.quantity * b.inventory.cost, 0),
         },
         {
-            title: "آمنة (أكثر من 90 يوم)",
+            title: `آمنة (أكثر من ${warningDays} يوم)`,
             icon: CheckCircle,
             items: safe,
             count: safe.length,
@@ -125,6 +133,9 @@ export default async function ExpiryReportPage({
 
             {/* Branch Filter */}
             <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/expiry" />
+
+            {/* Period Filter */}
+            <ExpiryPeriodFilter currentDays={totalDays} />
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -191,7 +202,7 @@ export default async function ExpiryReportPage({
                                             </td>
                                             <td className="px-4 py-3 font-bold">{batch.quantity}</td>
                                             <td className="px-4 py-3 text-sm">
-                                                {new Date(batch.expiryDate).toLocaleDateString("ar-IQ")}
+                                                {new Date(batch.expiryDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span

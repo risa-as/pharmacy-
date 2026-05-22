@@ -58,7 +58,9 @@ export async function PUT(request: Request) {
 
         // Keep CompanySettings in sync so the Desktop sync route (/sync/settings)
         // always reflects the correct loyalty configuration.
-        const existingSettings = await prisma.companySettings.findFirst();
+        const existingSettings = await prisma.companySettings.findFirst({
+            where: { organizationId },
+        });
         if (existingSettings) {
             await prisma.companySettings.update({
                 where: { id: existingSettings.id },

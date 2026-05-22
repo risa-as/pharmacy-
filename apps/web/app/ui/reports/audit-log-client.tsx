@@ -18,11 +18,16 @@ const ENTITY_LABELS: Record<string, string> = {
     INVENTORY: 'مخزون',
     DRUG: 'دواء',
     USER: 'مستخدم',
-    EXPENSE: 'مصروف',
+    EXPENSE: 'مصاريف',
     TRANSFER: 'تحويل',
     PATIENT: 'مريض',
     SUPPLIER: 'مورد',
+    SUPPLIER_PAYMENT: 'دفعة مورد',
     SHIFT: 'وردية',
+    PURCHASE: 'مشتريات',
+    SETTING: 'إعدادات',
+    DEBT: 'دين',
+    BATCH: 'دفعة مخزون',
 };
 
 interface AuditLogClientProps {
@@ -182,7 +187,7 @@ export default function AuditLogClient({ users, branches }: AuditLogClientProps)
                                                 </span>
                                             </td>
                                             <td className="py-3 px-4 text-muted-foreground">{ENTITY_LABELS[log.entity] || log.entity}</td>
-                                            <td className="py-3 px-4 text-muted-foreground text-xs max-w-[300px] truncate">{log.details}</td>
+                                            <td className="py-3 px-4 text-muted-foreground text-xs max-w-[300px] truncate" title={log.details ?? ''}>{log.details}</td>
                                         </tr>
                                     );
                                 })}

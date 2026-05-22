@@ -253,7 +253,7 @@ export default function ExportReports() {
                 <div ref={printRef} className="p-8 bg-card text-right" dir="rtl" style={{ width: "297mm", minHeight: "210mm", fontFamily: 'sans-serif' }}>
                     <div className="mb-4 text-center">
                         <h1 className="text-2xl font-bold mb-2">تقرير فاراماس</h1>
-                        <p className="text-muted-foreground">التاريخ: {new Date().toLocaleDateString('ar-EG')}</p>
+                        <p className="text-muted-foreground">التاريخ: {new Date().toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}</p>
                     </div>
 
                     {pdfData.length > 0 && (

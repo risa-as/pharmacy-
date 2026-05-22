@@ -5,6 +5,7 @@ import { apiService } from '../../services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors } from '../../constants/colors';
+import { formatDate } from '../../utils/date';
 
 export default function PurchaseDetailsScreen() {
     const { id } = useLocalSearchParams();
@@ -89,7 +90,7 @@ export default function PurchaseDetailsScreen() {
                         <View style={{ alignItems: 'flex-end' }}>
                             <Text style={{ fontSize: 12, color: C.mutedForeground, marginBottom: 4 }}>التاريخ</Text>
                             <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground }}>
-                                {new Date(purchase.createdAt).toLocaleDateString('ar-EG')}
+                                {formatDate(purchase.createdAt)}
                             </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>

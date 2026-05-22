@@ -41,7 +41,7 @@ export default function BackupManager() {
     };
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleString("ar-IQ");
+        return new Date(dateStr).toLocaleString("ar-IQ", { timeZone: "Asia/Baghdad" });
     };
 
     const handleDownload = (filename: string) => {

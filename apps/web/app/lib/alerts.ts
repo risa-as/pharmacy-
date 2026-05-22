@@ -41,7 +41,7 @@ export async function getLowStockAlerts(branchId?: string, organizationId?: stri
     for (const item of inventory) {
         const totalQty = item.batches.reduce((acc: any, b: any) => acc + b.quantity, 0);
 
-        if (totalQty <= item.minStock) {
+        if (totalQty < item.minStock) {
             const drug = drugMap.get(item.drugId);
             alerts.push({
                 id: item.id,

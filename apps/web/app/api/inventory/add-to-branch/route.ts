@@ -72,10 +72,10 @@ export async function POST(req: Request) {
                 inventory = await tx.inventory.update({
                     where: { id: existingInventory.id },
                     data: {
-                        price: parsedPrice || existingInventory.price,
-                        cost: parsedCost || existingInventory.cost,
-                        minStock: parsedMin || existingInventory.minStock,
-                        maxStock: parsedMax || existingInventory.maxStock,
+                        price: price != null ? parsedPrice : existingInventory.price,
+                        cost: cost != null ? parsedCost : existingInventory.cost,
+                        minStock: minStock != null ? parsedMin : existingInventory.minStock,
+                        maxStock: maxStock != null ? parsedMax : existingInventory.maxStock,
                     }
                 });
             } else {

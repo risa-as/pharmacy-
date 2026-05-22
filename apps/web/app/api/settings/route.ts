@@ -8,6 +8,9 @@ export async function PATCH(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canChangeSettings) {
+            return NextResponse.json({ error: "ليس لديك صلاحية لتغيير الإعدادات." }, { status: 403 });
+        }
 
         const body = await req.json();
         const { minProfitMargin } = body;

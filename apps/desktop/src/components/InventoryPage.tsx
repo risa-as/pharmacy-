@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Save, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, ChevronDown, Zap } from "lucide-react";
 import SyncHealthDashboard from "./SyncHealthDashboard";
+import SyncFailuresPanel from "./SyncFailuresPanel";
 
 function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
     return Promise.race([
@@ -53,7 +54,7 @@ type SyncHealth = {
 
 type SortField = 'name' | 'quantity' | 'price' | 'costPrice' | 'profit';
 type SortDir = 'asc' | 'desc';
-type StockFilter = 'all' | 'low' | 'good' | 'over';
+type StockFilter = 'all' | 'out' | 'low' | 'good' | 'over';
 
 export default function InventoryPage({ user }: { user: any }) {
     const isAdmin = user?.role === 'ADMIN';
@@ -71,6 +72,7 @@ export default function InventoryPage({ user }: { user: any }) {
     const [stockFilter, setStockFilter] = useState<StockFilter>('all');
     const barcodeInputRef = useRef<HTMLInputElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const syncingRef = useRef(false); // guard: prevent overlapping sync button clicks
 
     // Quick-Sale Toggle State
     const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>({});
@@ -90,6 +92,10 @@ export default function InventoryPage({ user }: { user: any }) {
         }
     };
 
+    const [dlqCount, setDlqCount] = useState(0);
+    const [showDLQ, setShowDLQ] = useState(false);
+    const [syncDebugLog, setSyncDebugLog] = useState<string | null>(null);
+
     // Modal States
     const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
     const [showEditModal, setShowEditModal] = useState<InventoryItem | null>(null);
@@ -98,6 +104,9 @@ export default function InventoryPage({ user }: { user: any }) {
     const [showAddToInventoryModal, setShowAddToInventoryModal] = useState<any | null>(null);
 
     // Form States for Add Batch
+    const [batchPacketPrice, setBatchPacketPrice] = useState(0);
+    const [batchStripsPerPacket, setBatchStripsPerPacket] = useState(1);
+    const batchComputedCost = batchStripsPerPacket > 0 ? batchPacketPrice / batchStripsPerPacket : 0;
     const [batchData, setBatchData] = useState({
         quantity: 0,
         costPrice: 0,
@@ -113,6 +122,11 @@ export default function InventoryPage({ user }: { user: any }) {
     const supplierRef = useRef<HTMLDivElement>(null);
     // Supplier for create-drug modal (batchData.supplierId is used for add-batch modal)
     const [createDrugSupplierId, setCreateDrugSupplierId] = useState("");
+
+    // Packet price calculator state (create-drug modal)
+    const [packetPrice, setPacketPrice] = useState<number>(0);
+    const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
+    const computedCostPrice = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
 
     useEffect(() => {
         ipcInvoke('get-local-suppliers')
@@ -156,9 +170,9 @@ export default function InventoryPage({ user }: { user: any }) {
     const stats = useMemo(() => {
         const totalItems = items.length;
         const totalStock = items.reduce((a, b) => a + b.quantity, 0);
-        const lowStockCount = items.filter(i => i.quantity <= i.minStock && i.quantity > 0).length;
+        const lowStockCount = items.filter(i => i.quantity < i.minStock && i.quantity > 0).length;
         const outOfStockCount = items.filter(i => i.quantity <= 0).length;
-        const overStockCount = items.filter(i => i.quantity >= i.maxStock).length;
+        const overStockCount = items.filter(i => i.quantity > i.maxStock).length;
         const totalCostValue = items.reduce((a, b) => a + (b.costPrice * b.quantity), 0);
         const totalRetailValue = items.reduce((a, b) => a + (b.drug.price * b.quantity), 0);
         const totalProfit = totalRetailValue - totalCostValue;
@@ -180,9 +194,10 @@ export default function InventoryPage({ user }: { user: any }) {
         }
 
         // Stock filter
-        if (stockFilter === 'low') result = result.filter(i => i.quantity <= i.minStock);
-        else if (stockFilter === 'good') result = result.filter(i => i.quantity > i.minStock && i.quantity < i.maxStock);
-        else if (stockFilter === 'over') result = result.filter(i => i.quantity >= i.maxStock);
+        if (stockFilter === 'out') result = result.filter(i => i.quantity <= 0);
+        else if (stockFilter === 'low') result = result.filter(i => i.quantity > 0 && i.quantity < i.minStock);
+        else if (stockFilter === 'good') result = result.filter(i => i.quantity >= i.minStock && i.quantity <= i.maxStock);
+        else if (stockFilter === 'over') result = result.filter(i => i.quantity > i.maxStock);
 
         // Sort
         result.sort((a, b) => {
@@ -242,10 +257,13 @@ export default function InventoryPage({ user }: { user: any }) {
         if (window.ipcRenderer) {
             setLoading(true);
             try {
+                // Use direct invoke (no 12s timeout wrapper) — these are local
+                // SQLite queries that should be fast, and the timeout was causing
+                // silent failures when called after sync completion.
                 const [data, pending, health] = await Promise.all([
-                    ipcInvoke('get-inventory-items', { searchTerm: "", user }),
-                    ipcInvoke('get-pending-sync-count'),
-                    ipcInvoke('get-sync-health')
+                    window.ipcRenderer.invoke('get-inventory-items', { searchTerm: "", user }),
+                    window.ipcRenderer.invoke('get-pending-sync-count'),
+                    window.ipcRenderer.invoke('get-sync-health')
                 ]);
                 setItems(data);
                 if (Array.isArray(data)) {
@@ -285,30 +303,56 @@ export default function InventoryPage({ user }: { user: any }) {
         }
     };
 
-    const handleSync = async () => {
-        if (window.ipcRenderer) {
-            setLoading(true);
-            try {
-                const res = await ipcInvoke('sync-inventory');
-                if (res.success) {
-                    await fetchInventory();
-                    setUploadToast({ type: "success", message: "تمت المزامنة بنجاح ✓" });
-                } else {
-                    const errorMsg = res.error || "";
-                    if (errorMsg.includes("database") || errorMsg.includes("Neon")) {
-                        setUploadToast({ type: "error", message: "السيرفر مضغوط حالياً. يرجى المحاولة لاحقاً." });
-                    } else if (errorMsg.includes("fetch") || errorMsg.includes("network")) {
-                        setUploadToast({ type: "error", message: "خطأ في الاتصال بالانترنت." });
-                    } else {
-                        setUploadToast({ type: "error", message: "فشلت المزامنة: " + (res.error || "خطأ غير معروف") });
-                    }
+    const handleSync = () => {
+        if (!window.ipcRenderer || syncingRef.current) return;
+        syncingRef.current = true;
+        setLoading(true);
+
+        // Listen for the async completion signal BEFORE invoking.
+        // The event now carries result data so we can show accurate toasts.
+        window.ipcRenderer.once('sync-inventory-done', (result: any) => {
+            syncingRef.current = false;
+            clearTimeout(safetyTimer);
+
+            // Always refresh UI from local DB after sync
+            fetchInventory().finally(() => setLoading(false));
+
+            // Show toast based on actual results
+            if (result?.success) {
+                const pullCount = result?.pull?.count ?? '?';
+                setUploadToast({ type: "success", message: `تمت المزامنة بنجاح ✓ (${pullCount} منتج)` });
+            } else {
+                const pullReason = result?.pull?.reason || '';
+                const pushErr = result?.push?.error || '';
+                let msg = "فشلت المزامنة";
+                if (pullReason === 'offline' || pushErr.includes('offline')) {
+                    msg = "تعذر الاتصال بالسيرفر";
+                } else if (pullReason === 'no_branch_id') {
+                    msg = "لم يتم تحديد الفرع";
+                } else if (pullReason === 'lock_timeout') {
+                    msg = "المزامنة مشغولة، حاول مرة أخرى";
+                } else if (pullReason) {
+                    // Show enough of the error to be useful for diagnosis
+                    msg = `فشلت المزامنة: ${pullReason.substring(0, 200)}`;
                 }
-            } catch (error) {
-                setUploadToast({ type: "error", message: "تعذر الاتصال بالسيرفر." });
-            } finally {
-                setLoading(false);
+                setUploadToast({ type: "error", message: msg });
             }
-        }
+        });
+
+        // Safety: release the spinner after 3 minutes if the done event never fires
+        const safetyTimer = setTimeout(() => {
+            syncingRef.current = false;
+            setLoading(false);
+        }, 3 * 60_000);
+
+        // Fire the IPC — returns immediately (sync runs in background)
+        window.ipcRenderer.invoke('sync-inventory')
+            .catch(() => {
+                clearTimeout(safetyTimer);
+                syncingRef.current = false;
+                setLoading(false);
+                setUploadToast({ type: "error", message: "تعذر الاتصال بالسيرفر." });
+            });
     };
 
     useEffect(() => {
@@ -325,7 +369,9 @@ export default function InventoryPage({ user }: { user: any }) {
 
     useEffect(() => {
         if (!uploadToast) return;
-        const timer = setTimeout(() => setUploadToast(null), 3200);
+        // Error toasts stay longer so the user can read the message
+        const duration = uploadToast.type === 'error' ? 10_000 : 3200;
+        const timer = setTimeout(() => setUploadToast(null), duration);
         return () => clearTimeout(timer);
     }, [uploadToast]);
 
@@ -346,6 +392,20 @@ export default function InventoryPage({ user }: { user: any }) {
         };
         window.ipcRenderer.on('sync-health-updated', onSyncHealthUpdated as any);
         return () => { window.ipcRenderer.off('sync-health-updated', onSyncHealthUpdated as any); };
+    }, []);
+
+    // Track DLQ (failed sync) count
+    useEffect(() => {
+        const refreshDlq = async () => {
+            try {
+                const n = await ipcInvoke<number>('get-sync-failures-count');
+                setDlqCount(typeof n === 'number' ? n : 0);
+            } catch { /* ignore */ }
+        };
+        refreshDlq();
+        const onFailure = () => refreshDlq();
+        window.ipcRenderer.on('sync-failure-recorded', onFailure as any);
+        return () => { window.ipcRenderer.off('sync-failure-recorded', onFailure as any); };
     }, []);
 
     const handleDelete = async () => {
@@ -386,10 +446,13 @@ export default function InventoryPage({ user }: { user: any }) {
         try {
             await ipcInvoke('add-inventory-batch', {
                 inventoryId: showBatchModal.id,
-                ...batchData
+                ...batchData,
+                costPrice: batchPacketPrice > 0 ? batchComputedCost : batchData.costPrice,
             });
             setShowBatchModal(null);
             setBatchData({ quantity: 0, costPrice: 0, expiryDate: "", supplierId: "" });
+            setBatchPacketPrice(0);
+            setBatchStripsPerPacket(1);
             fetchInventory();
             setUploadToast({ type: "success", message: "تمت إضافة الدفعة بنجاح ✓" });
         } catch (error) {
@@ -401,12 +464,13 @@ export default function InventoryPage({ user }: { user: any }) {
         e.preventDefault();
         if (!showCreateDrugModal) return;
         const formData = new FormData(e.currentTarget);
+        const stripCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
         const data = {
             barcode: showCreateDrugModal,
             tradeName: formData.get('tradeName'),
             scientificName: formData.get('scientificName'),
             price: formData.get('price'),
-            costPrice: formData.get('costPrice'),
+            costPrice: stripCost,
             quantity: formData.get('quantity'),
             minStock: formData.get('minStock'),
             maxStock: formData.get('maxStock'),
@@ -420,7 +484,7 @@ export default function InventoryPage({ user }: { user: any }) {
                 await ipcInvoke('add-to-inventory-local', {
                     drugId: res.drug.id,
                     branchId: user.branchId,
-                    costPrice: formData.get('costPrice'),
+                    costPrice: stripCost,
                     price: formData.get('price'),
                     quantity: formData.get('quantity'),
                     minStock: formData.get('minStock'),
@@ -431,6 +495,8 @@ export default function InventoryPage({ user }: { user: any }) {
                 });
                 setShowCreateDrugModal(null);
                 setCreateDrugSupplierId("");
+                setPacketPrice(0);
+                setStripsPerPacket(1);
                 fetchInventory();
                 setUploadToast({ type: "success", message: "تم إضافة الدواء بنجاح ✓" });
             }
@@ -465,20 +531,40 @@ export default function InventoryPage({ user }: { user: any }) {
         const pending = Number(syncHealth?.pendingCount ?? pendingSyncCount ?? 0);
         const failed = Number(syncHealth?.failedCount ?? 0);
         const inProgress = Boolean(syncHealth?.inProgress);
+        const topErr = syncHealth?.topError ?? null;
+
+        // Classify error type to avoid showing scary messages for simple offline state
+        const isOfflineError = !!topErr && (
+            topErr.toLowerCase().includes('retries') ||
+            topErr.toLowerCase().includes('fetch') ||
+            topErr.toLowerCase().includes('network') ||
+            topErr.toLowerCase().includes('abort') ||
+            topErr.toLowerCase().includes('timeout')
+        );
+        const friendlyError = isOfflineError
+            ? 'الإنترنت غير متاح — سيُعاد المحاولة تلقائياً'
+            : topErr
+                ? 'سيُعاد المحاولة تلقائياً'
+                : null;
+
         const status = inProgress
             ? "جاري الرفع"
             : pending === 0
                 ? "مستقر"
-                : failed > 0
-                    ? "بحاجة متابعة"
-                    : "ينتظر المزامنة";
+                : isOfflineError
+                    ? "غير متصل"
+                    : failed > 0
+                        ? "بحاجة متابعة"
+                        : "ينتظر المزامنة";
         const statusClass = inProgress
             ? "bg-primary/10 text-primary border-primary/30"
             : pending === 0
                 ? "bg-success/10 text-success border-success/30"
-                : failed > 0
-                    ? "bg-warning/10 text-warning border-warning/30"
-                    : "bg-muted text-muted-foreground border-border";
+                : isOfflineError
+                    ? "bg-muted text-muted-foreground border-border"
+                    : failed > 0
+                        ? "bg-warning/10 text-warning border-warning/30"
+                        : "bg-muted text-muted-foreground border-border";
 
         return {
             pending,
@@ -488,7 +574,8 @@ export default function InventoryPage({ user }: { user: any }) {
             statusClass,
             oldestAge: formatDuration(syncHealth?.oldestPendingAgeSec),
             nextRetry: formatDuration(syncHealth?.nextRetryInSec),
-            topError: syncHealth?.topError || null,
+            topError: friendlyError,
+            isOffline: isOfflineError,
             autoRetryInterval: formatDuration(syncHealth?.autoRetryIntervalSec ?? null),
         };
     }, [syncHealth, pendingSyncCount]);
@@ -515,6 +602,18 @@ export default function InventoryPage({ user }: { user: any }) {
 
                     <div className="flex gap-2 mt-4 items-center">
                         <SyncHealthDashboard />
+                        {dlqCount > 0 && (
+                            <button
+                                onClick={() => setShowDLQ(true)}
+                                className="flex items-center gap-2 bg-warning/10 border border-warning/30 text-warning hover:bg-warning/20 px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
+                            >
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>تعديلات فاشلة</span>
+                                <span className="min-w-5 h-5 px-1.5 rounded-full bg-warning text-warning-foreground text-[10px] flex items-center justify-center font-black">
+                                    {dlqCount}
+                                </span>
+                            </button>
+                        )}
                         {pendingSyncCount > 0 && (
                             <button
                                 onClick={handleUploadPending}
@@ -561,12 +660,36 @@ export default function InventoryPage({ user }: { user: any }) {
                         <p className="text-sm font-black text-foreground">{syncHealthView.nextRetry}</p>
                     </div>
                 </div>
+                {/* Debug log viewer */}
+                <button
+                    onClick={async () => {
+                        try {
+                            const log = await window.ipcRenderer.invoke('get-sync-debug-log');
+                            setSyncDebugLog(log);
+                        } catch { setSyncDebugLog('(error reading log)'); }
+                    }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground underline mb-2"
+                >
+                    عرض سجل المزامنة
+                </button>
+                {syncDebugLog !== null && (
+                    <div className="mb-4 p-3 bg-muted rounded-xl border border-border relative">
+                        <button onClick={() => setSyncDebugLog(null)} className="absolute top-2 left-2 text-muted-foreground hover:text-foreground">
+                            <X className="w-4 h-4" />
+                        </button>
+                        <pre className="text-[10px] font-mono text-foreground whitespace-pre-wrap max-h-48 overflow-y-auto" dir="ltr">
+                            {syncDebugLog}
+                        </pre>
+                    </div>
+                )}
 
                 {syncHealthView.topError && (
-                    <div className="mb-4 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
-                        <p className="text-[10px] text-warning font-bold">آخر سبب فشل</p>
-                        <p className="text-xs text-foreground truncate font-semibold">{syncHealthView.topError}</p>
-                        <p className="text-[10px] text-warning/80 mt-1">التحديث التلقائي كل {syncHealthView.autoRetryInterval}</p>
+                    <div className={`mb-4 rounded-xl border px-3 py-2 flex items-center gap-2 ${syncHealthView.isOffline ? 'border-border/50 bg-muted/30' : 'border-warning/20 bg-warning/5'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${syncHealthView.isOffline ? 'bg-muted-foreground/40' : 'bg-warning/60'}`} />
+                        <p className={`text-xs truncate ${syncHealthView.isOffline ? 'text-muted-foreground' : 'text-foreground/70'}`}>
+                            {syncHealthView.topError}
+                            <span className="opacity-50 mr-1">· كل {syncHealthView.autoRetryInterval}</span>
+                        </p>
                     </div>
                 )}
 
@@ -670,9 +793,10 @@ export default function InventoryPage({ user }: { user: any }) {
                 <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl p-1">
                     {([
                         { key: 'all' as StockFilter, label: 'الكل', count: items.length },
-                        { key: 'low' as StockFilter, label: 'نقص', count: items.filter(i => i.quantity <= i.minStock).length },
-                        { key: 'good' as StockFilter, label: 'جيد', count: items.filter(i => i.quantity > i.minStock && i.quantity < i.maxStock).length },
-                        { key: 'over' as StockFilter, label: 'فائض', count: items.filter(i => i.quantity >= i.maxStock).length },
+                        { key: 'out' as StockFilter, label: 'نفد', count: items.filter(i => i.quantity <= 0).length },
+                        { key: 'low' as StockFilter, label: 'نقص', count: items.filter(i => i.quantity > 0 && i.quantity < i.minStock).length },
+                        { key: 'good' as StockFilter, label: 'جيد', count: items.filter(i => i.quantity >= i.minStock && i.quantity <= i.maxStock).length },
+                        { key: 'over' as StockFilter, label: 'فائض', count: items.filter(i => i.quantity > i.maxStock).length },
                     ]).map(f => (
                         <button
                             key={f.key}
@@ -746,9 +870,9 @@ export default function InventoryPage({ user }: { user: any }) {
                             <tbody className="divide-y divide-border/30">
                                 {filteredItems.map((item) => {
                                     const stockPct = getStockPercent(item);
-                                    const isLow = item.quantity <= item.minStock;
-                                    const isOver = item.quantity >= item.maxStock;
                                     const isOut = item.quantity <= 0;
+                                    const isLow = !isOut && item.quantity < item.minStock;
+                                    const isOver = item.quantity > item.maxStock;
                                     const profit = (item.drug.price - item.costPrice) * item.quantity;
                                     const profitPerUnit = item.drug.price - item.costPrice;
                                     const profitMargin = item.drug.price > 0 ? Math.round((profitPerUnit / item.drug.price) * 100) : 0;
@@ -920,6 +1044,11 @@ export default function InventoryPage({ user }: { user: any }) {
                 )
             }
 
+            {/* ======= DLQ PANEL ======= */}
+            {showDLQ && (
+                <SyncFailuresPanel onClose={() => { setShowDLQ(false); ipcInvoke<number>('get-sync-failures-count').then(n => setDlqCount(typeof n === 'number' ? n : 0)).catch(() => {}); }} />
+            )}
+
             {/* ======= DELETE MODAL ======= */}
             {
                 showDeleteModal && (
@@ -1000,8 +1129,23 @@ export default function InventoryPage({ user }: { user: any }) {
                                     <input type="number" placeholder="0" value={batchData.quantity || ""} onChange={(e) => setBatchData({ ...batchData, quantity: parseInt(e.target.value) || 0 })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر شراء الدفعة (التكلفة للعلبة)</label>
-                                    <input type="number" step="0.01" placeholder="0" value={batchData.costPrice || ""} onChange={(e) => setBatchData({ ...batchData, costPrice: parseFloat(e.target.value) || 0 })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر التكلفة (من الباكيت)</label>
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                        <div>
+                                            <label className="block text-[10px] text-muted-foreground mb-1">سعر الباكيت</label>
+                                            <input type="number" min="0" step="any" value={batchPacketPrice || ""} onChange={(e) => setBatchPacketPrice(parseFloat(e.target.value) || 0)} placeholder="0" className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-muted-foreground mb-1">عدد الأشرطة</label>
+                                            <input type="number" min="1" step="1" value={batchStripsPerPacket || ""} onChange={(e) => setBatchStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))} placeholder="1" className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-3 py-2">
+                                        <span className="text-[10px] text-muted-foreground">التكلفة للشريط:</span>
+                                        <span className="text-xs font-bold text-primary mr-auto tabular-nums">
+                                            {batchPacketPrice > 0 ? `${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })}` : "—"}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">تاريخ انتهاء الصلاحية</label>
@@ -1092,9 +1236,43 @@ export default function InventoryPage({ user }: { user: any }) {
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر الجمهور</label>
                                     <input type="number" step="0.01" name="price" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر التكلفة</label>
-                                    <input type="number" step="0.01" name="costPrice" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                {/* Packet price calculator */}
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">حساب سعر التكلفة من الباكيت</label>
+                                    <div className="grid grid-cols-2 gap-3 mb-2">
+                                        <div>
+                                            <label className="block text-[11px] text-muted-foreground mb-1">سعر الباكيت</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={packetPrice || ""}
+                                                onChange={e => setPacketPrice(parseFloat(e.target.value) || 0)}
+                                                placeholder="0"
+                                                className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={stripsPerPacket || ""}
+                                                onChange={e => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
+                                                placeholder="1"
+                                                className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5">
+                                        <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                                        <span className="text-sm font-bold text-primary tabular-nums mr-auto">
+                                            {packetPrice > 0 && stripsPerPacket > 0
+                                                ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCostPrice.toLocaleString('en', { maximumFractionDigits: 2 })}`
+                                                : '—'}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">الكمية الافتتاحية</label>
@@ -1103,11 +1281,11 @@ export default function InventoryPage({ user }: { user: any }) {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأدنى</label>
-                                        <input type="number" name="minStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="minStock" defaultValue="1" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأعلى</label>
-                                        <input type="number" name="maxStock" defaultValue="100" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="maxStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                 </div>
                                 <div>
@@ -1168,7 +1346,7 @@ export default function InventoryPage({ user }: { user: any }) {
                                         <Save className="w-4 h-4" />
                                         حفظ وإضافة للمخزون
                                     </button>
-                                    <button type="button" onClick={() => setShowCreateDrugModal(null)} className="flex-1 bg-muted text-foreground py-3 rounded-xl font-bold hover:bg-muted/80 transition-all text-sm">إلغاء</button>
+                                    <button type="button" onClick={() => { setShowCreateDrugModal(null); setPacketPrice(0); setStripsPerPacket(1); }} className="flex-1 bg-muted text-foreground py-3 rounded-xl font-bold hover:bg-muted/80 transition-all text-sm">إلغاء</button>
                                 </div>
                             </form>
                         </div>
@@ -1196,11 +1374,11 @@ export default function InventoryPage({ user }: { user: any }) {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأدنى</label>
-                                        <input type="number" name="minStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="minStock" defaultValue="1" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأعلى</label>
-                                        <input type="number" name="maxStock" defaultValue="100" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                        <input type="number" name="maxStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
                                     </div>
                                 </div>
                                 <div className="flex gap-3 pt-3">

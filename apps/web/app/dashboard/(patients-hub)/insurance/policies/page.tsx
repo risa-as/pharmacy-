@@ -96,7 +96,7 @@ export default async function InsurancePoliciesPage() {
                                             {policy.coverageRate}%
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
-                                            {new Date(policy.expiryDate).toLocaleDateString("ar-IQ")}
+                                            {new Date(policy.expiryDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${isExpired

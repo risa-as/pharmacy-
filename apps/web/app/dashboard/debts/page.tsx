@@ -5,7 +5,7 @@ import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import DebtorsTable from "@/app/ui/debts/debtors-table";
 
 function formatIQD(amount: number) {
-    return new Intl.NumberFormat("ar-IQ").format(Math.round(amount)) + " د.ع";
+    return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " د.ع";
 }
 
 export default async function DebtsPage({
@@ -138,9 +138,9 @@ export default async function DebtsPage({
                                         </td>
                                         <td className="p-3 text-muted-foreground">{payment.note || "—"}</td>
                                         <td className="p-3 text-muted-foreground">
-                                            {new Date(payment.createdAt).toLocaleDateString("ar-IQ")}
+                                            {new Date(payment.createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                             <span className="text-xs block">
-                                                {new Date(payment.createdAt).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}
+                                                {new Date(payment.createdAt).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Baghdad" })}
                                             </span>
                                         </td>
                                     </tr>

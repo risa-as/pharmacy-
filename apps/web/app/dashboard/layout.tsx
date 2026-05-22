@@ -11,6 +11,8 @@ import { prisma } from "@/app/lib/prisma";
 import dynamicImport from "next/dynamic";
 
 const ElectronSessionSync = dynamicImport(() => import("../ui/electron-session-sync"), { ssr: false });
+const OnboardingTour = dynamicImport(() => import("../ui/dashboard/onboarding-tour"), { ssr: false });
+const AIAssistantPanel = dynamicImport(() => import("../ui/ai-assistant/AIAssistantPanel"), { ssr: false });
 
 export const dynamic = 'force-dynamic';
 
@@ -59,15 +61,17 @@ export default async function Layout({ children }: { children: React.ReactNode }
     return (
         <div className="flex h-screen flex-col md:flex-row md:overflow-hidden">
             <ElectronSessionSync />
+            <OnboardingTour />
+            {userRole === 'ADMIN' && <AIAssistantPanel />}
             {/* Desktop sidebar takes layout space; SideNav also renders mobile drawer with fixed positioning */}
-            <div className="hidden md:block w-full flex-none md:w-64">
+            <div className="hidden md:block w-full flex-none md:w-64 print:hidden">
                 <SideNav settings={settings} userPermissions={userPermissions} userRole={userRole} />
             </div>
             {/* Mobile: SideNav renders hamburger + drawer using fixed positioning */}
-            <div className="md:hidden">
+            <div className="md:hidden print:hidden">
                 <SideNav settings={settings} userPermissions={userPermissions} userRole={userRole} />
             </div>
-            <div className="flex-grow pt-14 md:pt-0 overflow-y-auto bg-background" dir="rtl">
+            <div className="flex-grow pt-14 md:pt-0 overflow-y-auto bg-background print:overflow-visible print:pt-0" dir="rtl">
                 {/* Subscription banner (warning/grace states) */}
                 <SubscriptionBanner
                     state={subscriptionResult.state}
@@ -75,7 +79,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
                     graceEndsAt={subscriptionResult.graceEndsAt}
                 />
                 {/* Top bar: theme toggle */}
-                <div className="flex justify-end px-4 md:px-6 lg:px-12 py-2 border-b border-border">
+                <div className="flex justify-end px-4 md:px-6 lg:px-12 py-2 border-b border-border print:hidden">
                     <ThemeToggle />
                 </div>
                 {/* Page content — always rendered for read-only access even when suspended */}

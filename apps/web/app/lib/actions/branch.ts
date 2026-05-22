@@ -21,6 +21,7 @@ const UpdateBranch = BranchSchema;
 export async function createBranch(prevState: any, formData: FormData) {
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+  if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لإدارة الفروع." };
 
   const validatedFields = CreateBranch.safeParse({
     name: formData.get("name"),
@@ -72,6 +73,7 @@ export async function updateBranch(
 ) {
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+  if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لتعديل الفروع." };
 
   const validatedFields = UpdateBranch.safeParse({
     id: id,
@@ -87,6 +89,17 @@ export async function updateBranch(
   }
 
   const { name, organizationId } = validatedFields.data;
+
+  // Verify the target branch belongs to the caller's org (prevents cross-org update)
+  if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+    const targetBranch = await prisma.branch.findUnique({
+      where: { id },
+      select: { organizationId: true },
+    });
+    if (!targetBranch || targetBranch.organizationId !== tenantCtx.user.organizationId) {
+      return { message: "غير مصرح: لا يمكنك تعديل فرع من منظمة أخرى." };
+    }
+  }
 
   try {
     await prisma.branch.update({
@@ -109,6 +122,18 @@ export async function updateBranch(
 export async function deleteBranch(id: string) {
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+  if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لحذف الفروع." };
+
+  // Verify the target branch belongs to the caller's org
+  if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+    const targetBranch = await prisma.branch.findUnique({
+      where: { id },
+      select: { organizationId: true },
+    });
+    if (!targetBranch || targetBranch.organizationId !== tenantCtx.user.organizationId) {
+      return { message: "غير مصرح: لا يمكنك حذف فرع من منظمة أخرى." };
+    }
+  }
 
   try {
     await prisma.branch.delete({

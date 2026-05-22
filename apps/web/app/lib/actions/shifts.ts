@@ -2,6 +2,7 @@
 
 import { prisma } from '@/app/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { logAudit } from '@/app/lib/audit'
 
 export type ShiftStatus = {
     isWorking: boolean;
@@ -40,6 +41,7 @@ export async function clockIn(userId: string, branchId: string) {
             return { success: false, message: 'لديك وردية مفتوحة بالفعل' };
         }
 
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
         await prisma.shift.create({
             data: {
                 userId,
@@ -47,6 +49,14 @@ export async function clockIn(userId: string, branchId: string) {
                 status: 'OPEN',
                 startTime: new Date()
             }
+        });
+        await logAudit({
+            userId,
+            userName: user?.name ?? user?.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'SHIFT',
+            details: JSON.stringify({ event: 'clock_in' }),
+            branchId,
         });
 
         revalidatePath('/');
@@ -71,6 +81,7 @@ export async function clockOut(userId: string) {
         const durationMs = endTime.getTime() - activeShift.startTime.getTime();
         const durationHours = durationMs / (1000 * 60 * 60);
 
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
         await prisma.shift.update({
             where: { id: activeShift.id },
             data: {
@@ -78,6 +89,15 @@ export async function clockOut(userId: string) {
                 status: 'CLOSED',
                 duration: durationHours
             }
+        });
+        await logAudit({
+            userId,
+            userName: user?.name ?? user?.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'SHIFT',
+            entityId: activeShift.id,
+            details: JSON.stringify({ event: 'clock_out', durationHours: Math.round(durationHours * 100) / 100 }),
+            branchId: activeShift.branchId,
         });
 
         revalidatePath('/');

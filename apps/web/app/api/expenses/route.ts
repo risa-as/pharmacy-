@@ -32,6 +32,10 @@ export async function POST(req: Request) {
         if (tenantCtx instanceof NextResponse) return tenantCtx;
         const { user } = tenantCtx;
 
+        if (!tenantCtx.userPermissions.canCreateExpense) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لإنشاء مصروفات.' }, { status: 403 });
+        }
+
         if (!user || (!user.branchId && user.role !== 'SUPER_ADMIN')) {
             return NextResponse.json({ message: 'Unauthorized or No Branch Assigned' }, { status: 401 });
         }

@@ -20,6 +20,8 @@ const FEATURE_NAMES: Record<keyof PlanFeatureFlags, string> = {
   advancedReports: "التقارير المتقدمة",
   supplierManagement: "إدارة الموردين",
   granularPermissions: "الصلاحيات التفصيلية",
+  branchManagement: "إدارة الفروع",
+  branchComparison: "مقارنة الفروع",
   warehouseManagement: "إدارة المستودعات",
   interBranchTransfers: "التحويلات بين الفروع",
   marketplace: "سوق الأدوية B2B",

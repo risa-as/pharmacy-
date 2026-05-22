@@ -14,7 +14,7 @@ export async function GET() {
 
     try {
         const branches = await prisma.branch.findMany({
-            where: tenantCtx.tenantWhere,
+            where: tenantCtx.branchModelWhere,
             select: { id: true, name: true, loyaltyEnabled: true },
             orderBy: { name: 'asc' },
         });
@@ -42,7 +42,7 @@ export async function PATCH(request: Request) {
 
         // Verify the branch belongs to this organization
         const branch = await prisma.branch.findFirst({
-            where: { id: branchId, ...tenantCtx.tenantWhere },
+            where: { id: branchId, ...tenantCtx.branchModelWhere },
             select: { id: true },
         });
 

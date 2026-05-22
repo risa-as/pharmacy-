@@ -70,7 +70,7 @@ export default function EmployeeReportsPage() {
                                     {stats.sort((a: any, b: any) => b.totalSales - a.totalSales)[0].name}
                                 </div>
                                 <p className="text-sm text-emerald-600 mt-1">
-                                    {new Intl.NumberFormat('ar-IQ').format(stats.sort((a: any, b: any) => b.totalSales - a.totalSales)[0].totalSales)} د.ع
+                                    {new Intl.NumberFormat('en-US').format(stats.sort((a: any, b: any) => b.totalSales - a.totalSales)[0].totalSales)} د.ع
                                 </p>
                             </div>
                         ) : <p>-</p>}
@@ -106,7 +106,7 @@ export default function EmployeeReportsPage() {
                                     {stats.sort((a: any, b: any) => b.salesPerHour - a.salesPerHour)[0].name}
                                 </div>
                                 <p className="text-sm text-purple-600 mt-1">
-                                    {new Intl.NumberFormat('ar-IQ').format(stats.sort((a: any, b: any) => b.salesPerHour - a.salesPerHour)[0].salesPerHour)} د.ع / ساعة
+                                    {new Intl.NumberFormat('en-US').format(stats.sort((a: any, b: any) => b.salesPerHour - a.salesPerHour)[0].salesPerHour)} د.ع / ساعة
                                 </p>
                             </div>
                         ) : <p>-</p>}
@@ -125,7 +125,7 @@ export default function EmployeeReportsPage() {
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="name" />
                             <YAxis />
-                            <Tooltip formatter={(value) => typeof value === 'number' ? new Intl.NumberFormat('ar-IQ').format(value) + ' د.ع' : value} />
+                            <Tooltip formatter={(value) => typeof value === 'number' ? new Intl.NumberFormat('en-US').format(value) + ' د.ع' : value} />
                             <Legend />
                             <Bar dataKey="totalSales" name="المبيعات" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                         </BarChart>
@@ -157,14 +157,14 @@ export default function EmployeeReportsPage() {
                                     <tr key={user.id} className="hover:bg-muted">
                                         <td className="p-3 font-medium">{user.name}</td>
                                         <td className="p-3 text-muted-foreground text-xs">{user.role}</td>
-                                        <td className="p-3 font-bold text-green-600">{new Intl.NumberFormat('ar-IQ').format(user.totalSales)} د.ع</td>
+                                        <td className="p-3 font-bold text-green-600">{new Intl.NumberFormat('en-US').format(user.totalSales)} د.ع</td>
                                         <td className="p-3">{user.transactionCount}</td>
-                                        <td className="p-3">{new Intl.NumberFormat('ar-IQ').format(user.averageBasket)} د.ع</td>
+                                        <td className="p-3">{new Intl.NumberFormat('en-US').format(user.averageBasket)} د.ع</td>
                                         <td className="p-3 flex items-center gap-1">
                                             <Clock className="w-3 h-3 text-muted-foreground" />
                                             {user.totalHours.toFixed(1)} س
                                         </td>
-                                        <td className="p-3 font-semibold text-blue-600">{new Intl.NumberFormat('ar-IQ').format(user.salesPerHour)} د.ع</td>
+                                        <td className="p-3 font-semibold text-blue-600">{new Intl.NumberFormat('en-US').format(user.salesPerHour)} د.ع</td>
                                     </tr>
                                 ))}
                             </tbody>

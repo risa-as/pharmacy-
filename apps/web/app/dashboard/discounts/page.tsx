@@ -114,9 +114,9 @@ export default async function DiscountsPage() {
                                         <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
                                             <div className="flex items-center gap-1">
                                                 <Calendar className="w-3 h-3" />
-                                                {new Date(discount.startDate).toLocaleDateString("ar-IQ")}
+                                                {new Date(discount.startDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                                 <ChevronLeft className="w-3 h-3" />
-                                                {new Date(discount.endDate).toLocaleDateString("ar-IQ")}
+                                                {new Date(discount.endDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">

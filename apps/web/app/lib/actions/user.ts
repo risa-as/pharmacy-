@@ -28,6 +28,7 @@ const UpdateUser = UserSchema.omit({ password: true }).extend({
 export async function createUser(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canManageUsers) return { message: "ليس لديك صلاحية لإدارة المستخدمين." };
 
     const validatedFields = CreateUser.safeParse({
         name: formData.get("name"),
@@ -84,7 +85,7 @@ export async function createUser(prevState: any, formData: FormData) {
             entity: 'USER',
             entityId: newUser.id,
             details: JSON.stringify({ name, email, role }),
-            branchId: branchId ?? undefined,
+            branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
         });
     } catch (error) {
         console.error("Error creating user:", error);
@@ -100,6 +101,9 @@ export async function updateUser(
     prevState: any,
     formData: FormData,
 ) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canManageUsers) return { message: "ليس لديك صلاحية لتعديل المستخدمين." };
     const passwordValue = formData.get("password");
 
     const validatedFields = UpdateUser.safeParse({
@@ -121,6 +125,18 @@ export async function updateUser(
     const { name, email, password, role, branchId } = validatedFields.data;
 
     try {
+        // Verify target user belongs to caller's org (prevents cross-tenant update)
+        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const targetUser = await prisma.user.findUnique({
+                where: { id },
+                select: { branch: { select: { organizationId: true } } },
+            });
+            const targetOrgId = targetUser?.branch?.organizationId;
+            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
+                return { message: "غير مصرح: لا يمكنك تعديل مستخدم من منظمة أخرى." };
+            }
+        }
+
         const updateData: any = {
             name,
             email,
@@ -137,6 +153,15 @@ export async function updateUser(
             where: { id },
             data: updateData,
         });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'USER',
+            entityId: id,
+            details: JSON.stringify({ name, email, role }),
+            branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
+        });
     } catch (error) {
         console.error("Error updating user:", error);
         return { message: "خطأ في قاعدة البيانات: فشل في تحديث المستخدم." };
@@ -147,9 +172,35 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canManageUsers) {
+        return { message: "ليس لديك صلاحية لحذف المستخدمين." };
+    }
     try {
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: { name: true, email: true, branch: { select: { organizationId: true } } },
+        });
+
+        // Verify target user belongs to caller's org
+        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const targetOrgId = user?.branch?.organizationId;
+            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
+                return { message: "غير مصرح: لا يمكنك حذف مستخدم من منظمة أخرى." };
+            }
+        }
         await prisma.user.delete({
             where: { id },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'USER',
+            entityId: id,
+            details: JSON.stringify({ name: user?.name, email: user?.email }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
         revalidatePath("/dashboard/users");
     } catch (error) {
@@ -171,8 +222,19 @@ export async function getUsers() {
 }
 
 export async function getUserById(id: string) {
-    return await prisma.user.findUnique({
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return null;
+
+    const user = await prisma.user.findUnique({
         where: { id },
         include: { branch: true },
     });
+
+    // Verify the user belongs to the caller's org (skip for SUPER_ADMIN)
+    if (user && tenantCtx.user.role !== 'SUPER_ADMIN') {
+        const targetOrgId = user.branch?.organizationId;
+        if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) return null;
+    }
+
+    return user;
 }

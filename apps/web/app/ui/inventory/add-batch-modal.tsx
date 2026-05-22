@@ -99,8 +99,14 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
     const [error, setError] = useState("");
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [supplierId, setSupplierId] = useState("");
+    const [mounted, setMounted] = useState(false);
+    const [packetPrice, setPacketPrice] = useState(0);
+    const [stripsPerPacket, setStripsPerPacket] = useState(1);
+    const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
 
     const router = useRouter();
+
+    useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
         fetch("/api/suppliers")
@@ -117,6 +123,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
         const formData = new FormData(e.currentTarget);
         formData.set("inventoryId", inventoryId);
         formData.set("supplierId", supplierId);
+        formData.set("costPrice", String(computedCost));
 
         try {
             const result = await addBatch(null, formData);
@@ -136,8 +143,10 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
         }
     };
 
+    if (!mounted) return null;
+
     return createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
             <div
                 className="bg-card rounded-xl p-6 w-full max-w-md shadow-xl"
                 onClick={(e) => e.stopPropagation()}
@@ -172,17 +181,41 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                     </div>
 
                     <div>
-                        <label className="block text-sm font-bold text-foreground mb-1">سعر شراء الدفعة (التكلفة للعلبة)</label>
-                        <input
-                            type="number"
-                            name="costPrice"
-                            required
-                            min="0"
-                            step="250"
-                            className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20 font-mono text-left"
-                            placeholder="0"
-                            dir="ltr"
-                        />
+                        <label className="block text-sm font-bold text-foreground mb-2">سعر التكلفة (من الباكيت)</label>
+                        <div className="grid grid-cols-2 gap-3 mb-2">
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1">سعر الباكيت</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={packetPrice || ""}
+                                    onChange={(e) => setPacketPrice(parseFloat(e.target.value) || 0)}
+                                    placeholder="0"
+                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={stripsPerPacket || ""}
+                                    onChange={(e) => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
+                                    placeholder="1"
+                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5 mb-2">
+                            <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                            <span className="text-sm font-bold text-primary mr-auto tabular-nums">
+                                {packetPrice > 0
+                                    ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })}`
+                                    : "—"}
+                            </span>
+                        </div>
                     </div>
 
                     <div>

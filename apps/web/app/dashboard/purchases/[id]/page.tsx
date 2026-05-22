@@ -9,6 +9,7 @@ import { ar } from 'date-fns/locale';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import PurchasePrintButton from './components/print-button';
+import CancelPurchaseButton from './components/cancel-button';
 
 import PrintHeader from '@/app/ui/components/print-header';
 
@@ -31,6 +32,8 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
         drugName: drugMap.get(item.drugId)?.tradeName || 'Unknown'
     }));
 
+    const invoiceTotal = purchase.items.reduce((sum: number, item: any) => sum + item.quantity * item.cost, 0);
+
     // WhatsApp Message
     const header = `*طلب شراء جديد من صيدلية فاراماس*`;
     const body = itemsWithNames.map((i: any) => `- ${i.drugName}: ${i.quantity} قطعة`).join('\n');
@@ -45,12 +48,12 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
     const waLink = `https://wa.me/${phone}?text=${msg}`;
 
     return (
-        <div className="p-6 space-y-6" dir="rtl">
+        <div className="p-6 space-y-6 print:p-0 print:space-y-4" dir="rtl">
             <PrintHeader />
-            <div className="flex justify-between items-center bg-card p-4 rounded-lg shadow print:shadow-none print:border-none">
+            <div className="flex justify-between items-center bg-card p-4 rounded-lg shadow print:shadow-none print:border print:border-border print:rounded-none">
                 <div>
-                    <h1 className="text-2xl font-bold">تفاصيل الطلب #{purchase.id.slice(0, 8)}</h1>
-                    <p className="text-muted-foreground">من المورد: {purchase.supplier.name}</p>
+                    <h1 className="text-2xl font-bold">فاتورة مشتريات #{purchase.id.slice(0, 8)}</h1>
+                    <p className="text-muted-foreground">المورد: <span className="font-semibold text-foreground">{purchase.supplier.name}</span></p>
                     <p className="text-muted-foreground">التاريخ: {format(new Date(purchase.createdAt), 'PPP', { locale: ar })}</p>
                 </div>
                 <div className="flex gap-2 print:hidden">
@@ -61,9 +64,12 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
                     </a>
                     <PurchasePrintButton />
                     {purchase.status === 'PENDING' && (
-                        <Link href={`/dashboard/purchases/${params.id}/receive`}>
-                            <Button>استلام المواد</Button>
-                        </Link>
+                        <>
+                            <Link href={`/dashboard/purchases/${params.id}/receive`}>
+                                <Button>استلام المواد</Button>
+                            </Link>
+                            <CancelPurchaseButton purchaseId={params.id} size="default" />
+                        </>
                     )}
                 </div>
             </div>
@@ -72,21 +78,31 @@ export default async function PurchaseDetailsPage({ params }: { params: { id: st
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="text-right">المادة</TableHead>
-                            <TableHead className="text-right">الكمية</TableHead>
-                            <TableHead className="text-right">التكلفة (تقديري)</TableHead>
-                            <TableHead className="text-right">الإجمالي</TableHead>
+                            <TableHead className="text-right font-bold">#</TableHead>
+                            <TableHead className="text-right font-bold">اسم الدواء</TableHead>
+                            <TableHead className="text-right font-bold">الكمية</TableHead>
+                            <TableHead className="text-right font-bold">سعر الوحدة (د.ع)</TableHead>
+                            <TableHead className="text-right font-bold">الإجمالي (د.ع)</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {itemsWithNames.map((item: any) => (
+                        {itemsWithNames.map((item: any, index: number) => (
                             <TableRow key={item.id}>
+                                <TableCell className="text-muted-foreground">{index + 1}</TableCell>
                                 <TableCell className="font-medium">{item.drugName}</TableCell>
                                 <TableCell>{item.quantity}</TableCell>
-                                <TableCell>{item.cost.toLocaleString()}</TableCell>
-                                <TableCell>{(item.quantity * item.cost).toLocaleString()}</TableCell>
+                                <TableCell>{item.cost.toLocaleString()} د.ع</TableCell>
+                                <TableCell className="font-bold">{(item.quantity * item.cost).toLocaleString()} د.ع</TableCell>
                             </TableRow>
                         ))}
+                        <TableRow className="border-t-2 border-border bg-muted/50">
+                            <TableCell colSpan={4} className="text-right font-bold text-lg">
+                                مجموع الفاتورة
+                            </TableCell>
+                            <TableCell className="font-bold text-lg text-primary">
+                                {invoiceTotal.toLocaleString()} د.ع
+                            </TableCell>
+                        </TableRow>
                     </TableBody>
                 </Table>
             </div>

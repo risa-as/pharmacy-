@@ -18,6 +18,7 @@ model Organization {
   isSuspended        Boolean   @default(false)
   suspendedAt        DateTime?
   subscriptionEndsAt DateTime?
+  aiDailyLimit       Int       @default(50)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   minProfitMargin    Float     @default(5)
@@ -30,6 +31,8 @@ model Organization {
   paymentTransactions PaymentTransaction[]
   customDrugs        GlobalDrug[] @relation("OrganizationCustomDrugs")
   suppliers          Supplier[]   @relation("OrganizationSuppliers")
+  companySettings    CompanySettings?
+  aiUsageLogs        AiUsageLog[]
 
   plan               SubscriptionPlan? @relation(fields: [planId], references: [id])
 }
@@ -179,7 +182,7 @@ model Inventory {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   maxStock  Int        @default(1000)
-  minStock  Int        @default(0)
+  minStock  Int        @default(1)
   batches   Batch[]
   branch    Branch     @relation(fields: [branchId], references: [id])
 
@@ -237,14 +240,16 @@ model SyncActionLog {
 }
 
 model Sale {
-  id           String        @id @default(uuid())
-  branchId     String
-  safeId       String? // The safe where the cash for this sale went
-  patientId    String? // Linked to CRM
-  total        Float
-  discount     Float         @default(0)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id               String        @id @default(uuid())
+  invoiceNumber    Int           @default(autoincrement()) @unique
+  branchId         String
+  safeId           String? // The safe where the cash for this sale went
+  patientId        String? // Linked to CRM
+  total            Float
+  discount         Float         @default(0)
+  hasPriceOverride Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
   branch       Branch        @relation(fields: [branchId], references: [id])
   safe         Safe?         @relation(fields: [safeId], references: [id])
   patient      Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
@@ -273,14 +278,15 @@ enum PaymentMethod {
 }
 
 model SaleItem {
-  id       String     @id @default(uuid())
-  saleId   String
-  drugId   String
-  quantity Int
-  price    Float
-  cost     Float      @default(0)
-  sale     Sale       @relation(fields: [saleId], references: [id])
-  drug     GlobalDrug @relation(fields: [drugId], references: [id])
+  id            String     @id @default(uuid())
+  saleId        String
+  drugId        String
+  quantity      Int
+  price         Float
+  originalPrice Float?
+  cost          Float      @default(0)
+  sale          Sale       @relation(fields: [saleId], references: [id])
+  drug          GlobalDrug @relation(fields: [drugId], references: [id])
 
   @@index([saleId])
   @@index([drugId])
@@ -531,8 +537,9 @@ enum DiscountType {
 
 // ==================== الإعدادات العامة ====================
 model CompanySettings {
-  id                     String   @id @default(uuid())
-  name                   String   @default("Pharmacy System")
+  id                     String        @id @default(uuid())
+  organizationId         String?       @unique
+  name                   String        @default("Pharmacy System")
   phone                  String?
   address                String?
   email                  String?
@@ -541,15 +548,17 @@ model CompanySettings {
   taxNumber              String?
   facebookUrl            String?
   instagramUrl           String?
-  currency               String   @default("IQD")
-  loyaltyEnabled         Boolean  @default(false)
-  loyaltyPointsPerDinar  Float    @default(0.01)
-  loyaltyRedemptionValue Float    @default(2.5)
-  loyaltyMinRedemption   Int      @default(500)
-  maxDiscountPercent     Float    @default(10)
-  minProfitMargin        Float    @default(5) // Minimum profit margin percentage - warn if selling below this
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  currency               String        @default("IQD")
+  loyaltyEnabled         Boolean       @default(false)
+  loyaltyPointsPerDinar  Float         @default(0.01)
+  loyaltyRedemptionValue Float         @default(2.5)
+  loyaltyMinRedemption   Int           @default(500)
+  maxDiscountPercent     Float         @default(10)
+  minProfitMargin        Float         @default(5) // Minimum profit margin percentage - warn if selling below this
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  organization           Organization? @relation(fields: [organizationId], references: [id])
 }
 
 // ==================== برنامج الولاء ====================
@@ -1041,4 +1050,18 @@ model MobileSession {
   @@index([organizationId, isActive])
   @@index([userId])
   @@index([lastSeenAt])
+}
+
+
+// =======================
+// AI Usage Tracking
+// =======================
+model AiUsageLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }

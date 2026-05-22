@@ -10,10 +10,11 @@ import { NextResponse } from "next/server";
 export default async function CreateInventoryPage() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect("/login");
-    const { tenantWhere } = tenantCtx;
+    if (!tenantCtx.userPermissions.canAddDrug) redirect("/dashboard/inventory");
+    const { branchModelWhere } = tenantCtx;
 
     const branches = await prisma.branch.findMany({
-        where: tenantWhere,
+        where: branchModelWhere,
         orderBy: { name: "asc" },
     });
 

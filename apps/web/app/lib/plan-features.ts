@@ -14,6 +14,10 @@ export type PlanFeatureFlags = {
   supplierManagement: boolean;
   /** Granular per-user permission controls (Pro+) */
   granularPermissions: boolean;
+  /** Branch creation & management beyond the default single branch (Pro+) */
+  branchManagement: boolean;
+  /** Cross-branch performance comparison reports (Enterprise only) */
+  branchComparison: boolean;
   /** Warehouse ordering system (Enterprise only) */
   warehouseManagement: boolean;
   /** Inter-branch stock transfers (Enterprise only) */
@@ -28,6 +32,8 @@ export const FREE_PLAN_FEATURES: PlanFeatureFlags = {
   advancedReports: false,
   supplierManagement: false,
   granularPermissions: false,
+  branchManagement: false,
+  branchComparison: false,
   warehouseManagement: false,
   interBranchTransfers: false,
   marketplace: false,

@@ -14,23 +14,46 @@ function parseDateParam(val: string | string[] | undefined) {
     return typeof val === "string" ? val : undefined;
 }
 
-function buildDateRange(from?: string, to?: string) {
-    const now = new Date();
+function buildDateRange(from?: string, to?: string, fromTime?: string, toTime?: string) {
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
+    let start: Date, end: Date, label: string;
     if (from && to) {
-        const start = new Date(from); start.setHours(0, 0, 0, 0);
-        const end = new Date(to); end.setHours(23, 59, 59, 999);
-        return { start, end, label: `${from} — ${to}` };
+        const [fy, fm, fd] = from.split('-').map(Number);
+        const [ty, tm, td] = to.split('-').map(Number);
+        // Parse as Baghdad dates → convert to UTC (full days for DB; time-of-day filtered in JS)
+        start = new Date(Date.UTC(fy, fm - 1, fd, 0, 0, 0, 0) - IRAQ_OFFSET);
+        end   = new Date(Date.UTC(ty, tm - 1, td, 23, 59, 59, 999) - IRAQ_OFFSET);
+        label = fromTime || toTime ? `${from} — ${to} (${fromTime || "00:00"} → ${toTime || "23:59"})` : `${from} — ${to}`;
+    } else {
+        const todayUtcIraq = Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate());
+        end   = new Date(todayUtcIraq + 24 * 60 * 60 * 1000 - 1 - IRAQ_OFFSET);
+        start = new Date(todayUtcIraq - 6 * 24 * 60 * 60 * 1000 - IRAQ_OFFSET);
+        label = "آخر 7 أيام";
     }
-    const start = new Date(now); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
-    const end = new Date(now); end.setHours(23, 59, 59, 999);
-    return { start, end, label: "آخر 7 أيام" };
+    return { start, end, label };
+}
+
+function filterByTimeOfDay<T extends { createdAt: Date | string }>(items: T[], fromTime?: string, toTime?: string): T[] {
+    if (!fromTime && !toTime) return items;
+    const toMinutes = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const fromMin = fromTime ? toMinutes(fromTime) : 0;
+    const toMin = toTime ? toMinutes(toTime) : 23 * 60 + 59;
+    const crossesMidnight = fromMin > toMin;
+    const IRAQ_OFFSET_MS = 3 * 60 * 60 * 1000;
+    return items.filter(item => {
+        const d = new Date(item.createdAt);
+        const iraqTime = new Date(d.getTime() + IRAQ_OFFSET_MS);
+        const min = iraqTime.getUTCHours() * 60 + iraqTime.getUTCMinutes();
+        return crossesMidnight ? (min >= fromMin || min <= toMin) : (min >= fromMin && min <= toMin);
+    });
 }
 
 function getDaysBetween(start: Date, end: Date) {
     const days: string[] = [];
     const cur = new Date(start); cur.setHours(0, 0, 0, 0);
     const endDay = new Date(end); endDay.setHours(0, 0, 0, 0);
-    while (cur <= endDay) { days.push(cur.toLocaleDateString("en-GB")); cur.setDate(cur.getDate() + 1); }
+    while (cur <= endDay) { days.push(cur.toLocaleDateString("en-GB", { timeZone: "Asia/Baghdad" })); cur.setDate(cur.getDate() + 1); }
     return days;
 }
 
@@ -51,7 +74,9 @@ export default async function ProfitsReportPage({
     const branchId = parseDateParam(searchParams.branch);
     const fromParam = parseDateParam(searchParams.from);
     const toParam = parseDateParam(searchParams.to);
-    const { start, end, label: periodLabel } = buildDateRange(fromParam, toParam);
+    const fromTimeParam = parseDateParam(searchParams.fromTime);
+    const toTimeParam = parseDateParam(searchParams.toTime);
+    const { start, end, label: periodLabel } = buildDateRange(fromParam, toParam, fromTimeParam, toTimeParam);
 
     const branchWhere = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
 
@@ -60,7 +85,7 @@ export default async function ProfitsReportPage({
     sixMonthsAgo.setHours(0, 0, 0, 0);
 
     // ── Run ALL queries in parallel ──────────────────────────────────────────
-    const [sales, expenses, inventoryRaw, pendingTotal, monthlySales, monthlyExpenses] = await Promise.all([
+    const [salesRaw, expenses, inventoryRaw, pendingTotal, monthlySales, monthlyExpenses] = await Promise.all([
         // Period sales — only fields needed for COGS + revenue
         prisma.sale.findMany({
             where: { createdAt: { gte: start, lte: end }, ...branchWhere },
@@ -103,6 +128,9 @@ export default async function ProfitsReportPage({
         }),
     ]);
 
+    // Filter period sales by time-of-day if specified
+    const sales = filterByTimeOfDay(salesRaw, fromTimeParam, toTimeParam);
+
     // ── Build cost map ───────────────────────────────────────────────────────
     const costMap = new Map<string, number>();
     let totalInventoryValue = 0;
@@ -139,7 +167,7 @@ export default async function ProfitsReportPage({
     const days = getDaysBetween(start, end);
     const profitByDay = new Map<string, number>(days.map((d) => [d, 0]));
     for (const sale of sales) {
-        const key = new Date(sale.createdAt).toLocaleDateString("en-GB");
+        const key = new Date(sale.createdAt).toLocaleDateString("en-GB", { timeZone: "Asia/Baghdad" });
         if (profitByDay.has(key)) {
             let saleCost = 0;
             for (const item of sale.items) {
@@ -155,7 +183,7 @@ export default async function ProfitsReportPage({
     for (let i = 5; i >= 0; i--) {
         const d = new Date(); d.setMonth(d.getMonth() - i);
         const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        const monthLabel = d.toLocaleDateString("ar-IQ", { month: "long", year: "numeric" });
+        const monthLabel = d.toLocaleDateString("ar-IQ", { month: "long", year: "numeric", timeZone: "Asia/Baghdad" });
 
         const rev = monthlySales
             .filter((s: any) => {
@@ -191,7 +219,10 @@ export default async function ProfitsReportPage({
                     baseUrl="/dashboard/reports/profits"
                     currentFrom={fromParam}
                     currentTo={toParam}
+                    currentFromTime={fromTimeParam}
+                    currentToTime={toTimeParam}
                     extraParams={extraParams}
+                    showTimeFilter
                 />
                 <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/profits" />
             </div>

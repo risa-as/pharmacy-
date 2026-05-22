@@ -17,6 +17,13 @@ export default auth((req) => {
         return Response.redirect(new URL("/login", nextUrl));
     }
 
+    // Skip root page SSR entirely for authenticated users — redirect straight to
+    // dashboard via fast middleware (avoids the 15+ second auth() cold-start call
+    // in app/page.tsx that caused a blank white screen on first load).
+    if (req.auth && nextUrl.pathname === "/") {
+        return Response.redirect(new URL("/dashboard", nextUrl));
+    }
+
     // SUPER_ADMIN must not access pharmacy operations routes
     if (role === "SUPER_ADMIN" && isPharmacyOnlyRoute(nextUrl.pathname)) {
         return Response.redirect(new URL("/dashboard", nextUrl));
@@ -47,5 +54,8 @@ export const config = {
     // Include API routes so the grace-period write-block (T022) can intercept
     // blocked operations. Static assets, image optimization, and sync routes
     // (which use raw request bodies) are excluded to avoid body-stream conflicts.
-    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/sync|api/mobile|api/public).*)"],
+    // api/auth/login and api/auth/change-password are custom endpoints (not NextAuth
+    // actions) — excluding them prevents NextAuth middleware from intercepting and
+    // returning a non-JSON response instead of the route handler's response.
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/sync|api/mobile|api/public|api/auth/login|api/auth/change-password).*)"],
 };

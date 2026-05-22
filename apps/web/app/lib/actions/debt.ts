@@ -4,6 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/app/lib/audit';
 
 // جلب جميع المدينين
 export async function getAllDebtors(branchId?: string) {
@@ -237,6 +238,8 @@ export async function makeDebtPayment(
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
 
+        const { organizationId } = tenantCtx;
+
         const sale = await prisma.sale.findFirst({
             where: { id: saleId, patient: { id: patientId, ...tenantCtx.tenantBranchWhere } },
             include: { payment: true, debtPayments: true, patient: true },
@@ -300,10 +303,22 @@ export async function makeDebtPayment(
         revalidatePath("/dashboard/debts");
         revalidatePath(`/dashboard/debts/${patientId}`);
 
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'DEBT',
+            entityId: saleId,
+            details: JSON.stringify({ patientId, amount: finalAmount, method }),
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
+
         // Loyalty System Logic (Earn points on debt payment)
         // Non-critical: a loyalty failure must NOT roll back or hide the payment.
         try {
-            const settings = await prisma.companySettings.findFirst();
+            const settings = await prisma.companySettings.findFirst({
+                where: { organizationId: organizationId ?? undefined },
+            });
             if (settings?.loyaltyEnabled && finalAmount > 0) {
                 const pointsPerDinar = settings.loyaltyPointsPerDinar || 0.01;
                 const pointsEarned = Math.floor(finalAmount * pointsPerDinar);

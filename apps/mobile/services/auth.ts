@@ -66,12 +66,16 @@ export class MobileSessionLimitError extends Error {
 
 // ── Internal session helpers ──────────────────────────────────────────────────
 
-async function startMobileSession(userId: string): Promise<void> {
+async function startMobileSession(userId: string, jwtToken?: string): Promise<void> {
     const deviceToken = await getOrCreateDeviceToken();
     const baseUrl = await getBaseUrl();
+    const token = jwtToken ?? await secureGet(TOKEN_KEY);
     const res = await fetch(`${baseUrl}/mobile/session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ userId, deviceToken }),
     });
     if (!res.ok) {
@@ -89,9 +93,13 @@ async function refreshMobileSession(userId: string): Promise<void> {
     try {
         const deviceToken = await getOrCreateDeviceToken();
         const baseUrl = await getBaseUrl();
+        const token = await secureGet(TOKEN_KEY);
         const res = await fetch(`${baseUrl}/mobile/session`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify({ userId, deviceToken }),
         });
         if (res.status === 403) {
@@ -111,9 +119,13 @@ async function endMobileSession(): Promise<void> {
         const deviceToken = await AsyncStorage.getItem(DEVICE_TOKEN_KEY);
         if (!deviceToken) return;
         const baseUrl = await getBaseUrl();
+        const token = await secureGet(TOKEN_KEY);
         await fetch(`${baseUrl}/mobile/session`, {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify({ deviceToken }),
         });
     } catch {
@@ -132,7 +144,14 @@ export const authService = {
             body: JSON.stringify({ email, password }),
         });
 
-        const data = await response.json();
+        const rawText = await response.text();
+        let data: any;
+        try {
+            data = JSON.parse(rawText);
+        } catch {
+            console.error('[Auth] Non-JSON response from /auth/login:', response.status, rawText.slice(0, 300));
+            throw new Error(`خطأ في الاتصال بالخادم (${response.status}). يرجى المحاولة مرة أخرى.`);
+        }
         if (!response.ok) throw new Error(data.message || 'فشل تسجيل الدخول');
 
         const { token, user } = data;
@@ -145,7 +164,7 @@ export const authService = {
         // Enforce session limit for all non-SUPER_ADMIN roles
         if (user.role !== 'SUPER_ADMIN') {
             try {
-                await startMobileSession(user.id);
+                await startMobileSession(user.id, token);
             } catch (sessionError: any) {
                 await secureDelete(TOKEN_KEY);
                 await secureDelete(USER_KEY);

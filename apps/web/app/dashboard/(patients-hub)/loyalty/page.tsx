@@ -225,7 +225,7 @@ export default async function LoyaltyDashboardPage() {
                                                         {lastTx.type === "EARN" ? "+" : ""}{lastTx.points.toLocaleString()} نقطة
                                                     </span>
                                                     <span className="text-xs text-muted-foreground">
-                                                        {new Date(lastTx.createdAt).toLocaleDateString("ar-IQ", { year: "numeric", month: "long", day: "numeric" })}
+                                                        {new Date(lastTx.createdAt).toLocaleDateString("ar-IQ", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" })}
                                                     </span>
                                                 </div>
                                             ) : "-"}

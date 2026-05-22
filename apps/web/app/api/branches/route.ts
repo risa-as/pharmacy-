@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
             tenantWhere = { organizationId: branch.organizationId };
         } else {
-            tenantWhere = tenantCtx.tenantWhere;
+            tenantWhere = tenantCtx.branchModelWhere;
         }
 
         const branches = await prisma.branch.findMany({

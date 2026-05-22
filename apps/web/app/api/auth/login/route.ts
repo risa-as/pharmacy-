@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 
 export async function POST(request: Request) {
@@ -32,19 +32,19 @@ export async function POST(request: Request) {
     const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
-      if (password !== user.password) {
-        return NextResponse.json(
-          { message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" },
-          { status: 401 },
-        );
-      }
+      return NextResponse.json(
+        { message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" },
+        { status: 401 },
+      );
     }
 
     const organizationId = user.branch?.organizationId ?? null;
 
-    const secret = new TextEncoder().encode(
-      process.env.AUTH_SECRET || "super-secret-key-123",
-    );
+    if (!process.env.AUTH_SECRET) {
+      console.error("CRITICAL: AUTH_SECRET env var is not set");
+      return NextResponse.json({ message: "خطأ في إعداد الخادم" }, { status: 500 });
+    }
+    const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
     const token = await new SignJWT({
       userId: user.id,
       email: user.email,

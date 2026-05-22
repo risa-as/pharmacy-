@@ -54,7 +54,7 @@ export function exportToPDF(
     // Date
     doc.setFontSize(10);
     doc.text(
-        new Date().toLocaleDateString("ar-IQ"),
+        new Date().toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" }),
         doc.internal.pageSize.getWidth() / 2,
         28,
         { align: "center" }
@@ -97,7 +97,7 @@ export function formatDataForExport(
         keys.map((key: any) => {
             const value = item[key];
             if (value instanceof Date) {
-                return value.toLocaleDateString("ar-IQ");
+                return value.toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" });
             }
             if (typeof value === "number") {
                 return value.toFixed(2);

@@ -13,7 +13,7 @@ interface DebtPaymentFormProps {
 }
 
 function formatIQD(amount: number) {
-    return new Intl.NumberFormat("ar-IQ").format(Math.round(amount)) + " د.ع";
+    return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " د.ع";
 }
 
 export default function DebtPaymentForm({ saleId, patientId, remaining, safes }: DebtPaymentFormProps) {
@@ -90,22 +90,7 @@ export default function DebtPaymentForm({ saleId, patientId, remaining, safes }:
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mt-3">
-                <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">إيداع في الصندوق</label>
-                    <select
-                        value={safeId}
-                        onChange={(e) => setSafeId(e.target.value)}
-                        required
-                        className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:ring-2 focus:ring-success/30 focus:border-success outline-none"
-                    >
-                        {safes.map((safe: any) => (
-                            <option key={safe.id} value={safe.id}>
-                                {safe.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+            <div className="grid grid-cols-1 gap-3 mt-3">
                 <div>
                     <label className="text-xs text-muted-foreground mb-1 block">ملاحظة (اختياري)</label>
                     <input

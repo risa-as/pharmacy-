@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 export default async function Page() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect("/login");
-    const { tenantWhere } = tenantCtx;
+    const { branchModelWhere } = tenantCtx;
 
     const [suppliers, branches, drugs, lastPurchase] = await Promise.all([
         prisma.supplier.findMany({
@@ -21,7 +21,7 @@ export default async function Page() {
             orderBy: { name: 'asc' },
         }),
         prisma.branch.findMany({
-            where: tenantWhere,
+            where: branchModelWhere,
             select: { id: true, name: true },
             orderBy: { name: 'asc' },
         }),

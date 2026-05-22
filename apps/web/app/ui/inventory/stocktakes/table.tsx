@@ -74,7 +74,7 @@ export default async function StocktakesTable({
                                         </div>
                                     </td>
                                     <td className="whitespace-nowrap px-3 py-3">
-                                        {new Date(stocktake.createdAt).toLocaleDateString('ar-IQ')} {new Date(stocktake.createdAt).toLocaleTimeString('ar-IQ')}
+                                        {new Date(stocktake.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })} {new Date(stocktake.createdAt).toLocaleTimeString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                     </td>
                                     <td className="whitespace-nowrap px-3 py-3">
                                         {stocktake.user?.name || 'غير معروف'}

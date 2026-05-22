@@ -23,7 +23,7 @@ export default function MarketplaceClient() {
 
     useEffect(() => { fetchListings(); }, [fetchListings]);
 
-    const fmt = (v: number) => new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v) + ' د.ع';
+    const fmt = (v: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v) + ' د.ع';
 
     const buyItem = async (listingId: string, qty: number) => {
         try {

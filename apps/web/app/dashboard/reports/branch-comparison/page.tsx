@@ -24,7 +24,7 @@ export default async function BranchComparisonPage() {
     }
 
     if (resolvedOrgId) {
-        const upgrade = await requireFeature(resolvedOrgId, 'advancedReports');
+        const upgrade = await requireFeature(resolvedOrgId, 'branchComparison');
         if (upgrade) return <UpgradeRequired {...upgrade} />;
     }
 

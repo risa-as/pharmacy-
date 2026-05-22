@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CloudOff, Cloud, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { WifiOff, RefreshCw, CloudOff, Clock } from 'lucide-react';
 
 type SyncHealthSnapshot = {
     syncMode: 'manual' | 'auto' | 'smart';
@@ -12,81 +12,82 @@ type SyncHealthSnapshot = {
     topError: string | null;
 };
 
+/** Maps a raw technical error to a short, calm Arabic label */
+function classifyError(error: string | null): 'offline' | 'data' | 'unknown' | null {
+    if (!error) return null;
+    const e = error.toLowerCase();
+    if (
+        e.includes('retries') ||
+        e.includes('fetch') ||
+        e.includes('network') ||
+        e.includes('abort') ||
+        e.includes('econnrefused') ||
+        e.includes('enotfound') ||
+        e.includes('timeout') ||
+        e.includes('failed to connect')
+    ) return 'offline';
+    if (e.includes('client error 4') || e.includes('400') || e.includes('403') || e.includes('404')) return 'data';
+    return 'unknown';
+}
+
 export default function SyncHealthDashboard() {
     const [health, setHealth] = useState<SyncHealthSnapshot | null>(null);
 
     useEffect(() => {
-        const listener = (_event: any, data: SyncHealthSnapshot) => {
-            setHealth(data);
-        };
-
-        if (window.ipcRenderer) {
-            window.ipcRenderer.on('sync-health-updated', listener);
-        }
-
-        return () => {
-            if (window.ipcRenderer) {
-                window.ipcRenderer.off('sync-health-updated', listener);
-            }
-        };
+        const listener = (_event: any, data: SyncHealthSnapshot) => setHealth(data);
+        if (window.ipcRenderer) window.ipcRenderer.on('sync-health-updated', listener);
+        return () => { if (window.ipcRenderer) window.ipcRenderer.off('sync-health-updated', listener); };
     }, []);
 
     if (!health) return null;
 
-    const isHealthy = health.failedCount === 0 && health.oldestPendingAgeSec < 300; // < 5 mins
-    const isCritical = health.failedCount > 0 || health.oldestPendingAgeSec > 3600; // > 1 hour
+    // All good and nothing pending — no need to show anything
+    if (health.pendingCount === 0 && health.failedCount === 0 && !health.inProgress) return null;
 
-    return (
-        <div className={`flex items-center gap-4 px-4 py-2 rounded-xl mb-4 border transition-colors ${isCritical ? 'bg-destructive/10 border-destructive/30' :
-            isHealthy ? 'bg-success/10 border-success/20' : 'bg-warning/10 border-warning/30'
-            }`}>
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-                {isCritical ? (
-                    <CloudOff className="w-6 h-6 text-destructive shrink-0" />
-                ) : health.inProgress ? (
-                    <RefreshCw className="w-6 h-6 text-primary animate-spin shrink-0" />
-                ) : isHealthy && health.pendingCount === 0 ? (
-                    <CheckCircle2 className="w-6 h-6 text-success shrink-0" />
-                ) : (
-                    <Cloud className="w-6 h-6 text-warning shrink-0" />
-                )}
+    const errorType = classifyError(health.topError);
+    const isOffline = errorType === 'offline' || (health.failedCount > 0 && errorType !== 'data');
 
-                <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className={`text-sm font-bold truncate ${isCritical ? 'text-destructive' :
-                            isHealthy ? 'text-success' : 'text-warning'
-                            }`}>
-                            حالة المزامنة السحابية
-                        </span>
-                        {health.pendingCount > 0 && (
-                            <span className="px-2 py-0.5 text-[10px] font-bold bg-card/60 rounded-full">
-                                {health.pendingCount} قيد الانتظار
-                            </span>
-                        )}
-                    </div>
-
-                    <span className={`text-xs truncate ${isCritical ? 'text-destructive' :
-                        isHealthy ? 'text-success' : 'text-warning'
-                        }`}>
-                        {isCritical ? (
-                            health.topError ? `خطأ: ${health.topError}` : 'يوجد فشل في المزامنة'
-                        ) : health.pendingCount === 0 ? (
-                            'تمت مزامنة جميع البيانات بنجاح'
-                        ) : (
-                            `أقدم عملية معلقة منذ ${Math.floor(health.oldestPendingAgeSec / 60)} دقيقة`
-                        )}
-                    </span>
-                </div>
+    // Actively syncing
+    if (health.inProgress) {
+        return (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/8 border border-primary/15 text-primary/70">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span className="text-[11px] font-medium">جارٍ المزامنة</span>
             </div>
+        );
+    }
 
-            {health.failedCount > 0 && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-card/60 rounded-lg shrink-0 border border-destructive/20">
-                    <AlertCircle className="w-4 h-4 text-destructive" />
-                    <span className="text-xs font-bold text-destructive">
-                        {health.failedCount} فشل
+    // Offline / network unreachable — calm and quiet
+    if (isOffline) {
+        return (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/60 border border-border/50 text-muted-foreground">
+                <WifiOff className="w-3 h-3 opacity-60" />
+                <span className="text-[11px] font-medium">غير متصل</span>
+                {health.pendingCount > 0 && (
+                    <span className="flex items-center gap-0.5 text-[10px] opacity-50">
+                        <Clock className="w-2.5 h-2.5" />
+                        {health.pendingCount}
                     </span>
-                </div>
-            )}
+                )}
+            </div>
+        );
+    }
+
+    // Items pending but no error yet — neutral waiting state
+    if (health.pendingCount > 0 && health.failedCount === 0) {
+        return (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/40 border border-border/40 text-muted-foreground">
+                <Clock className="w-3 h-3 opacity-50" />
+                <span className="text-[11px] font-medium">{health.pendingCount} معلق</span>
+            </div>
+        );
+    }
+
+    // Real data issue (4xx) — gentle amber, not destructive red
+    return (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-warning/8 border border-warning/25 text-warning/80">
+            <CloudOff className="w-3 h-3" />
+            <span className="text-[11px] font-medium">{health.failedCount} تحتاج مراجعة</span>
         </div>
     );
 }

@@ -2,6 +2,7 @@ generator client {
   provider      = "prisma-client-js"
   output        = "../node_modules/.prisma/desktop-client"
   binaryTargets = ["native", "windows"]
+  engineType    = "library"
 }
 
 datasource db {
@@ -75,11 +76,12 @@ model Inventory {
   branch    Branch?    @relation(fields: [branchId], references: [id])
   drugId    String
   drug      GlobalDrug @relation(fields: [drugId], references: [id])
-  quantity  Int
-  costPrice Float      @default(0) // Added for inventory management
-  minStock  Int        @default(10)
-  maxStock  Int        @default(100)
-  batches   Batch[]
+  quantity    Int
+  costPrice   Float   @default(0)
+  minStock    Int     @default(10)
+  maxStock    Int     @default(100)
+  syncPending Boolean @default(false) // true when edited locally but not yet pushed to cloud
+  batches     Batch[]
 }
 
 model Batch {

@@ -12,6 +12,7 @@ const SyncSaleSchema = z.object({
     id: z.string(),
     total: z.number(),
     discount: z.number().optional().default(0),
+    hasPriceOverride: z.boolean().optional().default(false),
     createdAt: z.string().or(z.date()),
     userId: z.string().nullable().optional(),
     patientId: z.string().nullable().optional(),
@@ -19,7 +20,8 @@ const SyncSaleSchema = z.object({
     items: z.array(z.object({
         drugId: z.string(),
         quantity: z.number(),
-        price: z.number()
+        price: z.number(),
+        originalPrice: z.number().nullable().optional(),
     })),
     // Patient snapshot sent by desktop for credit sales so cloud can upsert before FK check
     patient: z.object({
@@ -84,6 +86,8 @@ export async function POST(req: NextRequest) {
 
                     const saleItemsData = [];
 
+                    console.log(`[SyncSales DEBUG] sale ${sale.id} items:`, JSON.stringify(sale.items.map((i: any) => ({ drugId: i.drugId, price: i.price, originalPrice: i.originalPrice }))));
+
                     // Update Inventory (FIFO Deduction from Batches) and Calculate Cost
                     for (const item of sale.items) {
                         let itemTotalCost = 0;
@@ -124,6 +128,7 @@ export async function POST(req: NextRequest) {
                             drugId: item.drugId,
                             quantity: item.quantity,
                             price: item.price,
+                            originalPrice: item.originalPrice ?? null,
                             cost: unitCost
                         });
                     }
@@ -169,6 +174,7 @@ export async function POST(req: NextRequest) {
                             branchId: branchId,
                             total: sale.total,
                             discount: sale.discount || 0,
+                            hasPriceOverride: sale.hasPriceOverride === true,
                             createdAt: new Date(sale.createdAt),
                             userId: sale.userId,
                             patientId: resolvedPatientId,

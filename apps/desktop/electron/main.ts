@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, ipcMain, shell, powerMonitor } from "electron";
+﻿import { app, BrowserWindow, ipcMain, shell, powerMonitor, Menu } from "electron";
 import {
   loadOfflineToken,
   verifyAndDecodeToken,
@@ -7,7 +7,7 @@ import {
 import { getDeviceIdentity } from "../src/utils/hardware";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { prisma } from "./db";
+import { prisma, runMigrations } from "./db";
 import bcrypt from "bcryptjs";
 import {
   startSyncService,
@@ -36,13 +36,23 @@ import store from "./store";
 import { getApiCandidates, setApiBaseUrl } from "./api-config";
 import crypto from "crypto";
 
+// These globals are baked in at build time by vite.config.ts define.
+declare const __ZAINCASH_MERCHANT_ID__: string;
+declare const __ZAINCASH_SECRET__: string;
+declare const __ZAINCASH_BASE_URL__: string;
+declare const __BACKUP_SECRET_KEY__: string;
+declare const __OFFLINE_TOKEN_PUBLIC_KEY__: string;
+
 // Zain Cash Configuration
 const ZAINCASH_MERCHANT_ID =
+  (typeof __ZAINCASH_MERCHANT_ID__ !== "undefined" && __ZAINCASH_MERCHANT_ID__) ||
   process.env.ZAINCASH_MERCHANT_ID || "5ffacf6612b5777c6d44d6d6";
 const ZAINCASH_SECRET =
+  (typeof __ZAINCASH_SECRET__ !== "undefined" && __ZAINCASH_SECRET__) ||
   process.env.ZAINCASH_SECRET ||
   "$2y$10$hBbAZo2GfSSvyqAyV2SaqOfYnjJLUGwdahiZYuy2CI3af8v1YIDC6";
 const ZAINCASH_BASE_URL =
+  (typeof __ZAINCASH_BASE_URL__ !== "undefined" && __ZAINCASH_BASE_URL__) ||
   process.env.ZAINCASH_BASE_URL || "https://test.zaincash.iq";
 
 function generateZainCashToken(payload: object): string {
@@ -69,10 +79,15 @@ let win: BrowserWindow | null;
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 
 function createWindow() {
+  // Remove default Electron menu — it can intercept keyboard shortcuts on Windows
+  // and prevent characters from reaching focused input elements.
+  Menu.setApplicationMenu(null);
+
   win = new BrowserWindow({
     icon: path.join(publicPath, "electron-vite.svg"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      spellcheck: false,        // Prevents IME/spellcheck interference with Arabic input on Windows
     },
   });
 
@@ -148,7 +163,9 @@ type SyncHealthSnapshot = {
   nextAutoRunInSec: number | null;
 };
 
-let pendingSyncInProgress = false;
+let pendingSyncInProgress = false; // display-only flag for health snapshot
+let syncChainPromise: Promise<any> = Promise.resolve(); // tail of the serial execution chain
+let syncChainDepth = 0; // 0 = idle, 1 = one running, 2 = one running + one queued
 const MAX_PENDING_DELETE_ATTEMPTS = 8;
 const RETRY_BASE_MS = 30_000;
 const RETRY_MAX_MS = 15 * 60_000;
@@ -470,27 +487,56 @@ async function executePendingSyncAction(
         action.payload as Parameters<typeof pushAddBatchToCloud>[0],
         { actionId: action.id },
       );
-    case "update-inventory":
-      return await pushUpdateInventoryToCloud(
+    case "update-inventory": {
+      const ok = await pushUpdateInventoryToCloud(
         action.payload as Parameters<typeof pushUpdateInventoryToCloud>[0],
         { actionId: action.id },
       );
+      // NOTE: we intentionally do NOT clear syncPending here.
+      // If we clear it now and syncProducts() runs immediately after (as in the
+      // sync-inventory button handler), the pull will see syncPending=false and
+      // overwrite the local edit with stale cloud data (the cloud write may not
+      // have committed yet, or there is read-replica lag).
+      // Instead, syncPending is cleared by syncProducts() after the pull confirms
+      // the cloud values, or by the post-sync cleanup in the sync-inventory IIFE.
+      return ok;
+    }
     default:
       return false;
   }
 }
 
-async function processPendingSyncActions() {
-  if (pendingSyncInProgress) {
-    return {
-      success: true,
-      processed: 0,
-      failed: 0,
-      pending: getPendingSyncActions().length,
-      health: buildSyncHealthSnapshot(),
-    };
+/**
+ * Serializes concurrent sync calls: at most one run executes at a time,
+ * with at most one additional run queued. Extra callers piggyback on the queued run.
+ *
+ * Uses an IIFE promise chain so every link properly manages pendingSyncInProgress.
+ * syncChainDepth tracks slots: 0=idle, 1=running, 2=running+one-queued.
+ * The increment is synchronous (no yield before the check), so JS's single-threaded
+ * event loop guarantees two callers cannot both observe depth < 2 simultaneously.
+ */
+async function processPendingSyncActions(): Promise<any> {
+  if (syncChainDepth >= 2) {
+    // One running + one already queued — piggyback on the queued run
+    return syncChainPromise;
   }
+  syncChainDepth++;              // Reserve a slot before any await
+  const prev = syncChainPromise; // Capture current tail to chain onto
+  const mine = (async () => {
+    try { await prev; } catch {} // Wait for prior run; ignore its result/error
+    pendingSyncInProgress = true;
+    try {
+      return await _doSyncActions();
+    } finally {
+      pendingSyncInProgress = false;
+      syncChainDepth--;
+    }
+  })();
+  syncChainPromise = mine;       // Advance the tail for the next caller
+  return mine;
+}
 
+async function _doSyncActions() {
   const snapshot = getPendingSyncActions();
   if (snapshot.length === 0) {
     return {
@@ -502,7 +548,6 @@ async function processPendingSyncActions() {
     };
   }
 
-  pendingSyncInProgress = true;
   let processed = 0;
   let failed = 0;
   const succeededIds = new Set<string>();
@@ -512,7 +557,11 @@ async function processPendingSyncActions() {
     for (const action of snapshot) {
       const nextRetryTs = parseIsoDate(action.nextRetryAt);
       if (nextRetryTs > Date.now()) {
-        continue;
+        // Network-failed actions bypass backoff so they retry immediately on reconnect.
+        // Only data/server errors (4xx etc.) should respect the backoff delay.
+        const isNetworkFailed = !!action.lastError &&
+          /retries|fetch|network|abort|timeout|econnrefused|enotfound/i.test(action.lastError);
+        if (!isNetworkFailed) continue;
       }
 
       if (action.type === "delete-inventory" && action.attempts > 0) {
@@ -625,10 +674,17 @@ async function processPendingSyncActions() {
 
         const nextAttempts = action.attempts + 1;
 
-        // Route to Dead-Letter Queue if attempting 5+ times or specifically a Client Error (4xx) exception
+        // Network errors (connectivity, timeouts, retries exhausted) should NEVER go to DLQ —
+        // they are transient and will resolve when the connection is restored.
+        // Only 4xx client errors or persistent unknown failures are permanent.
+        const isNetworkError = error instanceof Error &&
+          /retries|fetch|network|abort|timeout|econnrefused|enotfound/i.test(error.message);
+
+        // Route to Dead-Letter Queue if permanently broken (4xx or repeated unknown failures)
         const isPermanentError =
-          nextAttempts >= 5 ||
-          (error instanceof Error && error.message.includes("Client Error 4"));
+          !isNetworkError &&
+          (nextAttempts >= 5 ||
+          (error instanceof Error && error.message.includes("Client Error 4")));
 
         if (isPermanentError) {
           console.error(
@@ -681,8 +737,24 @@ async function processPendingSyncActions() {
       pending: latest.length,
       health,
     };
-  } finally {
-    pendingSyncInProgress = false;
+  } catch (unexpectedError) {
+    // Unexpected error (e.g. thrown from isAlreadySynced checks outside the inner try/catch).
+    // Still persist whatever progress was made so succeeded actions are removed
+    // and failed ones keep their updated retry counters.
+    console.error("[SyncQueue] Unexpected error during queue processing:", unexpectedError);
+    try {
+      const latest = getPendingSyncActions()
+        .filter((action) => !succeededIds.has(action.id))
+        .map((action) => failedUpdates.get(action.id) ?? action);
+      setPendingSyncActions(latest);
+    } catch { /* ignore secondary failure */ }
+    return {
+      success: false,
+      processed,
+      failed,
+      pending: getPendingSyncActions().length,
+      health: buildSyncHealthSnapshot(),
+    };
   }
 }
 
@@ -734,7 +806,60 @@ async function checkOfflineSubscription(): Promise<void> {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Apply any missing schema changes before anything else touches the DB.
+  // Also pre-warms the Prisma engine so the first user query (login) is fast.
+  try {
+    await Promise.race([
+      runMigrations(),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error("DB_INIT_TIMEOUT")), 30000),
+      ),
+    ]);
+    console.log("[DB] Migrations complete, engine is warm.");
+  } catch (e) {
+    console.error("[DB] Startup error (continuing):", e);
+    // Even if migrations failed, try a simple ping to start the engine
+    try {
+      await Promise.race([
+        prisma.$queryRawUnsafe("SELECT 1"),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("DB_PING_TIMEOUT")), 20000),
+        ),
+      ]);
+      console.log("[DB] Engine ping succeeded.");
+    } catch (pingErr) {
+      console.error("[DB] Engine ping failed:", pingErr);
+    }
+  }
+
+  // Crash-recovery: if the app was closed between a local inventory update and
+  // enqueuePendingSyncAction(), syncPending=true records were never queued.
+  // Re-queue them now so the cloud eventually gets the update.
+  try {
+    const unsyncedInventory = await prisma.inventory.findMany({
+      where: { syncPending: true },
+      include: { drug: true },
+    });
+    if (unsyncedInventory.length > 0) {
+      console.log(`[Startup] Recovering ${unsyncedInventory.length} unqueued inventory update(s)...`);
+      const branchId = String(store.get("branchId") || "");
+      for (const inv of unsyncedInventory) {
+        enqueuePendingSyncAction("update-inventory", {
+          inventoryId: inv.id,
+          drugId: inv.drugId,
+          branchId: inv.branchId || branchId,
+          price: inv.drug?.price ?? 0,
+          costPrice: inv.costPrice,
+          minStock: inv.minStock,
+          maxStock: inv.maxStock,
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[Startup] Failed to recover unsynced inventory items:", e);
+  }
+
   createWindow();
   setPendingSyncActions(getPendingSyncActions());
 
@@ -1017,6 +1142,7 @@ app.whenReady().then(() => {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, password }),
+              signal: AbortSignal.timeout(6000),
             });
 
             if (res.ok) {
@@ -1137,12 +1263,18 @@ app.whenReady().then(() => {
         console.error("Network Error during login (Offline Mode):", netError);
       }
 
-      // 2. Fallback to Local DB
-      const user = await prisma.user.findFirst({ where: { email } });
+      // 2. Fallback to Local DB (with timeout to prevent infinite hang if engine is unresponsive)
+      const dbTimeout = new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error("DB_ENGINE_TIMEOUT")), 10000),
+      );
+      const user = await Promise.race([
+        prisma.user.findFirst({ where: { email } }),
+        dbTimeout,
+      ]);
       if (!user)
         return {
           success: false,
-          error: "ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط؛ظٹط± ظ…ظˆط¬ظˆط¯",
+          error: "البريد الإلكتروني غير موجود",
         };
 
       // Verify password
@@ -1162,14 +1294,15 @@ app.whenReady().then(() => {
       } else {
         return {
           success: false,
-          error: "ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط± ط؛ظٹط± طµط­ظٹط­ط©",
+          error: "كلمة المرور غير صحيحة",
         };
       }
     } catch (error) {
       console.error("Login error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„",
+        error: `خطأ: ${msg}`,
       };
     }
   });
@@ -1287,7 +1420,6 @@ ipcMain.handle("get-shift-summary", async (_, { userId }) => {
     // startingCash + all IN transactions on this safe since shift start - all OUT transactions
     let expectedCash = activeShift.startingCash;
     if (activeShift.safeId) {
-      // @ts-ignore
       const txns = await prisma.transaction.findMany({
         where: {
           safeId: activeShift.safeId,
@@ -1339,7 +1471,6 @@ ipcMain.handle("clock-out", async (_, { userId, actualCash }) => {
     // Calculate expected cash: startingCash + IN transactions - OUT transactions since shift start
     let expectedCash = activeShift.startingCash;
     if (activeShift.safeId) {
-      // @ts-ignore
       const txns = await prisma.transaction.findMany({
         where: {
           safeId: activeShift.safeId,
@@ -1546,6 +1677,7 @@ ipcMain.handle("get-products", async (_, arg: any) => {
         costPrice,
         barcode: p.barcode,
         stock: totalStock,
+        minStock: p.inventory[0]?.minStock ?? 1,
         nearestExpiry: nearestBatch?.expiryDate || null,
         isQuickSale: p.isQuickSale ?? false,
       };
@@ -1612,18 +1744,56 @@ ipcMain.handle("get-quick-sale-products", async (_, { branchId }: { branchId: st
   }
 });
 
-ipcMain.handle("sync-inventory", async () => {
-  try {
-    await syncProducts();
-    return { success: true };
-  } catch (error: any) {
-    console.error("Manual sync failed:", error);
-    return { success: false, error: error.message || String(error) };
-  }
+ipcMain.handle("sync-inventory", () => {
+  // Return immediately so the renderer is never blocked by network latency.
+  // Sync runs in the background; completion is signalled via 'sync-inventory-done'.
+  (async () => {
+    let pushResult: any = null;
+    let pullResult: any = null;
+
+    try {
+      pushResult = await processPendingSyncActions();
+      console.log("[Sync] Push phase completed:", JSON.stringify(pushResult));
+    } catch (e) {
+      console.error("[Sync] Push phase error:", e);
+      pushResult = { success: false, error: String(e) };
+    }
+
+    try {
+      pullResult = await syncProducts();
+      console.log("[Sync] Pull phase completed:", JSON.stringify(pullResult));
+    } catch (e) {
+      console.error("[Sync] Pull phase failed:", e);
+      pullResult = { success: false, reason: String(e) };
+    }
+
+    const overallSuccess =
+      (pullResult?.success !== false) && (pushResult?.success !== false);
+
+    BrowserWindow.getAllWindows().forEach(win => {
+      win.webContents.send("sync-inventory-done", {
+        success: overallSuccess,
+        push: pushResult,
+        pull: pullResult,
+      });
+    });
+  })();
+  return { started: true };
 });
 
 ipcMain.handle("get-pending-sync-count", () => {
   return { count: getPendingSyncActions().length };
+});
+
+ipcMain.handle("get-sync-debug-log", () => {
+  const logPath = path.join(app.getPath('userData'), 'sync-debug.log');
+  try {
+    const content = require('fs').readFileSync(logPath, 'utf-8');
+    // Return last 3000 chars to avoid huge payloads
+    return content.slice(-3000);
+  } catch {
+    return '(no log file yet)';
+  }
 });
 
 ipcMain.handle("get-sync-health", () => {
@@ -1924,13 +2094,16 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
       updatedDrug.price,
     );
 
-    // 2. Update Inventory item
+    // 2. Update Inventory item (syncPending=true marks it as needing cloud push;
+    //    if the app crashes before enqueuePendingSyncAction runs, startup recovery
+    //    will re-queue it automatically).
     const updatedInventory = await prisma.inventory.update({
       where: { id },
       data: {
         costPrice: isNaN(updCost) ? 0 : updCost,
         minStock: isNaN(updMin) ? 10 : updMin,
         maxStock: isNaN(updMax) ? 100 : updMax,
+        syncPending: true,
       },
     });
     console.log(
@@ -2862,7 +3035,8 @@ ipcMain.handle("retry-sync-failure", async (_event, failureData) => {
     } else if (
       entityType === "ADD-INVENTORY" ||
       entityType === "DELETE-INVENTORY" ||
-      entityType === "UPDATE-INVENTORY"
+      entityType === "UPDATE-INVENTORY" ||
+      entityType === "ADD-BATCH"
     ) {
       // Push to pending actions
       const existingQueue = getPendingSyncActions();

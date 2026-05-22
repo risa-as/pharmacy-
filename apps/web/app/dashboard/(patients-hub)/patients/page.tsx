@@ -129,7 +129,7 @@ export default async function PatientsPage({
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground text-sm" suppressHydrationWarning>
                                         {patient.prescriptions[0]
-                                            ? new Date(patient.prescriptions[0].createdAt).toLocaleDateString("ar-IQ")
+                                            ? new Date(patient.prescriptions[0].createdAt).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })
                                             : "-"
                                         }
                                     </td>

@@ -40,7 +40,7 @@ export default async function ExpiredDamagedPage({
 
     const expiredValue = expired.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
     const expiringSoonValue = expiringSoon.reduce((sum: any, b: any) => sum + b.quantity * b.costPrice, 0);
-    const fmt = (v: number) => new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 0 }).format(v);
+    const fmt = (v: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
 
     const allAlerts = [
         ...expired.map((b: any) => ({ ...b, status: "expired" as const })),
@@ -119,7 +119,7 @@ export default async function ExpiredDamagedPage({
                                         <td className="px-4 py-3 font-bold">{batch.quantity}</td>
                                         <td className="px-4 py-3 text-muted-foreground">{fmt(batch.costPrice)}</td>
                                         <td className="px-4 py-3 text-sm" suppressHydrationWarning>
-                                            {new Date(batch.expiryDate).toLocaleDateString("ar-IQ")}
+                                            {new Date(batch.expiryDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
                                         </td>
                                         <td className="px-4 py-3">
                                             {batch.status === "expired" ? (

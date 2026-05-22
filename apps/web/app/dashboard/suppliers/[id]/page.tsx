@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { getSupplierSummary, getSupplierLedger } from "@/app/lib/actions/supplier-ledger-actions";
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, DollarSign, TrendingDown, TrendingUp, FileText, CreditCard } from "lucide-react";
+import { ArrowLeft, DollarSign, TrendingDown, TrendingUp, FileText, CreditCard, ShoppingCart } from "lucide-react";
 import { PaymentFormWrapper } from "@/app/ui/suppliers/payment-form";
+import { OpeningBalanceButton } from "@/app/ui/suppliers/opening-balance-form";
 import { notFound, redirect } from "next/navigation";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
@@ -50,7 +51,17 @@ export default async function SupplierLedgerPage({ params }: { params: { id: str
                         )}
                     </div>
                 </div>
-                <PaymentFormWrapper supplierId={params.id} supplierName={supplier.name} branches={branches} />
+                <div className="flex items-center gap-3">
+                    <OpeningBalanceButton supplierId={params.id} supplierName={supplier.name} branches={branches} />
+                    <Link
+                        href={`/dashboard/suppliers/${params.id}/purchases`}
+                        className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-bold text-foreground transition-all hover:bg-muted shadow-sm"
+                    >
+                        <ShoppingCart className="h-4 w-4 text-primary" />
+                        فواتير الشراء
+                    </Link>
+                    <PaymentFormWrapper supplierId={params.id} supplierName={supplier.name} branches={branches} />
+                </div>
             </div>
 
             {/* Summary Cards */}
@@ -118,7 +129,7 @@ export default async function SupplierLedgerPage({ params }: { params: { id: str
                         {ledger.map((entry: any) => (
                             <tr key={entry.id} className="hover:bg-muted transition-colors">
                                 <td className="px-6 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                                    {new Date(entry.date).toLocaleDateString('ar-IQ')}
+                                    {new Date(entry.date).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
                                 </td>
                                 <td className="px-6 py-3 whitespace-nowrap">
                                     {entry.type === 'purchase' ? (

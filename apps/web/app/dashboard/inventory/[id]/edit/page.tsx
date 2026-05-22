@@ -12,7 +12,8 @@ import { NextResponse } from "next/server";
 export default async function Page({ params }: { params: { id: string } }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect("/login");
-    const { tenantWhere, tenantBranchWhere } = tenantCtx;
+    if (!tenantCtx.userPermissions.canEditDrug) redirect("/dashboard/inventory");
+    const { tenantBranchWhere, branchModelWhere } = tenantCtx;
 
     const inventory = await prisma.inventory.findFirst({
         where: { id: params.id, ...tenantBranchWhere },
@@ -34,7 +35,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     };
 
     const branches = await prisma.branch.findMany({
-        where: tenantWhere,
+        where: branchModelWhere,
         select: { id: true, name: true },
         orderBy: { name: "asc" },
     });

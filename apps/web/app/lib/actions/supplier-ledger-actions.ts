@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/app/lib/audit';
 
 // ===================== كشف حساب المورد =====================
 
@@ -104,7 +105,7 @@ export async function getSupplierLedger(supplierId: string) {
     const payments = await prisma.supplierPayment.findMany({
         where: { supplierId, branchId: { in: orgBranchIds } },
         include: { branch: { select: { name: true } } },
-        orderBy: { date: 'desc' },
+        orderBy: { createdAt: 'desc' },
     });
 
     // دمج وترتيب بالتاريخ
@@ -126,14 +127,17 @@ export async function getSupplierLedger(supplierId: string) {
             type: 'purchase' as const,
             date: p.createdAt,
             amount: p.total,
-            description: `فاتورة شراء ${p.invoiceNumber || '#' + p.id.slice(0, 8)}`,
+            description: p.invoiceNumber === 'OPENING-BALANCE'
+                ? `رصيد افتتاحي${p.signature ? ' — ' + p.signature : ''}`
+                : `فاتورة شراء ${p.invoiceNumber || '#' + p.id.slice(0, 8)}`,
             branch: p.branch?.name || '',
-            reference: p.invoiceNumber,
+            reference: p.invoiceNumber === 'OPENING-BALANCE' ? null : p.invoiceNumber,
+            isOpening: p.invoiceNumber === 'OPENING-BALANCE',
         })),
         ...payments.map((p: any) => ({
             id: p.id,
             type: 'payment' as const,
-            date: p.date,
+            date: p.createdAt,
             amount: p.amount,
             description: p.notes || `دفعة ${p.method === 'CASH' ? 'نقدي' : p.method === 'CHECK' ? 'شيك' : 'حوالة'}`,
             branch: p.branch?.name || '',
@@ -142,18 +146,8 @@ export async function getSupplierLedger(supplierId: string) {
         })),
     ];
 
-    // ترتيب بالتاريخ (الأقدم أولاً لحساب الرصيد التراكمي)
-    entries.sort((a: any, b: any) => {
-        const dayA = a.date.toISOString().split('T')[0];
-        const dayB = b.date.toISOString().split('T')[0];
-
-        if (dayA === dayB) {
-            // في نفس اليوم: نضع المشتريات قبل الدفعات لتجنب ظهور رصيد بالسالب
-            if (a.type === 'purchase' && b.type === 'payment') return -1;
-            if (a.type === 'payment' && b.type === 'purchase') return 1;
-        }
-        return a.date.getTime() - b.date.getTime();
-    });
+    // ترتيب زمني صارم (الأقدم أولاً) لحساب الرصيد التراكمي بشكل صحيح
+    entries.sort((a: any, b: any) => a.date.getTime() - b.date.getTime());
 
     // حساب الرصيد التراكمي
     let running = 0;
@@ -223,12 +217,82 @@ export async function recordSupplierPayment(data: {
             });
         });
 
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'SUPPLIER_PAYMENT',
+            details: JSON.stringify({ supplierId, amount, method }),
+            branchId,
+        });
+
         revalidatePath(`/dashboard/suppliers/${supplierId}`);
         revalidatePath('/dashboard/suppliers');
         return { success: true };
     } catch (error) {
         console.error('Record Supplier Payment Error:', error);
         return { success: false, error: 'فشل في تسجيل الدفعة' };
+    }
+}
+
+/**
+ * تسجيل رصيد افتتاحي للمورد
+ */
+export async function setSupplierOpeningBalance(data: {
+    supplierId: string;
+    branchId: string;
+    amount: number;
+    notes?: string;
+}) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+
+    const { supplierId, branchId, amount, notes } = data;
+
+    if (amount <= 0)
+        return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
+
+    const supplier = await prisma.supplier.findUnique({
+        where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined },
+    });
+    if (!supplier) return { success: false, error: 'المورد غير موجود' };
+
+    try {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            // سجل في جدول المشتريات كـ"رصيد افتتاحي" حتى يظهر في كشف الحساب
+            await tx.purchase.create({
+                data: {
+                    supplierId,
+                    branchId,
+                    total: amount,
+                    paidAmount: 0,
+                    status: 'COMPLETED',
+                    invoiceNumber: 'OPENING-BALANCE',
+                    signature: notes || null,
+                },
+            });
+            // تحديث رصيد المورد
+            await tx.supplier.update({
+                where: { id: supplierId },
+                data: { balance: { increment: amount } },
+            });
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'SUPPLIER_PAYMENT',
+            details: JSON.stringify({ supplierId, amount, type: 'OPENING_BALANCE' }),
+            branchId,
+        });
+
+        revalidatePath(`/dashboard/suppliers/${supplierId}`);
+        revalidatePath('/dashboard/suppliers');
+        return { success: true };
+    } catch (error) {
+        console.error('Opening Balance Error:', error);
+        return { success: false, error: 'فشل في تسجيل الرصيد الافتتاحي' };
     }
 }
 

@@ -1,69 +1,77 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import {
-    Store,
-    Pill,
-    Package,
-    ShoppingCart,
-    BarChart3,
-    Users,
-    Shield,
-    Zap,
-    Globe,
-    ChevronLeft,
-    ChevronRight,
-    Sparkles,
-    ArrowLeft,
-    Smartphone,
-    Bell,
-    TrendingUp,
-    Lock,
-    Cloud,
+    Pill, Package, ShoppingCart, BarChart3, Users, Shield, Zap,
+    Globe, ChevronLeft, ChevronRight, Sparkles, ArrowLeft, Smartphone,
+    Bell, TrendingUp, Lock, Cloud, Laptop, RefreshCw, ClipboardList,
+    Wallet, Receipt, Search, Star, UserCheck, Truck, FileText,
+    AlertTriangle, CheckCircle, Database, Activity, CreditCard, Gift,
+    Settings, Eye, PieChart, Calendar, Heart, Building2, ScanLine,
+    Layers, ArrowRightLeft, Check, Bot, Brain, MessageSquare, Wand2,
 } from "lucide-react";
 
 const ONBOARDING_KEY = "faramace_onboarding_completed";
 
-const slides = [
+type Feature = { icon: React.ElementType; text: string };
+type Stat = { value: string; label: string };
+type Slide = {
+    id: string;
+    gradient: string;
+    accentColor: string;
+    badge: string | null;
+    sidebarTitle: string;
+    mainIcon: React.ElementType;
+    title: string;
+    subtitle: string;
+    description: string;
+    features: Feature[] | null;
+    stats: Stat[] | null;
+};
+
+const slides: Slide[] = [
     {
         id: "hero",
         gradient: "from-[#0f0c29] via-[#302b63] to-[#24243e]",
         accentColor: "#818cf8",
         badge: null,
+        sidebarTitle: "مرحباً بك",
+        mainIcon: Sparkles,
         title: "فاراماس",
-        subtitle: "مستقبل إدارة الصيدليات",
-        description: "نظام سحابي متكامل يجمع بين القوة والبساطة لإدارة صيدليتك بذكاء واحترافية",
+        subtitle: "مستقبل إدارة الصيدليات في العراق والمنطقة",
+        description: "منظومة سحابية متكاملة تجمع بين الذكاء والسرعة والأمان — صُمِّمت خصيصاً لاحتياجات الصيدلية الحديثة بكل تفاصيلها.",
         features: [
-            { icon: Cloud, text: "سحابي بالكامل" },
-            { icon: Zap, text: "سريع وخفيف" },
-            { icon: Lock, text: "آمن ومشفّر" },
-            { icon: Globe, text: "يعمل من أي مكان" },
+            { icon: Cloud, text: "سحابي 100٪" },
+            { icon: Zap, text: "استجابة فورية" },
+            { icon: Lock, text: "تشفير عسكري" },
+            { icon: Globe, text: "من أي مكان" },
         ],
         stats: [
-            { value: "99.9%", label: "وقت التشغيل" },
-            { value: "∞", label: "فروع" },
-            { value: "24/7", label: "الدعم" },
+            { value: "99.9٪", label: "وقت التشغيل" },
+            { value: "< 1s", label: "سرعة الاستجابة" },
+            { value: "24/7", label: "دعم مستمر" },
         ],
     },
     {
         id: "branches",
         gradient: "from-[#0f2027] via-[#203a43] to-[#2c5364]",
         accentColor: "#67e8f9",
-        badge: "إدارة متعددة",
+        badge: "إدارة مركزية",
+        sidebarTitle: "إدارة الفروع",
+        mainIcon: Building2,
         title: "فروع بلا حدود",
-        subtitle: "تحكّم كامل بكل فرع",
-        description: "أدر جميع فروع صيدليتك من مكان واحد. لكل فرع مخزونه وأسعاره وفريق عمله المستقل — مع تقارير مركزية شاملة.",
+        subtitle: "إمبراطوريتك الدوائية — من لوحة تحكم واحدة",
+        description: "أدِر جميع فروعك في آنٍ واحد. لكل فرع مخزونه المستقل وأسعاره وموظفيه وتقاريره — مع رؤية مركزية شاملة تُمكِّنك من اتخاذ قرارات استراتيجية مبنية على بيانات حقيقية.",
         features: [
-            { icon: Store, text: "فروع غير محدودة" },
-            { icon: Users, text: "صلاحيات مخصصة" },
-            { icon: BarChart3, text: "تقارير مركزية" },
-            { icon: Shield, text: "عزل البيانات" },
+            { icon: Building2, text: "فروع غير محدودة" },
+            { icon: ArrowRightLeft, text: "تحويل المخزون" },
+            { icon: BarChart3, text: "مقارنة الفروع" },
+            { icon: Shield, text: "عزل تام للبيانات" },
         ],
         stats: [
-            { value: "∞", label: "فروع" },
-            { value: "100%", label: "عزل البيانات" },
+            { value: "∞", label: "عدد الفروع" },
             { value: "فوري", label: "المزامنة" },
+            { value: "100٪", label: "عزل البيانات" },
         ],
     },
     {
@@ -71,39 +79,43 @@ const slides = [
         gradient: "from-[#1a2a1a] via-[#0d3b0d] to-[#1a4a2e]",
         accentColor: "#4ade80",
         badge: "قاعدة بيانات ذكية",
+        sidebarTitle: "قاعدة الأدوية",
+        mainIcon: Pill,
         title: "قاعدة أدوية شاملة",
-        subtitle: "سجّل مرة، استخدم في كل مكان",
-        description: "قاعدة بيانات مركزية للأدوية بالباركود والأسماء التجارية والعلمية. أضف الدواء مرة واحدة وسيكون متاحاً لجميع فروعك تلقائياً.",
+        subtitle: "كل دواء — اسمه التجاري والعلمي وباركوده في مكان واحد",
+        description: "قاعدة بيانات مركزية موحَّدة لجميع الأدوية. أضف الدواء مرة واحدة بالاسم التجاري والعلمي والباركود والصورة — وسيكون متاحاً فوراً لجميع فروعك دون إعادة إدخال.",
         features: [
-            { icon: Pill, text: "باركود تلقائي" },
+            { icon: ScanLine, text: "مسح الباركود" },
+            { icon: Search, text: "بحث فوري بالاسم" },
             { icon: Globe, text: "مشاركة بين الفروع" },
-            { icon: Shield, text: "كشف التفاعلات الدوائية" },
-            { icon: Zap, text: "بحث فوري" },
+            { icon: AlertTriangle, text: "تحذيرات التفاعلات" },
         ],
         stats: [
             { value: "DDI", label: "كشف التفاعلات" },
             { value: "فوري", label: "البحث" },
-            { value: "QR", label: "مسح الباركود" },
+            { value: "QR+", label: "دعم الباركود" },
         ],
     },
     {
         id: "inventory",
         gradient: "from-[#2d1b00] via-[#4a2c00] to-[#3d2200]",
         accentColor: "#fb923c",
-        badge: "تتبع ذكي",
-        title: "مخزون تحت السيطرة",
-        subtitle: "لن تفقد حبة دواء واحدة",
-        description: "تتبع كل دفعة وكمية وتاريخ انتهاء. تنبيهات ذكية قبل نفاد المخزون وقبل انتهاء الصلاحية. طلبات شراء تلقائية.",
+        badge: "مخزون ذكي",
+        sidebarTitle: "المخزون والدفعات",
+        mainIcon: Package,
+        title: "تحكّم كامل بكل حبة دواء",
+        subtitle: "دُفعات — صلاحية — تكلفة — حد أدنى وأقصى",
+        description: "نظام دُفعات (Batches) متكامل يتتبع كل دفعة بتاريخ انتهاء الصلاحية ورقم الدُفعة والمورّد وسعر التكلفة. نظام FEFO تلقائي يضمن بيع الأقرب للانتهاء أولاً — دون أي تدخّل يدوي.",
         features: [
-            { icon: Package, text: "تتبع الدفعات" },
-            { icon: Bell, text: "تنبيهات ذكية" },
-            { icon: TrendingUp, text: "تحليل الحركة" },
-            { icon: ShoppingCart, text: "طلبات ذكية" },
+            { icon: Layers, text: "إدارة الدفعات FEFO" },
+            { icon: Bell, text: "تنبيه انتهاء الصلاحية" },
+            { icon: AlertTriangle, text: "تنبيه نقص المخزون" },
+            { icon: Package, text: "جرد دوري" },
         ],
         stats: [
-            { value: "0%", label: "هدر الأدوية" },
-            { value: "تلقائي", label: "إعادة الطلب" },
-            { value: "دقيق", label: "تتبع الصلاحية" },
+            { value: "FEFO", label: "نظام الإخراج" },
+            { value: "تلقائي", label: "تنبيه الصلاحية" },
+            { value: "0 هدر", label: "الهدف" },
         ],
     },
     {
@@ -111,19 +123,175 @@ const slides = [
         gradient: "from-[#1a1a3e] via-[#2d1b69] to-[#1a0a3e]",
         accentColor: "#c084fc",
         badge: "نقطة البيع",
-        title: "مبيعات بسرعة البرق",
-        subtitle: "واجهة مصممة للسرعة",
-        description: "نقطة بيع سريعة وسلسة مع دعم الباركود والدفع الإلكتروني. سجّل المبيعات وأصدر الفواتير في ثوانٍ معدودة.",
+        sidebarTitle: "نقطة البيع POS",
+        mainIcon: ShoppingCart,
+        title: "بيع بسرعة البرق",
+        subtitle: "فاتورة كاملة في أقل من 10 ثوانٍ",
+        description: "واجهة POS مُحسَّنة للسرعة: مسح الباركود → اختيار الكمية → دفع. دعم كامل لطرق الدفع المتعددة: نقداً، آجل، زين كاش. خصومات مرنة مع صلاحيات محكمة.",
         features: [
-            { icon: Zap, text: "بيع في ثوانٍ" },
-            { icon: Smartphone, text: "دفع إلكتروني" },
-            { icon: Users, text: "نظام الولاء" },
-            { icon: Pill, text: "وصفات طبية" },
+            { icon: Zap, text: "< 10 ثوانٍ للفاتورة" },
+            { icon: CreditCard, text: "دفع إلكتروني" },
+            { icon: UserCheck, text: "ربط بالمريض" },
+            { icon: Receipt, text: "فاتورة طباعة فورية" },
         ],
         stats: [
-            { value: "< 3s", label: "زمن المعاملة" },
-            { value: "Zain Cash", label: "دفع إلكتروني" },
+            { value: "< 10s", label: "زمن الفاتورة" },
+            { value: "3 طرق", label: "طرق الدفع" },
+            { value: "فوري", label: "خصم المخزون" },
+        ],
+    },
+    {
+        id: "returns",
+        gradient: "from-[#3b0f0f] via-[#5c1a1a] to-[#3b0f0f]",
+        accentColor: "#f87171",
+        badge: "إدارة المرتجعات",
+        sidebarTitle: "المرتجعات",
+        mainIcon: RefreshCw,
+        title: "مرتجعات بلا فوضى",
+        subtitle: "استرداد المبيعات بدقة وشفافية تامة",
+        description: "نظام مرتجعات محكم يُعيد الأصناف إلى المخزون تلقائياً، يُعدِّل رصيد الصندوق، ويُسجِّل العملية في سجل التدقيق — مع صلاحيات مستقلة تمنع الاستخدام غير المصرَّح به.",
+        features: [
+            { icon: RefreshCw, text: "إعادة المخزون تلقائياً" },
+            { icon: Wallet, text: "تعديل الصندوق" },
+            { icon: Shield, text: "صلاحية مستقلة" },
+            { icon: FileText, text: "سجل مرتجعات كامل" },
+        ],
+        stats: [
+            { value: "تلقائي", label: "إعادة المخزون" },
+            { value: "فوري", label: "تعديل الصندوق" },
+            { value: "100٪", label: "الشفافية" },
+        ],
+    },
+    {
+        id: "patients",
+        gradient: "from-[#0c2340] via-[#0d3b5e] to-[#0a2a4a]",
+        accentColor: "#38bdf8",
+        badge: "رعاية المرضى",
+        sidebarTitle: "ملفات المرضى",
+        mainIcon: Heart,
+        title: "ملف مريض متكامل",
+        subtitle: "تاريخ طبي كامل — في ثانية واحدة",
+        description: "لكل مريض ملف شامل: الأمراض المزمنة، الحساسية للأدوية، تاريخ الوصفات والمشتريات، ورصيد الديون. استدعِ الملف بسرعة عند البيع لتجنّب التفاعلات الدوائية.",
+        features: [
+            { icon: Heart, text: "الأمراض المزمنة" },
+            { icon: AlertTriangle, text: "تنبيه الحساسية" },
+            { icon: ClipboardList, text: "تاريخ الوصفات" },
+            { icon: Wallet, text: "رصيد الديون" },
+        ],
+        stats: [
+            { value: "فوري", label: "استدعاء الملف" },
+            { value: "آمن", label: "حفظ البيانات" },
+            { value: "كامل", label: "التاريخ الطبي" },
+        ],
+    },
+    {
+        id: "debts",
+        gradient: "from-[#1a0a2e] via-[#2d1050] to-[#1a0a2e]",
+        accentColor: "#a78bfa",
+        badge: "إدارة الديون",
+        sidebarTitle: "إدارة الديون",
+        mainIcon: CreditCard,
+        title: "لا دَين يضيع",
+        subtitle: "تتبّع كل مبلغ — من أول فاتورة حتى السداد الكامل",
+        description: "كشف حساب تفصيلي لكل مريض ومورّد. سجّل الدفعات الجزئية، تتبّع التواريخ، وأصدر إشعارات للمستحقات. لا مبلغ يُنسى ولا حساب يضيع.",
+        features: [
+            { icon: Wallet, text: "كشف حساب تفصيلي" },
+            { icon: Calendar, text: "تواريخ الاستحقاق" },
+            { icon: CheckCircle, text: "دفعات جزئية" },
+            { icon: Bell, text: "تذكير بالديون" },
+        ],
+        stats: [
+            { value: "تفصيلي", label: "كشف الحساب" },
+            { value: "فوري", label: "تسجيل الدفع" },
+            { value: "0", label: "ضياع الأموال" },
+        ],
+    },
+    {
+        id: "suppliers",
+        gradient: "from-[#0f1f0f] via-[#1a3a1a] to-[#0f2a1a]",
+        accentColor: "#86efac",
+        badge: "إدارة الموردين",
+        sidebarTitle: "الموردين",
+        mainIcon: Truck,
+        title: "علاقات موردين منظّمة",
+        subtitle: "من طلب الشراء حتى الاستلام — بدون ورق",
+        description: "أدِر جميع موردِيك بكشوف حسابات مفصّلة، سجِّل فواتير الشراء، وتابع الرصيد المستحق. نظام أوامر الشراء الذكي يقترح الكميات المثلى بناءً على حركة المبيعات وحدود المخزون.",
+        features: [
+            { icon: Truck, text: "أوامر شراء ذكية" },
+            { icon: Receipt, text: "فواتير الشراء" },
+            { icon: Wallet, text: "رصيد الموردين" },
+            { icon: ClipboardList, text: "سجل المعاملات" },
+        ],
+        stats: [
+            { value: "ذكي", label: "اقتراح الطلبات" },
+            { value: "كامل", label: "كشف الحساب" },
+            { value: "تلقائي", label: "تحديث المخزون" },
+        ],
+    },
+    {
+        id: "transfers",
+        gradient: "from-[#002040] via-[#003060] to-[#001a3a]",
+        accentColor: "#7dd3fc",
+        badge: "تحويل المخزون",
+        sidebarTitle: "تحويل المخزون",
+        mainIcon: ArrowRightLeft,
+        title: "توازن المخزون بين الفروع",
+        subtitle: "فرع يفيض — وآخر ينقص؟ المشكلة محلولة",
+        description: "حوِّل الأدوية بين فروعك بنقرات معدودة. نظام طلب ← إرسال ← استلام يضمن المساءلة الكاملة في كل خطوة — مع تحديث فوري للمخزون في كلا الفرعين.",
+        features: [
+            { icon: ArrowRightLeft, text: "تحويل بين الفروع" },
+            { icon: CheckCircle, text: "تأكيد الاستلام" },
+            { icon: Eye, text: "تتبع الشحنة" },
+            { icon: FileText, text: "سند التحويل" },
+        ],
+        stats: [
             { value: "فوري", label: "تحديث المخزون" },
+            { value: "محاسَب", label: "كل تحويل" },
+            { value: "مؤرشَف", label: "كل عملية" },
+        ],
+    },
+    {
+        id: "stocktake",
+        gradient: "from-[#1a1500] via-[#332900] to-[#1a1500]",
+        accentColor: "#fbbf24",
+        badge: "الجرد الدوري",
+        sidebarTitle: "الجرد الدوري",
+        mainIcon: ClipboardList,
+        title: "جرد لحظي بلا أخطاء",
+        subtitle: "قارن الواقع بالنظام — وصحِّح الفروقات فوراً",
+        description: "نظام جرد رقمي كامل: امسح الأصناف، سجِّل الكميات الفعلية، وسيحسب النظام الفروقات تلقائياً. الخسائر تُسجَّل كمصروف، والفروقات تُصحَّح في المخزون مباشرة — مع تقرير مفصّل لكل جردة.",
+        features: [
+            { icon: ScanLine, text: "جرد بالباركود" },
+            { icon: Activity, text: "فروقات تلقائية" },
+            { icon: Receipt, text: "تسجيل الخسائر" },
+            { icon: FileText, text: "تقرير الجردة" },
+        ],
+        stats: [
+            { value: "دقيق", label: "حساب الفروقات" },
+            { value: "تلقائي", label: "تصحيح المخزون" },
+            { value: "مؤرشَف", label: "كل جردة" },
+        ],
+    },
+    {
+        id: "expenses",
+        gradient: "from-[#2a0a0a] via-[#4a1515] to-[#2a0a0a]",
+        accentColor: "#fca5a5",
+        badge: "إدارة المصروفات",
+        sidebarTitle: "المصروفات",
+        mainIcon: Receipt,
+        title: "كل مصروف في مكانه",
+        subtitle: "راتب — إيجار — صيانة — كلها تحت السيطرة",
+        description: "سجِّل جميع مصروفات الفرع بالتصنيفات والتواريخ والمبالغ. تُدرَج المصروفات تلقائياً في حسابات الأرباح والخسائر لتحصل على صورة مالية حقيقية 100٪ عن أداء صيدليتك.",
+        features: [
+            { icon: Receipt, text: "تصنيف المصروفات" },
+            { icon: Calendar, text: "تتبع تاريخي" },
+            { icon: PieChart, text: "أثر على الربح" },
+            { icon: Wallet, text: "تقرير مالي كامل" },
+        ],
+        stats: [
+            { value: "دقيق", label: "حساب الربح" },
+            { value: "مصنَّف", label: "كل مصروف" },
+            { value: "فوري", label: "التقرير المالي" },
         ],
     },
     {
@@ -131,19 +299,197 @@ const slides = [
         gradient: "from-[#0c1445] via-[#1a237e] to-[#0d1b52]",
         accentColor: "#60a5fa",
         badge: "تحليلات متقدمة",
-        title: "تقارير تتحدث",
-        subtitle: "قرارات مبنية على البيانات",
-        description: "تقارير شاملة ومفصلة لكل جانب من صيدليتك. تصدير PDF و Excel. رؤية واضحة للأداء المالي والتشغيلي.",
+        sidebarTitle: "التقارير",
+        mainIcon: BarChart3,
+        title: "تقارير تتحدث بالأرقام",
+        subtitle: "قرارات مبنية على البيانات — لا على التخمين",
+        description: "تقارير شاملة: مبيعات يومية/شهرية، أرباح صافية، أداء الموظفين، حركة المخزون، الأدوية الأكثر مبيعاً، مقارنة الفروع. تصدير PDF و Excel بضغطة واحدة.",
         features: [
-            { icon: BarChart3, text: "تقارير مبيعات" },
-            { icon: TrendingUp, text: "تحليل الأرباح" },
-            { icon: Package, text: "تقارير المخزون" },
-            { icon: Globe, text: "تصدير Excel/PDF" },
+            { icon: TrendingUp, text: "تقرير الأرباح" },
+            { icon: Users, text: "أداء الموظفين" },
+            { icon: BarChart3, text: "مقارنة الفروع" },
+            { icon: Globe, text: "تصدير PDF/Excel" },
         ],
         stats: [
-            { value: "PDF", label: "تصدير فوري" },
-            { value: "Excel", label: "تقارير مفصلة" },
-            { value: "يومي", label: "ملخص تلقائي" },
+            { value: "شامل", label: "8+ أنواع تقارير" },
+            { value: "Excel", label: "تصدير مفصّل" },
+            { value: "لحظي", label: "تحديث البيانات" },
+        ],
+    },
+    {
+        id: "ai-assistant",
+        gradient: "from-[#0d0920] via-[#1e0f4e] to-[#0d0920]",
+        accentColor: "#8b5cf6",
+        badge: "ذكاء اصطناعي",
+        sidebarTitle: "المساعد الذكي",
+        mainIcon: Bot,
+        title: "مساعدك الذكي في الصيدلية",
+        subtitle: "اسأل بالعربية — واحصل على إجابة فورية من بياناتك",
+        description: "مساعد مدعوم بـ Gemini / GPT يحلل بيانات صيدليتك ويجيب على أسئلتك بلغة طبيعية — مبيعات اليوم، أرباح الشهر، المخزون الناقص، الحركات المشبوهة. كل ذلك بنقرة واحدة.",
+        features: [
+            { icon: MessageSquare, text: "أسئلة بالعربية الحرة" },
+            { icon: TrendingUp, text: "تحليل المبيعات والأرباح" },
+            { icon: AlertTriangle, text: "كشف الحركات المشبوهة" },
+            { icon: Brain, text: "Gemini · GPT مدعوم بـ" },
+        ],
+        stats: [
+            { value: "فوري", label: "الرد" },
+            { value: "7", label: "تصنيفات ذكية" },
+            { value: "آمن", label: "100٪ مشفر" },
+        ],
+    },
+    {
+        id: "safe",
+        gradient: "from-[#0a1a0a] via-[#0f2e0f] to-[#0a1f0a]",
+        accentColor: "#34d399",
+        badge: "إدارة الصندوق",
+        sidebarTitle: "إدارة الصندوق",
+        mainIcon: Wallet,
+        title: "صندوق الفرع تحت المجهر",
+        subtitle: "كل دينار يدخل — وكل دينار يخرج — موثَّق",
+        description: "نظام صندوق نقدي متكامل: كل عملية بيع تُضاف تلقائياً، كل مصروف يُخصَم فوراً، وكل مرتجع يُعدَّل في الحال. سجِّل شيفتات الدوام وأقفل الصندوق في نهاية كل وردية.",
+        features: [
+            { icon: Wallet, text: "رصيد لحظي" },
+            { icon: Activity, text: "سجل المعاملات" },
+            { icon: Calendar, text: "شيفتات الدوام" },
+            { icon: Lock, text: "إقفال الصندوق" },
+        ],
+        stats: [
+            { value: "لحظي", label: "الرصيد" },
+            { value: "موثَّق", label: "كل معاملة" },
+            { value: "مراجَع", label: "إقفال الوردية" },
+        ],
+    },
+    {
+        id: "desktop",
+        gradient: "from-[#0f0f1a] via-[#1a1a2e] to-[#0f0f1a]",
+        accentColor: "#a5b4fc",
+        badge: "تطبيق سطح المكتب",
+        sidebarTitle: "تطبيق المكتب",
+        mainIcon: Laptop,
+        title: "يعمل حتى بدون إنترنت",
+        subtitle: "انقطع الإنترنت؟ العمل لا يتوقف.",
+        description: "تطبيق Electron متكامل للحاسوب يعمل بشكل كامل offline: بيع، جرد، إضافة دفعات. وعند عودة الإنترنت، تتم المزامنة التلقائية مع السحابة دون فقدان أي بيانات.",
+        features: [
+            { icon: Laptop, text: "يعمل بدون إنترنت" },
+            { icon: RefreshCw, text: "مزامنة تلقائية" },
+            { icon: Database, text: "قاعدة بيانات محلية" },
+            { icon: Shield, text: "لا فقدان للبيانات" },
+        ],
+        stats: [
+            { value: "Offline", label: "يعمل دائماً" },
+            { value: "تلقائي", label: "المزامنة" },
+            { value: "صفر", label: "ضياع البيانات" },
+        ],
+    },
+    {
+        id: "permissions",
+        gradient: "from-[#1a0d00] via-[#2e1800] to-[#1a0d00]",
+        accentColor: "#fdba74",
+        badge: "صلاحيات محكمة",
+        sidebarTitle: "الصلاحيات",
+        mainIcon: Shield,
+        title: "كل موظف بصلاحياته فقط",
+        subtitle: "أدمن — مدير فرع — صيدلاني — كاشير",
+        description: "نظام صلاحيات متعدد المستويات: 31 صلاحية مستقلة قابلة للتفعيل والتعطيل لكل موظف. لا يرى الكاشير الأرباح، ولا يملك الصيدلاني حق حذف الفواتير — إلا من تأذن له.",
+        features: [
+            { icon: Users, text: "4 أدوار رئيسية" },
+            { icon: Settings, text: "31 صلاحية مستقلة" },
+            { icon: Eye, text: "تحكم دقيق بالرؤية" },
+            { icon: Shield, text: "حماية من التلاعب" },
+        ],
+        stats: [
+            { value: "31", label: "صلاحية مستقلة" },
+            { value: "4", label: "أدوار محددة" },
+            { value: "آمن", label: "من التلاعب" },
+        ],
+    },
+    {
+        id: "audit",
+        gradient: "from-[#0a0a1e] via-[#15153a] to-[#0a0a1e]",
+        accentColor: "#818cf8",
+        badge: "سجل التدقيق",
+        sidebarTitle: "سجل التدقيق",
+        mainIcon: Eye,
+        title: "لا شيء يحدث في الخفاء",
+        subtitle: "كل فعل موثَّق — من فعله ومتى وأين",
+        description: "سجل تدقيق شامل يُسجِّل كل عملية: من أضاف دواءً، من حذف فاتورة، من عدَّل سعراً، من غيَّر صلاحية. بحث وتصفية متقدمة بالتاريخ والمستخدم والفرع والنوع.",
+        features: [
+            { icon: Eye, text: "تتبع كل عملية" },
+            { icon: Users, text: "تحديد المسؤول" },
+            { icon: Search, text: "بحث وتصفية متقدمة" },
+            { icon: Shield, text: "لا يمكن تعديله" },
+        ],
+        stats: [
+            { value: "كامل", label: "تسجيل العمليات" },
+            { value: "محمي", label: "من التعديل" },
+            { value: "دائم", label: "الأرشفة" },
+        ],
+    },
+    {
+        id: "backup",
+        gradient: "from-[#0f1a0f] via-[#1a2e1a] to-[#0f1a0f]",
+        accentColor: "#86efac",
+        badge: "أمان البيانات",
+        sidebarTitle: "النسخ الاحتياطي",
+        mainIcon: Database,
+        title: "بياناتك محمية — دائماً",
+        subtitle: "نسخ احتياطي — استعادة — تشفير",
+        description: "نسخ احتياطي كامل لجميع بيانات المنظومة بضغطة واحدة. استعادة فورية من أي نسخة سابقة. التشفير من طرف إلى طرف يضمن أن بياناتك لا تصل إلى أحد غيرك.",
+        features: [
+            { icon: Database, text: "نسخ احتياطي كامل" },
+            { icon: RefreshCw, text: "استعادة فورية" },
+            { icon: Lock, text: "تشفير كامل" },
+            { icon: Cloud, text: "تخزين سحابي آمن" },
+        ],
+        stats: [
+            { value: "كامل", label: "النسخ الاحتياطي" },
+            { value: "فوري", label: "الاستعادة" },
+            { value: "مشفَّر", label: "البيانات" },
+        ],
+    },
+    {
+        id: "loyalty",
+        gradient: "from-[#1a0a2e] via-[#2d1050] to-[#1a0a2e]",
+        accentColor: "#e879f9",
+        badge: "نظام الولاء",
+        sidebarTitle: "نظام الولاء",
+        mainIcon: Star,
+        title: "اكسب ولاء زبائنك",
+        subtitle: "نقاط — مكافآت — عروض مخصصة",
+        description: "نظام ولاء متكامل: يكسب الزبون نقاطاً مع كل عملية شراء، ويستبدلها بخصومات في مشترياته القادمة. عزِّز علاقتك بزبائنك وارفع نسبة العودة بشكل ملموس.",
+        features: [
+            { icon: Star, text: "نقاط مع كل شراء" },
+            { icon: Gift, text: "استبدال المكافآت" },
+            { icon: TrendingUp, text: "ترتيب المتصدرين" },
+            { icon: Smartphone, text: "رصيد النقاط" },
+        ],
+        stats: [
+            { value: "+٣٠٪", label: "معدل العودة" },
+            { value: "فوري", label: "رصيد النقاط" },
+            { value: "مرن", label: "نسبة الكسب" },
+        ],
+    },
+    {
+        id: "alerts",
+        gradient: "from-[#1e0f00] via-[#3a1e00] to-[#1e0f00]",
+        accentColor: "#fcd34d",
+        badge: "التنبيهات الذكية",
+        sidebarTitle: "التنبيهات",
+        mainIcon: Bell,
+        title: "كن دائماً على علم",
+        subtitle: "النظام يراقب — وأنت تأخذ قرارات",
+        description: "منظومة تنبيهات ذكية في الوقت الفعلي: أدوية قاربت على الانتهاء، مخزون وصل للحد الأدنى، ديون مستحقة، طلبات شراء معلّقة. لا تفوِّت أي تفصيل يؤثر على عملك.",
+        features: [
+            { icon: Bell, text: "تنبيه انتهاء الصلاحية" },
+            { icon: Package, text: "نقص المخزون" },
+            { icon: Wallet, text: "الديون المستحقة" },
+            { icon: Activity, text: "لوحة التنبيهات" },
+        ],
+        stats: [
+            { value: "فوري", label: "التنبيه" },
+            { value: "ذكي", label: "التصفية" },
+            { value: "قابل", label: "للتخصيص" },
         ],
     },
     {
@@ -151,9 +497,11 @@ const slides = [
         gradient: "from-[#0f0c29] via-[#302b63] to-[#24243e]",
         accentColor: "#818cf8",
         badge: null,
-        title: "ابدأ رحلتك الآن",
-        subtitle: "صيدليتك تستحق الأفضل",
-        description: "انضم لنظام فاراماس وابدأ بإدارة صيدليتك باحترافية. أضف فروعك، سجّل الأدوية، وابدأ البيع خلال دقائق.",
+        sidebarTitle: "ابدأ الآن",
+        mainIcon: Zap,
+        title: "ابدأ رحلتك مع فاراماس",
+        subtitle: "صيدليتك تستحق نظاماً بمستوى طموحاتك",
+        description: "من الفرع الواحد إلى الشبكة الكاملة — فاراماس يكبر معك. أضف فروعك، سجِّل الأدوية، وابدأ البيع خلال دقائق. فريق الدعم معك في كل خطوة.",
         features: null,
         stats: null,
     },
@@ -165,41 +513,32 @@ export default function OnboardingTour() {
     const [mounted, setMounted] = useState(false);
     const [animating, setAnimating] = useState(false);
     const [direction, setDirection] = useState<"next" | "prev">("next");
-    const [countersVisible, setCountersVisible] = useState(false);
 
     useEffect(() => {
         setMounted(true);
-        const completed = localStorage.getItem(ONBOARDING_KEY);
-        if (!completed) {
-            setIsOpen(true);
-            setTimeout(() => setCountersVisible(true), 600);
-        }
+        if (!localStorage.getItem(ONBOARDING_KEY)) setIsOpen(true);
     }, []);
 
-    const goToSlide = useCallback((index: number, dir: "next" | "prev") => {
-        if (animating) return;
-        setAnimating(true);
-        setDirection(dir);
-        setCountersVisible(false);
-        setTimeout(() => {
-            setCurrentSlide(index);
-            setAnimating(false);
-            setTimeout(() => setCountersVisible(true), 300);
-        }, 400);
-    }, [animating]);
+    const goToSlide = useCallback(
+        (index: number, dir: "next" | "prev") => {
+            if (animating) return;
+            setAnimating(true);
+            setDirection(dir);
+            setTimeout(() => {
+                setCurrentSlide(index);
+                setAnimating(false);
+            }, 300);
+        },
+        [animating]
+    );
 
     const handleNext = () => {
-        if (currentSlide < slides.length - 1) {
-            goToSlide(currentSlide + 1, "next");
-        } else {
-            handleClose();
-        }
+        if (currentSlide < slides.length - 1) goToSlide(currentSlide + 1, "next");
+        else handleClose();
     };
 
     const handlePrev = () => {
-        if (currentSlide > 0) {
-            goToSlide(currentSlide - 1, "prev");
-        }
+        if (currentSlide > 0) goToSlide(currentSlide - 1, "prev");
     };
 
     const handleClose = () => {
@@ -210,230 +549,338 @@ export default function OnboardingTour() {
     if (!mounted || !isOpen) return null;
 
     const slide = slides[currentSlide];
+    const MainIcon = slide.mainIcon;
     const isLastSlide = currentSlide === slides.length - 1;
     const isFirstSlide = currentSlide === 0;
+    const progress = ((currentSlide + 1) / slides.length) * 100;
+    const ac = slide.accentColor;
 
     return (
         <>
             <style jsx global>{`
-                @keyframes float-orb {
-                    0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.15; }
-                    33% { transform: translateY(-30px) rotate(120deg); opacity: 0.25; }
-                    66% { transform: translateY(15px) rotate(240deg); opacity: 0.1; }
+                @keyframes onb-float {
+                    0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.12; }
+                    50%       { transform: translateY(-24px) rotate(180deg); opacity: 0.2; }
                 }
-                @keyframes pulse-ring {
-                    0% { transform: scale(0.9); opacity: 0.5; }
-                    50% { transform: scale(1.05); opacity: 0.8; }
-                    100% { transform: scale(0.9); opacity: 0.5; }
+                @keyframes onb-enter-next {
+                    from { opacity: 0; transform: translateX(-32px); }
+                    to   { opacity: 1; transform: translateX(0); }
                 }
-                @keyframes shimmer {
-                    0% { background-position: -200% 0; }
-                    100% { background-position: 200% 0; }
+                @keyframes onb-enter-prev {
+                    from { opacity: 0; transform: translateX(32px); }
+                    to   { opacity: 1; transform: translateX(0); }
                 }
-                @keyframes slide-up {
-                    from { transform: translateY(40px); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
+                @keyframes onb-exit-next {
+                    from { opacity: 1; transform: translateX(0); }
+                    to   { opacity: 0; transform: translateX(32px); }
                 }
-                @keyframes slide-down-out {
-                    from { transform: translateY(0); opacity: 1; }
-                    to { transform: translateY(-40px); opacity: 0; }
+                @keyframes onb-exit-prev {
+                    from { opacity: 1; transform: translateX(0); }
+                    to   { opacity: 0; transform: translateX(-32px); }
                 }
-                @keyframes scale-in {
-                    from { transform: scale(0.8); opacity: 0; }
-                    to { transform: scale(1); opacity: 1; }
+                @keyframes onb-glow {
+                    0%, 100% { opacity: 0.25; transform: scale(1); }
+                    50%      { opacity: 0.45; transform: scale(1.15); }
                 }
-                @keyframes glow {
-                    0%, 100% { box-shadow: 0 0 20px rgba(129,140,248,0.3); }
-                    50% { box-shadow: 0 0 40px rgba(129,140,248,0.6); }
+                @keyframes onb-icon-pop {
+                    from { opacity: 0; transform: scale(0.7); }
+                    to   { opacity: 1; transform: scale(1); }
                 }
-                .onb-slide-enter { animation: slide-up 0.5s cubic-bezier(0.16,1,0.3,1) forwards; }
-                .onb-slide-exit { animation: slide-down-out 0.4s cubic-bezier(0.7,0,0.84,0) forwards; }
-                .onb-scale-in { animation: scale-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
-                .onb-shimmer {
-                    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
-                    background-size: 200% 100%;
-                    animation: shimmer 3s infinite;
+                @keyframes onb-card-in {
+                    from { opacity: 0; transform: translateY(16px); }
+                    to   { opacity: 1; transform: translateY(0); }
                 }
-                .onb-stagger-1 { animation-delay: 0.1s; }
-                .onb-stagger-2 { animation-delay: 0.2s; }
-                .onb-stagger-3 { animation-delay: 0.3s; }
-                .onb-stagger-4 { animation-delay: 0.4s; }
+                .onb-anim-enter-next { animation: onb-enter-next 0.32s cubic-bezier(0.16,1,0.3,1) both; }
+                .onb-anim-enter-prev { animation: onb-enter-prev 0.32s cubic-bezier(0.16,1,0.3,1) both; }
+                .onb-anim-exit-next  { animation: onb-exit-next  0.22s cubic-bezier(0.7,0,0.84,0) both; }
+                .onb-anim-exit-prev  { animation: onb-exit-prev  0.22s cubic-bezier(0.7,0,0.84,0) both; }
+                .onb-icon-pop { animation: onb-icon-pop 0.4s cubic-bezier(0.16,1,0.3,1) 0.1s both; }
+                .onb-card-1 { animation: onb-card-in 0.35s cubic-bezier(0.16,1,0.3,1) 0.15s both; }
+                .onb-card-2 { animation: onb-card-in 0.35s cubic-bezier(0.16,1,0.3,1) 0.22s both; }
+                .onb-card-3 { animation: onb-card-in 0.35s cubic-bezier(0.16,1,0.3,1) 0.29s both; }
+                .onb-card-4 { animation: onb-card-in 0.35s cubic-bezier(0.16,1,0.3,1) 0.36s both; }
+                .onb-sidebar-item { transition: background 0.18s, opacity 0.18s; }
+                .onb-sidebar-item:hover { background: rgba(255,255,255,0.07); }
             `}</style>
 
-            <div className="fixed inset-0 z-[9999] overflow-hidden" dir="rtl">
-                {/* Animated Background */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${slide.gradient} transition-all duration-700`}>
-                    {/* Floating Orbs */}
-                    <div className="absolute top-[10%] right-[15%] w-72 h-72 rounded-full blur-3xl" style={{ background: slide.accentColor, animation: "float-orb 8s ease-in-out infinite", opacity: 0.12 }} />
-                    <div className="absolute bottom-[20%] left-[10%] w-96 h-96 rounded-full blur-3xl" style={{ background: slide.accentColor, animation: "float-orb 12s ease-in-out infinite 2s", opacity: 0.08 }} />
-                    <div className="absolute top-[50%] left-[50%] w-64 h-64 rounded-full blur-3xl" style={{ background: slide.accentColor, animation: "float-orb 10s ease-in-out infinite 4s", opacity: 0.1 }} />
+            <div className="fixed inset-0 z-[9999] flex flex-col overflow-hidden" dir="rtl">
 
-                    {/* Grid Pattern */}
-                    <div className="absolute inset-0" style={{
-                        backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)`,
-                        backgroundSize: "40px 40px",
-                    }} />
+                {/* ─── Background ─────────────────────────────────────── */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${slide.gradient} transition-all duration-700`}>
+                    <div className="absolute top-[10%] right-[15%] w-72 h-72 rounded-full blur-3xl pointer-events-none"
+                         style={{ background: ac, animation: "onb-float 10s ease-in-out infinite", opacity: 0.12 }} />
+                    <div className="absolute bottom-[10%] left-[10%] w-96 h-96 rounded-full blur-3xl pointer-events-none"
+                         style={{ background: ac, animation: "onb-float 14s ease-in-out infinite 3s", opacity: 0.08 }} />
+                    <div className="absolute inset-0 pointer-events-none"
+                         style={{
+                             backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.022) 1px, transparent 0)",
+                             backgroundSize: "36px 36px",
+                         }} />
                 </div>
 
-                {/* Content */}
-                <div className="relative h-full flex flex-col items-center justify-center p-6">
-                    {/* Skip Button */}
-                    <button
-                        onClick={handleClose}
-                        className="absolute top-6 left-6 text-white/40 hover:text-white/80 text-sm font-medium transition-all hover:bg-card/10 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10"
-                    >
-                        تخطي الجولة ✕
-                    </button>
-
-                    {/* Slide Counter */}
-                    <div className="absolute top-6 right-6 text-white/40 text-sm font-mono">
-                        {String(currentSlide + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
+                {/* ─── Top Bar ─────────────────────────────────────────── */}
+                <header className="relative z-10 flex-shrink-0 flex items-center gap-3 px-5 h-14 border-b border-white/10"
+                        style={{ background: "rgba(0,0,0,0.25)", backdropFilter: "blur(12px)" }}>
+                    {/* Logo */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                             style={{ background: `${ac}25`, border: `1px solid ${ac}40` }}>
+                            <Pill className="w-3.5 h-3.5" style={{ color: ac }} />
+                        </div>
+                        <span className="text-white font-black text-sm tracking-tight">فاراماس</span>
                     </div>
 
-                    {/* Main Content */}
-                    <div
-                        key={currentSlide}
-                        className={`max-w-4xl w-full text-center ${animating ? "onb-slide-exit" : "onb-slide-enter"}`}
-                    >
-                        {/* Badge */}
-                        {slide.badge && (
-                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold mb-6 backdrop-blur-md border border-white/20" style={{ background: `${slide.accentColor}20`, color: slide.accentColor }}>
-                                <Sparkles className="w-3.5 h-3.5" />
-                                {slide.badge}
-                            </div>
-                        )}
+                    <div className="w-px h-5 bg-white/15 flex-shrink-0" />
 
-                        {/* Title */}
-                        {isFirstSlide ? (
-                            <div className="mb-4">
-                                <h1 className="text-7xl md:text-8xl font-black text-white tracking-tight mb-2" style={{ textShadow: `0 0 80px ${slide.accentColor}40` }}>
-                                    {slide.title}
-                                </h1>
-                                <div className="h-1 w-24 mx-auto rounded-full mb-4" style={{ background: `linear-gradient(90deg, transparent, ${slide.accentColor}, transparent)` }} />
-                                <p className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent" style={{ backgroundImage: `linear-gradient(135deg, white, ${slide.accentColor})` }}>
-                                    {slide.subtitle}
-                                </p>
-                            </div>
-                        ) : isLastSlide ? (
-                            <div className="mb-4">
-                                <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight mb-3" style={{ textShadow: `0 0 80px ${slide.accentColor}40` }}>
-                                    {slide.title}
-                                </h1>
-                                <p className="text-xl md:text-2xl font-bold" style={{ color: slide.accentColor }}>
-                                    {slide.subtitle}
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="mb-4">
-                                <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight mb-3" style={{ textShadow: `0 0 60px ${slide.accentColor}30` }}>
-                                    {slide.title}
-                                </h1>
-                                <p className="text-xl md:text-2xl font-bold" style={{ color: slide.accentColor }}>
-                                    {slide.subtitle}
-                                </p>
-                            </div>
-                        )}
+                    {/* Current step name */}
+                    <span className="text-sm font-bold flex-shrink-0" style={{ color: ac }}>
+                        {slide.sidebarTitle}
+                    </span>
 
-                        {/* Description */}
-                        <p className="text-white/60 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-                            {slide.description}
-                        </p>
+                    {/* Progress bar */}
+                    <div className="flex-1 mx-3">
+                        <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-500 ease-out"
+                                 style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${ac}70, ${ac})` }} />
+                        </div>
+                    </div>
 
-                        {/* Features Grid */}
-                        {slide.features && (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 max-w-3xl mx-auto">
-                                {slide.features.map((feature: any, i: any) => {
-                                    const FeatureIcon = feature.icon;
+                    {/* Step counter */}
+                    <span className="text-xs font-bold flex-shrink-0 opacity-50 text-white">
+                        {currentSlide + 1} / {slides.length}
+                    </span>
+
+                    {/* Skip */}
+                    <button onClick={handleClose}
+                            className="flex-shrink-0 text-xs font-bold text-white/40 hover:text-white/80 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/10">
+                        تخطي الجولة ✕
+                    </button>
+                </header>
+
+                {/* ─── Middle: sidebar + content ───────────────────────── */}
+                <div className="relative z-10 flex flex-1 overflow-hidden">
+
+                    {/* Sidebar (right in RTL) */}
+                    <aside className="flex-shrink-0 w-60 xl:w-64 overflow-y-auto border-l border-white/10"
+                           style={{ background: "rgba(0,0,0,0.3)", backdropFilter: "blur(10px)" }}>
+                        <div className="p-3">
+                            <p className="text-white/30 text-[10px] font-black uppercase tracking-widest px-2 mb-2">
+                                خطوات الجولة
+                            </p>
+                            <div className="space-y-0.5">
+                                {slides.map((s, i) => {
+                                    const isActive = i === currentSlide;
+                                    const isDone = i < currentSlide;
+                                    const SIcon = s.mainIcon;
                                     return (
-                                        <div
-                                            key={i}
-                                            className={`onb-scale-in onb-stagger-${i + 1} group relative p-5 rounded-2xl backdrop-blur-md border border-white/10 hover:border-white/25 transition-all duration-300 cursor-default hover:scale-105`}
-                                            style={{ background: "rgba(255,255,255,0.05)" }}
+                                        <button
+                                            key={s.id}
+                                            onClick={() => goToSlide(i, i > currentSlide ? "next" : "prev")}
+                                            className="onb-sidebar-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-right"
+                                            style={{
+                                                background: isActive ? `${ac}15` : "transparent",
+                                                border: isActive ? `1px solid ${ac}30` : "1px solid transparent",
+                                            }}
                                         >
-                                            <div className="absolute inset-0 rounded-2xl onb-shimmer" />
-                                            <div className="relative">
-                                                <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center" style={{ background: `${slide.accentColor}20` }}>
-                                                    <FeatureIcon className="w-6 h-6" style={{ color: slide.accentColor }} />
-                                                </div>
-                                                <p className="text-white/80 text-sm font-bold">{feature.text}</p>
+                                            {/* Indicator */}
+                                            <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-black"
+                                                 style={{
+                                                     background: isActive ? ac : isDone ? "#10b981" : "rgba(255,255,255,0.1)",
+                                                     color: "white",
+                                                 }}>
+                                                {isDone
+                                                    ? <Check className="w-2.5 h-2.5" />
+                                                    : <span style={{ color: isActive ? "#000" : "rgba(255,255,255,0.6)" }}>{i + 1}</span>
+                                                }
                                             </div>
-                                        </div>
+                                            {/* Icon */}
+                                            <SIcon className="w-3.5 h-3.5 flex-shrink-0"
+                                                   style={{ color: isActive ? ac : isDone ? "#10b981" : "rgba(255,255,255,0.25)" }} />
+                                            {/* Title */}
+                                            <span className="text-xs font-bold truncate"
+                                                  style={{ color: isActive ? "white" : isDone ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.25)" }}>
+                                                {s.sidebarTitle}
+                                            </span>
+                                        </button>
                                     );
                                 })}
                             </div>
-                        )}
+                        </div>
+                    </aside>
 
-                        {/* Stats */}
-                        {slide.stats && (
-                            <div className="flex justify-center gap-16 md:gap-28 mb-10">
-                                {slide.stats.map((stat: any, i: any) => (
-                                    <div key={i} className={`text-center transition-all duration-500 ${countersVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`} style={{ transitionDelay: `${i * 150}ms` }}>
-                                        <div className="text-3xl md:text-4xl font-black mb-3" style={{ color: slide.accentColor }}>
-                                            {stat.value}
-                                        </div>
-                                        <div className="text-white/40 text-xs font-bold uppercase tracking-wider">{stat.label}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* CTA for last slide */}
-                        {isLastSlide && (
-                            <div className="flex flex-col items-center gap-4 mt-4">
-                                <button
-                                    onClick={handleClose}
-                                    className="group relative px-10 py-4 text-lg font-black text-white rounded-2xl overflow-hidden transition-all duration-300 hover:scale-105"
-                                    style={{ background: `linear-gradient(135deg, ${slide.accentColor}, ${slide.accentColor}cc)`, animation: "glow 2s infinite" }}
-                                >
-                                    <span className="relative z-10 flex items-center gap-2">
-                                        ابدأ استخدام فاراماس
-                                        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                                    </span>
-                                </button>
-                                <p className="text-white/30 text-sm">يمكنك إعادة عرض هذه الجولة من الإعدادات</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="absolute bottom-8 left-0 right-0 flex items-center justify-between px-8 max-w-4xl mx-auto">
-                        {/* Prev Button */}
-                        <button
-                            onClick={handlePrev}
-                            disabled={isFirstSlide}
-                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white/50 hover:text-white disabled:opacity-0 disabled:cursor-default transition-all rounded-xl hover:bg-card/10 backdrop-blur-sm"
+                    {/* Main content */}
+                    <main className="flex-1 overflow-y-auto flex items-center justify-center p-6 lg:p-10">
+                        <div
+                            key={currentSlide}
+                            className={`max-w-xl w-full ${
+                                animating
+                                    ? direction === "next" ? "onb-anim-exit-next" : "onb-anim-exit-prev"
+                                    : direction === "next" ? "onb-anim-enter-next" : "onb-anim-enter-prev"
+                            }`}
                         >
-                            <ChevronRight className="w-4 h-4" />
-                            السابق
-                        </button>
+                            {/* Main Icon */}
+                            <div className="flex justify-center mb-5 onb-icon-pop">
+                                <div className="relative">
+                                    <div className="absolute inset-[-12px] rounded-3xl blur-2xl pointer-events-none"
+                                         style={{ background: ac, animation: "onb-glow 3s ease-in-out infinite", opacity: 0.25 }} />
+                                    <div className="relative w-20 h-20 rounded-2xl flex items-center justify-center"
+                                         style={{
+                                             background: `linear-gradient(135deg, ${ac}30, ${ac}12)`,
+                                             border: `1.5px solid ${ac}40`,
+                                             boxShadow: `0 8px 32px ${ac}25`,
+                                         }}>
+                                        <MainIcon className="w-9 h-9" style={{ color: ac }} />
+                                    </div>
+                                </div>
+                            </div>
 
-                        {/* Dots */}
-                        <div className="flex items-center gap-2">
-                            {slides.map((_: any, i: any) => (
+                            {/* Badge */}
+                            {slide.badge && (
+                                <div className="flex justify-center mb-3">
+                                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[11px] font-black uppercase tracking-widest"
+                                          style={{
+                                              background: `${ac}18`,
+                                              border: `1px solid ${ac}35`,
+                                              color: ac,
+                                          }}>
+                                        <Sparkles className="w-2.5 h-2.5" />
+                                        {slide.badge}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Title */}
+                            <h1 className={`font-black text-white text-center mb-2 leading-tight ${isFirstSlide ? "text-6xl md:text-7xl" : "text-3xl md:text-4xl"}`}
+                                style={{ textShadow: `0 0 60px ${ac}45` }}>
+                                {slide.title}
+                            </h1>
+
+                            {/* Subtitle */}
+                            <p className="text-sm md:text-base font-bold text-center mb-4" style={{ color: ac }}>
+                                {slide.subtitle}
+                            </p>
+
+                            {/* Description */}
+                            <p className="text-white/55 text-sm leading-relaxed text-center max-w-md mx-auto mb-6">
+                                {slide.description}
+                            </p>
+
+                            {/* Feature cards */}
+                            {slide.features && (
+                                <div className="grid grid-cols-2 gap-2.5 mb-5">
+                                    {slide.features.map((f, i) => {
+                                        const FIcon = f.icon;
+                                        return (
+                                            <div key={i}
+                                                 className={`onb-card-${i + 1} flex items-center gap-3 p-3.5 rounded-xl`}
+                                                 style={{
+                                                     background: "rgba(255,255,255,0.05)",
+                                                     border: "1px solid rgba(255,255,255,0.09)",
+                                                 }}>
+                                                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                     style={{ background: `${ac}20` }}>
+                                                    <FIcon className="w-4 h-4" style={{ color: ac }} />
+                                                </div>
+                                                <span className="text-white/80 text-xs font-bold leading-snug">{f.text}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Stats */}
+                            {slide.stats && (
+                                <div className="flex justify-center gap-8 md:gap-14">
+                                    {slide.stats.map((stat, i) => (
+                                        <div key={i} className="text-center">
+                                            <div className="text-xl md:text-2xl font-black mb-0.5" style={{ color: ac }}>
+                                                {stat.value}
+                                            </div>
+                                            <div className="text-white/35 text-[10px] font-bold uppercase tracking-wider">
+                                                {stat.label}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* CTA — last slide */}
+                            {isLastSlide && (
+                                <div className="flex flex-col items-center gap-3 mt-8">
+                                    <button
+                                        onClick={handleClose}
+                                        className="px-10 py-3.5 rounded-xl text-base font-black text-black transition-all hover:scale-105 active:scale-95"
+                                        style={{
+                                            background: `linear-gradient(135deg, ${ac}, ${ac}cc)`,
+                                            boxShadow: `0 0 30px ${ac}50`,
+                                        }}
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            ابدأ استخدام فاراماس الآن
+                                            <ArrowLeft className="w-4 h-4" />
+                                        </span>
+                                    </button>
+                                    <p className="text-white/30 text-xs">
+                                        يمكنك إعادة عرض هذه الجولة في أي وقت من الإعدادات
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </main>
+                </div>
+
+                {/* ─── Bottom Bar ──────────────────────────────────────── */}
+                <footer className="relative z-10 flex-shrink-0 flex items-center justify-between px-6 h-14 border-t border-white/10"
+                        style={{ background: "rgba(0,0,0,0.25)", backdropFilter: "blur(12px)" }}>
+                    {/* Prev */}
+                    <button
+                        onClick={handlePrev}
+                        disabled={isFirstSlide}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold text-white/50 hover:text-white disabled:opacity-0 transition-all hover:bg-white/10"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                        السابق
+                    </button>
+
+                    {/* Dot navigation */}
+                    <div className="flex items-center gap-1">
+                        {slides.map((_, i) => {
+                            const isActive = i === currentSlide;
+                            const isNear = Math.abs(i - currentSlide) <= 2;
+                            const isFar = Math.abs(i - currentSlide) > 4;
+                            return (
                                 <button
                                     key={i}
                                     onClick={() => goToSlide(i, i > currentSlide ? "next" : "prev")}
-                                    className="transition-all duration-300 rounded-full"
+                                    className="rounded-full flex-shrink-0 transition-all duration-300"
                                     style={{
-                                        width: i === currentSlide ? "32px" : "8px",
-                                        height: "8px",
-                                        background: i === currentSlide ? slide.accentColor : i < currentSlide ? `${slide.accentColor}60` : "rgba(255,255,255,0.2)",
+                                        width: isActive ? "24px" : isNear ? "6px" : "4px",
+                                        height: isActive ? "6px" : "6px",
+                                        background: isActive
+                                            ? ac
+                                            : i < currentSlide
+                                            ? `${ac}55`
+                                            : "rgba(255,255,255,0.18)",
+                                        opacity: isFar ? 0.35 : 1,
                                     }}
                                 />
-                            ))}
-                        </div>
-
-                        {/* Next Button */}
-                        <button
-                            onClick={handleNext}
-                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white rounded-xl transition-all duration-300 hover:scale-105"
-                            style={{ background: `${slide.accentColor}30`, border: `1px solid ${slide.accentColor}50` }}
-                        >
-                            {isLastSlide ? "ابدأ الآن" : "التالي"}
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
+                            );
+                        })}
                     </div>
-                </div>
+
+                    {/* Next */}
+                    <button
+                        onClick={handleNext}
+                        className="flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white transition-all hover:scale-105 active:scale-95"
+                        style={{
+                            background: `${ac}22`,
+                            border: `1px solid ${ac}45`,
+                        }}
+                    >
+                        {isLastSlide ? "ابدأ الآن" : "التالي"}
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+                </footer>
             </div>
         </>
     );

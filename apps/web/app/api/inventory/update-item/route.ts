@@ -57,16 +57,20 @@ export async function POST(req: Request) {
             // Build update data — only update fields that were provided
             const updateData: any = {};
             if (price !== undefined && price !== null) {
-                updateData.price = Number.parseFloat(String(price)) || inventory.price;
+                const parsed = Number.parseFloat(String(price));
+                if (!Number.isNaN(parsed)) updateData.price = parsed;
             }
             if (costPrice !== undefined && costPrice !== null) {
-                updateData.cost = Number.parseFloat(String(costPrice)) || inventory.cost;
+                const parsed = Number.parseFloat(String(costPrice));
+                if (!Number.isNaN(parsed)) updateData.cost = parsed;
             }
             if (minStock !== undefined && minStock !== null) {
-                updateData.minStock = Number.parseInt(String(minStock), 10) || inventory.minStock;
+                const parsed = Number.parseInt(String(minStock), 10);
+                if (!Number.isNaN(parsed)) updateData.minStock = parsed;
             }
             if (maxStock !== undefined && maxStock !== null) {
-                updateData.maxStock = Number.parseInt(String(maxStock), 10) || inventory.maxStock;
+                const parsed = Number.parseInt(String(maxStock), 10);
+                if (!Number.isNaN(parsed)) updateData.maxStock = parsed;
             }
 
             // Update inventory

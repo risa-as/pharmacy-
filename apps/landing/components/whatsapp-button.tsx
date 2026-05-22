@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { MessageCircle } from "lucide-react";
 
 export default function WhatsAppButton() {
   const [isVisible, setIsVisible] = useState(false);
@@ -18,10 +18,10 @@ export default function WhatsAppButton() {
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
@@ -29,14 +29,14 @@ export default function WhatsAppButton() {
 
   return (
     <a
-      href="https://wa.me/9647800000000?text=مرحباً، أود الاستفسار عن نظام فاراماس لإدارة الصيدليات"
+      href="https://wa.me/9647775203786?text=مرحباً، أود الاستفسار عن نظام فاراماس لإدارة الصيدليات"
       target="_blank"
       rel="noopener noreferrer"
       className="fixed bottom-6 left-6 z-50 flex items-center justify-center w-14 h-14 bg-[#25D366] text-white rounded-full shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 animate-bounce"
       aria-label="تواصل معنا عبر واتساب"
     >
       <MessageCircle size={32} />
-      
+
       {/* Ripple Effect */}
       <span className="absolute w-full h-full rounded-full bg-[#25D366] animate-ping opacity-20 -z-10"></span>
     </a>

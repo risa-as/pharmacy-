@@ -49,7 +49,7 @@ export default function MarginWarningsPage() {
         finally { setSaving(false); }
     };
 
-    const fmt = (v: number) => new Intl.NumberFormat('ar-IQ', { maximumFractionDigits: 0 }).format(v) + ' د.ع';
+    const fmt = (v: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v) + ' د.ع';
 
     return (
         <div className="glass-card p-6 space-y-6" dir="rtl">

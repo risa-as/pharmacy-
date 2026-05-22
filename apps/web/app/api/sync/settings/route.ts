@@ -12,9 +12,6 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId');
 
-        // Base settings from CompanySettings (name, phone, address, etc.)
-        const settings = await prisma.companySettings.findFirst();
-
         // Loyalty settings are authoritative in Organization — always override
         // CompanySettings values with the Organization's current values when a
         // branchId is supplied (Desktop always sends it).
@@ -22,6 +19,7 @@ export async function GET(req: NextRequest) {
             const branch = await prisma.branch.findUnique({
                 where: { id: branchId },
                 select: {
+                    organizationId: true,
                     organization: {
                         select: {
                             loyaltyEnabled: true,
@@ -31,6 +29,11 @@ export async function GET(req: NextRequest) {
                         }
                     }
                 }
+            });
+
+            // Base settings filtered by this branch's organization
+            const settings = await prisma.companySettings.findFirst({
+                where: { organizationId: branch?.organizationId ?? undefined },
             });
 
             if (branch?.organization) {
@@ -44,9 +47,11 @@ export async function GET(req: NextRequest) {
                     loyaltyMinRedemption: org.loyaltyMinRedemption,
                 });
             }
+
+            return NextResponse.json(settings || {});
         }
 
-        return NextResponse.json(settings || {});
+        return NextResponse.json({});
     } catch (error) {
         return NextResponse.json({ error: "Failed to fetch settings" }, { status: 500 });
     }

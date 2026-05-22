@@ -6,36 +6,34 @@ import { UpdateUser, DeleteUser } from "@/app/ui/users/buttons";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
+import { BranchFilter } from '@/app/ui/reports/branch-filter';
 
 
-async function getUsers(tenantBranchWhere: any) {
-    const users = await prisma.user.findMany({
-        where: tenantBranchWhere,
-        orderBy: { createdAt: 'desc' },
-        include: {
-            branch: true,
-        }
-    });
-    return users;
-}
-
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: { branch?: string } }) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere } = tenantCtx;
 
-    let users: Awaited<ReturnType<typeof getUsers>> = [];
-    try {
-        users = await getUsers(tenantBranchWhere);
-    } catch (e) {
-        console.error('[Users Page] Failed to load users:', e);
-        // Do NOT fall back to unscoped query — return empty list instead
-    }
+    const selectedBranchId = searchParams.branch || '';
+
+    const users = await prisma.user.findMany({
+        where: {
+            ...tenantBranchWhere,
+            ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { branch: true },
+    }).catch(() => []);
 
     return (
         <div className="glass-card w-full p-6" suppressHydrationWarning>
             <div className="flex w-full items-center justify-between mb-8">
                 <h1 className="text-2xl font-bold font-cairo text-foreground">المستخدمين</h1>
+            </div>
+
+            {/* فلتر الفروع */}
+            <div className="mb-5">
+                <BranchFilter currentBranch={selectedBranchId || undefined} baseUrl="/dashboard/users" />
             </div>
 
             <div className="mt-4 flow-root">

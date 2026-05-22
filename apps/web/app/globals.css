@@ -238,3 +238,59 @@
         }
     }
 }
+
+/* ═══ Print / PDF Styles ═══ */
+@media print {
+    /* Hide everything that is not content */
+    nav,
+    aside,
+    header,
+    [class*="sidenav"],
+    [class*="sidebar"],
+    [class*="topbar"],
+    [class*="ThemeToggle"],
+    [class*="subscription-banner"],
+    button:not(.print-visible) {
+        display: none !important;
+    }
+
+    /* Reset layout so content fills the page */
+    body,
+    html {
+        background: white !important;
+        color: black !important;
+    }
+
+    /* Make main content full-width */
+    .flex-grow,
+    [class*="flex-grow"] {
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    /* Remove card shadows & blur for cleaner print */
+    .glass-card,
+    [class*="glass-card"] {
+        background: white !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }
+
+    /* Ensure tables print properly */
+    table {
+        page-break-inside: auto;
+        border-collapse: collapse;
+        width: 100% !important;
+    }
+
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    thead {
+        display: table-header-group;
+    }
+}
+

@@ -51,7 +51,8 @@ export function formatDateArabic(date: Date): string {
         return date.toLocaleDateString('ar-IQ', {
             year: 'numeric',
             month: '2-digit',
-            day: '2-digit'
+            day: '2-digit',
+            timeZone: 'Asia/Baghdad',
         });
     } catch {
         return date.toISOString().split('T')[0];

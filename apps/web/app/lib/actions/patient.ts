@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/app/lib/audit";
 
 
 // Schema للتحقق
@@ -24,6 +25,7 @@ const PatientSchema = z.object({
 export async function createPatient(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لإضافة مرضى." };
 
     const validatedFields = PatientSchema.safeParse({
         name: formData.get("name"),
@@ -55,7 +57,7 @@ export async function createPatient(prevState: any, formData: FormData) {
             return { message: "رقم الهاتف مسجل مسبقاً في هذا الفرع" };
         }
 
-        await prisma.patient.create({
+        const newPatient = await prisma.patient.create({
             data: {
                 name,
                 phone,
@@ -66,6 +68,15 @@ export async function createPatient(prevState: any, formData: FormData) {
                 notes: notes || null,
                 branchId,
             },
+        });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'PATIENT',
+            entityId: newPatient.id,
+            details: JSON.stringify({ name, phone }),
+            branchId: branchId ?? undefined,
         });
     } catch (error: any) {
         if (error.code === "P2002") {
@@ -83,6 +94,7 @@ export async function createPatient(prevState: any, formData: FormData) {
 export async function updatePatient(id: string, prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لتعديل بيانات المرضى." };
 
     // Authorization check
     const existingPatient = await prisma.patient.findFirst({
@@ -130,6 +142,15 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
                 notes: notes || null,
             },
         });
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'PATIENT',
+            entityId: id,
+            details: JSON.stringify({ name, phone }),
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
     } catch (error: any) {
         if (error.code === "P2002") return { message: "رقم الهاتف مسجل مسبقاً في هذا الفرع" };
         return { message: "حدث خطأ أثناء تحديث المريض" };
@@ -143,6 +164,7 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
 export async function deletePatient(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لحذف المرضى." };
 
     try {
         // التحقق من وجود ارتباطات
@@ -176,6 +198,16 @@ export async function deletePatient(id: string) {
             }
             await tx.insurancePolicy.deleteMany({ where: { patientId: id } });
             await tx.patient.delete({ where: { id } });
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'PATIENT',
+            entityId: id,
+            details: JSON.stringify({ name: patient.name, phone: patient.phone }),
+            branchId: tenantCtx.user.branchId ?? undefined,
         });
     } catch (error) {
         console.error("Delete patient error:", error);

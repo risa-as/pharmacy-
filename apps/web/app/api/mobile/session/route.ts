@@ -3,6 +3,21 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { checkMobileSessionLimit } from "@/app/lib/saas-guards";
+import { jwtVerify } from "jose";
+
+async function verifyBearerToken(req: Request): Promise<{ userId: string } | null> {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) return null;
+    const token = authHeader.slice(7);
+    if (!process.env.AUTH_SECRET) return null;
+    try {
+        const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
+        const { payload } = await jwtVerify(token, secret);
+        return { userId: payload.userId as string };
+    } catch {
+        return null;
+    }
+}
 
 /**
  * POST /api/mobile/session
@@ -21,11 +36,21 @@ import { checkMobileSessionLimit } from "@/app/lib/saas-guards";
  */
 export async function POST(req: Request) {
     try {
+        const verified = await verifyBearerToken(req);
+        if (!verified) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await req.json();
         const { userId, deviceToken } = body;
 
         if (!userId || !deviceToken) {
             return NextResponse.json({ error: "userId and deviceToken are required" }, { status: 400 });
+        }
+
+        // Ensure the token's userId matches the body's userId
+        if (verified.userId !== userId) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
         // Resolve user and their organisation
@@ -131,6 +156,11 @@ export async function POST(req: Request) {
  */
 export async function DELETE(req: Request) {
     try {
+        const verified = await verifyBearerToken(req);
+        if (!verified) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await req.json();
         const { deviceToken } = body;
 

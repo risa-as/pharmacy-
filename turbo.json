@@ -8,6 +8,10 @@
             "dependsOn": [
                 "^build"
             ],
+            "env": [
+                "WEB_APP_URL",
+                "WHATSAPP_PHONE_NUMBER"
+            ],
             "outputs": [
                 "dist/**",
                 ".next/**",

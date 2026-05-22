@@ -28,7 +28,7 @@ export function exportToExcel(
             const value = row[col.key];
             // Format dates
             if (value instanceof Date) {
-                return value.toLocaleDateString('ar-IQ');
+                return value.toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' });
             }
             return value ?? '';
         })
@@ -72,7 +72,7 @@ export function exportToExcelMultiSheet(
             sheet.columns.map((col: any) => {
                 const value = row[col.key];
                 if (value instanceof Date) {
-                    return value.toLocaleDateString('ar-IQ');
+                    return value.toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' });
                 }
                 return value ?? '';
             })

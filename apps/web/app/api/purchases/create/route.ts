@@ -4,11 +4,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { logAudit } from "@/app/lib/audit";
 
 export async function POST(req: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canCreatePurchase) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لإنشاء طلبات الشراء.' }, { status: 403 });
+        }
 
         const body = await req.json();
         const { branchId, supplierId, items } = body;
@@ -70,7 +74,7 @@ export async function POST(req: Request) {
                     await sendAndPersistNotification({
                         type: 'NEW_PURCHASE',
                         title: 'طلب شراء جديد',
-                        body: `تم إنشاء طلب شراء جديد بقيمة ${total.toLocaleString('ar-IQ')} د.ع`,
+                        body: `تم إنشاء طلب شراء جديد بقيمة ${total.toLocaleString('en-US')} د.ع`,
                         targetUserIds: managers.map((m: any) => m.id),
                         branchId,
                         data: { purchaseId: purchase.id },
@@ -80,6 +84,16 @@ export async function POST(req: Request) {
                 console.error('[create-purchase] New-purchase trigger failed:', triggerErr);
             }
         })();
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'PURCHASE',
+            entityId: purchase.id,
+            details: JSON.stringify({ branchId, supplierId, total, itemCount: items.length }),
+            branchId,
+        });
 
         return NextResponse.json({ success: true, purchaseId: purchase.id });
     } catch (error) {

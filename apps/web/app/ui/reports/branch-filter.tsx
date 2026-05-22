@@ -13,10 +13,10 @@ interface BranchFilterProps {
 export async function BranchFilter({ currentBranch, baseUrl, extraParams }: BranchFilterProps) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantWhere } = tenantCtx;
+    const { branchModelWhere } = tenantCtx;
 
     const branches = await prisma.branch.findMany({
-        where: tenantWhere,
+        where: branchModelWhere,
         select: { id: true, name: true },
         orderBy: { name: "asc" },
     });

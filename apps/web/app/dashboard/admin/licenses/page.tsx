@@ -216,6 +216,7 @@ export default function AdminLicensesPage() {
         if (!d) return '—';
         return new Date(d).toLocaleDateString('ar-IQ', {
             year: 'numeric', month: 'short', day: 'numeric',
+            timeZone: 'Asia/Baghdad',
         });
     };
 

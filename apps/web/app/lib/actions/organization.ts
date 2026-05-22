@@ -19,6 +19,7 @@ const UpdateOrganization = OrganizationSchema;
 export async function createOrganization(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (tenantCtx.user.role !== 'SUPER_ADMIN') return { message: "هذا الإجراء متاح للمشرف العام فقط." };
 
     const validatedFields = CreateOrganization.safeParse({
         name: formData.get("name"),
@@ -56,6 +57,9 @@ export async function updateOrganization(
 ) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (tenantCtx.user.role !== 'SUPER_ADMIN' && tenantCtx.user.organizationId !== id) {
+        return { message: "غير مصرح: لا يمكنك تعديل منظمة أخرى." };
+    }
 
     const validatedFields = UpdateOrganization.safeParse({
         id: id,
@@ -87,6 +91,7 @@ export async function updateOrganization(
 export async function deleteOrganization(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (tenantCtx.user.role !== 'SUPER_ADMIN') return { message: "هذا الإجراء متاح للمشرف العام فقط." };
 
     try {
         await prisma.organization.delete({

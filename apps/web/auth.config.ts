@@ -44,6 +44,7 @@ export const authConfig = {
         token.branchId = user.branchId;
         token.organizationId = (user as any).branch?.organizationId || null;
         token.permissions = (user as any).permissions || null;
+        token.subscriptionState = (user as any).subscriptionState || "active";
       }
       return token;
     },
@@ -54,6 +55,7 @@ export const authConfig = {
         session.user.branchId = token.branchId as string;
         (session.user as any).organizationId = token.organizationId || null;
         (session.user as any).permissions = token.permissions || null;
+        (session.user as any).subscriptionState = token.subscriptionState || "active";
       }
       return session;
     },

@@ -15,6 +15,17 @@ export async function GET(req: Request) {
         const filterDrugId = url.searchParams.get('drugId');
         const filterBranchId = url.searchParams.get('branchId');
 
+        // Validate filterBranchId is within the tenant's scope
+        if (filterBranchId && tenantCtx.user.role !== 'SUPER_ADMIN') {
+            const branch = await prisma.branch.findUnique({
+                where: { id: filterBranchId },
+                select: { organizationId: true },
+            });
+            if (!branch || branch.organizationId !== tenantCtx.user.organizationId) {
+                return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+            }
+        }
+
         const where = {
             ...tenantBranchWhere,
             ...(filterDrugId ? { drugId: filterDrugId } : {}),
@@ -25,12 +36,14 @@ export async function GET(req: Request) {
             where,
             include: {
                 batches: true,
-                // No direct relation to GlobalDrug in schema (drugId is just string)
             }
         });
 
-        // Fetch all drugs to map names
-        const drugs = await prisma.globalDrug.findMany();
+        // Fetch only drugs referenced in this inventory result (avoids full-table scan)
+        const drugIds = Array.from(new Set(inventory.map((item: any) => item.drugId)));
+        const drugs = drugIds.length > 0
+            ? await prisma.globalDrug.findMany({ where: { id: { in: drugIds } } })
+            : [];
         const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
         const mappedInventory = inventory.map((item: any) => {

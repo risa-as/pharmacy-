@@ -36,6 +36,10 @@
         ".next/types/**/*.ts"
     ],
     "exclude": [
-        "node_modules"
+        "node_modules",
+        "seed-drugs.ts",
+        "prisma/seed*.ts",
+        "prisma/seed-dummy.ts",
+        "prisma/seed-plans.ts"
     ]
 }

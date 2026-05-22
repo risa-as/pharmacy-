@@ -36,7 +36,7 @@ export default function DashboardPage({ user }: { user: any }) {
                 window.ipcRenderer.invoke('get-connection-status').catch(() => false),
             ]);
 
-            const lowStock = (productsData || []).filter((p: any) => p.stock > 0 && p.stock <= 5);
+            const lowStock = (productsData || []).filter((p: any) => p.stock > 0 && p.stock < p.minStock);
 
             setStats({
                 todaySales: salesData?.total || 0,

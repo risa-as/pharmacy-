@@ -12,10 +12,28 @@ export const metadata: Metadata = {
     title: 'سجل إقفالات الورديات | Faramace',
 };
 
+// Baghdad is UTC+3 — all date inputs are Baghdad local dates, convert to UTC for DB queries
+const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
+
 function parseDateRange(from?: string, to?: string) {
     const now = new Date();
-    const startDate = from ? new Date(`${from}T00:00:00`) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endDate = to ? new Date(`${to}T23:59:59`) : new Date();
+
+    let startDate: Date;
+    if (from) {
+        // Baghdad midnight → UTC = subtract 3h
+        startDate = new Date(new Date(`${from}T00:00:00.000Z`).getTime() - BAGHDAD_OFFSET_MS);
+    } else {
+        // Today's midnight in Baghdad time
+        const baghdadNow = new Date(now.getTime() + BAGHDAD_OFFSET_MS);
+        startDate = new Date(
+            Date.UTC(baghdadNow.getUTCFullYear(), baghdadNow.getUTCMonth(), baghdadNow.getUTCDate()) - BAGHDAD_OFFSET_MS
+        );
+    }
+
+    const endDate = to
+        ? new Date(new Date(`${to}T23:59:59.000Z`).getTime() - BAGHDAD_OFFSET_MS)
+        : now;
+
     return { startDate, endDate };
 }
 

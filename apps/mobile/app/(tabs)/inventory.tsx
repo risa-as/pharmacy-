@@ -263,7 +263,7 @@ export default function InventoryScreen() {
             return !q || i.drugName.toLowerCase().includes(q) || (i.barcode?.includes(search) ?? false);
         })
         .filter(i => {
-            if (activeTab === 'low-stock') return i.quantity <= i.reorderLevel;
+            if (activeTab === 'low-stock') return i.quantity > 0 && i.quantity <= i.reorderLevel;
             if (activeTab === 'expiring') {
                 const days = getDaysToExpiry(i.expiryDate);
                 return days !== null && days <= 30 && days >= 0;

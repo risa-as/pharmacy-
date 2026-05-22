@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { checkFeatureAccess } from "@/app/lib/saas-guards";
+import { logAudit } from "@/app/lib/audit";
 
 async function checkTransferAccess(tenantCtx: any) {
     if (!tenantCtx.organizationId) return null; // SUPER_ADMIN — allow
@@ -23,6 +24,9 @@ export async function POST(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canTransferStock) {
+            return NextResponse.json({ error: "ليس لديك صلاحية لتحويل المخزون بين الأفرع." }, { status: 403 });
+        }
 
         const guard = await checkTransferAccess(tenantCtx);
         if (guard) return guard;
@@ -83,6 +87,16 @@ export async function POST(req: NextRequest) {
             }
 
             return transfer;
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'TRANSFER',
+            entityId: result.id,
+            details: JSON.stringify({ fromBranchId, toBranchId, itemCount: items.length }),
+            branchId: fromBranchId,
         });
 
         return NextResponse.json({ success: true, transfer: result });

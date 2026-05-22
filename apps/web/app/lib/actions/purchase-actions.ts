@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/app/lib/audit';
 
 export async function getLowStockInventory(branchId?: string) {
     const tenantCtx = await getTenantContext();
@@ -68,6 +69,9 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return { success: false, error: 'Unauthorized Session' };
+        if (!tenantCtx.userPermissions.canCreatePurchase) {
+            return { success: false, error: 'ليس لديك صلاحية لإنشاء طلبات الشراء.' };
+        }
         const { tenantBranchWhere } = tenantCtx;
 
         // Optionally enforce that branchId matches `tenantBranchWhere` if this is not admin...
@@ -88,6 +92,16 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
                     }))
                 }
             }
+        });
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'PURCHASE',
+            entityId: purchase.id,
+            details: JSON.stringify({ supplierId, branchId, total, itemCount: items.length }),
+            branchId,
         });
 
         revalidatePath('/dashboard/purchases');
@@ -159,6 +173,67 @@ export async function getPurchaseDetails(id: string) {
             drugName: drugMap.get(item.drugId) || 'Unknown Drug'
         }))
     };
+}
+
+export async function deletePurchase(purchaseId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+
+    const purchase = await prisma.purchase.findFirst({
+        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
+    });
+
+    if (!purchase) return { success: false, error: 'الطلب غير موجود' };
+    if (purchase.status === 'COMPLETED' || purchase.status === 'RECEIVED') {
+        return { success: false, error: 'لا يمكن حذف الطلبات المكتملة' };
+    }
+
+    await prisma.purchaseItem.deleteMany({ where: { purchaseId } });
+    await prisma.purchase.delete({ where: { id: purchaseId } });
+
+    await logAudit({
+        userId: tenantCtx.user.id,
+        userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+        action: 'DELETE',
+        entity: 'PURCHASE',
+        entityId: purchaseId,
+        details: JSON.stringify({ status: purchase.status }),
+        branchId: purchase.branchId,
+    });
+
+    revalidatePath('/dashboard/purchases');
+    return { success: true };
+}
+
+export async function cancelPurchase(purchaseId: string) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+
+    const purchase = await prisma.purchase.findFirst({
+        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
+    });
+
+    if (!purchase) return { success: false, error: 'الطلب غير موجود' };
+    if (purchase.status !== 'PENDING') return { success: false, error: 'يمكن إلغاء الطلبات المعلقة فقط' };
+
+    await prisma.purchase.update({
+        where: { id: purchaseId },
+        data: { status: 'CANCELLED' },
+    });
+
+    await logAudit({
+        userId: tenantCtx.user.id,
+        userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+        action: 'UPDATE',
+        entity: 'PURCHASE',
+        entityId: purchaseId,
+        details: JSON.stringify({ status: 'CANCELLED' }),
+        branchId: purchase.branchId,
+    });
+
+    revalidatePath('/dashboard/purchases');
+    revalidatePath(`/dashboard/purchases/${purchaseId}`);
+    return { success: true };
 }
 
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {

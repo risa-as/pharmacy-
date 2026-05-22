@@ -105,7 +105,7 @@ export async function processWebSale(data: {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { success: false, error: "غير مصرح" };
 
-    const { tenantBranchWhere, user } = tenantCtx;
+    const { tenantBranchWhere, user, organizationId } = tenantCtx;
     const branchId = user?.branchId;
 
     if (!user || !user.id || !branchId) return { success: false, error: "جلسة المستخدم غير صالحة" };
@@ -242,7 +242,9 @@ export async function processWebSale(data: {
             }
 
             // Loyalty System Logic
-            const settings = await tx.companySettings.findFirst();
+            const settings = await tx.companySettings.findFirst({
+                where: { organizationId: organizationId ?? undefined },
+            });
 
             // Handle Redemption (Debit)
             if (settings?.loyaltyEnabled && validPatient && data.pointsRedeemed > 0) {

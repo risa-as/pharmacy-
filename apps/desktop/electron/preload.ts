@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
         const [channel, listener] = args
         return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
     },
+    once(channel: string, listener: (...args: any[]) => void) {
+        ipcRenderer.once(channel, (_event, ...args) => listener(...args))
+    },
     off(...args: Parameters<typeof ipcRenderer.off>) {
         const [channel, ...omit] = args
         return ipcRenderer.off(channel, ...omit)

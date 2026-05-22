@@ -33,6 +33,7 @@ export default async function SalesPage({
                 items: { include: { drug: true } },
                 branch: true,
                 user: true,
+                returns: { include: { items: { include: { drug: true } } } },
             },
             take: PAGE_SIZE,
             skip: (page - 1) * PAGE_SIZE,
@@ -43,16 +44,21 @@ export default async function SalesPage({
     ]);
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-    // إحصائيات
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // إحصائيات — نحسب بتوقيت بغداد (UTC+3) لأن السيرفر يعمل بـ UTC
+    const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+    const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
+    const todayStart = new Date(
+        Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), nowIraq.getUTCDate()) - IRAQ_OFFSET
+    );
+    const thisMonthStart = new Date(
+        Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), 1) - IRAQ_OFFSET
+    );
 
-    const todaySales = sales.filter((s: any) => new Date(s.createdAt) >= today);
+    const todaySales = sales.filter((s: any) => new Date(s.createdAt) >= todayStart);
     const todayTotal = todaySales.reduce((acc: any, s: any) => acc + s.total, 0);
     const totalItems = todaySales.reduce((acc: any, s: any) => acc + s.items.length, 0);
 
-    const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthSales = sales.filter((s: any) => new Date(s.createdAt) >= thisMonth);
+    const monthSales = sales.filter((s: any) => new Date(s.createdAt) >= thisMonthStart);
     const monthTotal = monthSales.reduce((acc: any, s: any) => acc + s.total, 0);
 
     return (

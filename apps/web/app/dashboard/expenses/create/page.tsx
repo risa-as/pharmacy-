@@ -24,43 +24,44 @@ export default function CreateExpensePage() {
     const [loading, setLoading] = useState(false);
     const [category, setCategory] = useState('');
 
-    // Hardcoded branchId
-    const branchId = 'e9e8f4c2-9547-4180-873b-555555555555';
-
-    async function handleSubmit(formData: FormData) {
-        setLoading(true);
+    async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
+        const formData = new FormData(e.currentTarget);
         const amount = Number(formData.get('amount'));
         const description = formData.get('description') as string;
         const dateStr = formData.get('date') as string;
 
         if (!amount || !category) {
             toast.error('يرجى تعبئة الحقول المطلوبة');
-            setLoading(false);
             return;
         }
 
-        const res = await createExpense(branchId, {
-            amount,
-            category,
-            description,
-            date: dateStr ? new Date(dateStr) : new Date()
-        });
+        setLoading(true);
+        try {
+            const res = await createExpense({
+                amount,
+                category,
+                description,
+                date: dateStr ? new Date(dateStr) : new Date()
+            });
 
-        if (res.success) {
-            toast.success('تم تسجيل المصروف بنجاح');
-            router.push('/dashboard/expenses');
-            router.refresh();
-        } else {
-            toast.error('فشل في التسجيل');
+            if (res.success) {
+                toast.success('تم تسجيل المصروف بنجاح');
+                router.push('/dashboard/expenses');
+                router.refresh();
+            } else {
+                toast.error((res as any).error || 'فشل في التسجيل');
+            }
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }
 
     return (
         <div className="p-6 max-w-2xl mx-auto space-y-6" dir="rtl">
             <h1 className="text-2xl font-bold">تسجيل مصروف جديد</h1>
 
-            <form action={handleSubmit} className="bg-card p-6 rounded-lg shadow space-y-4">
+            <form onSubmit={handleSubmit} className="bg-card p-6 rounded-lg shadow space-y-4">
                 <div className="space-y-2">
                     <label className="text-sm font-medium">المبلغ (د.ع)</label>
                     <Input name="amount" type="number" placeholder="0" required />

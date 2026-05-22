@@ -11,6 +11,9 @@ export async function POST(request: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canPayDebt) {
+            return NextResponse.json({ error: 'ليس لديك صلاحية لتسجيل سداد الديون.' }, { status: 403 });
+        }
 
         const { patientId, amount, note } = await request.json();
 

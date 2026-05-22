@@ -13,13 +13,21 @@
             "android": {
                 "buildType": "apk"
             },
-            "node": "18.18.0"
+            "node": "20.19.4",
+            "prebuildCommand": "prebuild --clean --no-install",
+            "env": {
+                "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
+            }
         },
         "production": {
             "android": {
                 "buildType": "app-bundle"
             },
-            "node": "18.18.0"
+            "node": "20.19.4",
+            "prebuildCommand": "prebuild --clean --no-install",
+            "env": {
+                "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
+            }
         }
     },
     "submit": {

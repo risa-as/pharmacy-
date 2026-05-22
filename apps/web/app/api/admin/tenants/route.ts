@@ -39,6 +39,7 @@ export async function GET() {
                 maxUsers: org.maxUsers ?? org.plan?.maxUsers ?? 3,
                 maxDevices: org.maxDevices ?? org.plan?.maxDevices ?? 1,
                 maxMobileUsers: org.maxMobileUsers ?? org.plan?.maxMobileUsers ?? 1,
+                aiDailyLimit: org.aiDailyLimit ?? 50,
                 monthlyPrice: org.plan?.price || 0,
                 isActive: !org.isSuspended,
                 trialEndsAt: null,

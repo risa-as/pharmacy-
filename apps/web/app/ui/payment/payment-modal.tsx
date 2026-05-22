@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { CreditCard, Smartphone, DollarSign, X, CheckCircle } from "lucide-react";
 import StripePaymentButton from "./stripe-button";
 import ZainCashButton from "./zaincash-button";
@@ -23,8 +24,11 @@ export default function PaymentModal({
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [mounted, setMounted] = useState(false);
 
-    if (!isOpen) return null;
+    useEffect(() => { setMounted(true); }, []);
+
+    if (!isOpen || !mounted) return null;
 
     const handleSuccess = () => {
         setPaymentSuccess(true);
@@ -45,8 +49,8 @@ export default function PaymentModal({
     };
 
     if (paymentSuccess) {
-        return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        return createPortal(
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
                 <div className="bg-card rounded-2xl p-8 max-w-md w-full mx-4 text-center">
                     <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
                         <CheckCircle className="w-8 h-8 text-success" />
@@ -54,12 +58,13 @@ export default function PaymentModal({
                     <h2 className="text-2xl font-bold text-foreground mb-2">تم الدفع بنجاح!</h2>
                     <p className="text-muted-foreground">سيتم إغلاق النافذة تلقائياً...</p>
                 </div>
-            </div>
+            </div>,
+            document.body
         );
     }
 
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    return createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
             <div className="bg-card rounded-2xl max-w-lg w-full mx-4 overflow-hidden">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground p-6">
@@ -148,5 +153,5 @@ export default function PaymentModal({
                 </div>
             </div>
         </div>
-    );
+    , document.body);
 }
