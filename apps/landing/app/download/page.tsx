@@ -64,10 +64,15 @@ export default function DownloadPage() {
             </div>
 
             <div className="mt-auto w-full">
-              <CTAButton variant="primary" fullWidth href="#download-windows" icon>
+              <CTAButton
+                variant="primary"
+                fullWidth
+                href="https://github.com/risa-as/pharmacy-/releases/download/v1.0.0/Faramace.POS.Setup.1.0.0.exe"
+                icon
+              >
                 تحميل للويندوز
               </CTAButton>
-              <p className="text-slate-400 text-xs mt-3">الإصدار 1.0.0 • حجم الملف: 85 MB</p>
+              <p className="text-slate-400 text-xs mt-3">الإصدار 1.0.0 • حجم الملف: 110 MB</p>
             </div>
           </div>
 
@@ -89,13 +94,13 @@ export default function DownloadPage() {
             <h3 className="text-2xl font-bold text-slate-900 mb-3">تطبيق الإدارة</h3>
             <p className="text-slate-600 mb-2">للمدراء والمتابعة عن بعد</p>
             <div className="inline-block bg-slate-100 text-slate-700 text-sm px-3 py-1 rounded-full mb-8 font-medium">
-              Android 8.0+ / iOS 14.0+
+              Android 8.0+
             </div>
 
             <ul className="text-right space-y-3 mb-8 text-sm text-slate-600 w-full bg-slate-50 p-4 rounded-xl border border-slate-100">
               <li className="flex items-start gap-2">
                 <CheckCircle2 size={16} className="text-primary-500 mt-0.5 shrink-0" />
-                <span>متوفر على أسواق Google Play و App Store</span>
+                <span>تحميل مباشر لملف APK بدون متجر</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 size={16} className="text-primary-500 mt-0.5 shrink-0" />
@@ -110,22 +115,22 @@ export default function DownloadPage() {
             <div className="text-right w-full mb-6 bg-indigo-50/50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100/50 dark:border-indigo-800/30">
               <h4 className="font-bold text-indigo-800 dark:text-indigo-300 mb-2 text-sm">خطوات التثبيت السريعة:</h4>
               <ol className="text-sm text-indigo-700/80 dark:text-indigo-400/80 space-y-2 list-decimal list-inside font-medium">
-                <li>اختر المتجر المناسب لهاتفك</li>
-                <li>ابحث وحمل تطبيق فاراماس</li>
+                <li>حمّل ملف APK على هاتفك</li>
+                <li>فعّل "تثبيت من مصادر غير معروفة"</li>
                 <li>سجل الدخول كصاحب صيدلية</li>
               </ol>
             </div>
 
             <div className="mt-auto w-full space-y-3">
-              {/* <CTAButton variant="primary" fullWidth href="#google-play" className="bg-slate-900 text-white hover:bg-slate-800">
-                Play Store تحميل من
+              <CTAButton
+                variant="primary"
+                fullWidth
+                href="https://github.com/risa-as/pharmacy-/releases/download/v1.0.0/Faramace-mobile.apk"
+                icon
+              >
+                تحميل APK للأندرويد
               </CTAButton>
-              <CTAButton variant="outline" fullWidth href="#app-store" className="border-slate-300 text-slate-700 hover:bg-slate-50">
-                App Store تحميل من
-              </CTAButton> */}
-              <CTAButton variant="primary" fullWidth href="#phone-app" icon>
-                تحميل للهاتف
-              </CTAButton>
+              <p className="text-slate-400 text-xs mt-1 text-center">الإصدار 1.0.0 • حجم الملف: 110 MB</p>
             </div>
           </div>
 
