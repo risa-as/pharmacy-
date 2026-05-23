@@ -1,11 +1,15 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
   webpack: (config) => {
+    const reactDir    = path.dirname(require.resolve('react/package.json'));
+    const reactDomDir = path.dirname(require.resolve('react-dom/package.json'));
     config.resolve.alias = {
       ...config.resolve.alias,
-      react: require.resolve('react'),
-      'react-dom': require.resolve('react-dom'),
+      react:    reactDir,
+      'react-dom': reactDomDir,
     };
     return config;
   },
