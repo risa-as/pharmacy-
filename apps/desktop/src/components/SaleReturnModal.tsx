@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { X, Undo2, AlertCircle, Search } from "lucide-react";
+import { X, Undo2, AlertCircle, Search, Hash, Pill } from "lucide-react";
 
 interface SaleReturnModalProps {
     isOpen: boolean;
@@ -9,8 +9,10 @@ interface SaleReturnModalProps {
 
 export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnModalProps) {
     const [isLoading, setIsLoading] = useState(false);
+    const [searchMode, setSearchMode] = useState<"invoice" | "drug">("invoice");
     const [searchQuery, setSearchQuery] = useState("");
     const [sale, setSale] = useState<any>(null);
+    const [drugSearchResults, setDrugSearchResults] = useState<any[] | null>(null);
     const [notes, setNotes] = useState("");
     const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
     const [errorMsg, setErrorMsg] = useState("");
@@ -33,19 +35,46 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
 
     if (!isOpen) return null;
 
+    const handleModeChange = (mode: "invoice" | "drug") => {
+        setSearchMode(mode);
+        setSearchQuery("");
+        setSale(null);
+        setDrugSearchResults(null);
+        setErrorMsg("");
+        setReturnQuantities({});
+    };
+
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
         setIsLoading(true);
         setErrorMsg("");
         setSale(null);
+        setDrugSearchResults(null);
         setReturnQuantities({});
         try {
-            // @ts-ignore
-            const res = await window.ipcRenderer.invoke('search-sale', searchQuery.trim());
-            if (res.success && res.sale) {
-                setSale(res.sale);
+            if (searchMode === "invoice") {
+                // @ts-ignore
+                const res = await window.ipcRenderer.invoke('search-sale', searchQuery.trim());
+                if (res.success && res.sale) {
+                    setSale(res.sale);
+                } else {
+                    setErrorMsg(res.error || "الفاتورة غير موجودة");
+                }
             } else {
-                setErrorMsg(res.error || "الفاتورة غير موجودة");
+                // @ts-ignore
+                const res = await window.ipcRenderer.invoke('search-sales-by-drug', {
+                    query: searchQuery.trim(),
+                    branchId: user?.branchId || null,
+                });
+                if (res.success) {
+                    if (res.sales.length === 0) {
+                        setErrorMsg("لا توجد فواتير تحتوي على هذا الدواء في آخر 30 يوم");
+                    } else {
+                        setDrugSearchResults(res.sales);
+                    }
+                } else {
+                    setErrorMsg(res.error || "حدث خطأ أثناء البحث");
+                }
             }
         } catch (error: any) {
             setErrorMsg(error.message || "حدث خطأ أثناء البحث");
@@ -88,8 +117,6 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
                     price: sale.items.find((i: any) => i.drugId === drugId)?.price || 0
                 }));
 
-            // Get active shift safe if Cash sale
-            // Default to null, Desktop POS IPC processes it
             // @ts-ignore
             const shiftStatus = await window.ipcRenderer.invoke('get-shift-status', { userId: user.id });
             const safeId = shiftStatus?.safeId || null;
@@ -109,6 +136,7 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
                 setNotes("");
                 setSale(null);
                 setSearchQuery("");
+                setDrugSearchResults(null);
                 onClose();
             } else {
                 setErrorMsg(res.error || "حدث خطأ أثناء الإرجاع");
@@ -131,26 +159,44 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
                         </div>
                         <div>
                             <h2 className="text-xl font-bold">إرجاع بضاعة (مرتجعات)</h2>
-                            <p className="text-xs mt-1 text-red-600/80">ابحث عن الفاتورة برقمها أو امسح الباركود الخاص بها</p>
+                            <p className="text-xs mt-1 text-red-600/80">ابحث عن الفاتورة برقمها أو باسم الدواء</p>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 rounded-full hover:bg-red-100 transition-colors"
-                    >
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-red-100 transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                {/* Search Bar */}
-                <div className="p-5 border-b border-gray-100 bg-gray-50/50 shrink-0">
+                {/* Search Mode Toggle + Search Bar */}
+                <div className="p-5 border-b border-gray-100 bg-gray-50/50 shrink-0 space-y-3">
+                    {/* Mode toggle */}
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => handleModeChange("invoice")}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors border ${searchMode === "invoice" ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-100"}`}
+                        >
+                            <Hash className="w-4 h-4" />
+                            بحث برقم الفاتورة
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleModeChange("drug")}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors border ${searchMode === "drug" ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-100"}`}
+                        >
+                            <Pill className="w-4 h-4" />
+                            بحث باسم الدواء / الباركود
+                        </button>
+                    </div>
+
+                    {/* Search input */}
                     <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="flex gap-2">
                         <div className="relative flex-1">
                             <Search className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
                             <input
                                 autoFocus
                                 type="text"
-                                placeholder="رقم الفاتورة (مثال: POS-123...)"
+                                placeholder={searchMode === "invoice" ? "رقم الفاتورة (مثال: POS-123...)" : "اسم الدواء أو الباركود..."}
                                 className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 outline-none transition-all font-mono"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -166,14 +212,59 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
                         </button>
                     </form>
                     {errorMsg && (
-                        <div className="mt-3 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
+                        <div className="mt-1 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
                             <AlertCircle className="w-4 h-4" />
                             {errorMsg}
                         </div>
                     )}
                 </div>
 
-                {/* Body */}
+                {/* Drug search results list */}
+                {drugSearchResults && !sale && (
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                        <p className="text-xs text-gray-500 mb-2">اختر الفاتورة المطلوبة ({drugSearchResults.length} نتيجة)</p>
+                        {drugSearchResults.map((s: any) => {
+                            const matchingDrugs = s.items
+                                .filter((it: any) => it.drug?.tradeName?.toLowerCase().includes(searchQuery.toLowerCase()) || it.drug?.barcode?.includes(searchQuery))
+                                .map((it: any) => it.drug?.tradeName)
+                                .filter(Boolean)
+                                .join("، ");
+                            return (
+                                <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => { setSale(s); setDrugSearchResults(null); setReturnQuantities({}); }}
+                                    className="w-full text-right p-3 rounded-xl border border-gray-200 hover:border-red-400 hover:bg-red-50 transition-colors bg-white"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="font-bold text-gray-800 text-sm">
+                                                {s.invoiceNumber || `#${s.id.slice(0, 8)}`}
+                                            </span>
+                                            {s.patient?.name && (
+                                                <span className="text-xs text-gray-500 mr-2">— {s.patient.name}</span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                            {new Date(s.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
+                                            {" "}
+                                            {new Date(s.createdAt).toLocaleTimeString('ar-IQ', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-2">
+                                        <span className="text-xs text-red-600 font-medium">{matchingDrugs}</span>
+                                        <span className="text-xs text-gray-400">— {(s.total || 0).toLocaleString()} د.ع</span>
+                                        <span className={`text-xs px-1.5 py-0.5 rounded ${s.payment?.method === 'CREDIT' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                                            {s.payment?.method === 'CREDIT' ? 'آجل' : 'نقدي'}
+                                        </span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Sale details + return form */}
                 {sale ? (
                     <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
                         <div className="p-5 overflow-y-auto flex-1">
@@ -269,8 +360,8 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
                                 <span className="text-xl font-black text-red-600">{totalReturnAmount.toLocaleString()} د.ع</span>
                             </div>
                             <div className="flex gap-3">
-                                <button type="button" onClick={() => setSale(null)} className="px-5 py-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors font-medium">
-                                    إلغاء
+                                <button type="button" onClick={() => { setSale(null); setDrugSearchResults(null); }} className="px-5 py-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors font-medium">
+                                    رجوع
                                 </button>
                                 <button
                                     type="submit"
@@ -283,12 +374,14 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
                             </div>
                         </div>
                     </form>
-                ) : (
+                ) : !drugSearchResults ? (
                     <div className="flex-1 flex flex-col items-center justify-center p-12 text-gray-400">
                         <Search className="w-16 h-16 mb-4 opacity-20" />
-                        <p className="text-lg">يرجى البحث عن فاتورة لعرض تفاصيلها</p>
+                        <p className="text-lg">
+                            {searchMode === "invoice" ? "يرجى البحث عن فاتورة لعرض تفاصيلها" : "ابحث باسم الدواء لعرض الفواتير المرتبطة به"}
+                        </p>
                     </div>
-                )}
+                ) : null}
             </div>
         </div>
     );

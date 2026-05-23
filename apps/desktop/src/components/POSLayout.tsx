@@ -49,6 +49,9 @@ export default function POSLayout({ user }: { user: any }) {
 
     // ─── Cash Drop ───────────────────────────────────────────────────────────
     const [showCashDropModal, setShowCashDropModal] = useState(false);
+    const [showGrid, setShowGrid] = useState(true);
+    const [showSearchResults, setShowSearchResults] = useState(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [cashDropType, setCashDropType] = useState<"IN" | "OUT">("OUT");
     const [cashDropAmount, setCashDropAmount] = useState("");
     const [cashDropNote, setCashDropNote] = useState("");
@@ -64,6 +67,7 @@ export default function POSLayout({ user }: { user: any }) {
     const [lastSale, setLastSale] = useState<SaleData | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [companySettings, setCompanySettings] = useState<any>(null);
+    const [showReceiptAfterSale, setShowReceiptAfterSale] = useState(true);
 
     // ─── Alternatives Modal ──────────────────────────────────────────────────
     const [showAlternativesModal, setShowAlternativesModal] = useState(false);
@@ -131,39 +135,55 @@ export default function POSLayout({ user }: { user: any }) {
 
     useEffect(() => { checkShiftStatus(); }, [checkShiftStatus]);
 
+    // Connection check — independent of search
     useEffect(() => {
         const checkConnection = async () => {
             if (window.ipcRenderer) {
-                try {
-                    const status = await ipcInvoke('get-connection-status');
-                    setIsOnline(status);
-                } catch { }
+                try { setIsOnline(await ipcInvoke('get-connection-status')); } catch { }
             }
         };
         const connectionInterval = setInterval(checkConnection, 10000);
         checkConnection();
+        return () => clearInterval(connectionInterval);
+    }, []);
 
-        const fetchProducts = async () => {
-            if (window.ipcRenderer) {
-                setLoading(true);
-                try {
-                    const data = await ipcInvoke('get-products', { searchTerm, branchId: user?.branchId });
-                    setProducts(data);
-                } catch (error) {
-                    console.error("فشل في جلب المنتجات", error);
-                } finally {
-                    setLoading(false);
-                }
+    // Initial product load — runs once on mount
+    useEffect(() => {
+        if (!window.ipcRenderer) return;
+        setLoading(true);
+        ipcInvoke('get-products', { searchTerm: "", branchId: user?.branchId })
+            .then(setProducts)
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [user?.branchId]);
+
+    // Text search — only fires for manual typing (>= 2 chars), NOT for barcode scans
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (!searchTerm || searchTerm.length < 2) {
+            setShowSearchResults(false);
+            return;
+        }
+        debounceRef.current = setTimeout(async () => {
+            if (!window.ipcRenderer) return;
+            setLoading(true);
+            try {
+                const data = await ipcInvoke('get-products', { searchTerm, branchId: user?.branchId });
+                setProducts(data);
+                setShowSearchResults(true);
+            } catch (error) {
+                console.error("فشل في جلب المنتجات", error);
+            } finally {
+                setLoading(false);
             }
-        };
-        const debounce = setTimeout(fetchProducts, 300);
-        return () => { clearTimeout(debounce); clearInterval(connectionInterval); };
+        }, 300);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     }, [searchTerm]);
 
     useEffect(() => {
         if (window.ipcRenderer) {
             ipcInvoke('get-quick-sale-products', { branchId: user?.branchId })
-                .then((data: any) => setQuickSaleProducts(data || []))
+                .then((data: any) => setQuickSaleProducts((data || []).sort((a: any, b: any) => a.name.localeCompare(b.name, 'ar'))))
                 .catch(console.error);
         }
     }, []);
@@ -172,6 +192,9 @@ export default function POSLayout({ user }: { user: any }) {
         if (window.ipcRenderer) {
             ipcInvoke('get-settings')
                 .then(setCompanySettings)
+                .catch(console.error);
+            ipcInvoke('get-pos-settings')
+                .then((s: any) => { if (typeof s?.showReceiptAfterSale === 'boolean') setShowReceiptAfterSale(s.showReceiptAfterSale); })
                 .catch(console.error);
         }
     }, []);
@@ -261,13 +284,38 @@ export default function POSLayout({ user }: { user: any }) {
         setCart(prev => prev.map(c => c.id === id ? { ...c, quantity: qty } : c));
     };
 
-    const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const setItemPrice = (id: string, price: number) => {
+        setCart(prev => prev.map(c => {
+            if (c.id !== id) return c;
+            // Store original price only on the first override
+            const originalPrice = c.originalPrice ?? c.price;
+            // If the user resets to original price, remove the override
+            if (price === originalPrice) return { ...c, price, originalPrice: undefined };
+            return { ...c, price, originalPrice };
+        }));
+    };
+
+    const handleSearchKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && searchTerm.trim()) {
-            const product = products.find(p => p.barcode === searchTerm.trim());
-            if (product && product.stock > 0) {
-                addToCart(product);
-                setSearchTerm("");
+            // Cancel any pending get-products query so it doesn't race with the barcode lookup
+            if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+            const term = searchTerm.trim();
+            // Clear input immediately — before the async call so there's no grid flash
+            setSearchTerm("");
+            setShowSearchResults(false);
+            // Fast path: direct barcode lookup (single product, indexed query < 50ms)
+            const byBarcode = await ipcInvoke<any>('get-product-by-barcode', { barcode: term, branchId: user?.branchId });
+            if (byBarcode) {
+                addToCart(byBarcode);
+                setProducts(prev => prev.some(p => p.id === byBarcode.id)
+                    ? prev.map(p => p.id === byBarcode.id ? byBarcode : p)
+                    : [...prev, byBarcode]
+                );
+                return;
             }
+            // Fallback: search in already-loaded products list
+            const product = products.find(p => p.barcode === term);
+            if (product && product.stock > 0) addToCart(product);
         }
     };
 
@@ -370,10 +418,11 @@ export default function POSLayout({ user }: { user: any }) {
 
         if (!confirm(confirmMsg)) return;
 
+        const hasPriceOverride = cart.some(item => item.originalPrice !== undefined);
         const result = await ipcInvoke('process-sale', {
             items: cart, total: finalTotal, userId: user.id,
             patientId: selectedPatient?.id, discount: totalDiscount,
-            pointsRedeemed: pointsToRedeem, paymentMethod
+            pointsRedeemed: pointsToRedeem, paymentMethod, hasPriceOverride
         });
 
         if (result.success) {
@@ -382,7 +431,7 @@ export default function POSLayout({ user }: { user: any }) {
                 : 0;
 
             const invoiceData: SaleData = {
-                items: cart.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+                items: cart.map(item => ({ name: item.name, quantity: item.quantity, price: item.price, originalPrice: item.originalPrice })),
                 total: finalTotal,
                 invoiceNumber: result.invoiceNumber || generateInvoiceNumber(),
                 date: new Date(),
@@ -396,50 +445,18 @@ export default function POSLayout({ user }: { user: any }) {
             };
 
             setShowSuccess(true);
-            setTimeout(() => { setShowSuccess(false); setLastSale(invoiceData); setShowPrintPreview(true); }, 1200);
+            setTimeout(() => { setShowSuccess(false); setLastSale(invoiceData); if (showReceiptAfterSale) setShowPrintPreview(true); }, 1200);
+            // Deduct sold quantities from local products state — no full reload needed
+            setProducts(prev => prev.map(p => {
+                const soldItem = cart.find(c => c.id === p.id);
+                return soldItem ? { ...p, stock: Math.max(0, p.stock - soldItem.quantity) } : p;
+            }));
             setCart([]); setSearchTerm(""); setSelectedPatient(null); setManualDiscount(0); setIsRedeemingLoyalty(false);
-            const refreshed = await ipcInvoke('get-products', { searchTerm: "", branchId: user?.branchId });
-            setProducts(refreshed);
         } else {
             alert("فشلت عملية البيع: " + result.error);
         }
     };
 
-    const handleZainCashPayment = async () => {
-        if (cart.length === 0) return;
-        setLoading(true);
-        try {
-            const saleId = `POS-${Date.now()}`;
-            const result = await ipcInvoke('initiate-zain-cash-payment', { amount: finalTotal, saleId });
-            if (!result.success) { alert(result.error || "فشل في بدء عملية الدفع"); setLoading(false); return; }
-            await ipcInvoke('open-external-url', result.redirectUrl);
-            setIsZainCashProcessing(true);
-            setLoading(false);
-
-            const pollInterval = setInterval(async () => {
-                try {
-                    const statusResult = await ipcInvoke('check-zain-cash-status', { transactionId: result.transactionId });
-                    if (statusResult.success) {
-                        if (statusResult.status === 'success' || statusResult.status === 'completed') {
-                            clearInterval(pollInterval);
-                            setIsZainCashProcessing(false);
-                            await handlePayment("ZAIN_CASH");
-                        } else if (statusResult.status === 'failed' || statusResult.status === 'rejected') {
-                            clearInterval(pollInterval);
-                            setIsZainCashProcessing(false);
-                            alert("فشلت عملية الدفع");
-                        }
-                    }
-                } catch (err) { console.error("Polling error", err); }
-            }, 3000);
-
-            setTimeout(() => { clearInterval(pollInterval); if (isZainCashProcessing) { setIsZainCashProcessing(false); alert("انتهت مهلة الدفع"); } }, 5 * 60 * 1000);
-        } catch (error) {
-            console.error("Zain Cash Error:", error);
-            alert("حدث خطأ غير متوقع");
-            setLoading(false);
-        }
-    };
 
     const handleSync = useCallback(async () => {
         if (window.ipcRenderer) {
@@ -480,6 +497,25 @@ export default function POSLayout({ user }: { user: any }) {
         }
     };
 
+    // ─── Refocus after modals close ──────────────────────────────────────────
+    // When any modal closes: trigger OS blur/focus cycle via IPC first (fixes
+    // Chromium internal keyboard focus), then DOM-focus the search input after
+    // enough time for the OS cycle to complete (~150ms).
+    const anyModalOpen = showSuccess || showPrintPreview || showPatientModal
+        || showReturnModal || showHelpPanel || isZainCashProcessing
+        || showShiftOpenModal || showShiftCloseModal || showCashDropModal
+        || showAlternativesModal;
+    const prevModalOpen = useRef(false);
+
+    useEffect(() => {
+        if (prevModalOpen.current && !anyModalOpen && !loading) {
+            window.ipcRenderer?.send('refocus-window');
+            const t = setTimeout(() => searchInputRef.current?.focus(), 200);
+            return () => clearTimeout(t);
+        }
+        prevModalOpen.current = anyModalOpen;
+    }, [anyModalOpen, loading]);
+
     // ─── Hotkeys ─────────────────────────────────────────────────────────────
     useHotkeys('f1', () => setShowHelpPanel(true), { preventDefault: true });
     useHotkeys('f2', () => searchInputRef.current?.focus(), { preventDefault: true });
@@ -488,14 +524,16 @@ export default function POSLayout({ user }: { user: any }) {
         setTimeout(() => document.getElementById('manual-discount-input')?.focus(), 50);
     }, { preventDefault: true });
     useHotkeys('f4', () => { if (cart.length > 0) handlePayment("CASH"); }, { preventDefault: true }, [cart, handlePayment]);
-    useHotkeys('f5', () => {
+    useHotkeys('f5', () => { if (cart.length > 0) handlePayment("CARD"); }, { preventDefault: true }, [cart, handlePayment]);
+    useHotkeys('f6', () => { if (cart.length > 0) handlePayment("CREDIT"); }, { preventDefault: true }, [cart, handlePayment]);
+    useHotkeys('f7', () => {
         if (cart.length === 0) return;
         if (window.confirm('هل تريد إلغاء البيع ومسح السلة؟')) {
             setCart([]); setManualDiscount(0); setIsRedeemingLoyalty(false);
         }
     }, { preventDefault: true }, [cart]);
-    useHotkeys('f6', () => setShowReturnModal(true), { preventDefault: true });
     useHotkeys('f8', () => { if (lastSale) setShowPrintPreview(true); }, { preventDefault: true }, [lastSale]);
+    useHotkeys('f9', () => setShowReturnModal(true), { preventDefault: true });
     useHotkeys('escape', () => {
         if (showHelpPanel) setShowHelpPanel(false);
         else if (showPrintPreview) setShowPrintPreview(false);
@@ -566,6 +604,9 @@ export default function POSLayout({ user }: { user: any }) {
                 onClearPatient={() => setSelectedPatient(null)}
                 onSync={handleSync}
                 onSeed={handleSeed}
+                showGrid={showGrid}
+                showSearchResults={showSearchResults}
+                onToggleGrid={() => setShowGrid(v => !v)}
             />
 
             <POSCart
@@ -586,12 +627,12 @@ export default function POSLayout({ user }: { user: any }) {
                 onUpdateQuantity={updateQuantity}
                 onRemoveFromCart={removeFromCart}
                 onSetItemQuantity={setItemQuantity}
+                onSetItemPrice={setItemPrice}
                 onClearCart={() => { setCart([]); setManualDiscount(0); setIsRedeemingLoyalty(false); }}
                 onDiscountToggle={() => setShowDiscountInput(v => !v)}
                 onDiscountChange={setManualDiscount}
                 onLoyaltyToggle={() => setIsRedeemingLoyalty(v => !v)}
                 onPayment={handlePayment}
-                onZainCash={handleZainCashPayment}
             />
 
             <ShiftModals

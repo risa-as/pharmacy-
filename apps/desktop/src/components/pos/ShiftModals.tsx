@@ -57,7 +57,7 @@ export default function ShiftModals({
                                 <input
                                     type="number"
                                     placeholder="أدخل المبلغ المتوفر في الصندوق الان"
-                                    className="w-full border-border rounded-lg shadow-sm focus:border-primary focus:ring-primary"
+                                    className="w-full bg-background text-foreground border border-border rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={startingCash}
                                     onChange={(e) => onStartingCashChange(e.target.value)}
                                 />
@@ -99,7 +99,7 @@ export default function ShiftModals({
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="bg-muted p-4 rounded-xl border border-border">
                                             <p className="text-xs text-muted-foreground mb-1">وقت البدء</p>
-                                            <p className="font-bold">{new Date(shiftSummary.startTime).toLocaleTimeString('ar-IQ')}</p>
+                                            <p className="font-bold">{new Date(shiftSummary.startTime).toLocaleTimeString('ar-IQ-u-nu-latn')}</p>
                                         </div>
                                         <div className="bg-muted p-4 rounded-xl border border-border">
                                             <p className="text-xs text-muted-foreground mb-1">مدة الوردية</p>
@@ -114,16 +114,26 @@ export default function ShiftModals({
                                             <p className="font-bold text-success">{formatIQD(shiftSummary.salesTotalAmount)}</p>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-3 gap-3">
                                         <div className="bg-primary/5 p-3 rounded-xl border border-primary/20">
                                             <p className="text-xs text-primary mb-1">نقدي ({shiftSummary.cashSalesCount})</p>
                                             <p className="font-bold text-primary">{formatIQD(shiftSummary.cashSalesTotal)}</p>
+                                        </div>
+                                        <div className="bg-info/5 p-3 rounded-xl border border-info/20">
+                                            <p className="text-xs text-info mb-1">بطاقة ({shiftSummary.cardSalesCount ?? 0})</p>
+                                            <p className="font-bold text-info">{formatIQD(shiftSummary.cardSalesTotal ?? 0)}</p>
                                         </div>
                                         <div className="bg-destructive/5 p-3 rounded-xl border border-destructive/20">
                                             <p className="text-xs text-destructive mb-1">آجل ({shiftSummary.creditSalesCount})</p>
                                             <p className="font-bold text-destructive">{formatIQD(shiftSummary.creditSalesTotal)}</p>
                                         </div>
                                     </div>
+                                    {(shiftSummary.returnsTotal ?? 0) > 0 && (
+                                        <div className="bg-orange-50 p-3 rounded-xl border border-orange-200 flex justify-between items-center">
+                                            <p className="text-xs text-orange-700">مرتجعات الوردية</p>
+                                            <p className="font-bold text-orange-700">- {formatIQD(shiftSummary.returnsTotal ?? 0)}</p>
+                                        </div>
+                                    )}
                                     <div className="bg-warning/10 rounded-xl p-4 border border-warning/30">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-sm font-medium text-warning">الرصيد الافتتاحي</span>
@@ -134,7 +144,7 @@ export default function ShiftModals({
                                             <span className="text-lg font-black text-warning">{formatIQD(shiftSummary.expectedCash)}</span>
                                         </div>
                                         <p className="text-[10px] text-warning/80 mt-2">
-                                            الرصيد المتوقع = الرصيد الافتتاحي + المبيعات النقدية + المقبوضات - المدفوعات
+                                            الرصيد المتوقع = الرصيد الافتتاحي + المبيعات النقدية - المرتجعات + المقبوضات - المدفوعات
                                         </p>
                                     </div>
                                     <div>
@@ -142,7 +152,7 @@ export default function ShiftModals({
                                         <input
                                             type="number"
                                             placeholder="أدخل المبلغ بعد عدّ الدرج"
-                                            className="w-full border-border rounded-lg shadow-sm focus:border-destructive focus:ring-destructive text-lg py-3"
+                                            className="w-full bg-background text-foreground border border-border rounded-lg px-3 py-3 text-lg shadow-sm focus:outline-none focus:border-destructive focus:ring-1 focus:ring-destructive"
                                             value={actualCash}
                                             onChange={(e) => onActualCashChange(e.target.value)}
                                         />
@@ -205,7 +215,7 @@ export default function ShiftModals({
                                 <label className="block text-sm font-bold text-foreground mb-1">المبلغ (د.ع)</label>
                                 <input
                                     type="number" placeholder="أدخل المبلغ"
-                                    className="w-full border-border rounded-lg shadow-sm focus:border-warning focus:ring-warning text-lg py-2"
+                                    className="w-full bg-background text-foreground border border-border rounded-lg px-3 py-2 text-lg shadow-sm focus:outline-none focus:border-warning focus:ring-1 focus:ring-warning"
                                     value={cashDropAmount}
                                     onChange={(e) => onCashDropAmountChange(e.target.value)}
                                 />
@@ -214,7 +224,7 @@ export default function ShiftModals({
                                 <label className="block text-sm font-bold text-foreground mb-1">السبب / ملاحظات</label>
                                 <input
                                     type="text" placeholder="مثال: مصاريف صيانة، تسليم كاش للمدير..."
-                                    className="w-full border-border rounded-lg shadow-sm focus:border-warning focus:ring-warning py-2"
+                                    className="w-full bg-background text-foreground border border-border rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:border-warning focus:ring-1 focus:ring-warning"
                                     value={cashDropNote}
                                     onChange={(e) => onCashDropNoteChange(e.target.value)}
                                     maxLength={200}

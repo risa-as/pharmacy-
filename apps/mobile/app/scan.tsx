@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -148,13 +148,13 @@ export default function ScanScreen() {
                 <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
                     <View style={{
                         width: 240, height: 240,
-                        borderWidth: 3, borderColor: C.primary, borderRadius: 18,
+                        borderWidth: 3, borderColor: C.primary, borderRadius: 5,
                         backgroundColor: 'transparent',
                     }} />
                     <Text style={{
                         color: '#fff', marginTop: 24, fontSize: 14, fontWeight: '600',
                         backgroundColor: 'rgba(0,0,0,0.65)',
-                        paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24,
+                        paddingHorizontal: 20, paddingVertical: 10, borderRadius: 5,
                     }}>
                         {loading ? 'جاري البحث...' : 'وجه الكاميرا نحو الباركود'}
                     </Text>
@@ -175,7 +175,7 @@ export default function ScanScreen() {
                     {/* Drug header */}
                     <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 18 }}>
                         <View style={{
-                            backgroundColor: `${C.primary}18`, borderRadius: 16,
+                            backgroundColor: `${C.primary}18`, borderRadius: 5,
                             padding: 12, marginLeft: 14,
                         }}>
                             <Ionicons name="medkit" size={28} color={C.primary} />

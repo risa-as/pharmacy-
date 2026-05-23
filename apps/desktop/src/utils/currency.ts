@@ -18,7 +18,7 @@ let currentCurrency: CurrencyConfig = {
     code: 'IQD',
     symbol: 'د.ع',
     decimals: 0,
-    locale: 'ar-IQ'
+    locale: 'en-US'
 };
 
 export function setAppCurrency(code: string) {
@@ -34,7 +34,7 @@ export function setAppCurrency(code: string) {
             code: 'IQD',
             symbol: 'د.ع',
             decimals: 0,
-            locale: 'ar-IQ'
+            locale: 'en-US'
         };
     }
 }

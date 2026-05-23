@@ -40,8 +40,11 @@
             },
             {
                 "from": "node_modules/.prisma/desktop-client",
-                "to": "app.asar.unpacked/node_modules/.prisma/desktop-client",
+                "to": "prisma-client",
                 "filter": [
+                    "*.js",
+                    "*.json",
+                    "runtime/**",
                     "query_engine-windows.dll.node"
                 ]
             }

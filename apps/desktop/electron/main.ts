@@ -88,12 +88,70 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       spellcheck: false,        // Prevents IME/spellcheck interference with Arabic input on Windows
+      // Explicit secure defaults — keep the renderer isolated from Node.
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
     },
+  });
+
+  // ── Security: lock down navigation and popups ───────────────────────────────
+  // The renderer should only ever show our own app (file:// in prod, the Vite
+  // dev server in dev). Block any attempt to navigate elsewhere or open new
+  // windows with Node access; route external links to the system browser.
+  const allowedOrigin = VITE_DEV_SERVER_URL ? new URL(VITE_DEV_SERVER_URL).origin : null;
+  win.webContents.on("will-navigate", (event, url) => {
+    let isInternal = url.startsWith("file://");
+    try {
+      if (!isInternal && allowedOrigin) isInternal = new URL(url).origin === allowedOrigin;
+    } catch { /* malformed URL → treat as external */ }
+    if (!isInternal) {
+      event.preventDefault();
+      if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    }
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
   });
 
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", new Date().toLocaleString());
   });
+
+  // ==================== ROOT FIX: Electron keyboard focus loss ====================
+  // Electron/Chromium on Windows loses internal webContents keyboard focus when
+  // in-app overlays/modals are removed from the DOM. webContents.focus() alone
+  // does NOT fix it — a synthetic mouse event is required to force Chromium to
+  // re-acquire internal keyboard focus.
+
+  // ==================== ROOT FIX: OS-level blur/focus cycle ====================
+  // Electron/Chromium on Windows loses internal keyboard focus when DOM overlays
+  // are removed. webContents.focus() + sendInputEvent are insufficient.
+  //
+  // The ONLY reliable fix is an OS-level WM_KILLFOCUS → WM_SETFOCUS cycle,
+  // identical to what alt-tab does. We use setAlwaysOnTop(true) to keep the
+  // window visually on top during the brief blur, preventing any desktop flash.
+
+  const forceOSFocusCycle = () => {
+    if (!win || win.isDestroyed()) return;
+    win.setAlwaysOnTop(true);
+    win.blur();
+    // After blur, OS sends WM_KILLFOCUS → Chromium resets internal focus state
+    setTimeout(() => {
+      if (!win || win.isDestroyed()) return;
+      win.focus();  // OS sends WM_SETFOCUS → Chromium reinitialises keyboard focus
+      win.setAlwaysOnTop(false);
+    }, 50);
+  };
+
+  // When the window regains OS focus (alt-tab back)
+  win.on('focus', () => {
+    win?.webContents.focus();
+  });
+
+  // Renderer requests a forced focus cycle after closing a modal
+  ipcMain.on('refocus-window', () => forceOSFocusCycle());
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
@@ -114,7 +172,7 @@ app.on("activate", () => {
   }
 });
 
-// ظ†ط³ط® ط§ط­طھظٹط§ط·ظٹ طھظ„ظ‚ط§ط¦ظٹ ط¹ظ†ط¯ ط¥ط؛ظ„ط§ظ‚ ط§ظ„طھط·ط¨ظٹظ‚
+// نسخ احتياطي تلقائي عند إغلاق التطبيق
 app.on("before-quit", async () => {
   console.log("Creating auto-backup before quit...");
   try {
@@ -1034,7 +1092,7 @@ app.whenReady().then(async () => {
         const patientAllergyList = patient.allergies
           .toLowerCase()
           .split(",")
-          .map((a) => a.trim())
+          .map((a: string) => a.trim())
           .filter(Boolean);
 
         if (patientAllergyList.length === 0) return [];
@@ -1042,7 +1100,7 @@ app.whenReady().then(async () => {
         // Simple intersection: returns the scientific names that the patient is allergic to
         const triggeredAllergies = scientificNames.filter((name) =>
           patientAllergyList.some(
-            (allergy) =>
+            (allergy: string) =>
               name.toLowerCase().includes(allergy) ||
               allergy.includes(name.toLowerCase()),
           ),
@@ -1125,7 +1183,9 @@ app.whenReady().then(async () => {
   // ... inside createWindow or app.whenReady ...
 
   ipcMain.handle("get-users", async () => {
-    return await prisma.user.findMany(); // Still useful for debugging or listing? Maybe remove password from return?
+    return await prisma.user.findMany({
+      select: { id: true, name: true, email: true, role: true, branchId: true, createdAt: true },
+    });
   });
 
   ipcMain.handle("login", async (_event, { email, password }) => {
@@ -1252,6 +1312,7 @@ app.whenReady().then(async () => {
               }
             }
 
+            store.set("loggedInUserId", safeUser.id);
             return { success: true, user: safeUser };
           }
         } else {
@@ -1290,6 +1351,7 @@ app.whenReady().then(async () => {
           void processPendingSyncActions();
         }
 
+        store.set("loggedInUserId", userWithoutPassword.id);
         return { success: true, user: userWithoutPassword };
       } else {
         return {
@@ -1307,6 +1369,26 @@ app.whenReady().then(async () => {
     }
   });
 });
+
+  // ==================== Session Restore ====================
+  ipcMain.handle("get-session-user", async () => {
+    try {
+      const userId = store.get("loggedInUserId");
+      if (!userId) return { success: false };
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) { store.set("loggedInUserId", ""); return { success: false }; }
+      const { password: _pw, ...safeUser } = user;
+      return { success: true, user: safeUser };
+    } catch {
+      return { success: false };
+    }
+  });
+
+  ipcMain.handle("logout", async () => {
+    store.set("loggedInUserId", "");
+    return { success: true };
+  });
+  // ==================== End Session Restore ====================
 
 // ==================== Shift Management ====================
 ipcMain.handle("get-shift-status", async (_, { userId }) => {
@@ -1382,6 +1464,7 @@ ipcMain.handle(
           status: "OPEN",
         },
       });
+      void syncShifts();
       return { success: true };
     } catch (error: any) {
       console.error("Clock-in failed:", error);
@@ -1402,19 +1485,31 @@ ipcMain.handle("get-shift-summary", async (_, { userId }) => {
 
     const shiftWhere = { userId, createdAt: { gte: activeShift.startTime } };
 
-    // Fetch all sales during the shift with their payments
+    // Fetch all sales during the shift with their payments and returns
     const shiftSales = await prisma.sale.findMany({
       where: shiftWhere,
-      include: { payment: true },
+      include: { payment: true, returns: true },
     });
 
-    const cashSales = shiftSales.filter((s: any) => s.payment?.method !== 'CREDIT');
+    const cashSales   = shiftSales.filter((s: any) => s.payment?.method === 'CASH');
+    const cardSales   = shiftSales.filter((s: any) => s.payment?.method === 'CARD');
     const creditSales = shiftSales.filter((s: any) => s.payment?.method === 'CREDIT');
+    const otherSales  = shiftSales.filter((s: any) =>
+      !['CASH','CARD','CREDIT'].includes(s.payment?.method ?? ''));
 
-    const cashSalesTotal = cashSales.reduce((sum: number, s: any) => sum + s.total, 0);
+    const cashSalesTotal   = cashSales.reduce((sum: number, s: any) => sum + s.total, 0);
+    const cardSalesTotal   = cardSales.reduce((sum: number, s: any) => sum + s.total, 0);
     const creditSalesTotal = creditSales.reduce((sum: number, s: any) => sum + s.total, 0);
+    const otherSalesTotal  = otherSales.reduce((sum: number, s: any) => sum + s.total, 0);
     const salesCount = shiftSales.length;
-    const salesTotalAmount = cashSalesTotal + creditSalesTotal;
+    const salesTotalAmount = cashSalesTotal + cardSalesTotal + creditSalesTotal + otherSalesTotal;
+
+    // Total returns during this shift (cash refunds reduce the drawer)
+    const returnsTotal = shiftSales.reduce(
+      (sum: number, s: any) =>
+        sum + (s.returns || []).reduce((rs: number, r: any) => rs + r.total, 0),
+      0
+    );
 
     // Calculate expected cash correctly:
     // startingCash + all IN transactions on this safe since shift start - all OUT transactions
@@ -1443,8 +1538,11 @@ ipcMain.handle("get-shift-summary", async (_, { userId }) => {
         salesTotalAmount,
         cashSalesCount: cashSales.length,
         cashSalesTotal,
+        cardSalesCount: cardSales.length,
+        cardSalesTotal,
         creditSalesCount: creditSales.length,
         creditSalesTotal,
+        returnsTotal,
         safeName: activeShift.safe?.name,
       },
     };
@@ -1650,21 +1748,21 @@ ipcMain.handle("get-products", async (_, arg: any) => {
           },
         },
       },
-      // take: 50 // REMOVED LIMIT
+      take: term ? 50 : undefined,
     });
 
-    return products.map((p) => {
+    return products.map((p: any) => {
       const totalStock = p.inventory.reduce(
-        (acc, inv) => acc + inv.quantity,
+        (acc: number, inv: any) => acc + inv.quantity,
         0,
       );
       const costPrice = p.inventory[0]?.costPrice || 0;
 
       // Find nearest expiry across all inventory batches (filtered by branch above)
       const nearestBatch = p.inventory
-        .flatMap((inv) => inv.batches)
+        .flatMap((inv: any) => inv.batches)
         .sort(
-          (a, b) =>
+          (a: any, b: any) =>
             new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime(),
         )[0];
 
@@ -1685,6 +1783,45 @@ ipcMain.handle("get-products", async (_, arg: any) => {
   } catch (error) {
     console.error("Error fetching products:", error);
     return [];
+  }
+});
+
+// Fast barcode lookup — returns a single product by exact barcode match
+ipcMain.handle("get-product-by-barcode", async (_, { barcode, branchId }: { barcode: string; branchId: string }) => {
+  try {
+    const effectiveBranchId = branchId || String(store.get("branchId") || "");
+    const drug = await prisma.globalDrug.findFirst({
+      where: { barcode: barcode.trim(), isActive: true },
+      include: {
+        inventory: {
+          where: effectiveBranchId ? { branchId: effectiveBranchId } : {},
+          include: {
+            batches: { where: { quantity: { gt: 0 } }, orderBy: { expiryDate: "asc" } },
+          },
+        },
+      },
+    });
+    if (!drug) return null;
+    const totalStock = drug.inventory.reduce((acc: number, inv: any) => acc + inv.quantity, 0);
+    const nearestBatch = drug.inventory
+      .flatMap((inv: any) => inv.batches)
+      .sort((a: any, b: any) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime())[0];
+    return {
+      id: drug.id,
+      name: drug.tradeName,
+      scientificName: drug.scientificName || "",
+      origin: drug.origin || "",
+      price: drug.price,
+      costPrice: drug.inventory[0]?.costPrice || 0,
+      barcode: drug.barcode,
+      stock: totalStock,
+      minStock: drug.inventory[0]?.minStock ?? 1,
+      nearestExpiry: nearestBatch?.expiryDate || null,
+      isQuickSale: drug.isQuickSale ?? false,
+    };
+  } catch (error) {
+    console.error("Error in get-product-by-barcode:", error);
+    return null;
   }
 });
 
@@ -1724,10 +1861,10 @@ ipcMain.handle("get-quick-sale-products", async (_, { branchId }: { branchId: st
     });
 
     return drugs
-      .map((p) => {
+      .map((p: any) => {
         const inv = p.inventory[0];
-        const stock = inv ? inv.batches.reduce((s, b) => s + b.quantity, 0) : 0;
-        const totalSold = p.saleItems.reduce((s, si) => s + si.quantity, 0);
+        const stock = inv ? inv.batches.reduce((s: number, b: any) => s + b.quantity, 0) : 0;
+        const totalSold = p.saleItems.reduce((s: number, si: any) => s + si.quantity, 0);
         return {
           id: p.id,
           name: p.tradeName,
@@ -1737,7 +1874,7 @@ ipcMain.handle("get-quick-sale-products", async (_, { branchId }: { branchId: st
           totalSold,
         };
       })
-      .sort((a, b) => b.totalSold - a.totalSold);
+      .sort((a: any, b: any) => b.totalSold - a.totalSold);
   } catch (error: any) {
     console.error("get-quick-sale-products failed:", error);
     return [];
@@ -1978,6 +2115,7 @@ ipcMain.handle("create-global-drug-local", async (_, data) => {
         branchId,
         quantity: parsedQuantity,
         expiryDate: data.expiryDate,
+        supplierId: data.supplierId ?? null,
       });
       void processPendingSyncActions();
     }
@@ -2247,7 +2385,18 @@ ipcMain.handle("get-settings", async () => {
   }
 });
 
-// ===== IPC Handlers ظ„ظ„ظ…ط±ط¶ظ‰ =====
+ipcMain.handle("get-pos-settings", () => {
+  return { showReceiptAfterSale: store.get("showReceiptAfterSale") };
+});
+
+ipcMain.handle("set-pos-settings", (_event, settings: { showReceiptAfterSale?: boolean }) => {
+  if (typeof settings.showReceiptAfterSale === "boolean") {
+    store.set("showReceiptAfterSale", settings.showReceiptAfterSale);
+  }
+  return { success: true };
+});
+
+// ===== IPC Handlers للمرضى =====
 
 ipcMain.handle(
   "get-patients",
@@ -2328,12 +2477,12 @@ ipcMain.handle("create-patient", async (_event, data) => {
     return {
       success: false,
       error:
-        "ظپط´ظ„ ط¥ظ†ط´ط§ط، ظ…ظ„ظپ ط§ظ„ظ…ط±ظٹط¶ (ظ‚ط¯ ظٹظƒظˆظ† ط±ظ‚ظ… ط§ظ„ظ‡ط§طھظپ ظ…ظƒط±ط±)",
+        "فشل إنشاء ملف المريض (قد يكون رقم الهاتف مكرر)",
     };
   }
 });
 
-// ===== ظ†ظ‡ط§ظٹط© IPC ط§ظ„ظ…ط±ط¶ظ‰ =====
+// ===== نهاية IPC المرضى =====
 
 ipcMain.handle(
   "process-sale",
@@ -2347,10 +2496,11 @@ ipcMain.handle(
       discount,
       pointsRedeemed,
       paymentMethod,
+      hasPriceOverride,
     },
   ) => {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx: any) => {
         const validUser = userId
           ? await tx.user.findUnique({ where: { id: userId } })
           : null;
@@ -2358,10 +2508,14 @@ ipcMain.handle(
           ? await tx.patient.findUnique({ where: { id: patientId } })
           : null;
 
+        // Resolve the branch this sale belongs to (user's branch → store fallback)
+        const saleBranchId: string =
+          validUser?.branchId || String(store.get("branchId") || "");
+
         // For credit sales, patient is required
         const isCredit = paymentMethod === "CREDIT";
         if (isCredit && !validPatient) {
-          throw new Error("ظٹط¬ط¨ طھط­ط¯ظٹط¯ ط¹ظ…ظٹظ„ ظ„ظ„ط¨ظٹط¹ ط¨ط§ظ„ط¢ط¬ظ„");
+          throw new Error("يجب تحديد عميل للبيع بالآجل");
         }
 
         const incomingItems: any[] = Array.isArray(items) ? items : [];
@@ -2394,8 +2548,13 @@ ipcMain.handle(
           let itemTotalCost = 0;
           let remainingToDeduct = item.quantity;
 
+          // Always scope inventory lookup to the user's branch to avoid
+          // picking up stale seed records from a different branch.
+          const inventoryWhere: any = { drugId: String(item.id) };
+          if (saleBranchId) inventoryWhere.branchId = saleBranchId;
+
           const inventory = await tx.inventory.findFirst({
-            where: { drugId: String(item.id) },
+            where: inventoryWhere,
             include: {
               batches: {
                 orderBy: { expiryDate: "asc" },
@@ -2405,11 +2564,15 @@ ipcMain.handle(
           });
 
           if (inventory) {
-            // Validate sufficient stock before deducting
-            const totalAvailable = inventory.batches.reduce(
+            // Use inventory.quantity as the authoritative stock count.
+            // Batch totals may lag behind (e.g. after a cloud sync that updates
+            // inventory.quantity but hasn't fully synced individual batches yet).
+            const batchTotal = inventory.batches.reduce(
               (sum: number, b: any) => sum + b.quantity,
               0,
             );
+            const totalAvailable = Math.max(inventory.quantity, batchTotal);
+
             if (item.quantity > totalAvailable) {
               throw new Error(
                 `الكمية المطلوبة (${item.quantity}) تتجاوز المخزون المتوفر (${totalAvailable}) للدواء`,
@@ -2439,9 +2602,9 @@ ipcMain.handle(
               }
             }
 
-            // Fallback cost if batches insufficient
-            if (remainingToDeduct > 0 && inventory.costPrice) {
-              itemTotalCost += remainingToDeduct * inventory.costPrice;
+            // Fallback cost for quantity not covered by batches
+            if (remainingToDeduct > 0) {
+              itemTotalCost += remainingToDeduct * (inventory.costPrice || 0);
             }
           }
 
@@ -2452,6 +2615,7 @@ ipcMain.handle(
             drugId: String(item.id),
             quantity: item.quantity,
             price: Number(item.price),
+            ...(item.originalPrice !== undefined && { originalPrice: Number(item.originalPrice) }),
             cost: unitCost,
           });
         }
@@ -2464,6 +2628,7 @@ ipcMain.handle(
             total,
             invoiceNumber,
             discount: discount || 0,
+            hasPriceOverride: hasPriceOverride === true,
             userId: validUser?.id ?? null,
             patientId: validPatient?.id ?? null,
             synced: false,
@@ -2538,7 +2703,7 @@ ipcMain.handle(
                   type: "REDEEM",
                   points: pointsRedeemed,
                   saleId: sale.id,
-                  description: `ط§ط³طھط¨ط¯ط§ظ„ ${pointsRedeemed} ظ†ظ‚ط·ط© ظ…ظ‚ط§ط¨ظ„ ط®طµظ…`,
+                  description: `استبدال ${pointsRedeemed} نقطة مقابل خصم`,
                 },
               });
             } else {
@@ -2590,7 +2755,7 @@ ipcMain.handle(
                 type: "EARN",
                 points: pointsEarned,
                 saleId: sale.id,
-                description: "ظ†ظ‚ط§ط· ظ…ظƒطھط³ط¨ط© ظ…ظ† ط¹ظ…ظ„ظٹط© ط´ط±ط§ط،",
+                description: "نقاط مكتسبة من عملية شراء",
               },
             });
           }
@@ -2607,9 +2772,11 @@ ipcMain.handle(
       }
 
       return result;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sale processing error:", error);
-      return { success: false, error: "Transaction failed" };
+      // Return the actual error message so it can be displayed and debugged
+      const errorMsg = error?.message || error?.toString() || "Transaction failed";
+      return { success: false, error: errorMsg };
     }
   },
 );
@@ -2682,7 +2849,7 @@ ipcMain.handle(
         return {
           success: false,
           error:
-            result.err.msg || "ظپط´ظ„ ظپظٹ ط¥ظ†ط´ط§ط، ظ…ط¹ط§ظ…ظ„ط© Zain Cash",
+            result.err.msg || "فشل في إنشاء معاملة Zain Cash",
         };
       }
 
@@ -2734,35 +2901,35 @@ ipcMain.handle("open-external-url", async (_event, url) => {
   return true;
 });
 
-// ===== ظ†ظ‡ط§ظٹط© IPC Zain Cash =====
+// ===== نهاية IPC Zain Cash =====
 
-// ===== IPC Handlers ظ„ظ„ظ†ط³ط® ط§ظ„ط§ط­طھظٹط§ط·ظٹ =====
+// ===== IPC Handlers للنسخ الاحتياطي =====
 
-// ط¥ظ†ط´ط§ط، ظ†ط³ط®ط© ط§ط­طھظٹط§ط·ظٹط©
+// إنشاء نسخة احتياطية
 ipcMain.handle("create-backup", async () => {
   const result = await createBackup();
   if (result.success && result.path) {
     return {
       success: true,
-      message: "طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ظ†ط³ط®ط© ط§ظ„ط§ط­طھظٹط§ط·ظٹط© ط¨ظ†ط¬ط§ط­",
+      message: "تم إنشاء النسخة الاحتياطية بنجاح",
       path: result.path,
     };
   }
   return { success: false, error: result.error };
 });
 
-// ط§ظ„ط­طµظˆظ„ ط¹ظ„ظ‰ ظ‚ط§ط¦ظ…ط© ط§ظ„ظ†ط³ط® ط§ظ„ط§ط­طھظٹط§ط·ظٹط©
+// الحصول على قائمة النسخ الاحتياطية
 ipcMain.handle("get-backups", async () => {
   return getBackupList();
 });
 
-// ط§ط³طھط¹ط§ط¯ط© ظ†ط³ط®ط© ط§ط­طھظٹط§ط·ظٹط©
+// استعادة نسخة احتياطية
 ipcMain.handle("restore-backup", async (_event, backupPath) => {
   const result = await restoreBackup(backupPath);
   return result;
 });
 
-// ظپطھط­ ظ…ط¬ظ„ط¯ ط§ظ„ظ†ط³ط® ط§ظ„ط§ط­طھظٹط§ط·ظٹط©
+// فتح مجلد النسخ الاحتياطية
 ipcMain.handle("open-backup-folder", async () => {
   const backups = getBackupList();
   if (backups.length > 0) {
@@ -2882,14 +3049,14 @@ ipcMain.handle(
         };
       }
 
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx: any) => {
         // 1. Create Payment
         const payment = await tx.debtPayment.create({
           data: {
             saleId: lastSale.id, // Linking to last sale for reference
             amount: amount,
             method: "CASH",
-            note: note || "طھط³ط¯ظٹط¯ ط¯ظپط¹ط©",
+            note: note || "تسديد دفعة",
             createdAt: new Date(),
           },
         });
@@ -3099,6 +3266,43 @@ ipcMain.handle("search-sale", async (_event, query) => {
   }
 });
 
+ipcMain.handle("search-sales-by-drug", async (_event, { query, branchId }) => {
+  try {
+    const normalized = String(query).trim();
+    if (!normalized) return { success: false, error: "يرجى إدخال اسم الدواء أو الباركود" };
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const include = {
+      items: { include: { drug: true } },
+      patient: true,
+      payment: true,
+      returns: { include: { items: true } },
+    };
+    const branchWhere: any = branchId ? { user: { branchId } } : {};
+    const sales = await prisma.sale.findMany({
+      where: {
+        ...branchWhere,
+        createdAt: { gte: thirtyDaysAgo },
+        items: {
+          some: {
+            drug: {
+              OR: [
+                { tradeName: { contains: normalized } },
+                { barcode: { contains: normalized } },
+              ],
+            },
+          },
+        },
+      },
+      include,
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    return { success: true, sales };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle(
   "return-sale",
   async (_event, { saleId, items, notes, safeId, branchId }) => {
@@ -3109,7 +3313,7 @@ ipcMain.handle(
       });
       if (!sale) throw new Error("Sale not found");
 
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx: any) => {
         const returnAmount = items.reduce(
           (sum: number, item: any) => sum + item.quantity * item.price,
           0,

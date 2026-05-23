@@ -113,6 +113,7 @@ model Sale {
   items               SaleItem[]
   synced              Boolean              @default(false)
   discount            Float                @default(0)
+  hasPriceOverride    Boolean              @default(false)
   userId              String?
   user                User?                @relation(fields: [userId], references: [id])
   patientId           String?
@@ -144,14 +145,15 @@ model Patient {
 }
 
 model SaleItem {
-  id       String     @id @default(uuid())
-  saleId   String
-  sale     Sale       @relation(fields: [saleId], references: [id])
-  drugId   String
-  quantity Int
-  price    Float
-  cost     Float      @default(0)
-  drug     GlobalDrug @relation(fields: [drugId], references: [id])
+  id            String     @id @default(uuid())
+  saleId        String
+  sale          Sale       @relation(fields: [saleId], references: [id])
+  drugId        String
+  quantity      Int
+  price         Float
+  originalPrice Float?     // Set only when price was manually overridden for this sale
+  cost          Float      @default(0)
+  drug          GlobalDrug @relation(fields: [drugId], references: [id])
 }
 
 model SaleReturn {

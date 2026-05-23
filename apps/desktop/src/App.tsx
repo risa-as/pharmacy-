@@ -54,8 +54,30 @@ type LicenseStatus = 'checking' | 'valid' | 'invalid' | 'no-key';
 
 function App() {
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [sessionLoading, setSessionLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState<Page>('dashboard');
     const [isDark, setIsDark] = useState(false);
+
+    // ==================== Electron Focus Fix ====================
+    // Fallback: if keyboard events still land on <body> (Chromium lost internal
+    // focus without a detectable DOM event), trigger the OS focus cycle via IPC.
+    useEffect(() => {
+        const handleKeyDown = () => {
+            if (document.activeElement === document.body || document.activeElement === document.documentElement) {
+                window.ipcRenderer?.send('refocus-window');
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, []);
+
+    // ==================== Session Restore ====================
+    useEffect(() => {
+        window.ipcRenderer?.invoke('get-session-user').then((res: any) => {
+            if (res?.success && res.user) setCurrentUser(res.user);
+        }).catch(() => {}).finally(() => setSessionLoading(false));
+    }, []);
+    // ==================== End Session Restore ====================
 
     // ==================== License Guard State ====================
     const [licenseStatus, setLicenseStatus] = useState<LicenseStatus>('checking');
@@ -170,11 +192,11 @@ function App() {
     }, []);
 
     // ==================== License Guard Render ====================
-    if (licenseStatus === 'checking') {
+    if (licenseStatus === 'checking' || sessionLoading) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 gap-4">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                <p className="text-zinc-500 text-sm">جاري التحقق من الترخيص...</p>
+                <p className="text-zinc-500 text-sm">{sessionLoading ? 'جاري استعادة الجلسة...' : 'جاري التحقق من الترخيص...'}</p>
             </div>
         );
     }
@@ -251,7 +273,7 @@ function App() {
 
                 {/* Logout */}
                 <button
-                    onClick={() => setCurrentUser(null)}
+                    onClick={() => { window.ipcRenderer?.invoke('logout').catch(() => {}); setCurrentUser(null); }}
                     className="relative group p-2.5 rounded-xl text-zinc-600 hover:bg-red-500/15 hover:text-red-400 transition-all duration-200"
                 >
                     <LogOut className="w-5 h-5" />

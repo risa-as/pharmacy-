@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Database, FolderOpen, Download, RotateCcw, Check, AlertCircle, Shield, HardDrive, Clock, Info, RefreshCcw, Loader2, ChevronDown } from "lucide-react";
+import { Database, FolderOpen, Download, RotateCcw, Check, AlertCircle, Shield, HardDrive, Clock, Info, RefreshCcw, Loader2, ChevronDown, ShoppingCart } from "lucide-react";
 import SyncFailuresTab from "./SyncFailuresTab";
 
 interface Backup {
@@ -16,7 +16,7 @@ const formatSize = (bytes: number) => {
 };
 
 const formatDate = (date: Date) => {
-    return new Date(date).toLocaleString('ar-IQ', {
+    return new Date(date).toLocaleString('ar-IQ-u-nu-latn', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -45,8 +45,10 @@ export default function SettingsPage() {
     const [showConfirmRestore, setShowConfirmRestore] = useState<Backup | null>(null);
     const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [showAll, setShowAll] = useState(false);
-    const [activeTab, setActiveTab] = useState<'backups' | 'failures'>('backups');
+    const [activeTab, setActiveTab] = useState<'backups' | 'failures' | 'pos'>('backups');
     const [failureCount, setFailureCount] = useState(0);
+    const [showReceiptAfterSale, setShowReceiptAfterSale] = useState(true);
+    const [savingPOS, setSavingPOS] = useState(false);
 
     const fetchBackups = async () => {
         if (window.ipcRenderer) {
@@ -63,6 +65,12 @@ export default function SettingsPage() {
     };
 
     useEffect(() => { fetchBackups(); }, []);
+
+    useEffect(() => {
+        window.ipcRenderer?.invoke('get-pos-settings').then((s: any) => {
+            if (typeof s?.showReceiptAfterSale === 'boolean') setShowReceiptAfterSale(s.showReceiptAfterSale);
+        }).catch(console.error);
+    }, []);
 
     useEffect(() => {
         if (!toast) return;
@@ -130,6 +138,20 @@ export default function SettingsPage() {
         }
     };
 
+    const handleToggleReceipt = async (value: boolean) => {
+        setSavingPOS(true);
+        setShowReceiptAfterSale(value);
+        try {
+            await window.ipcRenderer?.invoke('set-pos-settings', { showReceiptAfterSale: value });
+            setToast({ type: 'success', text: value ? 'سيتم عرض الفاتورة بعد كل بيعة ✓' : 'تم إيقاف عرض الفاتورة ✓' });
+        } catch {
+            setToast({ type: 'error', text: 'فشل حفظ الإعداد' });
+            setShowReceiptAfterSale(!value);
+        } finally {
+            setSavingPOS(false);
+        }
+    };
+
     const totalSize = backups.reduce((a, b) => a + (b.size || 0), 0);
     const displayedBackups = showAll ? backups : backups.slice(0, 5);
 
@@ -155,6 +177,13 @@ export default function SettingsPage() {
                             قاعدة البيانات
                         </button>
                         <button
+                            onClick={() => setActiveTab('pos')}
+                            className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-1.5 transition-all ${activeTab === 'pos' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            نقطة البيع
+                        </button>
+                        <button
                             onClick={() => setActiveTab('failures')}
                             className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-1.5 transition-all ${activeTab === 'failures' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                         >
@@ -167,7 +196,7 @@ export default function SettingsPage() {
                     <button
                         onClick={activeTab === 'backups' ? fetchBackups : undefined}
                         disabled={loading && activeTab === 'backups'}
-                        className={`flex items-center gap-2 text-muted-foreground hover:text-primary px-3 py-2 rounded-xl hover:bg-primary/10 transition-all text-sm font-bold ${activeTab === 'failures' ? 'invisible' : ''}`}
+                        className={`flex items-center gap-2 text-muted-foreground hover:text-primary px-3 py-2 rounded-xl hover:bg-primary/10 transition-all text-sm font-bold ${activeTab !== 'backups' ? 'invisible' : ''}`}
                     >
                         <RefreshCcw className={`w-4 h-4 ${loading && activeTab === 'backups' ? 'animate-spin' : ''}`} />
                         تحديث
@@ -347,6 +376,29 @@ export default function SettingsPage() {
                                     </li>
                                 </ul>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            ) : activeTab === 'pos' ? (
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                    <div className="bg-card rounded-xl border border-border p-5">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <ShoppingCart className="w-5 h-5 text-primary" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-foreground">عرض الفاتورة بعد البيع</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">عند التعطيل لن تظهر الفاتورة تلقائياً بعد إتمام البيعة</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => handleToggleReceipt(!showReceiptAfterSale)}
+                                disabled={savingPOS}
+                                className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${showReceiptAfterSale ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                            >
+                                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${showReceiptAfterSale ? 'translate-x-0.5' : 'translate-x-6'}`} />
+                            </button>
                         </div>
                     </div>
                 </div>

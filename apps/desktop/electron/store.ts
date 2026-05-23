@@ -7,6 +7,10 @@ interface StoreSchema {
     organizationName: string;
     /** ISO timestamp of last successful online check-in (for clock-rollback detection). */
     lastSeenAt: string;
+    /** ID of the last successfully logged-in user — used to restore session on app restart. */
+    loggedInUserId: string;
+    /** Whether to show the receipt/invoice preview after completing a sale. Default: true. */
+    showReceiptAfterSale: boolean;
     pendingSyncActions: Array<{
         id: string;
         type: 'create-drug' | 'add-inventory' | 'delete-inventory';
@@ -24,6 +28,8 @@ const store = new Store<StoreSchema>({
         organizationId: "",
         organizationName: "",
         lastSeenAt: "",
+        loggedInUserId: "",
+        showReceiptAfterSale: true,
         pendingSyncActions: []
     }
 });

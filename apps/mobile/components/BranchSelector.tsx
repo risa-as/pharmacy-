@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
     View, Text, TouchableOpacity, Modal, FlatList,
     ActivityIndicator, ScrollView,
@@ -76,7 +76,7 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
                                     gap: 6,
                                     paddingHorizontal: 16,
                                     paddingVertical: 9,
-                                    borderRadius: 24,
+                                    borderRadius: 5,
                                     backgroundColor: isSelected ? C.primary : C.card,
                                     borderWidth: 1.5,
                                     borderColor: isSelected ? C.primary : C.border,
@@ -117,7 +117,7 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
                     gap: 8,
                     paddingHorizontal: 16,
                     paddingVertical: 10,
-                    borderRadius: 24,
+                    borderRadius: 5,
                     backgroundColor: selectedBranchId ? C.primaryMuted : C.card,
                     borderWidth: 1.5,
                     borderColor: selectedBranchId ? C.primary : C.border,
@@ -165,7 +165,7 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
                         <Text style={{ fontSize: 18, fontWeight: '800', color: C.foreground }}>اختر الفرع</Text>
                         <TouchableOpacity
                             onPress={() => setModalVisible(false)}
-                            style={{ backgroundColor: C.border, borderRadius: 20, padding: 6 }}
+                            style={{ backgroundColor: C.border, borderRadius: 5, padding: 6 }}
                         >
                             <Ionicons name="close" size={18} color={C.mutedForeground} />
                         </TouchableOpacity>

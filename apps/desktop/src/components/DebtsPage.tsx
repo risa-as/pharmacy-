@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, ArrowRight, BookOpen, Banknote, User, CheckCircle, AlertCircle, Printer, X, RefreshCw, CheckCircle2, Cloud, CloudOff } from 'lucide-react';
 
 interface Debtor {
@@ -51,6 +51,8 @@ export default function DebtsPage() {
     const [loading, setLoading] = useState(false);
     const [details, setDetails] = useState<DebtorDetails | null>(null);
 
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
     // Repayment Modal State
     const [showRepayModal, setShowRepayModal] = useState(false);
     const [repayAmount, setRepayAmount] = useState<string>('');
@@ -61,6 +63,17 @@ export default function DebtsPage() {
     const [syncHealth, setSyncHealth] = useState<SyncHealth>({ pendingCount: 0, failedCount: 0, inProgress: false });
     const [syncing, setSyncing] = useState(false);
     const [syncToast, setSyncToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+    // Refocus search input after repay modal closes (OS blur/focus cycle)
+    const prevRepayModal = useRef(false);
+    useEffect(() => {
+        if (prevRepayModal.current && !showRepayModal) {
+            window.ipcRenderer?.send('refocus-window');
+            const t = setTimeout(() => searchInputRef.current?.focus(), 200);
+            return () => clearTimeout(t);
+        }
+        prevRepayModal.current = showRepayModal;
+    }, [showRepayModal]);
 
     // Listen to sync health updates
     useEffect(() => {
@@ -197,7 +210,7 @@ export default function DebtsPage() {
     };
 
     const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('ar-IQ').format(val) + ' د.ع';
+        return new Intl.NumberFormat('en-US').format(val) + ' د.ع';
     };
 
     if (view === 'detail' && details) {
@@ -260,7 +273,7 @@ export default function DebtsPage() {
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">آخر تحديث:</span>
                             <span className="font-medium text-foreground" dir="ltr">
-                                {new Date(details.patient.updatedAt).toLocaleDateString('ar-IQ')}
+                                {new Date(details.patient.updatedAt).toLocaleDateString('ar-IQ-u-nu-latn')}
                             </span>
                         </div>
                     </div>
@@ -304,7 +317,7 @@ export default function DebtsPage() {
                                             {formatCurrency(sale.total)}
                                         </td>
                                         <td className="p-4 text-sm text-muted-foreground" dir="ltr">
-                                            {new Date(sale.createdAt).toLocaleDateString('ar-IQ')}
+                                            {new Date(sale.createdAt).toLocaleDateString('ar-IQ-u-nu-latn')}
                                         </td>
                                         <td className="p-4 text-sm text-muted-foreground truncate max-w-xs">
                                             {sale.items.map(i => `${i.drug?.tradeName || 'Unknown'} (${i.quantity})`).join(', ')}
@@ -324,7 +337,7 @@ export default function DebtsPage() {
                                             - {formatCurrency(pay.amount)}
                                         </td>
                                         <td className="p-4 text-sm text-muted-foreground" dir="ltr">
-                                            {new Date(pay.createdAt).toLocaleDateString('ar-IQ')}
+                                            {new Date(pay.createdAt).toLocaleDateString('ar-IQ-u-nu-latn')}
                                         </td>
                                         <td className="p-4 text-sm text-muted-foreground">
                                             {pay.note || "تسديد"}
@@ -441,6 +454,7 @@ export default function DebtsPage() {
                 <div className="relative flex-1">
                     <Search className="absolute right-4 top-3.5 w-5 h-5 text-muted-foreground" />
                     <input
+                        ref={searchInputRef}
                         type="text"
                         className="w-full pr-12 pl-4 py-3 rounded-xl border border-border bg-card focus:ring-2 focus:ring-primary outline-none shadow-sm transition-all text-foreground placeholder:text-muted-foreground"
                         placeholder="بحث عن عميل باسم أو رقم هاتف..."
@@ -496,7 +510,7 @@ export default function DebtsPage() {
                                             </span>
                                         </td>
                                         <td className="p-4 text-muted-foreground text-sm">
-                                            {new Date(debtor.updatedAt).toLocaleDateString('ar-IQ')}
+                                            {new Date(debtor.updatedAt).toLocaleDateString('ar-IQ-u-nu-latn')}
                                         </td>
                                         <td className="p-4 text-center">
                                             <button

@@ -4,6 +4,7 @@ interface InvoiceItem {
     name: string;
     quantity: number;
     price: number;
+    originalPrice?: number;
 }
 
 interface InvoiceData {
@@ -17,12 +18,7 @@ interface InvoiceData {
     pointsEarned?: number;
 }
 
-// تحويل الأرقام إلى العربية المشرقية
-const toArabicNumerals = (str: string | number) => {
-    return str.toString().replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[parseInt(d)]);
-};
-
-// تنسيق الدينار العراقي بالأرقام العربية
+// تنسيق الدينار العراقي بالأرقام الإنجليزية
 const formatIQD = (amount: number) => {
     const formatted = new Intl.NumberFormat('en-US', {
         style: 'decimal',
@@ -30,7 +26,7 @@ const formatIQD = (amount: number) => {
         maximumFractionDigits: 0
     }).format(amount);
 
-    return toArabicNumerals(formatted) + ' د.ع';
+    return formatted + ' د.ع';
 };
 
 const InvoicePrint = forwardRef<HTMLDivElement, InvoiceData>(
@@ -79,11 +75,11 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoiceData>(
                     </div>
                     <div className="flex justify-between">
                         <span>التاريخ:</span>
-                        <span>{toArabicNumerals(date.toLocaleDateString('en-GB'))}</span>
+                        <span>{date.toLocaleDateString('en-GB')}</span>
                     </div>
                     <div className="flex justify-between">
                         <span>الوقت:</span>
-                        <span>{toArabicNumerals(date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).replace('AM', 'ص').replace('PM', 'م'))}</span>
+                        <span>{date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).replace('AM', 'ص').replace('PM', 'م')}</span>
                     </div>
                 </div>
 
@@ -99,11 +95,21 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoiceData>(
                 <div className="mb-4">
                     {items.map((item, index) => (
                         <div key={index} className="grid grid-cols-12 gap-1 text-[10px] py-1 border-b border-gray-200 items-start">
-                            <div className="col-span-5 break-words font-bold leading-tight">{item.name}</div>
-                            <div className="col-span-2 text-center pt-0.5">{toArabicNumerals(item.quantity)}</div>
-                            <div className="col-span-2 text-center pt-0.5">{toArabicNumerals(item.price.toLocaleString('en-US'))}</div>
+                            <div className="col-span-5 break-words font-bold leading-tight">
+                                {item.name}
+                                {item.originalPrice !== undefined && (
+                                    <span className="mr-1 px-0.5 rounded text-[8px] font-black bg-amber-100 text-amber-700 border border-amber-300">✏ سعر معدّل</span>
+                                )}
+                            </div>
+                            <div className="col-span-2 text-center pt-0.5">{item.quantity}</div>
+                            <div className="col-span-2 text-center pt-0.5">
+                                {item.originalPrice !== undefined && (
+                                    <span className="line-through text-gray-400 ml-1">{item.originalPrice.toLocaleString('en-US')}</span>
+                                )}
+                                {item.price.toLocaleString('en-US')}
+                            </div>
                             <div className="col-span-3 text-left font-bold pt-0.5">
-                                {toArabicNumerals((item.quantity * item.price).toLocaleString('en-US'))}
+                                {(item.quantity * item.price).toLocaleString('en-US')}
                             </div>
                         </div>
                     ))}
@@ -113,11 +119,11 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoiceData>(
                 <div className="border-t-2 border-dashed border-gray-400 pt-2 space-y-1">
                     <div className="flex justify-between text-xs font-semibold">
                         <span>عدد الأصناف:</span>
-                        <span>{toArabicNumerals(items.length)}</span>
+                        <span>{items.length}</span>
                     </div>
                     <div className="flex justify-between text-xs font-semibold">
                         <span>إجمالي العناصر:</span>
-                        <span>{toArabicNumerals(items.reduce((acc, item) => acc + item.quantity, 0))}</span>
+                        <span>{items.reduce((acc, item) => acc + item.quantity, 0)}</span>
                     </div>
                     <div className="text-xl font-bold text-center border-t border-dotted border-gray-400 mt-2 pt-2">
                         {formatIQD(total)}
@@ -127,7 +133,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoiceData>(
                 {settings?.loyaltyEnabled && (pointsEarned ? pointsEarned : 0) > 0 && (
                     <div className="flex justify-between text-xs font-bold mt-1 text-gray-600 border-t border-dotted border-gray-400 pt-1">
                         <span>نقاط مكتسبة:</span>
-                        <span>{toArabicNumerals(pointsEarned || 0)} نقطة</span>
+                        <span>{pointsEarned || 0} نقطة</span>
                     </div>
                 )}
 

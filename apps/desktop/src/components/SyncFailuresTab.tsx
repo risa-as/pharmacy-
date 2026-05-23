@@ -134,7 +134,7 @@ export default function SyncFailuresTab() {
                                             {failure.entityType}
                                         </span>
                                         <span className="text-xs text-gray-400 font-medium">
-                                            {new Date(failure.createdAt).toLocaleString('ar-IQ')}
+                                            {new Date(failure.createdAt).toLocaleString('ar-IQ-u-nu-latn')}
                                         </span>
                                     </div>
                                     <p className="text-sm font-bold text-gray-800 break-words line-clamp-2">

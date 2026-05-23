@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, FlatList, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -120,7 +120,7 @@ export default function ScanPrescriptionScreen() {
                 <View style={{
                     margin: 16, padding: 16,
                     backgroundColor: C.card,
-                    borderRadius: 16, borderWidth: 1, borderColor: C.border,
+                    borderRadius: 5, borderWidth: 1, borderColor: C.border,
                 }}>
                     <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <Ionicons name="document-text" size={20} color={C.primary} />
@@ -186,7 +186,7 @@ export default function ScanPrescriptionScreen() {
     return (
         <View style={{ flex: 1 }}>
             <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 10, flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16 }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 20 }}>
+                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 5 }}>
                     <Ionicons name="close" size={28} color="#fff" />
                 </TouchableOpacity>
                 <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginRight: 16 }}>تصوير الوصفة (AI)</Text>
@@ -197,25 +197,25 @@ export default function ScanPrescriptionScreen() {
             <View style={StyleSheet.absoluteFillObject}>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                     <View style={{ width: '80%', height: '60%', borderWidth: 2, borderColor: '#3b82f6', borderRadius: 12, backgroundColor: 'rgba(59,130,246,0.1)' }} />
-                    <Text style={{ color: '#fff', marginTop: 24, fontSize: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}>
+                    <Text style={{ color: '#fff', marginTop: 24, fontSize: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 5 }}>
                         اجعل الوصفة داخل الإطار وتأكد من وضوح الكلمات
                     </Text>
                 </View>
             </View>
 
             <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 30 }}>
-                <TouchableOpacity style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={pickImage} disabled={loading}>
+                <TouchableOpacity style={{ width: 50, height: 50, borderRadius: 5, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={pickImage} disabled={loading}>
                     <Ionicons name="images" size={28} color="#fff" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: '#fff', padding: 4, justifyContent: 'center', alignItems: 'center', opacity: loading ? 0.8 : 1 }}
+                    style={{ width: 70, height: 70, borderRadius: 5, backgroundColor: '#fff', padding: 4, justifyContent: 'center', alignItems: 'center', opacity: loading ? 0.8 : 1 }}
                     onPress={takePicture}
                     disabled={loading}
                 >
                     {loading
                         ? <ActivityIndicator color={C.primary} size="large" />
-                        : <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.primary }} />
+                        : <View style={{ width: 60, height: 60, borderRadius: 5, backgroundColor: C.primary }} />
                     }
                 </TouchableOpacity>
 

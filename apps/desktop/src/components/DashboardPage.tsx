@@ -81,7 +81,7 @@ export default function DashboardPage({ user }: { user: any }) {
                 <div>
                     <h1 className="text-2xl font-black text-foreground">{greeting()}، {user.name} 👋</h1>
                     <p className="text-muted-foreground text-sm mt-1">
-                        {new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        {new Date().toLocaleDateString('ar-IQ-u-nu-latn', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                     </p>
                 </div>
                 <button
@@ -179,18 +179,20 @@ export default function DashboardPage({ user }: { user: any }) {
                                                 {formatCurrency(sale.total || 0)}
                                             </p>
                                             <p className="text-[10px] text-muted-foreground">
-                                                {sale.createdAt ? new Date(sale.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                {sale.createdAt ? new Date(sale.createdAt).toLocaleTimeString('ar-IQ-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) : ''}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex flex-col gap-1 items-end">
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sale.paymentMethod === 'CREDIT'
                                             ? 'bg-warning/10 text-warning'
-                                            : sale.paymentMethod === 'ZAIN_CASH'
-                                                ? 'bg-purple-50 text-purple-600'
-                                                : 'bg-success/10 text-success'
+                                            : sale.paymentMethod === 'CARD'
+                                                ? 'bg-primary/10 text-primary'
+                                                : sale.paymentMethod === 'ZAIN_CASH'
+                                                    ? 'bg-purple-50 text-purple-600'
+                                                    : 'bg-success/10 text-success'
                                             }`}>
-                                            {sale.paymentMethod === 'CREDIT' ? 'آجل' : sale.paymentMethod === 'ZAIN_CASH' ? 'زين كاش' : 'نقدي'}
+                                            {sale.paymentMethod === 'CREDIT' ? 'آجل' : sale.paymentMethod === 'CARD' ? 'بطاقة' : sale.paymentMethod === 'ZAIN_CASH' ? 'زين كاش' : 'نقدي'}
                                         </span>
                                         {sale.returnsTotal > 0 && (
                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sale.returnsTotal >= sale.total ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'}`}>

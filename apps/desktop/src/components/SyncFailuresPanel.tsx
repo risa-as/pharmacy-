@@ -130,7 +130,7 @@ export default function SyncFailuresPanel({ onClose }: { onClose: () => void }) 
                         const isBusy = busy.has(f.id);
                         const label  = TYPE_LABELS[f.entityType] ?? f.entityType;
                         const err    = simplifyError(f.errorMessage);
-                        const date   = new Date(f.createdAt).toLocaleString('ar-SA', {
+                        const date   = new Date(f.createdAt).toLocaleString('ar-IQ-u-nu-latn', {
                             year: 'numeric', month: 'short', day: 'numeric',
                             hour: '2-digit', minute: '2-digit',
                         });

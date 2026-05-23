@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Save, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, ChevronDown, Zap } from "lucide-react";
+import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, ChevronDown, Zap } from "lucide-react";
 import SyncHealthDashboard from "./SyncHealthDashboard";
 import SyncFailuresPanel from "./SyncFailuresPanel";
 
@@ -70,6 +70,8 @@ export default function InventoryPage({ user }: { user: any }) {
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDir, setSortDir] = useState<SortDir>('asc');
     const [stockFilter, setStockFilter] = useState<StockFilter>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const PAGE_SIZE = 200;
     const barcodeInputRef = useRef<HTMLInputElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const syncingRef = useRef(false); // guard: prevent overlapping sync button clicks
@@ -147,7 +149,7 @@ export default function InventoryPage({ user }: { user: any }) {
     }, []);
 
     const formatIQD = (amount: number) => {
-        return new Intl.NumberFormat('ar-IQ', {
+        return new Intl.NumberFormat('en-US', {
             style: 'decimal',
             minimumFractionDigits: 0,
             maximumFractionDigits: 0
@@ -215,6 +217,12 @@ export default function InventoryPage({ user }: { user: any }) {
 
         return result;
     }, [items, searchTerm, stockFilter, sortField, sortDir]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+    const paginatedItems = filteredItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+    // Reset to page 1 when filters/search change
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, stockFilter, sortField, sortDir]);
 
     const toggleSort = (field: SortField) => {
         if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -357,15 +365,35 @@ export default function InventoryPage({ user }: { user: any }) {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Don't steal focus when a modal is open
+            if (showEditModal || showBatchModal || showCreateDrugModal || showAddToInventoryModal) return;
             if (e.key === "Escape") { setBarcode(""); setSearchTerm(""); }
             if (e.key === "F2") { e.preventDefault(); barcodeInputRef.current?.focus(); }
             if (e.key === "/" && !(e.target instanceof HTMLInputElement)) { e.preventDefault(); searchInputRef.current?.focus(); }
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, []);
+    }, [showEditModal, showBatchModal, showCreateDrugModal, showAddToInventoryModal]);
+
+    // Restore focus to search field when modals close (OS blur/focus cycle)
+    const prevInventoryModal = useRef(false);
+    useEffect(() => {
+        const anyOpen = showEditModal || showBatchModal || showCreateDrugModal || showAddToInventoryModal;
+        if (prevInventoryModal.current && !anyOpen) {
+            window.ipcRenderer?.send('refocus-window');
+            const t = setTimeout(() => searchInputRef.current?.focus(), 200);
+            return () => clearTimeout(t);
+        }
+        prevInventoryModal.current = anyOpen;
+    }, [showEditModal, showBatchModal, showCreateDrugModal, showAddToInventoryModal]);
 
     useEffect(() => { fetchInventory(); }, []);
+
+    // Auto-focus barcode input on page load
+    useEffect(() => {
+        const t = setTimeout(() => barcodeInputRef.current?.focus(), 100);
+        return () => clearTimeout(t);
+    }, []);
 
     useEffect(() => {
         if (!uploadToast) return;
@@ -476,6 +504,7 @@ export default function InventoryPage({ user }: { user: any }) {
             maxStock: formData.get('maxStock'),
             origin: formData.get('origin'),
             expiryDate: formData.get('expiryDate'),
+            supplierId: createDrugSupplierId || null,
         };
 
         try {
@@ -811,7 +840,10 @@ export default function InventoryPage({ user }: { user: any }) {
                     ))}
                 </div>
 
-                <span className="text-xs text-muted-foreground font-medium">{filteredItems.length} نتيجة</span>
+                <span className="text-xs text-muted-foreground font-medium">
+                    {filteredItems.length} نتيجة
+                    {totalPages > 1 && ` — صفحة ${currentPage} من ${totalPages}`}
+                </span>
             </div>
 
             {/* ======= TABLE ======= */}
@@ -868,7 +900,7 @@ export default function InventoryPage({ user }: { user: any }) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/30">
-                                {filteredItems.map((item) => {
+                                {paginatedItems.map((item) => {
                                     const stockPct = getStockPercent(item);
                                     const isOut = item.quantity <= 0;
                                     const isLow = !isOut && item.quantity < item.minStock;
@@ -1003,7 +1035,7 @@ export default function InventoryPage({ user }: { user: any }) {
                                         </tr>
                                     );
                                 })}
-                                {filteredItems.length === 0 && (
+                                {paginatedItems.length === 0 && (
                                     <tr>
                                         <td colSpan={isAdmin ? 7 : 5} className="px-6 py-16 text-center">
                                             <div className="flex flex-col items-center gap-3">
@@ -1019,6 +1051,45 @@ export default function InventoryPage({ user }: { user: any }) {
                                 )}
                             </tbody>
                         </table>
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-center gap-2 py-4 border-t border-border">
+                                <button
+                                    disabled={currentPage <= 1}
+                                    onClick={() => setCurrentPage(p => p - 1)}
+                                    className="px-3 py-1.5 rounded-lg text-sm font-bold border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    السابق
+                                </button>
+                                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                                    .reduce<(number | 'dots')[]>((acc, p, idx, arr) => {
+                                        if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('dots');
+                                        acc.push(p);
+                                        return acc;
+                                    }, [])
+                                    .map((p, i) =>
+                                        p === 'dots' ? (
+                                            <span key={`dots-${i}`} className="px-1 text-muted-foreground">…</span>
+                                        ) : (
+                                            <button
+                                                key={p}
+                                                onClick={() => setCurrentPage(p as number)}
+                                                className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${currentPage === p ? 'bg-primary text-white' : 'border border-border hover:bg-muted'}`}
+                                            >
+                                                {p}
+                                            </button>
+                                        )
+                                    )}
+                                <button
+                                    disabled={currentPage >= totalPages}
+                                    onClick={() => setCurrentPage(p => p + 1)}
+                                    className="px-3 py-1.5 rounded-lg text-sm font-bold border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    التالي
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -1115,45 +1186,19 @@ export default function InventoryPage({ user }: { user: any }) {
             {/* ======= ADD BATCH MODAL ======= */}
             {
                 showBatchModal && (
-                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-card rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-border overflow-y-auto max-h-[90vh]">
-                            <h2 className="text-xl font-bold mb-3 flex items-center gap-2">
-                                <Plus className="w-5 h-5 text-success" />
-                                إضافة دفعة جديدة
-                            </h2>
-                            <p className="text-muted-foreground text-sm mb-5">للدواء: <span className="text-primary font-black">{showBatchModal.drug?.tradeName}</span></p>
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-card rounded-xl max-w-md w-full p-6 shadow-xl border border-border overflow-y-auto max-h-[90vh]">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-lg font-bold text-foreground">إضافة دفعة جديدة</h3>
+                                <button type="button" onClick={() => setShowBatchModal(null)} className="p-2 hover:bg-muted rounded-lg">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-4">للدواء: <span className="font-bold text-foreground">{showBatchModal.drug?.tradeName}</span></p>
 
                             <form onSubmit={handleAddBatch} className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">الكمية</label>
-                                    <input type="number" placeholder="0" value={batchData.quantity || ""} onChange={(e) => setBatchData({ ...batchData, quantity: parseInt(e.target.value) || 0 })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر التكلفة (من الباكيت)</label>
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        <div>
-                                            <label className="block text-[10px] text-muted-foreground mb-1">سعر الباكيت</label>
-                                            <input type="number" min="0" step="any" value={batchPacketPrice || ""} onChange={(e) => setBatchPacketPrice(parseFloat(e.target.value) || 0)} placeholder="0" className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] text-muted-foreground mb-1">عدد الأشرطة</label>
-                                            <input type="number" min="1" step="1" value={batchStripsPerPacket || ""} onChange={(e) => setBatchStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))} placeholder="1" className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-3 py-2">
-                                        <span className="text-[10px] text-muted-foreground">التكلفة للشريط:</span>
-                                        <span className="text-xs font-bold text-primary mr-auto tabular-nums">
-                                            {batchPacketPrice > 0 ? `${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })}` : "—"}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">تاريخ انتهاء الصلاحية</label>
-                                    <input type="date" value={batchData.expiryDate} onChange={(e) => setBatchData({ ...batchData, expiryDate: e.target.value })} required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">المورد (اختياري)</label>
-                                    {/* Searchable supplier combobox for Add Batch */}
+                                    <label className="block text-sm font-bold text-foreground mb-1">المورد (اختياري)</label>
                                     {(() => {
                                         const selectedName = suppliers.find(s => s.id === batchData.supplierId)?.name ?? "";
                                         const filteredBatch = suppliers.filter(s =>
@@ -1162,10 +1207,10 @@ export default function InventoryPage({ user }: { user: any }) {
                                         return (
                                             <div ref={supplierRef} className="relative">
                                                 <div
-                                                    className="flex items-center gap-2 w-full bg-card border border-border rounded-xl px-3 py-2 cursor-text focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring"
+                                                    className="flex items-center gap-2 w-full rounded-lg border border-border bg-background px-3 py-2 cursor-pointer focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
                                                     onClick={() => setSupplierOpen(true)}
                                                 >
-                                                    <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                                    <Search className="w-4 h-4 text-muted-foreground shrink-0" />
                                                     <input
                                                         className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
                                                         placeholder={selectedName || "اكتب للبحث عن مورد..."}
@@ -1177,20 +1222,20 @@ export default function InventoryPage({ user }: { user: any }) {
                                                     {batchData.supplierId && (
                                                         <button type="button" onClick={e => { e.stopPropagation(); setBatchData({ ...batchData, supplierId: "" }); setSupplierSearch(""); }}
                                                             className="text-muted-foreground hover:text-destructive shrink-0">
-                                                            <X className="w-3 h-3" />
+                                                            <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     )}
-                                                    <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
+                                                    <ChevronDown className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
                                                 </div>
                                                 {supplierOpen && (
-                                                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                                                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
                                                         {filteredBatch.length === 0 ? (
                                                             <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
                                                         ) : (
                                                             filteredBatch.map(s => (
                                                                 <button key={s.id} type="button"
                                                                     onClick={() => { setBatchData({ ...batchData, supplierId: s.id }); setSupplierOpen(false); setSupplierSearch(""); }}
-                                                                    className={`w-full text-right px-4 py-2 text-sm hover:bg-muted transition-colors block ${s.id === batchData.supplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
+                                                                    className={`w-full text-right px-4 py-2.5 text-sm hover:bg-muted transition-colors block ${s.id === batchData.supplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
                                                                     {s.name}
                                                                 </button>
                                                             ))
@@ -1201,9 +1246,39 @@ export default function InventoryPage({ user }: { user: any }) {
                                         );
                                     })()}
                                 </div>
-                                <div className="flex gap-3 pt-3">
-                                    <button type="submit" className="flex-1 bg-success text-success-foreground py-2.5 rounded-xl font-bold hover:bg-success/90 transition-colors text-sm shadow-lg shadow-success/20">إضافة الدفعة</button>
-                                    <button type="button" onClick={() => setShowBatchModal(null)} className="flex-1 bg-muted text-foreground py-2.5 rounded-xl font-bold hover:bg-muted/80 transition-colors text-sm">إلغاء</button>
+                                <div>
+                                    <label className="block text-sm font-bold text-foreground mb-1">الكمية</label>
+                                    <input type="number" placeholder="0" min="1" value={batchData.quantity || ""} onChange={(e) => setBatchData({ ...batchData, quantity: parseInt(e.target.value) || 0 })} required autoFocus className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-foreground mb-2">سعر التكلفة (من الباكيت)</label>
+                                    <div className="grid grid-cols-2 gap-3 mb-2">
+                                        <div>
+                                            <label className="block text-xs text-muted-foreground mb-1">سعر الباكيت</label>
+                                            <input type="number" min="0" step="any" value={batchPacketPrice || ""} onChange={(e) => setBatchPacketPrice(parseFloat(e.target.value) || 0)} placeholder="0" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
+                                            <input type="number" min="1" step="1" value={batchStripsPerPacket || ""} onChange={(e) => setBatchStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))} placeholder="1" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
+                                        <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                                        <span className="text-sm font-bold text-primary mr-auto tabular-nums">
+                                            {batchPacketPrice > 0 ? `${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })}` : "—"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-foreground mb-1">تاريخ انتهاء الصلاحية</label>
+                                    <input type="date" value={batchData.expiryDate} onChange={(e) => setBatchData({ ...batchData, expiryDate: e.target.value })} required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                </div>
+                                <div className="flex gap-3 pt-2">
+                                    <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-lg font-bold hover:bg-primary/90 transition-colors text-sm">
+                                        <Plus className="w-4 h-4" />
+                                        إضافة الدفعة
+                                    </button>
+                                    <button type="button" onClick={() => setShowBatchModal(null)} className="px-4 py-2.5 bg-muted hover:bg-muted/80 text-muted-foreground rounded-lg font-bold text-sm">إلغاء</button>
                                 </div>
                             </form>
                         </div>
@@ -1214,139 +1289,153 @@ export default function InventoryPage({ user }: { user: any }) {
             {/* ======= CREATE DRUG MODAL ======= */}
             {
                 showCreateDrugModal && (
-                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-card rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-border overflow-y-auto max-h-[90vh]">
-                            <h2 className="text-xl font-bold mb-1">دواء جديد</h2>
-                            <p className="text-muted-foreground text-sm mb-5">الباركود: <span className="text-primary font-bold font-mono">{showCreateDrugModal}</span> غير موجود.</p>
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-card rounded-xl max-w-lg w-full p-6 shadow-xl border border-border overflow-y-auto max-h-[90vh]">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-xl font-bold text-foreground">تسجيل دواء جديد</h3>
+                                <button type="button" onClick={() => { setShowCreateDrugModal(null); setPacketPrice(0); setStripsPerPacket(1); }} className="p-2 hover:bg-muted rounded-lg">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
 
-                            <form onSubmit={handleCreateDrug} className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">الاسم التجاري</label>
-                                    <input type="text" name="tradeName" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">الاسم العلمي</label>
-                                    <input type="text" name="scientificName" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">المنشأ</label>
-                                    <input type="text" name="origin" placeholder="المانيا" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر الجمهور</label>
-                                    <input type="number" step="0.01" name="price" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                {/* Packet price calculator */}
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">حساب سعر التكلفة من الباكيت</label>
-                                    <div className="grid grid-cols-2 gap-3 mb-2">
-                                        <div>
-                                            <label className="block text-[11px] text-muted-foreground mb-1">سعر الباكيت</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                value={packetPrice || ""}
-                                                onChange={e => setPacketPrice(parseFloat(e.target.value) || 0)}
-                                                placeholder="0"
-                                                className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[11px] text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                step="1"
-                                                value={stripsPerPacket || ""}
-                                                onChange={e => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
-                                                placeholder="1"
-                                                className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
-                                            />
-                                        </div>
+                            <form onSubmit={handleCreateDrug} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-foreground mb-1">الباركود</label>
+                                        <input type="text" value={showCreateDrugModal} readOnly className="w-full rounded-lg border border-border px-4 py-2 bg-muted font-mono text-sm" />
                                     </div>
-                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5">
-                                        <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
-                                        <span className="text-sm font-bold text-primary tabular-nums mr-auto">
-                                            {packetPrice > 0 && stripsPerPacket > 0
-                                                ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCostPrice.toLocaleString('en', { maximumFractionDigits: 2 })}`
-                                                : '—'}
-                                        </span>
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-foreground mb-1">الاسم التجاري</label>
+                                        <input type="text" name="tradeName" required autoFocus className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
                                     </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">الكمية الافتتاحية</label>
-                                    <input type="number" name="quantity" defaultValue="0" required className="w-full bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring font-bold text-primary" />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأدنى</label>
-                                        <input type="number" name="minStock" defaultValue="1" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-foreground mb-1">الاسم العلمي</label>
+                                        <input type="text" name="scientificName" required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأعلى</label>
-                                        <input type="number" name="maxStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-foreground mb-1">المصدر/المنشأ</label>
+                                        <input type="text" name="origin" placeholder="مثال: Pfizer, Generic..." className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
                                     </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">تاريخ انتهاء الصلاحية</label>
-                                    <input type="date" name="expiryDate" defaultValue={new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0]} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">المورد (اختياري)</label>
-                                    {(() => {
-                                        const selectedName = suppliers.find(s => s.id === createDrugSupplierId)?.name ?? "";
-                                        const filteredCreate = suppliers.filter(s =>
-                                            !supplierSearch || s.name.toLowerCase().includes(supplierSearch.toLowerCase())
-                                        );
-                                        return (
-                                            <div ref={supplierRef} className="relative">
-                                                <div
-                                                    className="flex items-center gap-2 w-full bg-card border border-border rounded-xl px-3 py-2 cursor-text focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring"
-                                                    onClick={() => setSupplierOpen(true)}
-                                                >
-                                                    <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                                    <input
-                                                        className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
-                                                        placeholder={selectedName || "اكتب للبحث عن مورد..."}
-                                                        value={supplierOpen ? supplierSearch : selectedName}
-                                                        onChange={e => { setSupplierSearch(e.target.value); setSupplierOpen(true); }}
-                                                        onFocus={() => setSupplierOpen(true)}
-                                                        dir="rtl"
-                                                    />
-                                                    {createDrugSupplierId && (
-                                                        <button type="button" onClick={e => { e.stopPropagation(); setCreateDrugSupplierId(""); setSupplierSearch(""); }}
-                                                            className="text-muted-foreground hover:text-destructive shrink-0">
-                                                            <X className="w-3 h-3" />
-                                                        </button>
-                                                    )}
-                                                    <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
-                                                </div>
-                                                {supplierOpen && (
-                                                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
-                                                        {filteredCreate.length === 0 ? (
-                                                            <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
-                                                        ) : (
-                                                            filteredCreate.map(s => (
-                                                                <button key={s.id} type="button"
-                                                                    onClick={() => { setCreateDrugSupplierId(s.id); setSupplierOpen(false); setSupplierSearch(""); }}
-                                                                    className={`w-full text-right px-4 py-2 text-sm hover:bg-muted transition-colors block ${s.id === createDrugSupplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
-                                                                    {s.name}
-                                                                </button>
-                                                            ))
-                                                        )}
-                                                    </div>
-                                                )}
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-foreground mb-1">سعر الجمهور</label>
+                                        <input type="number" step="any" min="0" name="price" required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                    </div>
+                                    {/* Packet price calculator */}
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-foreground mb-2">سعر التكلفة (من الباكيت)</label>
+                                        <div className="grid grid-cols-2 gap-3 mb-2">
+                                            <div>
+                                                <label className="block text-xs text-muted-foreground mb-1">سعر الباكيت</label>
+                                                <input
+                                                    type="number"
+                                                    step="any"
+                                                    min="0"
+                                                    value={packetPrice || ""}
+                                                    onChange={e => setPacketPrice(parseFloat(e.target.value) || 0)}
+                                                    placeholder="0"
+                                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                                                />
                                             </div>
-                                        );
-                                    })()}
+                                            <div>
+                                                <label className="block text-xs text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    step="1"
+                                                    value={stripsPerPacket || ""}
+                                                    onChange={e => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
+                                                    placeholder="1"
+                                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
+                                            <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                                            <span className="text-sm font-bold text-primary mr-auto tabular-nums">
+                                                {packetPrice > 0 && stripsPerPacket > 0
+                                                    ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCostPrice.toLocaleString('en', { maximumFractionDigits: 2 })}`
+                                                    : '—'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-foreground mb-1">الحد الأدنى</label>
+                                        <input type="number" name="minStock" defaultValue="1" min="1" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-foreground mb-1">الحد الأقصى</label>
+                                        <input type="number" name="maxStock" defaultValue="10" min="0" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-foreground mb-1">المورد (اختياري)</label>
+                                        {(() => {
+                                            const selectedName = suppliers.find(s => s.id === createDrugSupplierId)?.name ?? "";
+                                            const filteredCreate = suppliers.filter(s =>
+                                                !supplierSearch || s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+                                            );
+                                            return (
+                                                <div ref={supplierRef} className="relative">
+                                                    <div
+                                                        className="flex items-center gap-2 w-full rounded-lg border border-border bg-background px-3 py-2 cursor-pointer focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
+                                                        onClick={() => setSupplierOpen(true)}
+                                                    >
+                                                        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                        <input
+                                                            className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
+                                                            placeholder={selectedName || "اكتب للبحث عن مورد..."}
+                                                            value={supplierOpen ? supplierSearch : selectedName}
+                                                            onChange={e => { setSupplierSearch(e.target.value); setSupplierOpen(true); }}
+                                                            onFocus={() => setSupplierOpen(true)}
+                                                            dir="rtl"
+                                                        />
+                                                        {createDrugSupplierId && (
+                                                            <button type="button" onClick={e => { e.stopPropagation(); setCreateDrugSupplierId(""); setSupplierSearch(""); }}
+                                                                className="text-muted-foreground hover:text-destructive shrink-0">
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                        <ChevronDown className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
+                                                    </div>
+                                                    {supplierOpen && (
+                                                        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+                                                            {filteredCreate.length === 0 ? (
+                                                                <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
+                                                            ) : (
+                                                                filteredCreate.map(s => (
+                                                                    <button key={s.id} type="button"
+                                                                        onClick={() => { setCreateDrugSupplierId(s.id); setSupplierOpen(false); setSupplierSearch(""); }}
+                                                                        className={`w-full text-right px-4 py-2.5 text-sm hover:bg-muted transition-colors block ${s.id === createDrugSupplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
+                                                                        {s.name}
+                                                                    </button>
+                                                                ))
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                    <div className="col-span-2 border-t pt-4 mt-2">
+                                        <h4 className="text-sm font-bold text-foreground mb-3">الدفعة الأولى (اختياري)</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-foreground mb-1">الكمية</label>
+                                                <input type="number" name="quantity" defaultValue="0" min="0" required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-foreground mb-1">تاريخ الانتهاء</label>
+                                                <input type="date" name="expiryDate" defaultValue={new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0]} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="col-span-2 flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 bg-primary text-primary-foreground py-3 rounded-xl font-bold hover:bg-primary/90 transition-all text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
-                                        <Save className="w-4 h-4" />
-                                        حفظ وإضافة للمخزون
+
+                                <div className="flex gap-3 pt-4">
+                                    <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground py-2.5 rounded-lg font-bold transition-all text-sm">
+                                        <Plus className="w-4 h-4" />
+                                        حفظ الدواء
                                     </button>
-                                    <button type="button" onClick={() => { setShowCreateDrugModal(null); setPacketPrice(0); setStripsPerPacket(1); }} className="flex-1 bg-muted text-foreground py-3 rounded-xl font-bold hover:bg-muted/80 transition-all text-sm">إلغاء</button>
+                                    <button type="button" onClick={() => { setShowCreateDrugModal(null); setPacketPrice(0); setStripsPerPacket(1); }} className="px-4 py-2.5 bg-muted hover:bg-muted text-foreground rounded-lg font-bold text-sm">إلغاء</button>
                                 </div>
                             </form>
                         </div>

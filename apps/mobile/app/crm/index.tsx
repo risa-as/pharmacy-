@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -42,7 +42,7 @@ export default function CRMListScreen() {
                 alignItems: 'center',
                 backgroundColor: C.card,
                 padding: 16,
-                borderRadius: 16,
+                borderRadius: 5,
                 marginBottom: 12,
                 borderWidth: 1,
                 borderColor: C.border,
@@ -51,7 +51,7 @@ export default function CRMListScreen() {
             activeOpacity={0.7}
         >
             <View style={{
-                width: 48, height: 48, borderRadius: 24,
+                width: 48, height: 48, borderRadius: 5,
                 backgroundColor: C.primaryMuted,
                 justifyContent: 'center', alignItems: 'center',
                 marginLeft: 12,

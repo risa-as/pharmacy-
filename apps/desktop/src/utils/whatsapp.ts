@@ -24,8 +24,8 @@ export function formatIraqiPhoneNumber(phone: string): string | null {
 }
 
 export function generateInvoiceMessage(sale: any, branchName: string = "صيدلية فاراماسي"): string {
-    const date = new Date(sale.createdAt).toLocaleDateString('ar-IQ');
-    const time = new Date(sale.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+    const date = new Date(sale.createdAt).toLocaleDateString('ar-IQ-u-nu-latn');
+    const time = new Date(sale.createdAt).toLocaleTimeString('ar-IQ-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
 
     let message = `👋 مرحباً ${sale.patient?.name || 'عزيزنا العميل'}،\n`;
     message += `شكراً لزيارتكم *${branchName}* 🏨\n\n`;

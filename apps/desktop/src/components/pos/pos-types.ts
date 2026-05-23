@@ -12,7 +12,9 @@ export interface Product {
 
 export interface CartItem extends Product {
     quantity: number;
+    originalPrice?: number; // set only when price has been manually overridden
 }
+
 
 export interface Patient {
     id: string;
@@ -31,8 +33,11 @@ export interface ShiftSummary {
     salesTotalAmount: number;
     cashSalesCount: number;
     cashSalesTotal: number;
+    cardSalesCount: number;
+    cardSalesTotal: number;
     creditSalesCount: number;
     creditSalesTotal: number;
+    returnsTotal: number;
     startingCash: number;
     expectedCash: number;
 }
@@ -45,7 +50,7 @@ export interface DrugInteraction {
 }
 
 export interface SaleData {
-    items: { name: string; quantity: number; price: number }[];
+    items: { name: string; quantity: number; price: number; originalPrice?: number }[];
     total: number;
     invoiceNumber: string;
     date: Date;

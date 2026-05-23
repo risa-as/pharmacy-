@@ -28,8 +28,9 @@ export default defineConfig(({ mode }) => {
                             __OFFLINE_TOKEN_PUBLIC_KEY__: JSON.stringify(env.OFFLINE_TOKEN_PUBLIC_KEY || ''),
                         },
                         build: {
+                            minify: false,
                             rollupOptions: {
-                                external: ['node-fetch', '@prisma/client', '.prisma/client', 'electron-store', /\.prisma[\\/]desktop-client/],
+                                external: ['node-fetch', 'electron-store', '@prisma/client'],
                             },
                         },
                     },

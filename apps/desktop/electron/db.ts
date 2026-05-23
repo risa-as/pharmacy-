@@ -1,20 +1,24 @@
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
-import { PrismaClient } from '../node_modules/.prisma/desktop-client';
+
+// Dynamic require prevents Vite from bundling the entire Prisma runtime into main.js.
+// Without this, Prisma's error-formatting code gets minified and breaks at runtime.
+// In packaged builds the full desktop-client (JS + runtime + engine) is copied to
+// resources/prisma-client via extraResources so it lives outside app.asar.
+const prismaClientPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'prisma-client')
+    : path.join(__dirname, '..', 'node_modules', '.prisma', 'desktop-client');
+const { PrismaClient } = require(prismaClientPath);
 
 // Point Prisma at the library engine (.dll.node) before creating PrismaClient.
 // The library engine runs in-process (no separate exe, no TCP) which is far
 // more reliable in packaged Electron apps on Windows.
 if (app.isPackaged) {
-    // Production: engine is in app.asar.unpacked (native .node files cannot
-    // be required from inside an asar archive)
+    // Production: engine is in resources/prisma-client (copied via extraResources)
     process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
         process.resourcesPath,
-        'app.asar.unpacked',
-        'node_modules',
-        '.prisma',
-        'desktop-client',
+        'prisma-client',
         'query_engine-windows.dll.node'
     );
 } else {
@@ -279,6 +283,8 @@ export async function runMigrations(): Promise<void> {
     await addColumn('Shift', 'safeId', 'TEXT');
     await addColumn('Shift', 'synced', 'BOOLEAN NOT NULL DEFAULT false');
     await addColumn('Shift', 'branchId', 'TEXT NOT NULL DEFAULT \'\'');
+    await addColumn('Sale', 'hasPriceOverride', 'BOOLEAN NOT NULL DEFAULT false');
+    await addColumn('SaleItem', 'originalPrice', 'REAL');
 
     console.log('[DB Migration] Schema migrations complete.');
 }

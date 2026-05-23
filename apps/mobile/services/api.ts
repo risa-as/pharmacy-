@@ -427,6 +427,30 @@ export const apiService = {
         }
     },
 
+    // Search drugs by name — uses GET /inventory?search=...
+    async searchDrugByName(query: string, branchId?: string): Promise<Array<{
+        id: string; name: string; tradeName: string; scientificName: string;
+        barcode: string; price: number; quantity: number;
+    }>> {
+        try {
+            const params = new URLSearchParams({ search: query });
+            if (branchId) params.set('branchId', branchId);
+            const results = await request<any[]>(`/inventory?${params.toString()}`);
+            return Array.isArray(results) ? results.map((r: any) => ({
+                id:             r.drugId ?? r.id,
+                name:           r.tradeName ?? r.drugName ?? '',
+                tradeName:      r.tradeName ?? r.drugName ?? '',
+                scientificName: r.scientificName ?? '',
+                barcode:        r.barcode ?? '',
+                price:          r.price ?? 0,
+                quantity:       r.quantity ?? 0,
+            })) : [];
+        } catch (error) {
+            console.error('API Error searchDrugByName:', error);
+            return [];
+        }
+    },
+
     // Raw barcode check for full Add Inventory Flow
     async checkBarcodeExact(barcode: string, branchId?: string) {
         try {
@@ -612,6 +636,29 @@ export const apiService = {
             return await request(`/purchases/${id}`);
         } catch (error) {
             console.error('API Error getPurchaseDetails:', error);
+            throw error;
+        }
+    },
+
+    // Cancel Purchase
+    async cancelPurchase(id: string) {
+        try {
+            return await request(`/purchases/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ action: 'cancel' }),
+            });
+        } catch (error) {
+            console.error('API Error cancelPurchase:', error);
+            throw error;
+        }
+    },
+
+    // Delete Purchase
+    async deletePurchase(id: string) {
+        try {
+            return await request(`/purchases/${id}`, { method: 'DELETE' });
+        } catch (error) {
+            console.error('API Error deletePurchase:', error);
             throw error;
         }
     },

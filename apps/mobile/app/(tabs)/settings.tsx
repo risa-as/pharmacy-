@@ -6,6 +6,29 @@ import { authService, User } from '../../services/auth';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors } from '../../constants/colors';
 
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+interface MenuItem {
+    label: string;
+    subtitle?: string;
+    icon: IoniconsName;
+    iconBg: string;
+    iconColor: string;
+    onPress: () => void;
+}
+
+interface MenuSection {
+    title: string;
+    items: MenuItem[];
+}
+
+const ROLE_LABELS: Record<string, string> = {
+    ADMIN:      'مدير',
+    PHARMACIST: 'صيدلاني',
+    MANAGER:    'مشرف',
+    CASHIER:    'كاشير',
+};
+
 export default function SettingsScreen() {
     const [user, setUser] = useState<User | null>(null);
     const { isDarkMode } = useTheme();
@@ -33,117 +56,227 @@ export default function SettingsScreen() {
         );
     };
 
-    const menuItems = [
+    const initials = user?.name
+        ? user.name.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+        : 'U';
+
+    const menuSections: MenuSection[] = [
         {
             title: 'الحساب',
-            icon: 'person-outline' as const,
             items: [
-                { label: 'معلومات الحساب',    icon: 'person-circle-outline' as const, onPress: () => router.push('/settings/account' as any) },
-                { label: 'تغيير كلمة المرور', icon: 'key-outline' as const,           onPress: () => router.push('/settings/password' as any) },
+                {
+                    label:    'معلومات الحساب',
+                    subtitle: 'الاسم والبريد الإلكتروني',
+                    icon:     'person-outline',
+                    iconBg:   C.primaryMuted,
+                    iconColor: C.primary,
+                    onPress: () => router.push('/settings/account' as any),
+                },
+                {
+                    label:    'تغيير كلمة المرور',
+                    subtitle: 'تحديث كلمة المرور الخاصة بك',
+                    icon:     'key-outline',
+                    iconBg:   C.warningBg,
+                    iconColor: C.warning,
+                    onPress: () => router.push('/settings/password' as any),
+                },
             ],
         },
         {
             title: 'التطبيق',
-            icon: 'settings-outline' as const,
             items: [
-                { label: 'الإشعارات', icon: 'notifications-outline' as const, onPress: () => router.push('/settings/notifications' as any) },
-                { label: 'المظهر',    icon: 'moon-outline' as const,           onPress: () => router.push('/settings/theme' as any) },
+                {
+                    label:    'الإشعارات',
+                    subtitle: 'إدارة التنبيهات والإشعارات',
+                    icon:     'notifications-outline',
+                    iconBg:   C.infoBg,
+                    iconColor: C.info,
+                    onPress: () => router.push('/settings/notifications' as any),
+                },
+                {
+                    label:    'المظهر',
+                    subtitle: isDarkMode ? 'الوضع الليلي مفعّل' : 'الوضع النهاري مفعّل',
+                    icon:     isDarkMode ? 'moon' : 'sunny-outline',
+                    iconBg:   isDarkMode ? '#2D2A4A' : '#FFF8E7',
+                    iconColor: isDarkMode ? '#A78BFA' : '#F59E0B',
+                    onPress: () => router.push('/settings/theme' as any),
+                },
             ],
         },
         {
             title: 'المساعدة',
-            icon: 'help-circle-outline' as const,
             items: [
-                { label: 'الدعم الفني',  icon: 'headset-outline' as const,             onPress: () => router.push('/settings/support' as any) },
-                { label: 'حول التطبيق', icon: 'information-circle-outline' as const, onPress: () => router.push('/settings/about' as any) },
+                {
+                    label:    'الدعم الفني',
+                    subtitle: 'تواصل مع فريق الدعم',
+                    icon:     'headset-outline',
+                    iconBg:   C.successBg,
+                    iconColor: C.success,
+                    onPress: () => router.push('/settings/support' as any),
+                },
+                {
+                    label:    'حول التطبيق',
+                    subtitle: 'الإصدار والمعلومات',
+                    icon:     'information-circle-outline',
+                    iconBg:   C.input,
+                    iconColor: C.mutedForeground,
+                    onPress: () => router.push('/settings/about' as any),
+                },
             ],
         },
     ];
 
     return (
-        <ScrollView style={{ flex: 1, backgroundColor: C.background }} contentContainerStyle={{ paddingBottom: 32 }}>
-            {/* User Card */}
+        <ScrollView
+            style={{ flex: 1, backgroundColor: C.background }}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+        >
+            {/* ── Profile header ──────────────────────────────────────────── */}
             <View style={{
-                flexDirection: 'row-reverse',
-                alignItems: 'center',
                 backgroundColor: C.card,
-                margin: 16,
-                padding: 16,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: C.border,
+                borderBottomWidth: 1, borderBottomColor: C.border,
+                paddingHorizontal: 16, paddingTop: 20, paddingBottom: 20,
             }}>
-                <View style={{
-                    width: 64, height: 64, borderRadius: 8,
-                    backgroundColor: C.primaryMuted,
-                    justifyContent: 'center', alignItems: 'center',
-                }}>
-                    <Ionicons name="person" size={32} color={C.primary} />
-                </View>
-                <View style={{ flex: 1, marginRight: 16, alignItems: 'flex-end' }}>
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: C.foreground }}>
-                        {user?.name || 'المستخدم'}
-                    </Text>
-                    <Text style={{ fontSize: 14, color: C.mutedForeground, marginTop: 4 }}>
-                        {user?.email || 'user@faramace.com'}
-                    </Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 14 }}>
+                    {/* Avatar */}
+                    <View style={{
+                        width: 64, height: 64, borderRadius: 5,
+                        backgroundColor: C.primary,
+                        justifyContent: 'center', alignItems: 'center',
+                    }}>
+                        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900' }}>
+                            {initials}
+                        </Text>
+                    </View>
+
+                    {/* Info */}
+                    <View style={{ flex: 1, alignItems: 'flex-end', gap: 4 }}>
+                        <Text style={{
+                            color: C.foreground, fontSize: 18, fontWeight: '900',
+                            textAlign: 'right',
+                        }}>
+                            {user?.name || 'المستخدم'}
+                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right' }}>
+                            {user?.email || '—'}
+                        </Text>
+                        {user?.role && (
+                            <View style={{
+                                backgroundColor: C.primaryMuted, borderRadius: 5,
+                                paddingHorizontal: 10, paddingVertical: 3, marginTop: 2,
+                            }}>
+                                <Text style={{ color: C.primary, fontSize: 11, fontWeight: '700' }}>
+                                    {ROLE_LABELS[user.role] ?? user.role}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
             </View>
 
-            {/* Menu Sections */}
-            {menuItems.map((section, sectionIndex) => (
-                <View key={sectionIndex} style={{ marginHorizontal: 16, marginBottom: 16 }}>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8, paddingHorizontal: 4 }}>
-                        <Text style={{ fontSize: 14, fontWeight: '600', color: C.mutedForeground }}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 20, gap: 24 }}>
+
+                {/* ── Menu sections ────────────────────────────────────────── */}
+                {menuSections.map((section, si) => (
+                    <View key={si}>
+                        {/* Section label */}
+                        <Text style={{
+                            color: C.mutedForeground, fontSize: 12, fontWeight: '700',
+                            textAlign: 'right', marginBottom: 8, paddingHorizontal: 4,
+                            letterSpacing: 0.5, textTransform: 'uppercase',
+                        }}>
                             {section.title}
                         </Text>
-                        <Ionicons name={section.icon} size={18} color={C.mutedForeground} />
+
+                        {/* Section card */}
+                        <View style={{
+                            backgroundColor: C.card, borderRadius: 5,
+                            borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+                            elevation: 1, shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,
+                        }}>
+                            {section.items.map((item, ii) => (
+                                <TouchableOpacity
+                                    key={ii}
+                                    onPress={item.onPress}
+                                    activeOpacity={0.7}
+                                    style={[
+                                        {
+                                            flexDirection: 'row-reverse',
+                                            alignItems: 'center',
+                                            paddingVertical: 13, paddingHorizontal: 14,
+                                            gap: 12,
+                                        },
+                                        ii < section.items.length - 1 && {
+                                            borderBottomWidth: 1, borderBottomColor: C.border,
+                                        },
+                                    ]}
+                                >
+                                    {/* Icon bubble */}
+                                    <View style={{
+                                        width: 38, height: 38, borderRadius: 5,
+                                        backgroundColor: item.iconBg,
+                                        justifyContent: 'center', alignItems: 'center',
+                                        flexShrink: 0,
+                                    }}>
+                                        <Ionicons name={item.icon} size={19} color={item.iconColor} />
+                                    </View>
+
+                                    {/* Label + subtitle */}
+                                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                        <Text style={{
+                                            color: C.foreground, fontSize: 15, fontWeight: '600',
+                                            textAlign: 'right',
+                                        }}>
+                                            {item.label}
+                                        </Text>
+                                        {item.subtitle && (
+                                            <Text style={{
+                                                color: C.mutedForeground, fontSize: 12,
+                                                textAlign: 'right', marginTop: 1,
+                                            }}>
+                                                {item.subtitle}
+                                            </Text>
+                                        )}
+                                    </View>
+
+                                    {/* Chevron */}
+                                    <Ionicons name="chevron-back" size={16} color={C.mutedForeground} />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
-                    <View style={{ backgroundColor: C.card, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
-                        {section.items.map((item, itemIndex) => (
-                            <TouchableOpacity
-                                key={itemIndex}
-                                style={[
-                                    { flexDirection: 'row-reverse', alignItems: 'center', padding: 16 },
-                                    itemIndex < section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
-                                ]}
-                                onPress={item.onPress}
-                                activeOpacity={0.7}
-                            >
-                                <View style={{
-                                    width: 36, height: 36, borderRadius: 4,
-                                    backgroundColor: C.input,
-                                    justifyContent: 'center', alignItems: 'center',
-                                }}>
-                                    <Ionicons name={item.icon} size={20} color={C.mutedForeground} />
-                                </View>
-                                <Text style={{ fontSize: 16, color: C.foreground, flex: 1, textAlign: 'right', marginRight: 12 }}>
-                                    {item.label}
-                                </Text>
-                                <Ionicons name="chevron-back" size={18} color={C.mutedForeground} />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                ))}
+
+                {/* ── Logout ───────────────────────────────────────────────── */}
+                <TouchableOpacity
+                    onPress={handleLogout}
+                    activeOpacity={0.8}
+                    style={{
+                        flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
+                        gap: 8, borderRadius: 5, paddingVertical: 14,
+                        borderWidth: 1.5, borderColor: `${C.danger}50`,
+                        backgroundColor: C.dangerBg,
+                    }}
+                >
+                    <Ionicons name="log-out-outline" size={19} color={C.danger} />
+                    <Text style={{ color: C.danger, fontSize: 15, fontWeight: '700' }}>
+                        تسجيل الخروج
+                    </Text>
+                </TouchableOpacity>
+
+                {/* ── Footer ───────────────────────────────────────────────── */}
+                <View style={{ alignItems: 'center', gap: 4, paddingBottom: 8 }}>
+                    <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: '700' }}>
+                        Faramace
+                    </Text>
+                    <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
+                        الإصدار 1.0.0
+                    </Text>
                 </View>
-            ))}
 
-            {/* Logout Button */}
-            <TouchableOpacity
-                style={{
-                    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    backgroundColor: C.dangerBg,
-                    marginHorizontal: 16, padding: 16, borderRadius: 6, marginTop: 8,
-                }}
-                onPress={handleLogout}
-                activeOpacity={0.8}
-            >
-                <Ionicons name="log-out-outline" size={20} color={C.danger} />
-                <Text style={{ fontSize: 16, fontWeight: '600', color: C.danger }}>تسجيل الخروج</Text>
-            </TouchableOpacity>
-
-            <Text style={{ textAlign: 'center', color: C.mutedForeground, fontSize: 12, marginVertical: 24 }}>
-                الإصدار 1.0.0
-            </Text>
+            </View>
         </ScrollView>
     );
 }

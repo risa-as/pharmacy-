@@ -7,6 +7,34 @@ import store from './store';
 import { buildApiUrl, getApiCandidates, setApiBaseUrl } from './api-config';
 import { storeOfflineToken } from './offline-token';
 
+// SQLite has a max of 999 bind variables per statement. When using `{ in: [...] }`
+// or `{ notIn: [...] }` with large arrays, Prisma generates one bind variable per
+// element and exceeds this limit (P2029). This helper chunks the array.
+const SQLITE_VAR_LIMIT = 900; // leave headroom for other params in the query
+
+async function deleteManyChunked(
+    model: any,
+    field: string,
+    ids: string[],
+) {
+    for (let i = 0; i < ids.length; i += SQLITE_VAR_LIMIT) {
+        const chunk = ids.slice(i, i + SQLITE_VAR_LIMIT);
+        await model.deleteMany({ where: { [field]: { in: chunk } } });
+    }
+}
+
+async function updateManyChunked(
+    model: any,
+    field: string,
+    ids: string[],
+    data: any,
+) {
+    for (let i = 0; i < ids.length; i += SQLITE_VAR_LIMIT) {
+        const chunk = ids.slice(i, i + SQLITE_VAR_LIMIT);
+        await model.updateMany({ where: { [field]: { in: chunk } }, data });
+    }
+}
+
 // Debug log file — written to userData so the user can share it for troubleshooting.
 const SYNC_LOG_PATH = path.join(app.getPath('userData'), 'sync-debug.log');
 function syncLog(msg: string) {
@@ -22,10 +50,10 @@ class SyncClientError extends Error {
 }
 
 /**
- * Enhanced fetch with retry logic and timeout
+ * Builds the device auth headers (HMAC sync token, else device license key)
+ * that every cloud request must carry so the server can authenticate + scope it.
  */
-async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 1000) {
-    // Inject device auth headers automatically
+function getDeviceAuthHeaders(): Record<string, string> {
     const licenseKey  = store.get('licenseKey')    as string | undefined;
     const branchId    = store.get('branchId')      as string | undefined;
     const syncToken   = store.get('syncToken')     as string | undefined;
@@ -44,6 +72,15 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
         // Fallback to device license key
         deviceHeaders['x-device-license-key'] = licenseKey;
     }
+    return deviceHeaders;
+}
+
+/**
+ * Enhanced fetch with retry logic and timeout
+ */
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 1000) {
+    // Inject device auth headers automatically
+    const deviceHeaders = getDeviceAuthHeaders();
 
     const mergedOptions: RequestInit = {
         ...options,
@@ -235,18 +272,20 @@ export async function syncSales() {
         }
 
         // Map sales to include payment and patient data (patient data needed for credit sales)
-        const salesPayload = unsyncedSales.map(sale => ({
+        const salesPayload = unsyncedSales.map((sale: any) => ({
             id: sale.id,
             total: sale.total,
             discount: sale.discount || 0,
+            hasPriceOverride: sale.hasPriceOverride === true,
             createdAt: sale.createdAt,
             userId: sale.userId,
             patientId: sale.patientId,
             paymentMethod: sale.payment?.method || "CASH",
-            items: sale.items.map(item => ({
+            items: sale.items.map((item: any) => ({
                 drugId: item.drugId,
                 quantity: item.quantity,
-                price: item.price
+                price: item.price,
+                originalPrice: item.originalPrice ?? null,
             })),
             // Include patient snapshot so cloud can upsert before FK check
             patient: sale.patient ? {
@@ -344,7 +383,7 @@ export async function syncDebtPayments() {
         if (unsyncedPayments.length > 0) {
             console.log(`[Sync] Pushing ${unsyncedPayments.length} debt payments...`);
 
-            const payload = unsyncedPayments.map(p => ({
+            const payload = unsyncedPayments.map((p: any) => ({
                 id: p.id,
                 saleId: p.saleId,
                 amount: p.amount,
@@ -387,7 +426,7 @@ export async function syncDebtPayments() {
             let pulled = 0;
             for (const payment of payments) {
                 try {
-                    await prisma.$transaction(async (tx) => {
+                    await prisma.$transaction(async (tx: any) => {
                         const existing = await tx.debtPayment.findUnique({ where: { id: payment.id } });
                         if (existing) return;
 
@@ -493,14 +532,14 @@ export async function syncSaleReturns() {
             return;
         }
 
-        const returnsPayload = unsyncedReturns.map(ret => ({
+        const returnsPayload = unsyncedReturns.map((ret: any) => ({
             id: ret.id,
             saleId: ret.saleId,
             safeId: ret.safeId,
             total: ret.total,
             createdAt: ret.createdAt,
             notes: ret.notes,
-            items: ret.items.map(item => ({
+            items: ret.items.map((item: any) => ({
                 drugId: item.drugId,
                 quantity: item.quantity,
                 price: item.price
@@ -881,7 +920,7 @@ export async function syncLoyalty() {
         const branchId = getBranchId();
         if (!branchId) return;
 
-        const payload = unsyncedTx.map(tx => ({
+        const payload = unsyncedTx.map((tx: any) => ({
             id: tx.id,
             patientId: tx.account.patientId,
             type: tx.type,
@@ -1060,7 +1099,7 @@ export async function syncProducts(): Promise<SyncProductsResult> {
 
         // Use generous timeout — large inventories (hundreds of drugs+batches)
         // can exceed Prisma's 5s default.
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: any) => {
             for (const drug of drugs) {
                 if (!drug?.id) continue;
               try {
@@ -1089,7 +1128,7 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                         where: { drugId: collision.id },
                         select: { id: true }
                     });
-                    const collisionInventoryIds = collisionInventories.map((row) => row.id);
+                    const collisionInventoryIds = collisionInventories.map((row: any) => row.id);
                     if (collisionInventoryIds.length > 0) {
                         await tx.batch.deleteMany({
                             where: { inventoryId: { in: collisionInventoryIds } }
@@ -1142,7 +1181,7 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                 // Prefer the record whose ID matches the cloud ID; fall back to first local record.
                 // This prevents creating duplicate inventory records when IDs diverge
                 // (e.g. item created on desktop then re-created on web with a different UUID).
-                const existingByCloudId = branchInventories.find((row) => row.id === cloudInventoryId);
+                const existingByCloudId = branchInventories.find((row: any) => row.id === cloudInventoryId);
                 const existingInventory = existingByCloudId || branchInventories[0] || null;
 
                 // If the local record has unsaved edits (syncPending=true), the user has
@@ -1154,8 +1193,8 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                 // Remove orphan duplicates created by previous buggy syncs
                 if (branchInventories.length > 1 && existingInventory) {
                     const orphanIds = branchInventories
-                        .map((r) => r.id)
-                        .filter((id) => id !== existingInventory.id);
+                        .map((r: any) => r.id)
+                        .filter((id: string) => id !== existingInventory.id);
                     await tx.batch.deleteMany({ where: { inventoryId: { in: orphanIds } } });
                     await tx.inventory.deleteMany({ where: { id: { in: orphanIds } } });
                 }
@@ -1201,14 +1240,14 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                 if (drug.batches && Array.isArray(drug.batches) && targetInventoryId) {
                     // Filter out batches with missing IDs — Prisma requires a
                     // non-null primary key for upsert's `where` clause.
-                    const validBatches = drug.batches.filter(b => b && typeof b.id === 'string' && b.id.trim().length > 0);
+                    const validBatches = drug.batches.filter((b: any) => b && typeof b.id === 'string' && b.id.trim().length > 0);
 
                     const existingBatches = await tx.batch.findMany({
                         where: { inventoryId: targetInventoryId }, select: { id: true }
                     });
 
-                    const cloudBatchIds = validBatches.map(b => b.id);
-                    const staleBatchIds = existingBatches.map(b => b.id).filter(id => !cloudBatchIds.includes(id));
+                    const cloudBatchIds = validBatches.map((b: any) => b.id);
+                    const staleBatchIds = existingBatches.map((b: any) => b.id).filter((id: string) => !cloudBatchIds.includes(id));
 
                     if (staleBatchIds.length > 0) {
                         await tx.batch.deleteMany({ where: { id: { in: staleBatchIds } } });
@@ -1236,11 +1275,50 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                             }
                         });
                     }
+
+                    // After syncing all batches, ensure their total quantity matches
+                    // inventory.quantity. If the cloud sends no batches (or batches with
+                    // quantity=0) but inventory.quantity > 0, create a synthetic batch so
+                    // the FEFO deduction in process-sale can proceed correctly.
+                    const syncedBatchTotal = validBatches.reduce(
+                        (sum: number, b: any) => sum + Math.round(Number(b.quantity || 0)), 0
+                    );
+                    if (safeQuantity > 0 && syncedBatchTotal === 0) {
+                        await tx.batch.create({
+                            data: {
+                                inventoryId: targetInventoryId,
+                                batchNumber: 'SYNCED',
+                                quantity: safeQuantity,
+                                expiryDate: new Date('2099-12-31'),
+                                costPrice: safeCost,
+                            }
+                        });
+                        console.log(`[Sync] Created synthetic batch for drug ${drug.id} qty=${safeQuantity} (no batches from cloud)`);
+                    }
+                } else if (safeQuantity > 0 && targetInventoryId) {
+                    // No batches field at all from cloud — ensure at least one batch exists
+                    const existingBatches = await tx.batch.findMany({
+                        where: { inventoryId: targetInventoryId },
+                        select: { id: true, quantity: true }
+                    });
+                    const existingTotal = existingBatches.reduce((s: number, b: any) => s + b.quantity, 0);
+                    if (existingTotal === 0) {
+                        await tx.batch.create({
+                            data: {
+                                inventoryId: targetInventoryId,
+                                batchNumber: 'SYNCED',
+                                quantity: safeQuantity,
+                                expiryDate: new Date('2099-12-31'),
+                                costPrice: safeCost,
+                            }
+                        });
+                        console.log(`[Sync] Created synthetic batch for drug ${drug.id} qty=${safeQuantity} (no batch data)`);
+                    }
                 }
 
                 const duplicateInventoryIds = branchInventories
-                    .map((row) => row.id)
-                    .filter((inventoryId) => inventoryId !== targetInventoryId);
+                    .map((row: any) => row.id)
+                    .filter((inventoryId: string) => inventoryId !== targetInventoryId);
 
                 if (duplicateInventoryIds.length > 0) {
                     await tx.batch.deleteMany({
@@ -1258,69 +1336,52 @@ export async function syncProducts(): Promise<SyncProductsResult> {
 
             // Remove local inventory rows deleted remotely for this branch.
             // Delete batches first to satisfy FK constraints.
-            if (hasCompleteInventoryIds) {
-                const staleInventories = await tx.inventory.findMany({
-                    where: fetchedInventoryIds.length > 0
-                        ? { branchId, id: { notIn: fetchedInventoryIds } }
-                        : { branchId },
-                    select: { id: true }
-                });
+            // Use Set for O(1) lookups instead of `notIn` which can exceed
+            // SQLite's 999-variable limit (P2029).
+            const fetchedInvSet = new Set(fetchedInventoryIds);
+            const fetchedDrugSet = new Set(fetchedDrugIds);
 
-                const staleInventoryIds = staleInventories.map((row) => row.id);
-                if (staleInventoryIds.length > 0) {
-                    await tx.batch.deleteMany({
-                        where: { inventoryId: { in: staleInventoryIds } }
-                    });
-                    await tx.inventory.deleteMany({
-                        where: { id: { in: staleInventoryIds } }
-                    });
-                }
+            const allBranchInventories = await tx.inventory.findMany({
+                where: { branchId },
+                select: { id: true, drugId: true }
+            });
+
+            let staleInventoryIds: string[];
+            if (hasCompleteInventoryIds) {
+                staleInventoryIds = allBranchInventories
+                    .filter((row: any) => !fetchedInvSet.has(row.id))
+                    .map((row: any) => row.id);
             } else if (fetchedDrugIds.length > 0) {
-                const staleInventories = await tx.inventory.findMany({
-                    where: {
-                        branchId,
-                        drugId: { notIn: fetchedDrugIds }
-                    },
-                    select: { id: true }
-                });
-                const staleInventoryIds = staleInventories.map((row) => row.id);
-                if (staleInventoryIds.length > 0) {
-                    await tx.batch.deleteMany({
-                        where: { inventoryId: { in: staleInventoryIds } }
-                    });
-                    await tx.inventory.deleteMany({
-                        where: { id: { in: staleInventoryIds } }
-                    });
-                }
+                staleInventoryIds = allBranchInventories
+                    .filter((row: any) => !fetchedDrugSet.has(row.drugId))
+                    .map((row: any) => row.id);
             } else {
-                const staleInventories = await tx.inventory.findMany({
-                    where: { branchId },
-                    select: { id: true }
-                });
-                const staleInventoryIds = staleInventories.map((row) => row.id);
-                if (staleInventoryIds.length > 0) {
-                    await tx.batch.deleteMany({
-                        where: { inventoryId: { in: staleInventoryIds } }
-                    });
-                    await tx.inventory.deleteMany({
-                        where: { id: { in: staleInventoryIds } }
-                    });
-                }
+                staleInventoryIds = allBranchInventories.map((row: any) => row.id);
+            }
+
+            if (staleInventoryIds.length > 0) {
+                await deleteManyChunked(tx.batch, 'inventoryId', staleInventoryIds);
+                await deleteManyChunked(tx.inventory, 'id', staleInventoryIds);
             }
 
             // Keep drug activation consistent with current branch snapshot.
-            await tx.globalDrug.updateMany({
-                where: { id: { in: fetchedDrugIds } },
-                data: { isActive: true }
-            });
+            await updateManyChunked(tx.globalDrug, 'id', fetchedDrugIds, { isActive: true });
 
-            await tx.globalDrug.updateMany({
-                where: {
-                    id: { notIn: fetchedDrugIds },
-                    inventory: { none: {} }
-                },
-                data: { isActive: false }
-            });
+            // Deactivate drugs not in cloud and not linked to any local inventory
+            const allDrugs = await tx.globalDrug.findMany({ select: { id: true } });
+            const inactiveDrugIds = allDrugs
+                .map((d: any) => d.id)
+                .filter((id: string) => !fetchedDrugSet.has(id));
+            if (inactiveDrugIds.length > 0) {
+                // Only deactivate if they have no inventory at all
+                for (let i = 0; i < inactiveDrugIds.length; i += SQLITE_VAR_LIMIT) {
+                    const chunk = inactiveDrugIds.slice(i, i + SQLITE_VAR_LIMIT);
+                    await tx.globalDrug.updateMany({
+                        where: { id: { in: chunk }, inventory: { none: {} } },
+                        data: { isActive: false }
+                    });
+                }
+            }
         }, { timeout: 120_000 });
 
         // After a successful pull, clear syncPending for ALL inventory items.
@@ -1373,7 +1434,7 @@ export async function syncUsers() {
 
         if (users.length > 0) {
             const cloudUserIds = users.map((u: any) => u.id);
-            await prisma.$transaction(async (tx) => {
+            await prisma.$transaction(async (tx: any) => {
                 for (const user of users) {
                     if (!user?.id || !user?.email) {
                         console.log("[Sync] Skipping invalid user payload:", user);
@@ -1471,7 +1532,7 @@ export async function syncPatients() {
             return;
         }
 
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: any) => {
             for (const patient of patients) {
                 await tx.patient.upsert({
                     where: { id: patient.id },
@@ -1499,34 +1560,48 @@ export async function syncPatients() {
                 });
             }
 
-            await tx.sale.updateMany({
-                where: {
-                    AND: [
-                        { patientId: { not: null } },
-                        ...(cloudIds.length > 0 ? [{ patientId: { notIn: cloudIds } }] : [])
-                    ]
-                },
-                data: { patientId: null }
-            });
+            // Use Set-based filtering to avoid SQLite's 999-variable limit (P2029)
+            const cloudIdSet = new Set(cloudIds);
 
-            const accountFilter = cloudIds.length > 0 ? { patientId: { notIn: cloudIds } } : {};
-            const accountsToDelete = await tx.loyaltyAccount.findMany({
-                where: accountFilter,
-                select: { id: true }
+            // Nullify patientId on sales that reference deleted patients
+            const orphanSales = await tx.sale.findMany({
+                where: { patientId: { not: null } },
+                select: { id: true, patientId: true }
             });
-
-            const accountIds = accountsToDelete.map(a => a.id);
-            if (accountIds.length > 0) {
-                await tx.loyaltyTransaction.deleteMany({
-                    where: { accountId: { in: accountIds } }
-                });
-                await tx.loyaltyAccount.deleteMany({
-                    where: { id: { in: accountIds } }
-                });
+            const orphanSaleIds = orphanSales
+                .filter((s: any) => s.patientId && !cloudIdSet.has(s.patientId))
+                .map((s: any) => s.id);
+            if (orphanSaleIds.length > 0) {
+                await updateManyChunked(tx.sale, 'id', orphanSaleIds, { patientId: null });
             }
 
-            const deleteWhere = cloudIds.length > 0 ? { id: { notIn: cloudIds } } : {};
-            const deleted = await tx.patient.deleteMany({ where: deleteWhere });
+            // Delete loyalty accounts for patients no longer in cloud
+            const allAccounts = await tx.loyaltyAccount.findMany({
+                select: { id: true, patientId: true }
+            });
+            const accountsToDelete = allAccounts.filter(
+                (a: any) => cloudIds.length === 0 || !cloudIdSet.has(a.patientId)
+            );
+            const accountIds = accountsToDelete.map((a: any) => a.id);
+            if (accountIds.length > 0) {
+                await deleteManyChunked(tx.loyaltyTransaction, 'accountId', accountIds);
+                await deleteManyChunked(tx.loyaltyAccount, 'id', accountIds);
+            }
+
+            // Delete patients no longer in cloud
+            const allPatients = await tx.patient.findMany({ select: { id: true } });
+            const patientIdsToDelete = allPatients
+                .filter((p: any) => cloudIds.length === 0 || !cloudIdSet.has(p.id))
+                .map((p: any) => p.id);
+            let deletedCount = 0;
+            if (patientIdsToDelete.length > 0) {
+                for (let i = 0; i < patientIdsToDelete.length; i += SQLITE_VAR_LIMIT) {
+                    const chunk = patientIdsToDelete.slice(i, i + SQLITE_VAR_LIMIT);
+                    const r = await tx.patient.deleteMany({ where: { id: { in: chunk } } });
+                    deletedCount += r.count;
+                }
+            }
+            const deleted = { count: deletedCount };
             if (deleted.count > 0) {
                 console.log(`[Sync] Removed ${deleted.count} local patient record(s) missing from cloud.`);
             }
@@ -1656,6 +1731,7 @@ export async function pushCreateDrugToCloud(data: {
     quantity?: number;
     expiryDate?: string;
     inventoryId?: string;
+    supplierId?: string | null;
 }, options?: { actionId?: string }): Promise<boolean> {
     try {
         if (!await checkConnection()) return false;
@@ -1685,7 +1761,8 @@ export async function pushCreateDrugToCloud(data: {
                 maxStock: data.maxStock,
                 quantity: data.quantity || 0,
                 expiryDate: data.expiryDate || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
-                inventoryId: data.inventoryId
+                inventoryId: data.inventoryId,
+                supplierId: data.supplierId ?? null
             })
         });
 
@@ -1796,6 +1873,7 @@ export async function pushDeleteInventoryFromCloud(inventoryId: string, options?
                 const response = await fetch(buildApiUrl('/inventory/delete'), {
                     method: 'POST',
                     headers: {
+                        ...getDeviceAuthHeaders(),
                         'Content-Type': 'application/json',
                         'x-idempotency-key': idempotencyKey
                     },

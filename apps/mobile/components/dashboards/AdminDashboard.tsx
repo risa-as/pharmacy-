@@ -14,67 +14,8 @@ import { BranchSelector } from '../BranchSelector';
 import { formatDate, formatTime } from '../../utils/date';
 
 const { width } = Dimensions.get('window');
-const CARD_W = (width - 56) / 2;
+const HALF = (width - 48) / 2;
 
-// ── Metric Tile ────────────────────────────────────────────────────────────────
-interface MetricTileProps {
-    title: string;
-    value: string | number;
-    icon: keyof typeof Ionicons.glyphMap;
-    color: string;
-    bg: string;
-    route?: string;
-}
-function MetricTile({ title, value, icon, color, bg, route }: MetricTileProps) {
-    const router = useRouter();
-    return (
-        <TouchableOpacity
-            style={{ width: CARD_W }}
-            onPress={() => route && router.push(route as any)}
-            activeOpacity={route ? 0.75 : 1}
-            disabled={!route}
-        >
-            <View style={{
-                backgroundColor: bg,
-                borderRadius: 18,
-                padding: 16,
-                minHeight: 106,
-                justifyContent: 'space-between',
-            }}>
-                {/* Icon */}
-                <View style={{
-                    alignSelf: 'flex-end',
-                    backgroundColor: `${color}20`,
-                    borderRadius: 10,
-                    padding: 8,
-                }}>
-                    <Ionicons name={icon} size={20} color={color} />
-                </View>
-                {/* Value */}
-                <View style={{ marginTop: 10 }}>
-                    <Text
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.6}
-                        style={{
-                            color,
-                            fontSize: 22,
-                            fontWeight: '900',
-                            textAlign: 'right',
-                        }}
-                    >
-                        {typeof value === 'number' ? value.toLocaleString('en-US') : value}
-                    </Text>
-                    <Text style={{ color: `${color}99`, fontSize: 12, fontWeight: '600', textAlign: 'right', marginTop: 2 }}>
-                        {title}
-                    </Text>
-                </View>
-            </View>
-        </TouchableOpacity>
-    );
-}
-
-// ── Sale Row ───────────────────────────────────────────────────────────────────
 interface RecentSale {
     id: string;
     total?: number;
@@ -82,6 +23,27 @@ interface RecentSale {
     createdAt: string;
     paymentMethod?: string;
 }
+
+const QUICK_ACTIONS = [
+    { label: 'المخزون',       icon: 'cube-outline'    as const, route: '/(tabs)/inventory',    iconColor: (C: any) => C.warning,  iconBg: (C: any) => C.warningBg  },
+    { label: 'المشتريات',     icon: 'bag-handle-outline' as const, route: '/(tabs)/purchases', iconColor: (C: any) => C.info,     iconBg: (C: any) => C.infoBg     },
+    { label: 'الديون',        icon: 'book-outline'    as const, route: '/(tabs)/debts',        iconColor: (C: any) => C.danger,   iconBg: (C: any) => C.dangerBg   },
+    { label: 'الطلبات الذكية',icon: 'sparkles-outline' as const, route: '/(tabs)/smart-orders',iconColor: (C: any) => C.success,  iconBg: (C: any) => C.successBg  },
+] as const;
+
+function SectionLabel({ text }: { text: string }) {
+    const { isDarkMode } = useTheme();
+    const C = Colors(isDarkMode);
+    return (
+        <Text style={{
+            color: C.mutedForeground, fontSize: 11, fontWeight: '700',
+            textAlign: 'right', marginBottom: 10, paddingHorizontal: 2, letterSpacing: 0.5,
+        }}>
+            {text}
+        </Text>
+    );
+}
+
 function SaleRow({ sale, isLast }: { sale: RecentSale; isLast: boolean }) {
     const { isDarkMode } = useTheme();
     const C = Colors(isDarkMode);
@@ -90,20 +52,14 @@ function SaleRow({ sale, isLast }: { sale: RecentSale; isLast: boolean }) {
 
     return (
         <>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
-                {/* Method icon */}
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 13, gap: 12 }}>
                 <View style={{
+                    width: 36, height: 36, borderRadius: 5,
                     backgroundColor: isCash ? C.successBg : C.primaryMuted,
-                    borderRadius: 10,
-                    padding: 8,
+                    justifyContent: 'center', alignItems: 'center', flexShrink: 0,
                 }}>
-                    <Ionicons
-                        name={isCash ? 'cash' : 'card'}
-                        size={16}
-                        color={isCash ? C.success : C.primary}
-                    />
+                    <Ionicons name={isCash ? 'cash-outline' : 'card-outline'} size={17} color={isCash ? C.success : C.primary} />
                 </View>
-                {/* Info */}
                 <View style={{ flex: 1 }}>
                     <Text style={{ color: C.foreground, fontWeight: '600', textAlign: 'right', fontSize: 13 }}>
                         {sale.createdAt ? formatTime(sale.createdAt, { hour: '2-digit', minute: '2-digit' }) : '--:--'}
@@ -112,30 +68,29 @@ function SaleRow({ sale, isLast }: { sale: RecentSale; isLast: boolean }) {
                         {isCash ? 'نقدي' : (sale.paymentMethod ?? '')}
                     </Text>
                 </View>
-                {/* Amount */}
-                <View style={{ alignItems: 'flex-start' }}>
+                <View style={{ alignItems: 'flex-end' }}>
                     <Text style={{ color: C.success, fontWeight: '800', fontSize: 15 }}>
                         {amount.toLocaleString('en-US')}
                     </Text>
-                    <Text style={{ color: C.mutedForeground, fontSize: 10, textAlign: 'left' }}>د.ع</Text>
+                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>د.ع</Text>
                 </View>
             </View>
-            {!isLast && <View style={{ height: 1, backgroundColor: C.border, marginHorizontal: 4 }} />}
+            {!isLast && <View style={{ height: 1, backgroundColor: C.border }} />}
         </>
     );
 }
 
-// ── AdminDashboard ─────────────────────────────────────────────────────────────
 export function AdminDashboard() {
     const { isDarkMode } = useTheme();
-    const { branchId } = useAuth();
+    const { branchId, user } = useAuth();
     const C = Colors(isDarkMode);
+    const router = useRouter();
 
-    const [stats, setStats] = useState<any>(null);
+    const [stats, setStats]             = useState<any>(null);
     const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
     const [selectedBranch, setSelectedBranch] = useState<string | null>(branchId);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+    const [loading, setLoading]         = useState(true);
+    const [refreshing, setRefreshing]   = useState(false);
 
     const fetchData = useCallback(async () => {
         try {
@@ -156,6 +111,8 @@ export function AdminDashboard() {
     useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
     const onRefresh = useCallback(() => { setRefreshing(true); fetchData(); }, [fetchData]);
 
+    const firstName = user?.name?.split(' ')[0] ?? 'المدير';
+
     return (
         <ScrollView
             style={{ flex: 1, backgroundColor: C.background }}
@@ -163,91 +120,98 @@ export function AdminDashboard() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
             showsVerticalScrollIndicator={false}
         >
-            {/* ── Header ─────────────────────────────────────────────────────── */}
+            {/* ── Header ──────────────────────────────────────────────────────── */}
             <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 }}>
                 <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View style={{ flex: 1 }}>
-                        <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginBottom: 2 }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginBottom: 3 }}>
                             {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
                         </Text>
                         <Text style={{ color: C.foreground, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>
-                            لوحة التحكم
+                            أهلاً، {firstName}
                         </Text>
                     </View>
                     <View style={{
+                        width: 48, height: 48, borderRadius: 5,
                         backgroundColor: C.primary,
-                        borderRadius: 14,
-                        padding: 11,
-                        marginRight: 0,
+                        justifyContent: 'center', alignItems: 'center',
                         shadowColor: C.primary,
                         shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 8,
-                        elevation: 6,
+                        shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
                     }}>
-                        <Ionicons name="analytics" size={22} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>
+                            {firstName.charAt(0)}
+                        </Text>
                     </View>
                 </View>
             </View>
 
-            {/* ── Branch Filter ───────────────────────────────────────────────── */}
-            <View style={{ paddingHorizontal: 20 }}>
-                <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} />
+            {/* ── Branch Filter ──────────────────────────────────────────────── */}
+            <View style={{ paddingHorizontal: 20, marginBottom: 4 }}>
+                <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle />
             </View>
 
-            {/* ── Loading ─────────────────────────────────────────────────────── */}
+            {/* ── Loading ────────────────────────────────────────────────────── */}
             {loading && !refreshing ? (
-                <View style={{ paddingHorizontal: 20, gap: 16 }}>
-                    <Skeleton height={160} radius={24} />
-                    <View style={{ flexDirection: 'row-reverse', gap: 16 }}>
-                        <Skeleton width={CARD_W} height={106} radius={18} />
-                        <Skeleton width={CARD_W} height={106} radius={18} />
+                <View style={{ paddingHorizontal: 20, gap: 16, marginTop: 8 }}>
+                    <Skeleton height={160} radius={5} />
+                    <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                        <Skeleton width={HALF} height={100} radius={5} />
+                        <Skeleton width={HALF} height={100} radius={5} />
                     </View>
-                    <Skeleton height={160} radius={18} />
+                    <Skeleton height={56} radius={5} />
+                    <Skeleton height={180} radius={5} />
                 </View>
             ) : (
-                <View style={{ paddingHorizontal: 20, gap: 20 }}>
+                <View style={{ paddingHorizontal: 20, gap: 20, marginTop: 8 }}>
 
-                    {/* ── Hero Revenue Card ─────────────────────────────────── */}
+                    {/* ── Hero Revenue Card ───────────────────────────────────── */}
                     <View style={{
-                        backgroundColor: C.primary,
-                        borderRadius: 24,
-                        padding: 22,
+                        backgroundColor: C.primary, borderRadius: 5,
+                        padding: 20,
                         shadowColor: C.primary,
                         shadowOffset: { width: 0, height: 8 },
-                        shadowOpacity: 0.35,
-                        shadowRadius: 16,
-                        elevation: 10,
+                        shadowOpacity: 0.3, shadowRadius: 16, elevation: 10,
                     }}>
-                        <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, textAlign: 'right', fontWeight: '500' }}>
-                            إجمالي مبيعات اليوم
-                        </Text>
-                        <Text style={{ color: '#fff', fontSize: 36, fontWeight: '900', textAlign: 'right', marginTop: 4, marginBottom: 20 }}>
-                            {(stats?.salesToday ?? 0).toLocaleString('en-US')}
-                            {'  '}
-                            <Text style={{ fontSize: 16, fontWeight: '600' }}>د.ع</Text>
-                        </Text>
+                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                            <View>
+                                <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '500', textAlign: 'right' }}>
+                                    إجمالي مبيعات اليوم
+                                </Text>
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+                                    <Text style={{ color: '#fff', fontSize: 32, fontWeight: '900' }}>
+                                        {(stats?.salesToday ?? 0).toLocaleString('en-US')}
+                                    </Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '600' }}>
+                                        د.ع
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={{
+                                backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 5,
+                                padding: 10,
+                            }}>
+                                <Ionicons name="analytics" size={22} color="rgba(255,255,255,0.9)" />
+                            </View>
+                        </View>
 
                         {/* Sub-metrics */}
-                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                        <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
                             {[
-                                { label: 'مبيعات', value: stats?.salesCount ?? 0, icon: 'receipt' as const },
-                                { label: 'تنبيهات', value: stats?.expiring ?? 0, icon: 'notifications' as const },
-                                { label: 'ديون', value: stats?.debtsCount ?? 0, icon: 'book' as const },
+                                { label: 'فاتورة',  value: stats?.salesCount  ?? 0, icon: 'receipt-outline'      as const },
+                                { label: 'تنبيه',   value: stats?.expiring    ?? 0, icon: 'notifications-outline' as const },
+                                { label: 'دين',     value: stats?.debtsCount  ?? 0, icon: 'book-outline'          as const },
                             ].map(m => (
                                 <View key={m.label} style={{
                                     flex: 1,
-                                    backgroundColor: 'rgba(255,255,255,0.14)',
-                                    borderRadius: 14,
-                                    padding: 12,
-                                    alignItems: 'center',
-                                    gap: 4,
+                                    backgroundColor: 'rgba(255,255,255,0.12)',
+                                    borderRadius: 5, padding: 11, alignItems: 'center', gap: 3,
                                 }}>
-                                    <Ionicons name={m.icon} size={16} color="rgba(255,255,255,0.8)" />
-                                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>
+                                    <Ionicons name={m.icon} size={15} color="rgba(255,255,255,0.75)" />
+                                    <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900' }}>
                                         {String(m.value)}
                                     </Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600' }}>
+                                    <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '600' }}>
                                         {m.label}
                                     </Text>
                                 </View>
@@ -255,40 +219,70 @@ export function AdminDashboard() {
                         </View>
                     </View>
 
-                    {/* ── Secondary KPI Grid ──────────────────────────────────── */}
-                    <View style={{ flexDirection: 'row-reverse', gap: 16 }}>
-                        <MetricTile
-                            title="نواقص المخزون"
-                            value={stats?.lowStock ?? 0}
-                            icon="cube"
-                            color={C.warning}
-                            bg={C.warningBg}
-                            route="/(tabs)/inventory"
-                        />
-                        <MetricTile
-                            title="أصناف منتهية"
-                            value={stats?.expiredCount ?? 0}
-                            icon="alert-circle"
-                            color={C.danger}
-                            bg={C.dangerBg}
-                            route="/(tabs)/inventory"
-                        />
+                    {/* ── KPI Grid ────────────────────────────────────────────── */}
+                    <View>
+                        <SectionLabel text="مؤشرات المخزون" />
+                        <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                            {[
+                                { label: 'نواقص المخزون', value: stats?.lowStock ?? 0, icon: 'cube-outline' as const, iconColor: C.warning, iconBg: C.warningBg, route: '/(tabs)/inventory' },
+                                { label: 'أصناف منتهية',  value: stats?.expiredCount ?? 0, icon: 'alert-circle-outline' as const, iconColor: C.danger, iconBg: C.dangerBg, route: '/(tabs)/inventory' },
+                            ].map(kpi => (
+                                <TouchableOpacity
+                                    key={kpi.label}
+                                    onPress={() => router.push(kpi.route as any)}
+                                    activeOpacity={0.8}
+                                    style={{
+                                        flex: 1,
+                                        backgroundColor: C.card, borderRadius: 5,
+                                        borderWidth: 1, borderColor: C.border,
+                                        padding: 16,
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 1 },
+                                        shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+                                    }}
+                                >
+                                    <View style={{
+                                        width: 38, height: 38, borderRadius: 5,
+                                        backgroundColor: kpi.iconBg,
+                                        justifyContent: 'center', alignItems: 'center',
+                                        marginBottom: 12, alignSelf: 'flex-end',
+                                    }}>
+                                        <Ionicons name={kpi.icon} size={19} color={kpi.iconColor} />
+                                    </View>
+                                    <Text style={{
+                                        color: kpi.iconColor, fontSize: 26, fontWeight: '900',
+                                        textAlign: 'right', marginBottom: 4,
+                                    }}>
+                                        {kpi.value.toLocaleString('en-US')}
+                                    </Text>
+                                    <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: '600', textAlign: 'right' }}>
+                                        {kpi.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
 
-                    {/* ── Low Stock Banner ─────────────────────────────────────── */}
+                    {/* ── Low Stock Banner ────────────────────────────────────── */}
                     {(stats?.lowStock ?? 0) > 0 && (
-                        <View style={{
-                            flexDirection: 'row-reverse',
-                            alignItems: 'center',
-                            backgroundColor: C.warningBg,
-                            borderRadius: 16,
-                            padding: 14,
-                            gap: 12,
-                            borderWidth: 1,
-                            borderColor: `${C.warning}30`,
-                        }}>
-                            <View style={{ backgroundColor: `${C.warning}25`, borderRadius: 10, padding: 8 }}>
-                                <Ionicons name="alert-circle" size={20} color={C.warning} />
+                        <TouchableOpacity
+                            onPress={() => router.push('/(tabs)/inventory' as any)}
+                            activeOpacity={0.8}
+                            style={{
+                                flexDirection: 'row-reverse', alignItems: 'center',
+                                backgroundColor: C.warningBg, borderRadius: 5,
+                                borderWidth: 1, borderColor: `${C.warning}40`,
+                                padding: 14, gap: 12,
+                            }}
+                        >
+                            <View style={{ width: 4, height: '100%', position: 'absolute', right: 0, top: 0, backgroundColor: C.warning, borderTopRightRadius: 5, borderBottomRightRadius: 5 }} />
+                            <View style={{
+                                width: 36, height: 36, borderRadius: 5,
+                                backgroundColor: `${C.warning}25`,
+                                justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+                                marginRight: 4,
+                            }}>
+                                <Ionicons name="warning-outline" size={18} color={C.warning} />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={{ color: C.foreground, fontWeight: '700', textAlign: 'right', fontSize: 13 }}>
@@ -298,29 +292,55 @@ export function AdminDashboard() {
                                     {stats.lowStock} صنف تحت حد إعادة الطلب
                                 </Text>
                             </View>
-                            <View style={{ backgroundColor: C.warning, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 4 }}>
-                                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{stats.lowStock}</Text>
-                            </View>
-                        </View>
+                            <Ionicons name="chevron-back" size={16} color={C.warning} />
+                        </TouchableOpacity>
                     )}
+
+                    {/* ── Quick Actions ────────────────────────────────────────── */}
+                    <View>
+                        <SectionLabel text="وصول سريع" />
+                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                            {QUICK_ACTIONS.map(action => (
+                                <TouchableOpacity
+                                    key={action.label}
+                                    onPress={() => router.push(action.route as any)}
+                                    activeOpacity={0.8}
+                                    style={{
+                                        flex: 1,
+                                        backgroundColor: C.card, borderRadius: 5,
+                                        borderWidth: 1, borderColor: C.border,
+                                        paddingVertical: 14, alignItems: 'center', gap: 8,
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 1 },
+                                        shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+                                    }}
+                                >
+                                    <View style={{
+                                        width: 36, height: 36, borderRadius: 5,
+                                        backgroundColor: action.iconBg(C),
+                                        justifyContent: 'center', alignItems: 'center',
+                                    }}>
+                                        <Ionicons name={action.icon} size={18} color={action.iconColor(C)} />
+                                    </View>
+                                    <Text style={{ color: C.foreground, fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
+                                        {action.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
 
                     {/* ── Recent Sales ─────────────────────────────────────────── */}
                     {recentSales.length > 0 && (
                         <View>
-                            <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right', marginBottom: 12 }}>
-                                آخر المبيعات
-                            </Text>
+                            <SectionLabel text="آخر المبيعات" />
                             <View style={{
-                                backgroundColor: C.card,
-                                borderRadius: 20,
-                                paddingHorizontal: 16,
-                                borderWidth: 1,
-                                borderColor: C.border,
+                                backgroundColor: C.card, borderRadius: 5,
+                                borderWidth: 1, borderColor: C.border,
+                                paddingHorizontal: 14,
                                 shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: isDarkMode ? 0.3 : 0.06,
-                                shadowRadius: 8,
-                                elevation: 2,
+                                shadowOffset: { width: 0, height: 1 },
+                                shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
                             }}>
                                 {recentSales.map((sale, idx) => (
                                     <SaleRow key={sale.id} sale={sale} isLast={idx === recentSales.length - 1} />
