@@ -30,6 +30,29 @@ const nextConfig = {
     // ── HTTP Headers ─────────────────────────────────────────────────────────
     async headers() {
         return [
+            // Global security headers (apply to pages + API).
+            // Note: CSP intentionally restricts framing/objects/base-uri only,
+            // not script/style sources, to avoid breaking Next.js hydration.
+            {
+                source: '/:path*',
+                headers: [
+                    { key: 'X-Content-Type-Options', value: 'nosniff' },
+                    { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+                    { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+                    {
+                        key: 'Strict-Transport-Security',
+                        value: 'max-age=63072000; includeSubDomains; preload',
+                    },
+                    {
+                        key: 'Permissions-Policy',
+                        value: 'geolocation=(), microphone=(), payment=()',
+                    },
+                    {
+                        key: 'Content-Security-Policy',
+                        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+                    },
+                ],
+            },
             // Static assets — long-lived immutable cache
             {
                 source: '/_next/static/:path*',
@@ -42,14 +65,6 @@ const nextConfig = {
                 source: '/fonts/:path*',
                 headers: [
                     { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-                ],
-            },
-            // API routes — no cache by default (overridden per route where appropriate)
-            {
-                source: '/api/:path*',
-                headers: [
-                    { key: 'X-Content-Type-Options', value: 'nosniff' },
-                    { key: 'X-Frame-Options', value: 'DENY' },
                 ],
             },
         ];

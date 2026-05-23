@@ -51,7 +51,7 @@ export async function GET() {
         return NextResponse.json({ tenants });
     } catch (e: any) {
         console.error("==> Error in /api/admin/tenants:", e.message);
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 
@@ -175,6 +175,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ tenant, success: true }, { status: 201 });
     } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        console.error("==> Error creating tenant:", e?.message);
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

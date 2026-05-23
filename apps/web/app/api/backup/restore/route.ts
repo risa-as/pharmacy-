@@ -14,6 +14,28 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, message: "ليس لديك صلاحية للنسخ الاحتياطي." }, { status: 403 });
         }
 
+        // ── Tenant scope ─────────────────────────────────────────────────────
+        // A restore must only ever write records that belong to the caller's own
+        // organization. Without this, an org admin could craft a backup that
+        // creates SUPER_ADMIN users, overwrites another tenant's data, or resets
+        // any user's password by id.
+        const isSuper = tenantCtx.user.role === 'SUPER_ADMIN';
+        const orgId = tenantCtx.organizationId;
+
+        let allowedBranchIds: Set<string> | null = null; // null = unrestricted (super admin only)
+        if (!isSuper) {
+            if (!orgId) {
+                return NextResponse.json({ success: false, message: "No organization context" }, { status: 403 });
+            }
+            const branches = await prisma.branch.findMany({
+                where: { organizationId: orgId },
+                select: { id: true },
+            });
+            allowedBranchIds = new Set(branches.map((b: { id: string }) => b.id));
+        }
+        const branchAllowed = (b?: string | null) => isSuper || (!!b && allowedBranchIds!.has(b));
+        const orgAllowed = (o?: string | null) => isSuper || (!!o && o === orgId);
+
         const body = await req.json();
 
         // Support both direct data object or wrapped in "data" key (as exported)
@@ -38,6 +60,19 @@ export async function POST(req: Request) {
             // 1. Users
             if (Array.isArray(users)) {
                 for (const user of users) {
+                    if (!user?.id) continue;
+                    // Never import or elevate a user to platform-staff role.
+                    if (user.role === 'SUPER_ADMIN') continue;
+                    // Target branch must be within the caller's scope.
+                    if (!branchAllowed(user.branchId)) continue;
+                    // If the user already exists, it must already belong to the
+                    // caller's scope (prevents cross-tenant password/role overwrite).
+                    const existingUser = await tx.user.findUnique({
+                        where: { id: user.id },
+                        select: { branchId: true },
+                    });
+                    if (existingUser && !branchAllowed(existingUser.branchId)) continue;
+
                     await tx.user.upsert({
                         where: { id: user.id },
                         update: {
@@ -56,13 +91,21 @@ export async function POST(req: Request) {
                             branchId: user.branchId
                         }
                     });
+                    stats.users++;
                 }
-                stats.users = users.length;
             }
 
             // 2. Patients
             if (Array.isArray(patients)) {
                 for (const p of patients) {
+                    if (!p?.id) continue;
+                    if (!branchAllowed(p.branchId)) continue;
+                    const existingPatient = await tx.patient.findUnique({
+                        where: { id: p.id },
+                        select: { branchId: true },
+                    });
+                    if (existingPatient && !branchAllowed(existingPatient.branchId)) continue;
+
                     await tx.patient.upsert({
                         where: { id: p.id },
                         update: {
@@ -72,7 +115,8 @@ export async function POST(req: Request) {
                             gender: p.gender,
                             allergies: p.allergies,
                             chronicDiseases: p.chronicDiseases,
-                            notes: p.notes
+                            notes: p.notes,
+                            branchId: p.branchId
                         },
                         create: {
                             id: p.id,
@@ -82,16 +126,25 @@ export async function POST(req: Request) {
                             gender: p.gender,
                             allergies: p.allergies,
                             chronicDiseases: p.chronicDiseases,
-                            notes: p.notes
+                            notes: p.notes,
+                            branchId: p.branchId
                         }
                     });
+                    stats.patients++;
                 }
-                stats.patients = patients.length;
             }
 
-            // 3. Suppliers
+            // 3. Suppliers (org-scoped)
             if (Array.isArray(suppliers)) {
                 for (const s of suppliers) {
+                    if (!s?.id) continue;
+                    const existingSupplier = await tx.supplier.findUnique({
+                        where: { id: s.id },
+                        select: { organizationId: true },
+                    });
+                    if (existingSupplier && !orgAllowed(existingSupplier.organizationId)) continue;
+                    const supplierOrg = isSuper ? (s.organizationId ?? null) : orgId;
+
                     await tx.supplier.upsert({
                         where: { id: s.id },
                         update: {
@@ -99,6 +152,7 @@ export async function POST(req: Request) {
                             phone: s.phone,
                             email: s.email,
                             address: s.address,
+                            organizationId: supplierOrg,
                         },
                         create: {
                             id: s.id,
@@ -106,15 +160,26 @@ export async function POST(req: Request) {
                             phone: s.phone,
                             email: s.email,
                             address: s.address,
+                            organizationId: supplierOrg,
                         }
                     });
+                    stats.suppliers++;
                 }
-                stats.suppliers = suppliers.length;
             }
 
-            // 4. Global Drugs
+            // 4. Custom Drugs (org-scoped). The shared global catalog
+            //    (organizationId = null) is never modified via tenant restore.
             if (Array.isArray(drugs)) {
                 for (const d of drugs) {
+                    if (!d?.id) continue;
+                    const existingDrug = await tx.globalDrug.findUnique({
+                        where: { id: d.id },
+                        select: { organizationId: true },
+                    });
+                    // Only touch drugs that already belong to the caller's org.
+                    if (existingDrug && !orgAllowed(existingDrug.organizationId)) continue;
+                    const drugOrg = isSuper ? (d.organizationId ?? null) : orgId;
+
                     await tx.globalDrug.upsert({
                         where: { id: d.id },
                         update: {
@@ -123,7 +188,8 @@ export async function POST(req: Request) {
                             scientificName: d.scientificName,
                             origin: d.origin,
                             image: d.image,
-                            isActive: d.isActive
+                            isActive: d.isActive,
+                            organizationId: drugOrg,
                         },
                         create: {
                             id: d.id,
@@ -132,16 +198,24 @@ export async function POST(req: Request) {
                             scientificName: d.scientificName,
                             origin: d.origin,
                             image: d.image,
-                            isActive: d.isActive
+                            isActive: d.isActive,
+                            organizationId: drugOrg,
                         }
                     });
+                    stats.drugs++;
                 }
-                stats.drugs = drugs.length;
             }
 
             // 5. Inventories
             if (Array.isArray(inventories)) {
                 for (const inv of inventories) {
+                    if (!inv?.id) continue;
+                    if (!branchAllowed(inv.branchId)) continue;
+                    const existingInv = await tx.inventory.findUnique({
+                        where: { id: inv.id },
+                        select: { branchId: true },
+                    });
+                    if (existingInv && !branchAllowed(existingInv.branchId)) continue;
                     // Check if drug exists first (to be safe, though step 4 should cover it)
                     const drugExists = await tx.globalDrug.findUnique({ where: { id: inv.drugId } });
                     if (!drugExists) continue; // Skip orphan inventory
@@ -165,16 +239,23 @@ export async function POST(req: Request) {
                             cost: inv.cost ?? 0
                         }
                     });
+                    stats.inventories++;
                 }
-                stats.inventories = inventories.length;
             }
 
             // 6. Sales
             if (Array.isArray(sales)) {
                 for (const sale of sales) {
+                    if (!sale?.id) continue;
+                    if (!branchAllowed(sale.branchId)) continue;
+                    const existingSale = await tx.sale.findUnique({
+                        where: { id: sale.id },
+                        select: { branchId: true },
+                    });
+                    if (existingSale && !branchAllowed(existingSale.branchId)) continue;
                     // Normalize items if they exist on the sale object or need separate handling
                     // Assuming items are nested
-                    const { items, ...saleData } = sale;
+                    const { items } = sale;
 
                     await tx.sale.upsert({
                         where: { id: sale.id },
@@ -216,8 +297,8 @@ export async function POST(req: Request) {
                             });
                         }
                     }
+                    stats.sales++;
                 }
-                stats.sales = sales.length;
             }
         }, {
             maxWait: 10000, // 10s max wait for connection
@@ -234,7 +315,7 @@ export async function POST(req: Request) {
         console.error("Restore failed:", error);
         return NextResponse.json({
             success: false,
-            message: "Restore failed: " + error.message
+            message: "Restore failed"
         }, { status: 500 });
     }
 }

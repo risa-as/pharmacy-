@@ -61,7 +61,7 @@ export async function GET(req: Request) {
         return NextResponse.json(result);
     } catch (error: any) {
         console.error('Quick-sale list error:', error);
-        return NextResponse.json({ message: 'Error: ' + error.message }, { status: 500 });
+        return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
     }
 }
 
@@ -69,6 +69,9 @@ export async function GET(req: Request) {
 // Toggle isQuickSale for a drug
 export async function PATCH(req: Request) {
     try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
         const { drugId, isQuickSale } = await req.json();
 
         if (!drugId || typeof isQuickSale !== 'boolean') {
@@ -76,6 +79,19 @@ export async function PATCH(req: Request) {
                 { message: 'drugId and isQuickSale (boolean) are required' },
                 { status: 400 }
             );
+        }
+
+        // Don't let one tenant flip flags on another tenant's custom drug.
+        const existing = await prisma.globalDrug.findUnique({
+            where: { id: drugId },
+            select: { organizationId: true },
+        });
+        if (!existing) {
+            return NextResponse.json({ message: 'Drug not found' }, { status: 404 });
+        }
+        const isSuper = tenantCtx.user.role === 'SUPER_ADMIN';
+        if (existing.organizationId && existing.organizationId !== tenantCtx.organizationId && !isSuper) {
+            return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
         }
 
         const drug = await prisma.globalDrug.update({
@@ -87,6 +103,6 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ success: true, drug });
     } catch (error: any) {
         console.error('Quick-sale toggle error:', error);
-        return NextResponse.json({ message: 'Error: ' + error.message }, { status: 500 });
+        return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
     }
 }

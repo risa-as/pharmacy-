@@ -62,7 +62,27 @@ export async function POST(request: Request) {
             }
         }
 
+        // Resolve organizationId for the per-org invoice counter
+        const orgId = tenantCtx.organizationId ?? (
+            user.branchId
+                ? (await prisma.branch.findUnique({ where: { id: user.branchId }, select: { organizationId: true } }))?.organizationId
+                : undefined
+        );
+
         const sale = await prisma.$transaction(async (tx) => {
+            // Assign per-org sequential invoice number atomically
+            let invoiceNumber: number | undefined;
+            if (orgId) {
+                const [counter] = await tx.$queryRaw<[{ nextNumber: bigint }]>`
+                    INSERT INTO "InvoiceCounter" ("organizationId", "nextNumber")
+                    VALUES (${orgId}::text, 2)
+                    ON CONFLICT ("organizationId")
+                    DO UPDATE SET "nextNumber" = "InvoiceCounter"."nextNumber" + 1
+                    RETURNING "nextNumber"
+                `;
+                invoiceNumber = Number(counter.nextNumber) - 1;
+            }
+
             // Fix #3: Batch-fetch all inventory + batches BEFORE the loop (eliminates N+1)
             const drugIds = items.map((i: any) => i.drugId);
             const allInventories = await tx.inventory.findMany({
@@ -130,6 +150,7 @@ export async function POST(request: Request) {
                     discount: discount ?? 0,
                     patientId: patientId || null,
                     safeId: cashSafe?.id ?? null,
+                    ...(invoiceNumber !== undefined ? { invoiceNumber } : {}),
                     items: { create: saleItemsData }
                 }
             });

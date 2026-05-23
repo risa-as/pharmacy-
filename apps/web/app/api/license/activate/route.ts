@@ -3,9 +3,13 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { checkDeviceLimit } from "@/app/lib/saas-guards";
+import { enforceRateLimit } from "@/app/lib/rate-limit";
 
 export async function POST(req: Request) {
     try {
+        const limited = await enforceRateLimit(req, "license-activate", 20, 60_000);
+        if (limited) return limited;
+
         const { licenseKey, hardwareId, deviceName } = await req.json();
 
         if (!licenseKey || !hardwareId) {

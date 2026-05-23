@@ -3,8 +3,11 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
 
 type AckStatus = "processed" | "duplicate" | "noop";
+
+class ForbiddenError extends Error {}
 
 function readIdempotencyKey(req: Request, body: any): string {
     const fromHeader = String(req.headers.get("x-idempotency-key") || "").trim();
@@ -22,6 +25,9 @@ function makeAck(status: AckStatus, idempotencyKey: string) {
 
 export async function POST(req: Request) {
     try {
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
+
         const body = await req.json();
         const idempotencyKey = readIdempotencyKey(req, body);
 
@@ -52,6 +58,11 @@ export async function POST(req: Request) {
 
             if (!inventory) {
                 throw new Error("Inventory record not found");
+            }
+
+            // Tenant isolation: only mutate records inside the caller's scope.
+            if (!(await isBranchInSyncScope(syncUser, inventory.branchId))) {
+                throw new ForbiddenError();
             }
 
             // Build update data — only update fields that were provided
@@ -91,11 +102,17 @@ export async function POST(req: Request) {
             ack: makeAck(result.ackStatus, idempotencyKey),
         });
     } catch (error: any) {
+        if (error instanceof ForbiddenError) {
+            return NextResponse.json(
+                { success: false, message: "Forbidden", ack: makeAck("noop", "") },
+                { status: 403 }
+            );
+        }
         console.error("Update inventory item failed:", error);
         return NextResponse.json(
             {
                 success: false,
-                message: "Failed: " + error.message,
+                message: "Failed to update inventory item",
                 ack: makeAck("noop", ""),
             },
             { status: 500 }

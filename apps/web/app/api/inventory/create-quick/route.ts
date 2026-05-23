@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser } from "@/app/lib/sync-auth";
+import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
 
 type AckStatus = "processed" | "duplicate" | "noop";
 
@@ -74,6 +74,13 @@ export async function POST(req: Request) {
                     ack: makeAck("noop", idempotencyKey),
                 },
                 { status: 400 }
+            );
+        }
+
+        if (!(await isBranchInSyncScope(syncUser, branchId))) {
+            return NextResponse.json(
+                { success: false, message: "Forbidden", ack: makeAck("noop", idempotencyKey) },
+                { status: 403 }
             );
         }
 
@@ -208,7 +215,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
             {
                 success: false,
-                message: "Creation failed: " + error.message,
+                message: "Creation failed",
                 ack: makeAck("noop", ""),
             },
             { status: 500 }

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
 
 type AckStatus = "processed" | "duplicate" | "noop";
 
@@ -26,8 +27,18 @@ function makeAck(status: AckStatus, idempotencyKey: string) {
 
 export async function POST(req: Request) {
     try {
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
+
         const body = await req.json();
         const idempotencyKey = readIdempotencyKey(req, body);
+
+        if (!(await isBranchInSyncScope(syncUser, body?.branchId))) {
+            return NextResponse.json(
+                { success: false, message: "Forbidden", ack: makeAck("noop", idempotencyKey) },
+                { status: 403 }
+            );
+        }
 
         if (idempotencyKey) {
             const existingLog = await prisma.syncActionLog.findUnique({
@@ -136,7 +147,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
             {
                 success: false,
-                message: "Failed: " + error.message,
+                message: "Failed to add inventory",
                 ack: makeAck("noop", ""),
             },
             { status: 500 }

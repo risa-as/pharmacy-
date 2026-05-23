@@ -12,8 +12,8 @@ export async function GET(
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
 
-        const patient = await prisma.patient.findUnique({
-            where: { id: params.id },
+        const patient = await prisma.patient.findFirst({
+            where: { id: params.id, ...tenantCtx.tenantBranchWhere },
             include: {
                 sales: {
                     orderBy: { createdAt: 'desc' },
@@ -53,10 +53,21 @@ export async function PATCH(
             return NextResponse.json({ message: 'ليس لديك صلاحية لتعديل بيانات المرضى.' }, { status: 403 });
         }
 
+        // Tenant isolation: confirm the patient is within the caller's scope first.
+        const existing = await prisma.patient.findFirst({
+            where: { id: params.id, ...tenantCtx.tenantBranchWhere },
+            select: { id: true },
+        });
+        if (!existing) {
+            return NextResponse.json({ message: 'Patient not found' }, { status: 404 });
+        }
+
         const body = await req.json();
+        // Never allow the caller to move a patient to another branch via the body.
+        const { branchId: _ignoredBranchId, id: _ignoredId, ...safeData } = body ?? {};
         const patient = await prisma.patient.update({
             where: { id: params.id },
-            data: body,
+            data: safeData,
         });
 
         return NextResponse.json(patient);

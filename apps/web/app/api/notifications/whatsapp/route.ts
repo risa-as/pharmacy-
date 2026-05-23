@@ -9,6 +9,12 @@ export async function POST(req: NextRequest) {
     try {
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        // Outbound messaging uses the org's WhatsApp Business account — limit it to
+        // management roles so a low-privileged seat can't spam arbitrary numbers.
+        const role = (session.user as any).role;
+        if (!['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(role)) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
 
         const body = await req.json();
         const { phone, templateName, variables, customMessage } = body;
@@ -83,19 +89,24 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: result.error?.message || 'WhatsApp API error', details: result }, { status: 400 });
         }
     } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        console.error('WhatsApp send error:', e);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
 
 // GET: List WhatsApp templates
 export async function GET() {
     try {
+        const session = await auth();
+        if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
         const templates = await prisma.whatsAppTemplate.findMany({
             where: { isActive: true },
             orderBy: { name: 'asc' }
         });
         return NextResponse.json({ templates });
     } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        console.error('WhatsApp templates error:', e);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

@@ -139,6 +139,7 @@ export default function AIAssistantPanel() {
     const [configured,    setConfigured]    = useState(true);
     const [usage,         setUsage]         = useState<UsageInfo | null>(null);
     const [showExamples,  setShowExamples]  = useState(false);
+    const [activeTab,     setActiveTab]     = useState(0);
     const bottomRef   = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -243,7 +244,7 @@ export default function AIAssistantPanel() {
     const isDisabled     = atMsgLimit || atDailyLimit;
 
     const usagePct = usage ? Math.round((usage.used / usage.limit) * 100) : 0;
-    const usageColor = usagePct >= 90 ? 'text-destructive' : usagePct >= 70 ? 'text-warning' : 'text-violet-200';
+    const usageColor = usagePct >= 90 ? 'text-destructive' : usagePct >= 70 ? 'text-warning' : 'text-white/70';
 
     return (
         <>
@@ -253,8 +254,8 @@ export default function AIAssistantPanel() {
                 title="المساعد الذكي"
                 className={`fixed bottom-6 left-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all
                     ${isOpen
-                        ? 'bg-violet-700 text-white rotate-12'
-                        : 'bg-violet-600 hover:bg-violet-700 text-white'
+                        ? 'bg-primary/90 text-white rotate-12'
+                        : 'bg-primary hover:bg-primary/90 text-white'
                     }`}
             >
                 <Bot size={24} />
@@ -271,7 +272,7 @@ export default function AIAssistantPanel() {
                         border border-border bg-background overflow-hidden"
                 >
                     {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-violet-600 text-white">
+                    <div className="flex items-center justify-between px-4 py-3 bg-primary text-white">
                         <div className="flex items-center gap-2 min-w-0">
                             <Bot size={20} className="shrink-0" />
                             <span className="font-semibold text-sm">المساعد الذكي</span>
@@ -317,9 +318,11 @@ export default function AIAssistantPanel() {
                     {/* Examples overlay */}
                     {showExamples && (
                         <div className="absolute inset-0 z-10 flex flex-col bg-background border-t border-border overflow-hidden">
-                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/50">
+
+                            {/* Overlay header */}
+                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/40 shrink-0">
                                 <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                                    <Lightbulb size={14} className="text-violet-500" />
+                                    <Lightbulb size={14} className="text-primary" />
                                     أمثلة على الأسئلة
                                 </div>
                                 <button
@@ -329,29 +332,39 @@ export default function AIAssistantPanel() {
                                     <X size={14} />
                                 </button>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                                {EXAMPLE_CATEGORIES.map(cat => (
-                                    <div key={cat.label}>
-                                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                                            <span>{cat.icon}</span>
-                                            <span>{cat.label}</span>
-                                        </p>
-                                        <div className="flex flex-col gap-1">
-                                            {cat.questions.map(q => (
-                                                <button
-                                                    key={q}
-                                                    onClick={() => sendMessage(q)}
-                                                    disabled={isDisabled || !configured}
-                                                    className="text-right text-xs px-3 py-1.5 rounded-lg border border-border
-                                                        hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700
-                                                        dark:hover:bg-violet-900/30 dark:hover:border-violet-700 dark:hover:text-violet-300
-                                                        transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                                >
-                                                    {q}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+
+                            {/* Tab bar — horizontally scrollable */}
+                            <div className="flex overflow-x-auto gap-1 px-3 py-2 border-b border-border bg-muted/20 shrink-0 scrollbar-none">
+                                {EXAMPLE_CATEGORIES.map((cat, idx) => (
+                                    <button
+                                        key={cat.label}
+                                        onClick={() => setActiveTab(idx)}
+                                        className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0
+                                            ${activeTab === idx
+                                                ? 'bg-primary text-white shadow-sm'
+                                                : 'bg-background border border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
+                                            }`}
+                                    >
+                                        <span>{cat.icon}</span>
+                                        <span>{cat.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Questions for active tab */}
+                            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5">
+                                {EXAMPLE_CATEGORIES[activeTab].questions.map(q => (
+                                    <button
+                                        key={q}
+                                        onClick={() => { sendMessage(q); setShowExamples(false); }}
+                                        disabled={isDisabled || !configured}
+                                        className="text-right text-xs px-3 py-2.5 rounded-lg border border-border bg-background
+                                            hover:bg-primary/5 hover:border-primary/40 hover:text-primary
+                                            dark:hover:bg-primary/20 dark:hover:border-primary/40 dark:hover:text-primary
+                                            transition-colors disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed"
+                                    >
+                                        {q}
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -375,9 +388,9 @@ export default function AIAssistantPanel() {
                                             <button
                                                 key={q}
                                                 onClick={() => sendMessage(q)}
-                                                className="text-xs px-3 py-1.5 rounded-full border border-violet-300
-                                                    text-violet-700 hover:bg-violet-50 dark:text-violet-400
-                                                    dark:border-violet-700 dark:hover:bg-violet-900/30 transition-colors"
+                                                className="text-xs px-3 py-1.5 rounded-full border border-primary/40
+                                                    text-primary hover:bg-primary/5 dark:text-primary
+                                                    dark:border-primary/40 dark:hover:bg-primary/20 transition-colors"
                                             >
                                                 {q}
                                             </button>
@@ -396,7 +409,7 @@ export default function AIAssistantPanel() {
                                 <div
                                     className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed
                                         ${msg.role === 'user'
-                                            ? 'bg-violet-600 text-white rounded-br-sm'
+                                            ? 'bg-primary text-white rounded-br-sm'
                                             : 'bg-muted text-foreground rounded-bl-sm'
                                         }`}
                                 >
@@ -426,7 +439,7 @@ export default function AIAssistantPanel() {
                                 <p className="text-xs text-muted-foreground mb-2">وصلت للحد الأقصى للمحادثة (20 رسالة)</p>
                                 <button
                                     onClick={() => setMessages([])}
-                                    className="text-xs text-violet-600 hover:underline"
+                                    className="text-xs text-primary hover:underline"
                                 >
                                     بدء محادثة جديدة
                                 </button>
@@ -458,14 +471,14 @@ export default function AIAssistantPanel() {
                                 rows={1}
                                 className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2
                                     text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2
-                                    focus:ring-violet-500 disabled:opacity-50 max-h-28 overflow-y-auto"
+                                    focus:ring-primary disabled:opacity-50 max-h-28 overflow-y-auto"
                                 style={{ direction: 'rtl' }}
                             />
                             <button
                                 onClick={() => sendMessage(input)}
                                 disabled={!input.trim() || loading || isDisabled || !configured}
-                                className="flex-shrink-0 p-2.5 rounded-xl bg-violet-600 text-white
-                                    hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                className="flex-shrink-0 p-2.5 rounded-xl bg-primary text-white
+                                    hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
                                 {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                             </button>

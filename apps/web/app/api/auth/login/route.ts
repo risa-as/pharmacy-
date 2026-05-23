@@ -4,9 +4,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
+import { enforceRateLimit } from "@/app/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const limited = await enforceRateLimit(request, "auth-login", 10, 60_000);
+    if (limited) return limited;
+
     const body = await request.json();
     const { email, password } = body;
 

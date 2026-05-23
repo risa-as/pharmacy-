@@ -3,10 +3,15 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { enforceRateLimit } from '@/app/lib/rate-limit';
+import { signPatientToken } from '@/app/lib/patient-app-auth';
 
 // POST: Patient Registration / Login
 export async function POST(req: NextRequest) {
     try {
+        const limited = await enforceRateLimit(req, 'patient-app-auth', 10, 60_000);
+        if (limited) return limited;
+
         const body = await req.json();
         const { action, phone, password, name, email } = body;
 
@@ -33,8 +38,10 @@ export async function POST(req: NextRequest) {
                 }
             });
 
+            const token = await signPatientToken(user.id);
             return NextResponse.json({
                 success: true,
+                token,
                 user: { id: user.id, phone: user.phone, name: user.name }
             }, { status: 201 });
 
@@ -46,8 +53,10 @@ export async function POST(req: NextRequest) {
             const valid = await bcrypt.compare(password, user.password);
             if (!valid) return NextResponse.json({ error: "كلمة المرور غير صحيحة" }, { status: 401 });
 
+            const token = await signPatientToken(user.id);
             return NextResponse.json({
                 success: true,
+                token,
                 user: {
                     id: user.id,
                     phone: user.phone,

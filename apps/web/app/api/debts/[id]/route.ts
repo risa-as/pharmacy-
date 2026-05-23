@@ -12,8 +12,8 @@ export async function GET(
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
 
-        const patient = await prisma.patient.findUnique({
-            where: { id: params.id },
+        const patient = await prisma.patient.findFirst({
+            where: { id: params.id, ...tenantCtx.tenantBranchWhere },
             include: {
                 sales: {
                     orderBy: { createdAt: 'desc' },

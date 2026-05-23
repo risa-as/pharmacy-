@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         const userRole = syncUser.role;
         const userBranchId = syncUser.branchId;
         const userOrgId = syncUser.organizationId;
+        let resolvedOrgId: string | undefined = userOrgId ?? undefined;
         if (userRole !== 'SUPER_ADMIN') {
             const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
             if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
@@ -63,6 +64,10 @@ export async function POST(req: NextRequest) {
             } else {
                 if (branchId !== userBranchId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
             }
+            resolvedOrgId = branch.organizationId;
+        } else if (!resolvedOrgId) {
+            const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
+            resolvedOrgId = branch?.organizationId;
         }
 
         // Process Sales Transactionally
@@ -80,6 +85,19 @@ export async function POST(req: NextRequest) {
                     const existing = await tx.sale.findUnique({ where: { id: sale.id } });
                     if (existing) {
                         return; // Already synced
+                    }
+
+                    // Assign per-org sequential invoice number atomically
+                    let invoiceNumber: number | undefined;
+                    if (resolvedOrgId) {
+                        const [counter] = await tx.$queryRaw<[{ nextNumber: bigint }]>`
+                            INSERT INTO "InvoiceCounter" ("organizationId", "nextNumber")
+                            VALUES (${resolvedOrgId}::text, 2)
+                            ON CONFLICT ("organizationId")
+                            DO UPDATE SET "nextNumber" = "InvoiceCounter"."nextNumber" + 1
+                            RETURNING "nextNumber"
+                        `;
+                        invoiceNumber = Number(counter.nextNumber) - 1;
                     }
 
                     const isCredit = sale.paymentMethod === "CREDIT";
@@ -178,6 +196,7 @@ export async function POST(req: NextRequest) {
                             createdAt: new Date(sale.createdAt),
                             userId: sale.userId,
                             patientId: resolvedPatientId,
+                            ...(invoiceNumber !== undefined ? { invoiceNumber } : {}),
                             items: {
                                 create: saleItemsData
                             }

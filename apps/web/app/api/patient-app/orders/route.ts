@@ -2,14 +2,13 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getPatientUserId } from '@/app/lib/patient-app-auth';
 
 // GET: Patient's orders
 export async function GET(req: NextRequest) {
     try {
-        const { searchParams } = new URL(req.url);
-        const patientId = searchParams.get('patientId');
-
-        if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
+        const patientId = await getPatientUserId(req);
+        if (patientId instanceof NextResponse) return patientId;
 
         const orders = await prisma.patientAppOrder.findMany({
             where: { patientId },
@@ -26,17 +25,19 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ orders });
     } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        console.error('Patient-app orders error:', e);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
 
 // POST: Place a new order (request medication)
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
-        const { patientId, branchId, prescriptionUrl, deliveryAddress, notes, items } = body;
+        const patientId = await getPatientUserId(req);
+        if (patientId instanceof NextResponse) return patientId;
 
-        if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
+        const body = await req.json();
+        const { branchId, prescriptionUrl, deliveryAddress, notes, items } = body;
 
         const orderData: any = {
             patientId,
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ order }, { status: 201 });
     } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        console.error('Patient-app orders error:', e);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

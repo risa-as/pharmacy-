@@ -12,8 +12,10 @@ export async function GET(req: Request) {
         const { tenantBranchWhere } = tenantCtx;
 
         const url = new URL(req.url);
-        const filterDrugId = url.searchParams.get('drugId');
+        const filterDrugId   = url.searchParams.get('drugId');
         const filterBranchId = url.searchParams.get('branchId');
+        const searchQuery    = url.searchParams.get('search')?.trim() ?? '';
+        const isSearch       = searchQuery.length >= 2;
 
         // Validate filterBranchId is within the tenant's scope
         if (filterBranchId && tenantCtx.user.role !== 'SUPER_ADMIN') {
@@ -26,17 +28,35 @@ export async function GET(req: Request) {
             }
         }
 
+        // When searching: find matching drugs first, then filter inventory to those drugs
+        let searchDrugIds: string[] | null = null;
+        if (isSearch) {
+            const matchingDrugs = await prisma.globalDrug.findMany({
+                where: {
+                    OR: [
+                        { tradeName:      { contains: searchQuery, mode: 'insensitive' } },
+                        { scientificName: { contains: searchQuery, mode: 'insensitive' } },
+                        { barcode:        { contains: searchQuery } },
+                    ],
+                },
+                select: { id: true },
+                take: 20,
+            });
+            searchDrugIds = matchingDrugs.map((d: any) => d.id);
+            if (searchDrugIds.length === 0) return NextResponse.json([]);
+        }
+
         const where = {
             ...tenantBranchWhere,
-            ...(filterDrugId ? { drugId: filterDrugId } : {}),
-            ...(filterBranchId ? { branchId: filterBranchId } : {}),
+            ...(filterDrugId    ? { drugId: filterDrugId }   : {}),
+            ...(filterBranchId  ? { branchId: filterBranchId } : {}),
+            ...(searchDrugIds   ? { drugId: { in: searchDrugIds } } : {}),
         };
 
         const inventory = await prisma.inventory.findMany({
             where,
-            include: {
-                batches: true,
-            }
+            include: { batches: true },
+            ...(isSearch ? { take: 10 } : {}),
         });
 
         // Fetch only drugs referenced in this inventory result (avoids full-table scan)
@@ -55,6 +75,10 @@ export async function GET(req: Request) {
                 drugId: item.drugId,
                 barcode: drug ? drug.barcode : '',
                 drugName: drug ? drug.tradeName : 'Unknown Drug',
+                // For POS name search: expose these fields
+                name:           drug ? drug.tradeName     : 'Unknown Drug',
+                tradeName:      drug ? drug.tradeName     : 'Unknown Drug',
+                scientificName: drug ? (drug.scientificName ?? '') : '',
                 quantity: totalQuantity,
                 price: item.price,
                 publicPrice: drug ? (drug as any).publicPrice || item.price : item.price,

@@ -104,35 +104,41 @@ export async function GET(req: NextRequest) {
         });
     } catch (error: any) {
         console.error('Audit Log GET Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
 
 // POST: Create a new audit log entry
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
-        const { userId, userName, action, entity, entityId, details, branchId } = body;
+        // Identity is taken from the authenticated session — never from the body —
+        // so audit entries can't be spoofed or forged by anonymous callers.
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { user } = tenantCtx;
 
-        if (!userId || !userName || !action || !entity) {
+        const body = await req.json();
+        const { action, entity, entityId, details } = body;
+
+        if (!action || !entity) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
         const log = await prisma.auditLog.create({
             data: {
-                userId,
-                userName,
+                userId: user.id,
+                userName: user.name ?? user.email ?? 'Unknown',
                 action,
                 entity,
                 entityId: entityId || null,
                 details: typeof details === 'object' ? JSON.stringify(details) : details || null,
-                branchId: branchId || null,
+                branchId: user.branchId || null,
             }
         });
 
         return NextResponse.json({ success: true, log });
     } catch (error: any) {
         console.error('Audit Log POST Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

@@ -4,8 +4,11 @@ import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
+import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
 
 type AckStatus = "processed" | "duplicate" | "noop";
+
+class ForbiddenError extends Error {}
 
 function readIdempotencyKey(req: Request, body: any): string {
     const fromHeader = String(req.headers.get("x-idempotency-key") || "").trim();
@@ -27,6 +30,9 @@ function makeAck(status: AckStatus, idempotencyKey: string) {
 
 export async function POST(req: Request) {
     try {
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
+
         const body = await req.json();
         const idempotencyKey = readIdempotencyKey(req, body);
 
@@ -81,9 +87,20 @@ export async function POST(req: Request) {
                 });
             }
 
+            if (inventory) {
+                // Existing record — its branch must be in the caller's scope.
+                if (!(await isBranchInSyncScope(syncUser, inventory.branchId))) {
+                    throw new ForbiddenError();
+                }
+            }
+
             if (!inventory) {
                 // Auto-create inventory if drug+branch is known (e.g. local-only records syncing up for the first time)
                 if (drugId && branchId) {
+                    // Can only create inventory in a branch within the caller's scope.
+                    if (!(await isBranchInSyncScope(syncUser, branchId))) {
+                        throw new ForbiddenError();
+                    }
                     const drug = await tx.globalDrug.findUnique({ where: { id: drugId }, select: { id: true } });
                     if (!drug) throw new Error(`Drug not found: ${drugId}`);
                     inventory = await tx.inventory.create({
@@ -168,11 +185,17 @@ export async function POST(req: Request) {
             ack: makeAck(result.ackStatus, idempotencyKey),
         });
     } catch (error: any) {
+        if (error instanceof ForbiddenError) {
+            return NextResponse.json(
+                { success: false, message: "Forbidden", ack: makeAck("noop", "") },
+                { status: 403 }
+            );
+        }
         console.error("Add batch failed:", error);
         return NextResponse.json(
             {
                 success: false,
-                message: "Failed: " + error.message,
+                message: "Failed to add batch",
                 ack: makeAck("noop", ""),
             },
             { status: 500 }

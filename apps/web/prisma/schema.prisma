@@ -33,6 +33,7 @@ model Organization {
   suppliers          Supplier[]   @relation("OrganizationSuppliers")
   companySettings    CompanySettings?
   aiUsageLogs        AiUsageLog[]
+  invoiceCounter     InvoiceCounter?
 
   plan               SubscriptionPlan? @relation(fields: [planId], references: [id])
 }
@@ -241,7 +242,7 @@ model SyncActionLog {
 
 model Sale {
   id               String        @id @default(uuid())
-  invoiceNumber    Int           @default(autoincrement()) @unique
+  invoiceNumber    Int?
   branchId         String
   safeId           String? // The safe where the cash for this sale went
   patientId        String? // Linked to CRM
@@ -265,7 +266,11 @@ model Sale {
   @@index([branchId, createdAt])
 }
 
-
+model InvoiceCounter {
+  organizationId String       @id
+  nextNumber     Int          @default(1)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
 
 enum PaymentMethod {
   CASH

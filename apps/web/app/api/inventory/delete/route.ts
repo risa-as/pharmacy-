@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { validateSyncUser, isBranchInSyncScope } from '@/app/lib/sync-auth';
 
 type AckStatus = 'processed' | 'already_deleted' | 'noop';
 
@@ -22,6 +23,9 @@ function makeAck(status: AckStatus, idempotencyKey: string) {
 export async function POST(req: Request) {
     let idempotencyKey = '';
     try {
+        const syncUser = await validateSyncUser(req);
+        if (syncUser instanceof NextResponse) return syncUser;
+
         const body = await req.json();
         const { inventoryId } = body;
         idempotencyKey = readIdempotencyKey(req, body);
@@ -34,6 +38,26 @@ export async function POST(req: Request) {
                     ack: makeAck('noop', idempotencyKey),
                 },
                 { status: 400 }
+            );
+        }
+
+        // Tenant isolation: the inventory item must belong to a branch in the
+        // caller's scope before we delete anything.
+        const target = await prisma.inventory.findUnique({
+            where: { id: inventoryId },
+            select: { branchId: true },
+        });
+        if (!target) {
+            return NextResponse.json({
+                success: true,
+                message: 'Inventory already deleted',
+                ack: makeAck('already_deleted', idempotencyKey),
+            });
+        }
+        if (!(await isBranchInSyncScope(syncUser, target.branchId))) {
+            return NextResponse.json(
+                { success: false, message: 'Forbidden', ack: makeAck('noop', idempotencyKey) },
+                { status: 403 }
             );
         }
 

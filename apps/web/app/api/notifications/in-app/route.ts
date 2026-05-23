@@ -3,11 +3,16 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
+import { jwtVerify } from 'jose';
 
 /**
  * Resolve the current user from either:
  *  - A NextAuth session cookie (web dashboard)
- *  - A mobile Bearer token (base64-encoded "email:timestamp" from /api/auth/login)
+ *  - A mobile Bearer token: the signed JWT issued by /api/auth/login
+ *
+ * The mobile token MUST be a valid signature-verified JWT. (Previously this
+ * trusted an unsigned base64 "email:timestamp" blob, which let anyone forge
+ * any user's identity.)
  *
  * Returns the user's DB id, or null if unresolvable.
  * Callers return empty data (not 401) on null so the mobile polling loop
@@ -18,16 +23,15 @@ async function resolveUserId(req: NextRequest): Promise<string | null> {
     const session = await auth();
     if (session?.user?.id) return session.user.id as string;
 
-    // 2. Mobile Bearer token — decoded as "email:timestamp"
+    // 2. Mobile Bearer token — verified JWT signed with AUTH_SECRET
     const authHeader = req.headers.get('authorization') ?? '';
     if (!authHeader.startsWith('Bearer ')) return null;
+    if (!process.env.AUTH_SECRET) return null;
     const token = authHeader.slice(7);
     try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const email = decoded.split(':')[0];
-        if (!email) return null;
-        const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-        return user?.id ?? null;
+        const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
+        const { payload } = await jwtVerify(token, secret);
+        return (payload.userId as string) ?? null;
     } catch {
         return null;
     }
@@ -70,7 +74,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ notifications, unreadCount });
     } catch (error: any) {
         console.error('[in-app notifications GET]', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
 
@@ -112,6 +116,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, unreadCount });
     } catch (error: any) {
         console.error('[in-app notifications POST]', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

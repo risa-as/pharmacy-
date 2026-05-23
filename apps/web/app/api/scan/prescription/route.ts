@@ -3,18 +3,35 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import Fuse from 'fuse.js';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { enforceRateLimit } from '@/app/lib/rate-limit';
 
 // We'll use the REST API approach for Google Vision to avoid complex auth setups
 // and just use the simple API key the user provided.
 const GOOGLE_VISION_API_URL = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.GOOGLE_VISION_API_KEY}`;
 
+// Cap the inbound image so an attacker can't run up the Vision bill or exhaust
+// memory with a huge base64 blob. ~12MB of base64 ≈ a 9MB photo.
+const MAX_IMAGE_CHARS = 12 * 1024 * 1024;
+
 export async function POST(req: Request) {
     try {
+        // Authenticated users only — this endpoint calls a paid external API.
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+
+        const limited = await enforceRateLimit(req, 'scan-prescription', 20, 60_000);
+        if (limited) return limited;
+
         const body = await req.json();
         const base64Image = body.image;
 
-        if (!base64Image) {
+        if (!base64Image || typeof base64Image !== 'string') {
             return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+        }
+
+        if (base64Image.length > MAX_IMAGE_CHARS) {
+            return NextResponse.json({ error: 'الصورة كبيرة جدًا' }, { status: 413 });
         }
 
         // 2. Call Google Cloud Vision API

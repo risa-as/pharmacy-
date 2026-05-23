@@ -101,7 +101,11 @@ const controlTowerSections: NavSection[] = [
   {
     label: "",
     links: [
-      { name: "قاعدة الأدوية العالمية", href: "/dashboard/admin/drugs", icon: Pill },
+      {
+        name: "قاعدة الأدوية العالمية",
+        href: "/dashboard/admin/drugs",
+        icon: Pill,
+      },
     ],
   },
   {
@@ -407,26 +411,37 @@ export default function SideNav({
     <>
       {/* Brand Header */}
       <Link
-        className="mb-5 flex h-20 md:h-32 items-end justify-start rounded-2xl bg-gradient-to-tr from-primary to-primary/80 p-4 shadow-lg shadow-primary/15 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+        className="mb-4 block rounded-lg overflow-hidden shadow-md shadow-primary/10 transition-transform hover:scale-[1.01] active:scale-[0.99]"
         href="/"
         onClick={() => setMobileOpen(false)}
       >
-        <div className="w-full text-primary-foreground flex flex-col gap-0.5">
-          {settings?.logoUrl ? (
-            <img
-              src={settings.logoUrl}
-              alt="Logo"
-              className="h-9 w-9 object-contain bg-primary-foreground/90 rounded-lg p-1 mb-1.5"
-            />
-          ) : (
-            <Store className="h-7 w-7 text-primary-foreground/90 mb-1" />
-          )}
-          <span className="text-lg font-bold truncate leading-tight">
-            {settings?.name || "فاراماس"}
-          </span>
-          <span className="text-[10px] text-primary-foreground/60 font-medium">
-            النظام السحابي
-          </span>
+        {/* Top gradient strip */}
+        <div className="bg-gradient-to-r from-primary to-primary/80 h-1.5 w-full" />
+
+        {/* Main card body */}
+        <div className="bg-primary/5 border border-primary/10 border-t-0 px-3 py-3 flex items-center gap-3">
+          {/* Logo / Icon */}
+          <div className="shrink-0 h-15 w-15 rounded-md bg-primary flex items-center justify-center shadow-sm">
+            {settings?.logoUrl ? (
+              <img
+                src={settings.logoUrl}
+                alt="Logo"
+                className="h-12 w-12 object-contain rounded-sm"
+              />
+            ) : (
+              <Store className="h-5 w-5 text-primary-foreground" />
+            )}
+          </div>
+
+          {/* Text */}
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-bold text-foreground truncate leading-tight">
+              {settings?.name || "فاراماس"}
+            </p>
+            <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-sm">
+              النظام السحابي لأدارة الصيدليات
+            </span>
+          </div>
         </div>
       </Link>
 
@@ -636,6 +651,12 @@ export default function SideNav({
           </span>
         </button>
       </form>
+
+      {/* Powered by */}
+      {/* <p className="mt-3 text-center text-[10px] text-muted-foreground/50 select-none">
+        طور بواسطة{" "}
+        <span className="font-semibold text-muted-foreground/70">Risa02</span>
+      </p> */}
     </>
   );
 

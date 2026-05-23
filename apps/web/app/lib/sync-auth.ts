@@ -20,17 +20,26 @@ export interface SyncUser {
     email?: string;
 }
 
-const SYNC_SECRET = process.env.SYNC_TOKEN_SECRET;
-if (!SYNC_SECRET) {
-    console.error("CRITICAL: SYNC_TOKEN_SECRET env var is not set — sync authentication is insecure");
+function getSyncSecret(): string {
+    const secret = process.env.SYNC_TOKEN_SECRET;
+    if (!secret) {
+        // Fail loudly rather than fall back to a hardcoded secret that anyone
+        // reading the source could use to forge tokens for any user/role/org.
+        throw new Error('SYNC_TOKEN_SECRET env var is not set');
+    }
+    return secret;
 }
-const _SYNC_SECRET = SYNC_SECRET || 'faramace-sync-secret-key';
 
 function verifySyncToken(token: string, userId: string, branchId: string, orgId: string, role: string): boolean {
-    const expected = crypto.createHmac('sha256', _SYNC_SECRET)
+    const expected = crypto.createHmac('sha256', getSyncSecret())
         .update(`${userId}:${branchId}:${orgId}:${role}`)
         .digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+    const tokenBuf = Buffer.from(token);
+    const expectedBuf = Buffer.from(expected);
+    // timingSafeEqual throws on length mismatch — guard so a wrong-length token
+    // is a clean "false" instead of a thrown 500.
+    if (tokenBuf.length !== expectedBuf.length) return false;
+    return crypto.timingSafeEqual(tokenBuf, expectedBuf);
 }
 
 export async function validateSyncUser(request: Request): Promise<SyncUser | NextResponse> {
@@ -85,4 +94,28 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
         name: session.user.name ?? undefined,
         email: session.user.email ?? undefined,
     };
+}
+
+/**
+ * Verifies that the given branch is within the authenticated sync user's scope.
+ *  - SUPER_ADMIN: any branch
+ *  - ADMIN: any branch within their organization
+ *  - CASHIER / DEVICE / others: only their own assigned branch
+ * Returns false for unknown branches or out-of-scope access.
+ */
+export async function isBranchInSyncScope(
+    syncUser: SyncUser,
+    branchId: string | null | undefined
+): Promise<boolean> {
+    if (syncUser.role === 'SUPER_ADMIN') return true;
+    if (!branchId) return false;
+
+    if (syncUser.role === 'ADMIN' || syncUser.role === 'MANAGER') {
+        const branch = await prisma.branch.findUnique({
+            where: { id: branchId },
+            select: { organizationId: true },
+        });
+        return !!branch && branch.organizationId === syncUser.organizationId;
+    }
+    return branchId === syncUser.branchId;
 }
