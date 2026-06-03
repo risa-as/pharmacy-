@@ -63,6 +63,8 @@ interface NavLink {
     activeFor?: string[];
     excludeFor?: string[];
     plan?: "pro" | "enterprise";
+    /** يُخفى عن أي دور غير ADMIN / SUPER_ADMIN */
+    adminOnly?: boolean;
   }[];
 }
 
