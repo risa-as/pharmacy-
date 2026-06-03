@@ -234,6 +234,7 @@ const sections: NavSection[] = [
             name: "التقارير المتقدمة",
             href: "/dashboard/reports/analytics",
             plan: "enterprise",
+            adminOnly: true,
           },
           {
             name: "مقارنة الفروع",
@@ -358,6 +359,13 @@ export default function SideNav({
         .map((link: any) => {
           if (link.subLinks) {
             const visibleSubLinks = link.subLinks.filter((sub: any) => {
+              // روابط خاصة بالمدير فقط — تُخفى عن باقي الأدوار
+              if (
+                sub.adminOnly &&
+                userRole !== "ADMIN" &&
+                userRole !== "SUPER_ADMIN"
+              )
+                return false;
               if (!userPermissions) return true;
               if (userRole === "ADMIN" || userRole === "SUPER_ADMIN")
                 return true;

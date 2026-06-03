@@ -77,22 +77,28 @@ interface Props {
     extraParams?: Record<string, string | undefined>;
     allowedPresets?: Preset[];
     showTimeFilter?: boolean;
+    /** الفلتر المُبرَز عندما لا يوجد تاريخ في الرابط (للصفحات التي لها فترة افتراضية مثل التقارير) */
+    defaultPreset?: Preset;
 }
 
-export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, currentFromTime, currentToTime, extraParams, allowedPresets, showTimeFilter }: Props) {
+export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, currentFromTime, currentToTime, extraParams, allowedPresets, showTimeFilter, defaultPreset }: Props) {
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
-    const [activePreset, setActivePreset] = useState<Preset>("last7");
+    const [activePreset, setActivePreset] = useState<Preset | null>(defaultPreset ?? null);
     const [customFrom, setCustomFrom] = useState(currentFrom || "");
     const [customTo, setCustomTo] = useState(currentTo || "");
     const [fromTime, setFromTime] = useState(currentFromTime || "");
     const [toTime, setToTime] = useState(currentToTime || "");
     const [showTimePicker, setShowTimePicker] = useState(!!(currentFromTime || currentToTime));
 
+    // عند غياب التاريخ من الرابط: نُبرز الفلتر الافتراضي إن وُجد، وإلا لا نُبرز شيئاً
+    const resolveActive = (from?: string, to?: string): Preset | null =>
+        (!from && !to) ? (defaultPreset ?? null) : detectPreset(from, to);
+
     useEffect(() => {
-        setActivePreset(detectPreset(currentFrom, currentTo));
+        setActivePreset(resolveActive(currentFrom, currentTo));
         setMounted(true);
-    }, [currentFrom, currentTo]);
+    }, [currentFrom, currentTo, defaultPreset]);
 
     const navigate = useCallback((from: string, to: string, ft?: string, tt?: string) => {
         const params = new URLSearchParams();
@@ -103,12 +109,19 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
         if (extraParams) {
             Object.entries(extraParams).forEach(([k, v]) => { if (v) params.set(k, v); });
         }
-        router.push(`${baseUrl}?${params.toString()}`);
+        const qs = params.toString();
+        router.push(qs ? `${baseUrl}?${qs}` : baseUrl);
     }, [baseUrl, extraParams, router]);
 
     const handlePreset = (preset: Preset) => {
         if (preset === "custom") {
-            setActivePreset("custom");
+            // تبديل وضع التخصيص: إظهار/إخفاء حقول التاريخ
+            setActivePreset(activePreset === "custom" ? resolveActive(currentFrom, currentTo) : "custom");
+            return;
+        }
+        // الضغط على الفلتر النشط مرة ثانية يلغيه ويعيد الوضع الافتراضي
+        if (preset === activePreset) {
+            navigate("", "", fromTime || undefined, toTime || undefined);
             return;
         }
         const { from, to } = getPresetDates(preset);
@@ -125,7 +138,7 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
         if (from && to) navigate(from, to, fromTime || undefined, toTime || undefined);
         else {
             // re-apply current preset with new times
-            const p = activePreset !== "custom" ? getPresetDates(activePreset) : { from: "", to: "" };
+            const p = activePreset && activePreset !== "custom" ? getPresetDates(activePreset) : { from: "", to: "" };
             if (p.from && p.to) navigate(p.from, p.to, fromTime || undefined, toTime || undefined);
         }
     };
@@ -136,7 +149,7 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
         const to = customTo || currentTo || "";
         if (from && to) navigate(from, to);
         else {
-            const p = activePreset !== "custom" ? getPresetDates(activePreset) : { from: "", to: "" };
+            const p = activePreset && activePreset !== "custom" ? getPresetDates(activePreset) : { from: "", to: "" };
             if (p.from && p.to) navigate(p.from, p.to);
         }
     };

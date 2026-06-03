@@ -145,6 +145,7 @@ export default async function SalesReportPage({
                     currentToTime={toTimeParam}
                     extraParams={extraParams}
                     showTimeFilter
+                    defaultPreset="last7"
                 />
                 <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/sales" />
             </div>

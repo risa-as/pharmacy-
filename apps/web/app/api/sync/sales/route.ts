@@ -138,6 +138,12 @@ export async function POST(req: NextRequest) {
                             if (remainingToDeduct > 0 && inv.cost) {
                                 itemTotalCost += remainingToDeduct * inv.cost;
                             }
+
+                            if (remainingToDeduct > 0) {
+                                console.warn(`[SyncSales] Over-sell or empty batches for drugId=${item.drugId} branchId=${branchId}. Remaining after deduction: ${remainingToDeduct}`);
+                            }
+                        } else {
+                            console.error(`[SyncSales] INVENTORY NOT FOUND — drugId=${item.drugId} branchId=${branchId} saleId=${sale.id}. Stock was NOT deducted!`);
                         }
 
                         const unitCost = item.quantity > 0 ? (itemTotalCost / item.quantity) : 0;

@@ -223,6 +223,7 @@ export default async function ProfitsReportPage({
                     currentToTime={toTimeParam}
                     extraParams={extraParams}
                     showTimeFilter
+                    defaultPreset="last7"
                 />
                 <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/profits" />
             </div>

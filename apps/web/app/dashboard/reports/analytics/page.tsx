@@ -35,6 +35,11 @@ export default async function AnalyticsPage({
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, tenantWhere, organizationId, user } = tenantCtx;
 
+    // المدير فقط (الأدمن) يمكنه الوصول لهذه الصفحة
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+        redirect('/dashboard');
+    }
+
     const selectedBranchId = searchParams?.branch;
     const branchWhere = selectedBranchId
         ? { ...tenantBranchWhere, branchId: selectedBranchId }

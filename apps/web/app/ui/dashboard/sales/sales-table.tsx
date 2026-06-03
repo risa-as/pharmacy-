@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { Eye, TrendingUp, Pencil, Tag } from "lucide-react";
 import SaleDetailsModal from "./sale-details-modal"; // Import the modal
+import SaleEditModal from "./sale-edit-modal";
 
 interface SalesTableProps {
     sales: any[];
     settings?: any;
+    canEdit?: boolean;
 }
 
-export default function SalesTable({ sales, settings }: SalesTableProps) {
+export default function SalesTable({ sales, settings, canEdit }: SalesTableProps) {
     const [selectedSale, setSelectedSale] = useState<any | null>(null);
+    const [editingSale, setEditingSale] = useState<any | null>(null);
 
     return (
         <>
@@ -78,15 +81,30 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                                     </div>
                                 </td>
                                 <td className="px-4 py-3 text-center">
-                                    <button
-                                        className="p-2 bg-muted text-muted-foreground rounded-lg group-hover:bg-primary/10 group-hover:text-primary transition-colors"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedSale(sale);
-                                        }}
-                                    >
-                                        <Eye className="w-4 h-4" />
-                                    </button>
+                                    <div className="flex items-center justify-center gap-2">
+                                        <button
+                                            title="عرض التفاصيل"
+                                            className="p-2 bg-muted text-muted-foreground rounded-lg group-hover:bg-primary/10 group-hover:text-primary transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedSale(sale);
+                                            }}
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                        </button>
+                                        {canEdit && (
+                                            <button
+                                                title="تعديل الفاتورة"
+                                                className="p-2 bg-muted text-muted-foreground rounded-lg hover:bg-amber-100 hover:text-amber-600 transition-colors"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditingSale(sale);
+                                                }}
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -100,6 +118,14 @@ export default function SalesTable({ sales, settings }: SalesTableProps) {
                 onClose={() => setSelectedSale(null)}
                 settings={settings}
             />
+
+            {canEdit && (
+                <SaleEditModal
+                    sale={editingSale}
+                    isOpen={!!editingSale}
+                    onClose={() => setEditingSale(null)}
+                />
+            )}
         </>
     );
 }

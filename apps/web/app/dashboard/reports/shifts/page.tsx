@@ -164,6 +164,7 @@ export default async function Page({
                     currentTo={to}
                     extraParams={query ? { query } : undefined}
                     allowedPresets={["today", "yesterday", "last7", "custom"]}
+                    defaultPreset="last7"
                 />
             </div>
 
