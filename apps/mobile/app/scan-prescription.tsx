@@ -1,11 +1,23 @@
-﻿import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, FlatList, Alert } from 'react-native';
+import React, { useState, useRef } from 'react';
+import {
+    View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
+    Image, ScrollView, Alert,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../constants/colors';
 import { apiService } from '../services/api';
+
+// مفتاح AsyncStorage لتمرير الأدوية المحددة إلى شاشة المبيعات
+export const PRESCRIPTION_DRUGS_KEY = 'pendingPrescriptionDrugs';
+
+// الإطار الأزرق: عرضه 80% وارتفاعه 60% — نفس قيم الـ UI
+const FRAME_WIDTH_RATIO  = 0.80;
+const FRAME_HEIGHT_RATIO = 0.60;
 
 export default function ScanPrescriptionScreen() {
     const { isDarkMode } = useTheme();
@@ -13,11 +25,12 @@ export default function ScanPrescriptionScreen() {
     const [permission, requestPermission] = useCameraPermissions();
     const cameraRef = useRef<CameraView>(null);
 
-    const [loading, setLoading] = useState(false);
-    const [photoUri, setPhotoUri] = useState<string | null>(null);
-    const [rawText, setRawText] = useState<string>('');
-    const [suggestions, setSuggestions] = useState<any[]>([]);
-    const [step, setStep] = useState<'camera' | 'review'>('camera');
+    const [loading, setLoading]           = useState(false);
+    const [photoUri, setPhotoUri]         = useState<string | null>(null);
+    const [rawText, setRawText]           = useState<string>('');
+    const [suggestions, setSuggestions]   = useState<any[]>([]);
+    const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
+    const [step, setStep]                 = useState<'camera' | 'review'>('camera');
 
     if (!permission) return <View style={{ flex: 1, backgroundColor: C.background }} />;
     if (!permission.granted) {
@@ -36,14 +49,32 @@ export default function ScanPrescriptionScreen() {
         );
     }
 
+    // ── قص الصورة لتطابق الإطار الأزرق ──────────────────────────────────────
+    const cropToFrame = async (uri: string): Promise<string> => {
+        const info = await ImageManipulator.manipulateAsync(uri, [], { base64: false });
+        const { width: imgW, height: imgH } = info;
+        const cropW    = Math.round(imgW * FRAME_WIDTH_RATIO);
+        const cropH    = Math.round(imgH * FRAME_HEIGHT_RATIO);
+        const originX  = Math.round((imgW - cropW) / 2);
+        const originY  = Math.round((imgH - cropH) / 2);
+        const cropped  = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ crop: { originX, originY, width: cropW, height: cropH } }],
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+        );
+        return cropped.base64!;
+    };
+
+    // ── التقاط الصورة من الكاميرا ────────────────────────────────────────────
     const takePicture = async () => {
         if (cameraRef.current && !loading) {
             try {
                 setLoading(true);
-                const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
-                if (photo && photo.base64) {
+                const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
+                if (photo?.uri) {
                     setPhotoUri(photo.uri);
-                    processImage(photo.base64);
+                    const croppedBase64 = await cropToFrame(photo.uri);
+                    processImage(croppedBase64);
                 } else {
                     setLoading(false);
                 }
@@ -54,6 +85,7 @@ export default function ScanPrescriptionScreen() {
         }
     };
 
+    // ── اختيار صورة من المعرض ────────────────────────────────────────────────
     const pickImage = async () => {
         try {
             const ImagePicker = require('expo-image-picker');
@@ -80,11 +112,15 @@ export default function ScanPrescriptionScreen() {
         }
     };
 
+    // ── إرسال الصورة للـ API ──────────────────────────────────────────────────
     const processImage = async (base64: string) => {
         try {
             const result = await apiService.scanPrescription(base64);
+            const sugg = result.suggestions || [];
             setRawText(result.rawText || 'لم يتم قراءة نصوص واضحة');
-            setSuggestions(result.suggestions || []);
+            setSuggestions(sugg);
+            // تحديد كل الأدوية تلقائياً عند أول ظهور النتائج
+            setSelectedIds(new Set(sugg.map((s: any) => s.id)));
             setStep('review');
         } catch (error: any) {
             Alert.alert('خطأ', error.message || 'حدث خطأ أثناء تحليل الصورة');
@@ -94,99 +130,204 @@ export default function ScanPrescriptionScreen() {
         }
     };
 
-    const handleAddDrug = (drug: any) => {
-        router.push({ pathname: '/(tabs)/sales', params: { scannedBarcode: drug.id } });
+    // ── تبديل تحديد دواء ─────────────────────────────────────────────────────
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
     };
 
+    // ── إضافة المحددة إلى سلة المبيعات ──────────────────────────────────────
+    const handleAddSelected = async () => {
+        const selected = suggestions.filter(s => selectedIds.has(s.id));
+        if (selected.length === 0) {
+            Alert.alert('تنبيه', 'يرجى تحديد دواء واحد على الأقل');
+            return;
+        }
+        try {
+            // نخزن أسماء الأدوية في AsyncStorage لتقرأها شاشة المبيعات
+            await AsyncStorage.setItem(
+                PRESCRIPTION_DRUGS_KEY,
+                JSON.stringify(selected.map((s: any) => s.tradeName)),
+            );
+            router.push('/(tabs)/sales');
+        } catch {
+            Alert.alert('خطأ', 'تعذر الانتقال إلى نقطة البيع');
+        }
+    };
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // شاشة النتائج
+    // ════════════════════════════════════════════════════════════════════════════
     if (step === 'review') {
+        const selectedCount = selectedIds.size;
+
         return (
             <View style={{ flex: 1, backgroundColor: C.background }}>
-                {/* Review Header */}
-                <View style={{
-                    flexDirection: 'row-reverse', alignItems: 'center',
-                    padding: 16, paddingTop: 50,
-                    backgroundColor: C.card,
-                    borderBottomWidth: 1, borderBottomColor: C.border,
-                }}>
-                    <TouchableOpacity onPress={() => { setStep('camera'); setPhotoUri(null); }} style={{ padding: 4, marginLeft: 16 }}>
-                        <Ionicons name="arrow-forward" size={24} color={C.foreground} />
-                    </TouchableOpacity>
-                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: C.foreground }}>نتائج تحليل الوصفة</Text>
-                </View>
+                <Stack.Screen options={{ title: 'نتائج تحليل الوصفة', headerShown: true }} />
 
-                {photoUri && <Image source={{ uri: photoUri }} style={{ width: '100%', height: 180, resizeMode: 'cover' }} />}
-
-                {/* Raw Text */}
-                <View style={{
-                    margin: 16, padding: 16,
-                    backgroundColor: C.card,
-                    borderRadius: 5, borderWidth: 1, borderColor: C.border,
-                }}>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <Ionicons name="document-text" size={20} color={C.primary} />
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground }}>النص المقروء من الوصفة:</Text>
-                    </View>
-                    <Text style={{ fontSize: 14, color: C.mutedForeground, textAlign: 'right', lineHeight: 22 }}>
-                        {rawText}
-                    </Text>
-                </View>
-
-                {/* Suggestions */}
-                <View style={{ flex: 1, paddingHorizontal: 16 }}>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                        <Ionicons name="medical" size={20} color={C.success} />
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground }}>الأدوية المقترحة:</Text>
-                    </View>
-
-                    {suggestions.length === 0 ? (
-                        <Text style={{ textAlign: 'center', marginTop: 20, color: C.mutedForeground, fontSize: 15 }}>
-                            لم يتم التعرف على أدوية مطابقة في المخزون
-                        </Text>
-                    ) : (
-                        <FlatList
-                            data={suggestions}
-                            keyExtractor={item => item.id}
-                            showsVerticalScrollIndicator={false}
-                            renderItem={({ item }) => (
-                                <View style={{
-                                    flexDirection: 'row-reverse', alignItems: 'center',
-                                    backgroundColor: C.card,
-                                    padding: 14, borderRadius: 12, marginBottom: 10,
-                                    borderWidth: 1, borderColor: C.border,
-                                }}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground, textAlign: 'right' }}>
-                                            {item.tradeName}
-                                        </Text>
-                                        <Text style={{ fontSize: 13, color: C.success, textAlign: 'right', marginTop: 4 }}>
-                                            مطابق بنسبة {item.confidence}
-                                            <Text style={{ color: C.mutedForeground, fontSize: 12 }}> (من كلمة: {item.matchedFrom})</Text>
-                                        </Text>
-                                    </View>
-                                    <TouchableOpacity
-                                        style={{
-                                            flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
-                                            backgroundColor: C.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10,
-                                        }}
-                                        onPress={() => handleAddDrug(item)}
-                                    >
-                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>إضافة</Text>
-                                        <Ionicons name="add-circle" size={20} color="#fff" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                        />
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 110 : 30 }}
+                >
+                    {photoUri && (
+                        <Image source={{ uri: photoUri }} style={{ width: '100%', height: 180, resizeMode: 'cover' }} />
                     )}
-                </View>
+
+                    {/* النص المقروء */}
+                    <View style={{
+                        margin: 16, padding: 16,
+                        backgroundColor: C.card,
+                        borderRadius: 8, borderWidth: 1, borderColor: C.border,
+                    }}>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            <Ionicons name="document-text" size={20} color={C.primary} />
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground }}>النص المقروء من الوصفة:</Text>
+                        </View>
+                        <Text style={{ fontSize: 14, color: C.mutedForeground, textAlign: 'right', lineHeight: 22 }}>
+                            {rawText}
+                        </Text>
+                    </View>
+
+                    {/* الأدوية المقترحة */}
+                    <View style={{ paddingHorizontal: 16 }}>
+                        {/* رأس القسم + تحديد الكل / إلغاء الكل */}
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 12 }}>
+                            <Ionicons name="medical" size={20} color={C.success} />
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground, flex: 1, marginRight: 8, textAlign: 'right' }}>
+                                الأدوية المقترحة ({suggestions.length})
+                            </Text>
+                            {suggestions.length > 0 && (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if (selectedIds.size === suggestions.length) {
+                                            setSelectedIds(new Set());
+                                        } else {
+                                            setSelectedIds(new Set(suggestions.map((s: any) => s.id)));
+                                        }
+                                    }}
+                                    style={{
+                                        backgroundColor: C.input, borderRadius: 8,
+                                        paddingHorizontal: 10, paddingVertical: 5,
+                                        borderWidth: 1, borderColor: C.border,
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: C.primary, fontWeight: '600' }}>
+                                        {selectedIds.size === suggestions.length ? 'إلغاء الكل' : 'تحديد الكل'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {suggestions.length === 0 ? (
+                            <View style={{ alignItems: 'center', marginTop: 30, gap: 10 }}>
+                                <Ionicons name="search-outline" size={48} color={C.mutedForeground} />
+                                <Text style={{ textAlign: 'center', color: C.mutedForeground, fontSize: 15 }}>
+                                    لم يتم التعرف على أدوية مطابقة في المخزون
+                                </Text>
+                            </View>
+                        ) : (
+                            suggestions.map((item) => {
+                                const isSelected = selectedIds.has(item.id);
+                                return (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        activeOpacity={0.8}
+                                        onPress={() => toggleSelect(item.id)}
+                                        style={{
+                                            flexDirection: 'row-reverse',
+                                            alignItems: 'center',
+                                            backgroundColor: isSelected ? `${C.primary}12` : C.card,
+                                            padding: 14,
+                                            borderRadius: 12,
+                                            marginBottom: 10,
+                                            borderWidth: 2,
+                                            borderColor: isSelected ? C.primary : C.border,
+                                            gap: 10,
+                                        }}
+                                    >
+                                        {/* Checkbox */}
+                                        <View style={{
+                                            width: 24, height: 24,
+                                            borderRadius: 6,
+                                            borderWidth: 2,
+                                            borderColor: isSelected ? C.primary : C.border,
+                                            backgroundColor: isSelected ? C.primary : 'transparent',
+                                            justifyContent: 'center', alignItems: 'center',
+                                            flexShrink: 0,
+                                        }}>
+                                            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                                        </View>
+
+                                        {/* معلومات الدواء */}
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: C.foreground, textAlign: 'right' }}>
+                                                {item.tradeName}
+                                            </Text>
+                                            <Text style={{ fontSize: 12, color: C.mutedForeground, textAlign: 'right', marginTop: 3 }}>
+                                                مطابق بنسبة{' '}
+                                                <Text style={{ color: C.success, fontWeight: '600' }}>{item.confidence}</Text>
+                                                {'  ·  '}
+                                                <Text style={{ color: C.mutedForeground }}>{item.matchedFrom}</Text>
+                                            </Text>
+                                        </View>
+
+                                        {/* شارة "متوفر" — السيرفر يرجع فقط الموجود في المخزون */}
+                                        <View style={{
+                                            backgroundColor: `${C.success}20`,
+                                            paddingHorizontal: 8, paddingVertical: 4,
+                                            borderRadius: 6, flexShrink: 0,
+                                        }}>
+                                            <Text style={{ fontSize: 11, color: C.success, fontWeight: '700' }}>✓ متوفر</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })
+                        )}
+                    </View>
+                </ScrollView>
+
+                {/* زر الإضافة الثابت في الأسفل */}
+                {selectedCount > 0 && (
+                    <View style={{
+                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                        padding: 16,
+                        backgroundColor: C.card,
+                        borderTopWidth: 1, borderTopColor: C.border,
+                    }}>
+                        <TouchableOpacity
+                            onPress={handleAddSelected}
+                            style={{
+                                backgroundColor: C.primary,
+                                borderRadius: 14,
+                                padding: 16,
+                                flexDirection: 'row-reverse',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 10,
+                            }}
+                        >
+                            <Ionicons name="cart" size={22} color="#fff" />
+                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>
+                                إضافة {selectedCount} {selectedCount === 1 ? 'دواء' : 'أدوية'} إلى السلة
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
         );
     }
 
-    // Camera step — always dark UI (camera overlay)
+    // ════════════════════════════════════════════════════════════════════════════
+    // شاشة الكاميرا
+    // ════════════════════════════════════════════════════════════════════════════
     return (
         <View style={{ flex: 1 }}>
             <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 10, flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16 }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 5 }}>
+                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 8 }}>
                     <Ionicons name="close" size={28} color="#fff" />
                 </TouchableOpacity>
                 <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginRight: 16 }}>تصوير الوصفة (AI)</Text>
@@ -194,28 +335,42 @@ export default function ScanPrescriptionScreen() {
 
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} autofocus={'on'} />
 
+            {/* الإطار الأزرق المرئي */}
             <View style={StyleSheet.absoluteFillObject}>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <View style={{ width: '80%', height: '60%', borderWidth: 2, borderColor: '#3b82f6', borderRadius: 12, backgroundColor: 'rgba(59,130,246,0.1)' }} />
-                    <Text style={{ color: '#fff', marginTop: 24, fontSize: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 5 }}>
+                    <View style={{
+                        width: '80%', height: '60%',
+                        borderWidth: 2, borderColor: '#3b82f6',
+                        borderRadius: 12, backgroundColor: 'rgba(59,130,246,0.08)',
+                    }} />
+                    <Text style={{
+                        color: '#fff', marginTop: 16, fontSize: 13,
+                        backgroundColor: 'rgba(0,0,0,0.65)',
+                        paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8,
+                    }}>
                         اجعل الوصفة داخل الإطار وتأكد من وضوح الكلمات
                     </Text>
                 </View>
             </View>
 
+            {/* أزرار الكاميرا */}
             <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 30 }}>
-                <TouchableOpacity style={{ width: 50, height: 50, borderRadius: 5, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={pickImage} disabled={loading}>
+                <TouchableOpacity
+                    style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+                    onPress={pickImage}
+                    disabled={loading}
+                >
                     <Ionicons name="images" size={28} color="#fff" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={{ width: 70, height: 70, borderRadius: 5, backgroundColor: '#fff', padding: 4, justifyContent: 'center', alignItems: 'center', opacity: loading ? 0.8 : 1 }}
+                    style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: '#fff', padding: 4, justifyContent: 'center', alignItems: 'center', opacity: loading ? 0.8 : 1 }}
                     onPress={takePicture}
                     disabled={loading}
                 >
                     {loading
                         ? <ActivityIndicator color={C.primary} size="large" />
-                        : <View style={{ width: 60, height: 60, borderRadius: 5, backgroundColor: C.primary }} />
+                        : <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.primary }} />
                     }
                 </TouchableOpacity>
 
@@ -223,7 +378,7 @@ export default function ScanPrescriptionScreen() {
             </View>
 
             {loading && (
-                <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 20 }]}>
+                <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', zIndex: 20 }]}>
                     <ActivityIndicator size="large" color="#fff" />
                     <Text style={{ color: '#fff', marginTop: 16, fontSize: 16, fontWeight: 'bold' }}>
                         جاري تحليل الوصفة بالذكاء الاصطناعي...

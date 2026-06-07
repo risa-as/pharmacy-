@@ -166,11 +166,13 @@ async function handleSessionExpiry() {
         await AsyncStorage.removeItem('user');
     }
     // التوجيه لشاشة تسجيل الدخول
-    try {
-        router.replace('/login');
-    } catch (e) {
-        console.error('Could not navigate to login', e);
-    }
+    setTimeout(() => {
+        try {
+            router.replace('/login');
+        } catch (e) {
+            console.error('Could not navigate to login', e);
+        }
+    }, 100);
 }
 
 /** Reset the session-expired flag on a fresh login so polling can resume. */

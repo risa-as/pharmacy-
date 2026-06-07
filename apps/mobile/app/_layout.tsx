@@ -92,6 +92,7 @@ function RootStack() {
                 <Stack.Screen name="(tabs)"          options={{ headerShown: false }} />
                 <Stack.Screen name="settings"           options={{ headerShown: false }} />
                 <Stack.Screen name="reports/financial" options={{ headerShown: false }} />
+                <Stack.Screen name="scan-prescription" options={{ headerShown: false }} />
             </Stack>
         </>
     );

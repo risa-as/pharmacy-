@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Pill, Shield, Zap, BarChart3, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Shield, Zap, BarChart3, Eye, EyeOff } from 'lucide-react';
+import logoUrl from '../assets/logo.png';
 
 function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
     return Promise.race([
@@ -77,8 +78,14 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
                 {/* Content */}
                 <div className="relative flex flex-col items-center justify-center h-full p-8 text-white">
-                    <div className={`w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 mb-5 shadow-2xl transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                        <Pill className="w-10 h-10 text-white" />
+                    <div className={`w-24 h-24 rounded-3xl mb-5 shadow-2xl transition-all duration-700 delay-200 overflow-hidden shrink-0 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+                        style={{ boxShadow: '0 8px 32px rgba(99,102,241,0.35), 0 0 0 1.5px rgba(255,255,255,0.2)' }}
+                    >
+                        <img
+                            src={logoUrl}
+                            alt="فاراماس"
+                            className="w-full h-full object-cover"
+                        />
                     </div>
                     <h1 className={`text-5xl font-black tracking-tight mb-2 transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ textShadow: '0 0 60px rgba(129,140,248,0.3)' }}>
                         فاراماس

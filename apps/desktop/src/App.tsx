@@ -7,7 +7,8 @@ import InventoryPage from './components/InventoryPage';
 import LoginScreen from './components/LoginScreen';
 import LicenseScreen from './components/LicenseScreen';
 
-import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, Pill, BookOpen, Moon, Sun, Loader2 } from 'lucide-react';
+import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, BookOpen, Moon, Sun, Loader2 } from 'lucide-react';
+import logoUrl from './assets/logo.png';
 
 
 
@@ -215,8 +216,8 @@ function App() {
             {/* Sidebar */}
             <div dir="rtl" className="w-[68px] bg-zinc-900 flex flex-col items-center py-4 gap-1 shadow-2xl z-30 shrink-0">
                 {/* Brand */}
-                <div className="mb-2 w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/30">
-                    <Pill className="w-5 h-5 text-white" />
+                <div className="mb-2 w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-blue-900/30">
+                    <img src={logoUrl} alt="فاراماس" className="w-full h-full object-cover" />
                 </div>
 
                 <div className="w-8 h-px bg-zinc-800 mb-1" />

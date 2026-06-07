@@ -1258,10 +1258,25 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                         const parsedDate = new Date(b.expiryDate);
                         const safeExpiryDate = isNaN(parsedDate.getTime()) ? new Date(0) : parsedDate;
 
+                        const cloudQuantity = Math.round(Number(b.quantity || 0));
+
+                        // Don't overwrite a locally-decremented quantity with the cloud value.
+                        // If the local quantity is lower, it means a sale deducted it locally
+                        // but the cloud hasn't reflected that deduction yet (sync lag).
+                        // Overwriting would silently restore stock that was already sold.
+                        const existingBatch = await tx.batch.findUnique({
+                            where: { id: b.id },
+                            select: { quantity: true }
+                        });
+                        const localQuantity = existingBatch?.quantity ?? cloudQuantity;
+                        const safeQuantityToApply = existingBatch && localQuantity < cloudQuantity
+                            ? localQuantity   // keep the locally-decremented value
+                            : cloudQuantity;  // new batch or cloud quantity is lower (e.g. return was processed)
+
                         const batchPayload = {
                             inventoryId: targetInventoryId,
                             batchNumber: String(b.batchNumber || ''),
-                            quantity: Math.round(Number(b.quantity || 0)),
+                            quantity: safeQuantityToApply,
                             expiryDate: safeExpiryDate,
                             costPrice: Number(b.costPrice || 0)
                         };
@@ -1271,7 +1286,8 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                             update: batchPayload,
                             create: {
                                 id: b.id,
-                                ...batchPayload
+                                ...batchPayload,
+                                quantity: cloudQuantity, // for new batches always use cloud value
                             }
                         });
                     }

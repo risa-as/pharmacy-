@@ -1302,14 +1302,11 @@ app.whenReady().then(async () => {
                 store.set("syncOrgId", cloudUser.organizationId || "");
               }
               void processPendingSyncActions();
-              // Trigger immediate sync and wait for it
-              try {
-                console.log("Waiting for immediate sync...");
-                await syncProducts();
-                console.log("Immediate sync completed.");
-              } catch (err) {
-                console.error("Immediate product sync failed:", err);
-              }
+              // Trigger product sync in background — do not await so login
+              // returns immediately instead of blocking on a potentially slow sync.
+              void syncProducts().catch((err: unknown) => {
+                console.error("Background product sync failed:", err);
+              });
             }
 
             store.set("loggedInUserId", safeUser.id);

@@ -25,10 +25,12 @@ interface RecentSale {
 }
 
 const QUICK_ACTIONS = [
-    { label: 'المخزون',       icon: 'cube-outline'    as const, route: '/(tabs)/inventory',    iconColor: (C: any) => C.warning,  iconBg: (C: any) => C.warningBg  },
-    { label: 'المشتريات',     icon: 'bag-handle-outline' as const, route: '/(tabs)/purchases', iconColor: (C: any) => C.info,     iconBg: (C: any) => C.infoBg     },
-    { label: 'الديون',        icon: 'book-outline'    as const, route: '/(tabs)/debts',        iconColor: (C: any) => C.danger,   iconBg: (C: any) => C.dangerBg   },
-    { label: 'الطلبات الذكية',icon: 'sparkles-outline' as const, route: '/(tabs)/smart-orders',iconColor: (C: any) => C.success,  iconBg: (C: any) => C.successBg  },
+    { label: 'نقطة البيع',    icon: 'cart-outline'       as const, route: '/(tabs)/sales',        iconColor: (C: any) => C.primary,  iconBg: (C: any) => C.primaryMuted},
+    { label: 'المخزون',       icon: 'cube-outline'       as const, route: '/(tabs)/inventory',    iconColor: (C: any) => C.warning,  iconBg: (C: any) => C.warningBg  },
+    { label: 'المشتريات',     icon: 'bag-handle-outline' as const, route: '/(tabs)/purchases',    iconColor: (C: any) => C.info,     iconBg: (C: any) => C.infoBg     },
+    { label: 'الديون',        icon: 'book-outline'       as const, route: '/(tabs)/debts',        iconColor: (C: any) => C.danger,   iconBg: (C: any) => C.dangerBg   },
+    { label: 'الطلبات الذكية',icon: 'sparkles-outline'   as const, route: '/(tabs)/smart-orders', iconColor: (C: any) => C.success,  iconBg: (C: any) => C.successBg  },
+    { label: 'فحص الوصفة',   icon: 'scan-outline'       as const, route: '/scan-prescription',   iconColor: (C: any) => '#8b5cf6',  iconBg: (C: any) => 'rgba(139,92,246,0.1)'}, // Different color to distinguish from POS
 ] as const;
 
 function SectionLabel({ text }: { text: string }) {
@@ -299,35 +301,39 @@ export function AdminDashboard() {
                     {/* ── Quick Actions ────────────────────────────────────────── */}
                     <View>
                         <SectionLabel text="وصول سريع" />
-                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                        <ScrollView 
+                            horizontal 
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ gap: 12, flexDirection: 'row-reverse', paddingVertical: 4, paddingHorizontal: 2 }}
+                        >
                             {QUICK_ACTIONS.map(action => (
                                 <TouchableOpacity
                                     key={action.label}
                                     onPress={() => router.push(action.route as any)}
                                     activeOpacity={0.8}
                                     style={{
-                                        flex: 1,
-                                        backgroundColor: C.card, borderRadius: 5,
+                                        width: 105,
+                                        backgroundColor: C.card, borderRadius: 16,
                                         borderWidth: 1, borderColor: C.border,
-                                        paddingVertical: 14, alignItems: 'center', gap: 8,
+                                        paddingVertical: 18, alignItems: 'center', gap: 12,
                                         shadowColor: '#000',
-                                        shadowOffset: { width: 0, height: 1 },
-                                        shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
                                     }}
                                 >
                                     <View style={{
-                                        width: 36, height: 36, borderRadius: 5,
+                                        width: 48, height: 48, borderRadius: 14,
                                         backgroundColor: action.iconBg(C),
                                         justifyContent: 'center', alignItems: 'center',
                                     }}>
-                                        <Ionicons name={action.icon} size={18} color={action.iconColor(C)} />
+                                        <Ionicons name={action.icon} size={24} color={action.iconColor(C)} />
                                     </View>
-                                    <Text style={{ color: C.foreground, fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
+                                    <Text style={{ color: C.foreground, fontSize: 12, fontWeight: '800', textAlign: 'center' }}>
                                         {action.label}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
-                        </View>
+                        </ScrollView>
                     </View>
 
                     {/* ── Recent Sales ─────────────────────────────────────────── */}

@@ -252,6 +252,27 @@ export default function SalesScreen() {
     }
   }, [params.scannedBarcode]);
 
+  // قراءة الأدوية المحددة من شاشة تحليل الوصفة وإضافتها للسلة
+  useEffect(() => {
+    const processPrescriptionDrugs = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('pendingPrescriptionDrugs');
+        if (!raw) return;
+        await AsyncStorage.removeItem('pendingPrescriptionDrugs');
+        const drugNames: string[] = JSON.parse(raw);
+        if (!Array.isArray(drugNames) || drugNames.length === 0) return;
+        // نضيف كل دواء بشكل متسلسل
+        for (const name of drugNames) {
+          await handleBarcodeAdd(name);
+        }
+      } catch {
+        // نتجاهل الأخطاء هنا لكي لا تؤثر على تجربة المستخدم
+      }
+    };
+    void processPrescriptionDrugs();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+
   useEffect(() => {
     if (patientQuery.length < 2) {
       setPatientResults([]);

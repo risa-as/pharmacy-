@@ -15,10 +15,11 @@ interface Alert { id: string; drugName?: string; message?: string; type?: string
 interface Sale  { id: string; total: number; createdAt: string; paymentMethod?: string; }
 
 const QUICK_ACTIONS = [
-    { title: 'بيع جديد',     icon: 'cart-outline'    as const, route: '/(tabs)/sales',     iconColor: (C: any) => C.primary,  iconBg: (C: any) => C.primaryMuted },
-    { title: 'مسح باركود',   icon: 'barcode-outline' as const, route: '/scan',             iconColor: (C: any) => C.info,     iconBg: (C: any) => C.infoBg       },
-    { title: 'بحث دواء',     icon: 'search-outline'  as const, route: '/(tabs)/inventory', iconColor: (C: any) => C.success,  iconBg: (C: any) => C.successBg    },
-    { title: 'سجل الديون',   icon: 'book-outline'    as const, route: '/(tabs)/debts',     iconColor: (C: any) => C.warning,  iconBg: (C: any) => C.warningBg    },
+    { title: 'بيع جديد',     icon: 'cart-outline'    as const, route: '/(tabs)/sales',        iconColor: (C: any) => C.primary,  iconBg: (C: any) => C.primaryMuted },
+    { title: 'مسح باركود',   icon: 'barcode-outline' as const, route: '/scan',                iconColor: (C: any) => C.info,     iconBg: (C: any) => C.infoBg       },
+    { title: 'بحث دواء',     icon: 'search-outline'  as const, route: '/(tabs)/inventory',    iconColor: (C: any) => C.success,  iconBg: (C: any) => C.successBg    },
+    { title: 'سجل الديون',   icon: 'book-outline'    as const, route: '/(tabs)/debts',        iconColor: (C: any) => C.warning,  iconBg: (C: any) => C.warningBg    },
+    { title: 'فحص الوصفة',  icon: 'scan-outline'    as const, route: '/scan-prescription',   iconColor: (C: any) => C.primary,  iconBg: (C: any) => C.primaryMuted },
 ] as const;
 
 const ALERT_ICON: Record<string, { icon: keyof typeof Ionicons.glyphMap; iconColor: (C: any) => string; iconBg: (C: any) => string; label: string }> = {
@@ -183,14 +184,14 @@ export function PharmacistDashboard() {
                     {/* ── Quick Actions ────────────────────────────────────────── */}
                     <View>
                         <SectionLabel text="إجراءات سريعة" />
-                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                        <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10 }}>
                             {QUICK_ACTIONS.map(action => (
                                 <TouchableOpacity
                                     key={action.title}
                                     onPress={() => router.push(action.route as any)}
                                     activeOpacity={0.8}
                                     style={{
-                                        flex: 1,
+                                        width: (width - 40 - 10) / 2 - 5,
                                         backgroundColor: C.card, borderRadius: 5,
                                         borderWidth: 1, borderColor: C.border,
                                         paddingVertical: 14, alignItems: 'center', gap: 8,
