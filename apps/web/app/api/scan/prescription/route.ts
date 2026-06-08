@@ -70,7 +70,10 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
         if (!baseNameLower || baseNameLower.length < 3) continue;
 
         // الكلمة الأولى من الاسم المستخرج (بعد حذف الجرعات)
-        const extractedFirst = baseNameLower.split(/\s+/)[0];
+        const extractedWords = baseNameLower.split(/\s+/);
+        const extractedFirst = extractedWords[0];
+        // أول كلمتين للمطابقة المركّبة (مثل "aloe vera")
+        const extractedTwoWords = extractedWords.slice(0, 2).join(' ');
 
         let bestMatch: DrugInfo | null = null;
         let bestScore = Infinity;
@@ -107,15 +110,28 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
                 }
             }
 
-            // ── 3. تطابق تام لأول كلمة (حد أدنى 5 أحرف) ────────────────────────
-            if (extractedFirst.length >= 5 && tradeFirst === extractedFirst) {
+            // ── 3. تطابق أول كلمتين كـ substring (≥ 7 أحرف مجموعة) ──────────────
+            // مثال: "aloe vera" يطابق "Aloe Vera Gel 150ml" أو "Aloe Vera gel"
+            if (extractedWords.length >= 2 && extractedTwoWords.length >= 7) {
+                if (tradeLower.startsWith(extractedTwoWords) || tradeLower.includes(` ${extractedTwoWords}`) || tradeLower.includes(extractedTwoWords)) {
+                    if (tradeLower.includes(extractedFirst)) { // تحقق إضافي أن الكلمة الأولى موجودة
+                        bestMatch = drug; bestScore = 0.3; bestConfidence = '90%'; break;
+                    }
+                }
+                if (sciLower.includes(extractedTwoWords)) {
+                    bestMatch = drug; bestScore = 0.3; bestConfidence = '88%'; break;
+                }
+            }
+
+            // ── 4. تطابق تام لأول كلمة (حد أدنى 4 أحرف) ────────────────────────
+            if (extractedFirst.length >= 4 && tradeFirst === extractedFirst) {
                 bestMatch = drug; bestScore = 0.5; bestConfidence = '95%'; break;
             }
-            if (extractedFirst.length >= 5 && sciFirst && sciFirst === extractedFirst) {
+            if (extractedFirst.length >= 4 && sciFirst && sciFirst === extractedFirst) {
                 bestMatch = drug; bestScore = 0.5; bestConfidence = '92%'; break;
             }
 
-            // ── 4. تطابق ضبابي صارم (أول كلمة ≥ 7 أحرف، مسافة ≤ 2 فقط) ─────────
+            // ── 5. تطابق ضبابي صارم (أول كلمة ≥ 7 أحرف، مسافة ≤ 2 فقط) ─────────
             const MIN_FUZZY_LEN = 7;
             const MAX_EDIT_DIST = 2;
 
