@@ -12,7 +12,8 @@ import { enforceRateLimit } from '@/app/lib/rate-limit';
 const SCAN_PROVIDER = (process.env.PRESCRIPTION_SCAN_PROVIDER || 'gemini').toLowerCase();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_MODEL   = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 const GOOGLE_VISION_API_KEY = process.env.GOOGLE_VISION_API_KEY;
 const GOOGLE_VISION_API_URL = `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_VISION_API_KEY}`;
@@ -50,20 +51,35 @@ function levenshtein(a: string, b: string): number {
 
 type DrugInfo = { id: string; tradeName: string; scientificName: string };
 
+// كلمات الجرعة/الشكل الدوائي لحذفها قبل المطابقة
+const DOSAGE_NOISE_RE = /\b(\d+\s*(?:mg|ml|gm|g|mcg|iu|%)|\d+\s*(?:tab|cap|amp|vial|x\d+))s?\b/gi;
+
+/** استخراج اسم الدواء الأساسي بحذف الجرعات والأشكال الدوائية */
+function extractDrugBaseName(raw: string): string {
+    return raw
+        .replace(DOSAGE_NOISE_RE, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
+
 /**
  * مطابقة أسماء الأدوية المستخرجة مع مخزون الصيدلية.
  * تُستخدم مع كلا النظامين.
+ * تُرجع المتوفرة وغير المتوفرة معاً.
  */
 function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
     const suggestions: {
         id: string; tradeName: string; scientificName: string;
-        confidence: string; matchedFrom: string;
+        confidence: string; matchedFrom: string; inStock: boolean;
     }[] = [];
     const matchedIds = new Set<string>();
 
     for (const extracted of extractedNames) {
-        const extractedLower = extracted.toLowerCase().trim();
-        if (!extractedLower || extractedLower.length < 3) continue;
+        const baseName      = extractDrugBaseName(extracted);
+        const baseNameLower = baseName.toLowerCase().trim();
+        const fullLower     = extracted.toLowerCase().trim();
+
+        if (!baseNameLower || baseNameLower.length < 3) continue;
 
         let bestMatch: DrugInfo | null = null;
         let bestScore = Infinity;
@@ -72,45 +88,49 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
         for (const drug of drugs) {
             if (matchedIds.has(drug.id)) continue;
             const tradeLower = drug.tradeName.toLowerCase().replace(/[-_]/g, ' ').trim();
-            const sciLower = (drug.scientificName || '').toLowerCase().replace(/[-_]/g, ' ').trim();
+            const sciLower   = (drug.scientificName || '').toLowerCase().replace(/[-_]/g, ' ').trim();
 
-            // تطابق تام
-            if (tradeLower.includes(extractedLower) || extractedLower.includes(tradeLower)) {
-                bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
-            }
-            if (sciLower && (sciLower.includes(extractedLower) || extractedLower.includes(sciLower))) {
-                bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
-            }
+            // جرّب المطابقة مع الاسم المنظّف والاسم الكامل
+            for (const name of [baseNameLower, fullLower]) {
+                // تطابق تام
+                if (tradeLower.includes(name) || name.includes(tradeLower)) {
+                    bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
+                }
+                if (sciLower && (sciLower.includes(name) || name.includes(sciLower))) {
+                    bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
+                }
 
-            // تطابق أول كلمة
-            const extractedFirst = extractedLower.split(/\s+/)[0];
-            const tradeFirst = tradeLower.split(/\s+/)[0];
-            const sciFirst = sciLower.split(/\s+/)[0];
+                // تطابق أول كلمة
+                const nameFirst  = name.split(/\s+/)[0];
+                const tradeFirst = tradeLower.split(/\s+/)[0];
+                const sciFirst   = sciLower.split(/\s+/)[0];
 
-            if (extractedFirst.length >= 4 && tradeFirst === extractedFirst) {
-                bestMatch = drug; bestScore = 0.5; bestConfidence = '95%'; break;
-            }
-            if (sciFirst && extractedFirst.length >= 4 && sciFirst === extractedFirst) {
-                bestMatch = drug; bestScore = 0.5; bestConfidence = '92%'; break;
-            }
+                if (nameFirst.length >= 4 && tradeFirst === nameFirst) {
+                    bestMatch = drug; bestScore = 0.5; bestConfidence = '95%'; break;
+                }
+                if (sciFirst && nameFirst.length >= 4 && sciFirst === nameFirst) {
+                    bestMatch = drug; bestScore = 0.5; bestConfidence = '92%'; break;
+                }
 
-            // تطابق ضبابي (Levenshtein)
-            if (extractedFirst.length >= 4 && tradeFirst.length >= 4) {
-                const dist = levenshtein(extractedFirst, tradeFirst);
-                const maxLen = Math.max(extractedFirst.length, tradeFirst.length);
-                if (dist <= 2 && dist / maxLen < 0.3 && dist < bestScore) {
-                    bestMatch = drug; bestScore = dist;
-                    bestConfidence = ((1 - dist / maxLen) * 100).toFixed(0) + '%';
+                // تطابق ضبابي (Levenshtein)
+                if (nameFirst.length >= 4 && tradeFirst.length >= 4) {
+                    const dist   = levenshtein(nameFirst, tradeFirst);
+                    const maxLen = Math.max(nameFirst.length, tradeFirst.length);
+                    if (dist <= Math.min(3, Math.floor(maxLen * 0.35)) && dist < bestScore) {
+                        bestMatch = drug; bestScore = dist;
+                        bestConfidence = ((1 - dist / maxLen) * 100).toFixed(0) + '%';
+                    }
+                }
+                if (sciFirst && nameFirst.length >= 4 && sciFirst.length >= 4) {
+                    const dist   = levenshtein(nameFirst, sciFirst);
+                    const maxLen = Math.max(nameFirst.length, sciFirst.length);
+                    if (dist <= Math.min(3, Math.floor(maxLen * 0.35)) && dist < bestScore) {
+                        bestMatch = drug; bestScore = dist;
+                        bestConfidence = ((1 - dist / maxLen) * 100).toFixed(0) + '%';
+                    }
                 }
             }
-            if (sciFirst && extractedFirst.length >= 4 && sciFirst.length >= 4) {
-                const dist = levenshtein(extractedFirst, sciFirst);
-                const maxLen = Math.max(extractedFirst.length, sciFirst.length);
-                if (dist <= 2 && dist / maxLen < 0.3 && dist < bestScore) {
-                    bestMatch = drug; bestScore = dist;
-                    bestConfidence = ((1 - dist / maxLen) * 100).toFixed(0) + '%';
-                }
-            }
+            if (bestScore === 0) break;
         }
 
         if (bestMatch) {
@@ -119,11 +139,26 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
                 id: bestMatch.id, tradeName: bestMatch.tradeName,
                 scientificName: bestMatch.scientificName,
                 confidence: bestConfidence, matchedFrom: extracted,
+                inStock: true,
             });
+        } else {
+            // الدواء غير موجود في المخزون — أضفه للعرض مع تمييزه
+            const displayName = baseName.length >= 3 ? baseName : extracted;
+            if (displayName.length >= 3) {
+                suggestions.push({
+                    id: `not-in-stock-${displayName.replace(/\s+/g, '-')}`,
+                    tradeName: displayName,
+                    scientificName: '',
+                    confidence: '—',
+                    matchedFrom: extracted,
+                    inStock: false,
+                });
+            }
         }
     }
     return suggestions;
 }
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // نظام 1: Gemini AI Vision — أدق للخط اليدوي
@@ -337,9 +372,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ rawText, suggestions });
 
     } catch (error) {
-        console.error('Prescription Scan Error:', error);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('Prescription Scan Error:', msg);
         return NextResponse.json(
-            { error: 'حدث خطأ أثناء تحليل الوصفة' },
+            { error: `حدث خطأ أثناء تحليل الوصفة: ${msg}` },
             { status: 500 },
         );
     }

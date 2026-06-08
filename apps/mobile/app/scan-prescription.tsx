@@ -142,9 +142,9 @@ export default function ScanPrescriptionScreen() {
 
     // ── إضافة المحددة إلى سلة المبيعات ──────────────────────────────────────
     const handleAddSelected = async () => {
-        const selected = suggestions.filter(s => selectedIds.has(s.id));
+        const selected = suggestions.filter(s => selectedIds.has(s.id) && (s as any).inStock !== false);
         if (selected.length === 0) {
-            Alert.alert('تنبيه', 'يرجى تحديد دواء واحد على الأقل');
+            Alert.alert('تنبيه', 'يرجى تحديد دواء متوفر في المخزون');
             return;
         }
         try {
@@ -163,7 +163,7 @@ export default function ScanPrescriptionScreen() {
     // شاشة النتائج
     // ════════════════════════════════════════════════════════════════════════════
     if (step === 'review') {
-        const selectedCount = selectedIds.size;
+        const selectedCount = suggestions.filter(s => selectedIds.has(s.id) && (s as any).inStock !== false).length;
 
         return (
             <View style={{ flex: 1, backgroundColor: C.background }}>
@@ -200,13 +200,16 @@ export default function ScanPrescriptionScreen() {
                             <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground, flex: 1, marginRight: 8, textAlign: 'right' }}>
                                 الأدوية المقترحة ({suggestions.length})
                             </Text>
-                            {suggestions.length > 0 && (
+                            {suggestions.some((s: any) => s.inStock !== false) && (
                                 <TouchableOpacity
                                     onPress={() => {
-                                        if (selectedIds.size === suggestions.length) {
+                                        const inStockIds = suggestions
+                                            .filter((s: any) => s.inStock !== false)
+                                            .map((s: any) => s.id);
+                                        if (inStockIds.every((id: string) => selectedIds.has(id))) {
                                             setSelectedIds(new Set());
                                         } else {
-                                            setSelectedIds(new Set(suggestions.map((s: any) => s.id)));
+                                            setSelectedIds(new Set(inStockIds));
                                         }
                                     }}
                                     style={{
@@ -216,7 +219,7 @@ export default function ScanPrescriptionScreen() {
                                     }}
                                 >
                                     <Text style={{ fontSize: 12, color: C.primary, fontWeight: '600' }}>
-                                        {selectedIds.size === suggestions.length ? 'إلغاء الكل' : 'تحديد الكل'}
+                                        {selectedCount === suggestions.filter((s: any) => s.inStock !== false).length ? 'إلغاء الكل' : 'تحديد الكل'}
                                     </Text>
                                 </TouchableOpacity>
                             )}
@@ -226,30 +229,37 @@ export default function ScanPrescriptionScreen() {
                             <View style={{ alignItems: 'center', marginTop: 30, gap: 10 }}>
                                 <Ionicons name="search-outline" size={48} color={C.mutedForeground} />
                                 <Text style={{ textAlign: 'center', color: C.mutedForeground, fontSize: 15 }}>
-                                    لم يتم التعرف على أدوية مطابقة في المخزون
+                                    لم يتم التعرف على أي أدوية في الوصفة
                                 </Text>
                             </View>
                         ) : (
                             suggestions.map((item) => {
                                 const isSelected = selectedIds.has(item.id);
+                                const inStock    = (item as any).inStock !== false;
                                 return (
                                     <TouchableOpacity
                                         key={item.id}
-                                        activeOpacity={0.8}
-                                        onPress={() => toggleSelect(item.id)}
+                                        activeOpacity={inStock ? 0.8 : 1}
+                                        onPress={() => inStock && toggleSelect(item.id)}
                                         style={{
                                             flexDirection: 'row-reverse',
                                             alignItems: 'center',
-                                            backgroundColor: isSelected ? `${C.primary}12` : C.card,
+                                            backgroundColor: !inStock
+                                                ? C.input
+                                                : isSelected ? `${C.primary}12` : C.card,
                                             padding: 14,
                                             borderRadius: 12,
                                             marginBottom: 10,
                                             borderWidth: 2,
-                                            borderColor: isSelected ? C.primary : C.border,
+                                            borderColor: !inStock
+                                                ? C.border
+                                                : isSelected ? C.primary : C.border,
                                             gap: 10,
+                                            opacity: inStock ? 1 : 0.65,
                                         }}
                                     >
-                                        {/* Checkbox */}
+                                        {/* Checkbox — مخفي للأدوية غير المتوفرة */}
+                                        {inStock && (
                                         <View style={{
                                             width: 24, height: 24,
                                             borderRadius: 6,
@@ -261,6 +271,7 @@ export default function ScanPrescriptionScreen() {
                                         }}>
                                             {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
                                         </View>
+                                        )}
 
                                         {/* معلومات الدواء */}
                                         <View style={{ flex: 1 }}>
@@ -268,20 +279,28 @@ export default function ScanPrescriptionScreen() {
                                                 {item.tradeName}
                                             </Text>
                                             <Text style={{ fontSize: 12, color: C.mutedForeground, textAlign: 'right', marginTop: 3 }}>
-                                                مطابق بنسبة{' '}
-                                                <Text style={{ color: C.success, fontWeight: '600' }}>{item.confidence}</Text>
-                                                {'  ·  '}
-                                                <Text style={{ color: C.mutedForeground }}>{item.matchedFrom}</Text>
+                                                {inStock ? (
+                                                    <>
+                                                        مطابق بنسبة{' '}
+                                                        <Text style={{ color: C.success, fontWeight: '600' }}>{item.confidence}</Text>
+                                                        {'  ·  '}
+                                                        <Text style={{ color: C.mutedForeground }}>{item.matchedFrom}</Text>
+                                                    </>
+                                                ) : (
+                                                    <Text style={{ color: C.mutedForeground }}>تم التعرف عليه من الوصفة</Text>
+                                                )}
                                             </Text>
                                         </View>
 
-                                        {/* شارة "متوفر" — السيرفر يرجع فقط الموجود في المخزون */}
+                                        {/* شارة التوفر */}
                                         <View style={{
-                                            backgroundColor: `${C.success}20`,
+                                            backgroundColor: inStock ? `${C.success}20` : `${C.mutedForeground}20`,
                                             paddingHorizontal: 8, paddingVertical: 4,
                                             borderRadius: 6, flexShrink: 0,
                                         }}>
-                                            <Text style={{ fontSize: 11, color: C.success, fontWeight: '700' }}>✓ متوفر</Text>
+                                            <Text style={{ fontSize: 11, color: inStock ? C.success : C.mutedForeground, fontWeight: '700' }}>
+                                                {inStock ? '✓ متوفر' : '✗ غير متوفر'}
+                                            </Text>
                                         </View>
                                     </TouchableOpacity>
                                 );
