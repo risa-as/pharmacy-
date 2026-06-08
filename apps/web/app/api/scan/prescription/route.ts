@@ -86,71 +86,79 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
             const tradeFirst = tradeLower.split(/\s+/)[0];
             const sciFirst   = sciLower.split(/\s+/)[0];
 
-            // ── 1. تطابق تام للاسم كاملاً (حد أدنى 5 أحرف تحسباً لكلمات قصيرة) ──
+            let currentScore = Infinity;
+            let currentConfidence = '';
+
+            // ── 1. تطابق تام للاسم كاملاً (حد أدنى 5 أحرف) ──
             const MIN_SUBSTR = 5;
             if (tradeLower.length >= MIN_SUBSTR) {
                 if (tradeLower === baseNameLower || tradeLower === fullLower) {
-                    bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
-                }
-                if (baseNameLower.includes(tradeLower) || fullLower.includes(tradeLower)) {
-                    bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
-                }
-                if (baseNameLower.length >= MIN_SUBSTR && tradeLower.includes(baseNameLower)) {
-                    bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
+                    currentScore = -2; currentConfidence = '100%';
+                } else if (baseNameLower.includes(tradeLower) || fullLower.includes(tradeLower)) {
+                    currentScore = -2; currentConfidence = '100%';
+                } else if (baseNameLower.length >= MIN_SUBSTR && tradeLower.includes(baseNameLower)) {
+                    currentScore = -2; currentConfidence = '100%';
                 }
             }
 
             // ── 2. تطابق تام للاسم العلمي (حد أدنى 5 أحرف) ──────────────────────
-            if (sciLower.length >= MIN_SUBSTR) {
+            if (currentScore > -1 && sciLower.length >= MIN_SUBSTR) {
                 if (sciLower === baseNameLower || sciLower === fullLower) {
-                    bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
-                }
-                if ((baseNameLower.includes(sciLower) || sciLower.includes(baseNameLower)) && baseNameLower.length >= MIN_SUBSTR) {
-                    bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
+                    currentScore = -1; currentConfidence = '98%';
+                } else if ((baseNameLower.includes(sciLower) || sciLower.includes(baseNameLower)) && baseNameLower.length >= MIN_SUBSTR) {
+                    currentScore = -1; currentConfidence = '98%';
                 }
             }
 
             // ── 3. تطابق أول كلمتين كـ substring (≥ 7 أحرف مجموعة) ──────────────
-            // مثال: "aloe vera" يطابق "Aloe Vera Gel 150ml" أو "Aloe Vera gel"
-            if (extractedWords.length >= 2 && extractedTwoWords.length >= 7) {
+            if (currentScore > 0 && extractedWords.length >= 2 && extractedTwoWords.length >= 7) {
                 if (tradeLower.startsWith(extractedTwoWords) || tradeLower.includes(` ${extractedTwoWords}`) || tradeLower.includes(extractedTwoWords)) {
-                    if (tradeLower.includes(extractedFirst)) { // تحقق إضافي أن الكلمة الأولى موجودة
-                        bestMatch = drug; bestScore = 0.3; bestConfidence = '90%'; break;
+                    if (tradeLower.includes(extractedFirst)) {
+                        currentScore = 0.1; currentConfidence = '90%';
                     }
-                }
-                if (sciLower.includes(extractedTwoWords)) {
-                    bestMatch = drug; bestScore = 0.3; bestConfidence = '88%'; break;
+                } else if (sciLower.includes(extractedTwoWords)) {
+                    currentScore = 0.2; currentConfidence = '88%';
                 }
             }
 
             // ── 4. تطابق تام لأول كلمة (حد أدنى 4 أحرف) ────────────────────────
-            if (extractedFirst.length >= 4 && tradeFirst === extractedFirst) {
-                bestMatch = drug; bestScore = 0.5; bestConfidence = '95%'; break;
-            }
-            if (extractedFirst.length >= 4 && sciFirst && sciFirst === extractedFirst) {
-                bestMatch = drug; bestScore = 0.5; bestConfidence = '92%'; break;
+            if (currentScore > 0.5 && extractedFirst.length >= 4) {
+                if (tradeFirst === extractedFirst) {
+                    currentScore = 0.3; currentConfidence = '95%';
+                } else if (sciFirst && sciFirst === extractedFirst) {
+                    currentScore = 0.4; currentConfidence = '92%';
+                }
             }
 
             // ── 5. تطابق ضبابي صارم (أول كلمة ≥ 7 أحرف، مسافة ≤ 2 فقط) ─────────
             const MIN_FUZZY_LEN = 7;
             const MAX_EDIT_DIST = 2;
 
-            if (extractedFirst.length >= MIN_FUZZY_LEN && tradeFirst.length >= MIN_FUZZY_LEN) {
-                const dist = levenshtein(extractedFirst, tradeFirst);
-                if (dist <= MAX_EDIT_DIST && dist < bestScore) {
-                    bestMatch = drug; bestScore = dist;
-                    bestConfidence = ((1 - dist / Math.max(extractedFirst.length, tradeFirst.length)) * 100).toFixed(0) + '%';
+            if (currentScore > 1 && extractedFirst.length >= MIN_FUZZY_LEN) {
+                if (tradeFirst.length >= MIN_FUZZY_LEN) {
+                    const dist = levenshtein(extractedFirst, tradeFirst);
+                    if (dist <= MAX_EDIT_DIST && dist < currentScore) {
+                        currentScore = dist;
+                        currentConfidence = ((1 - dist / Math.max(extractedFirst.length, tradeFirst.length)) * 100).toFixed(0) + '%';
+                    }
                 }
-            }
-            if (extractedFirst.length >= MIN_FUZZY_LEN && sciFirst.length >= MIN_FUZZY_LEN) {
-                const dist = levenshtein(extractedFirst, sciFirst);
-                if (dist <= MAX_EDIT_DIST && dist < bestScore) {
-                    bestMatch = drug; bestScore = dist;
-                    bestConfidence = ((1 - dist / Math.max(extractedFirst.length, sciFirst.length)) * 100).toFixed(0) + '%';
+                if (sciFirst.length >= MIN_FUZZY_LEN) {
+                    const dist = levenshtein(extractedFirst, sciFirst);
+                    if (dist <= MAX_EDIT_DIST && (dist + 0.5) < currentScore) { // +0.5 to prefer trade fuzzy over sci fuzzy
+                        currentScore = dist + 0.5;
+                        currentConfidence = ((1 - dist / Math.max(extractedFirst.length, sciFirst.length)) * 100).toFixed(0) + '%';
+                    }
                 }
             }
 
-            if (bestScore === 0) break;
+            if (currentScore < bestScore) {
+                bestMatch = drug;
+                bestScore = currentScore;
+                bestConfidence = currentConfidence;
+            }
+
+            // التوقف الفوري فقط إذا وجدنا تطابقاً تجارياً مثالياً
+            if (bestScore === -2) break;
         }
 
         if (bestMatch && bestScore < Infinity) {
