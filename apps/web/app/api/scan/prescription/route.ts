@@ -69,6 +69,9 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
 
         if (!baseNameLower || baseNameLower.length < 3) continue;
 
+        // الكلمة الأولى من الاسم المستخرج (بعد حذف الجرعات)
+        const extractedFirst = baseNameLower.split(/\s+/)[0];
+
         let bestMatch: DrugInfo | null = null;
         let bestScore = Infinity;
         let bestConfidence = '';
@@ -77,47 +80,64 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
             if (matchedIds.has(drug.id)) continue;
             const tradeLower = drug.tradeName.toLowerCase().replace(/[-_]/g, ' ').trim();
             const sciLower   = (drug.scientificName || '').toLowerCase().replace(/[-_]/g, ' ').trim();
+            const tradeFirst = tradeLower.split(/\s+/)[0];
+            const sciFirst   = sciLower.split(/\s+/)[0];
 
-            for (const name of [baseNameLower, fullLower]) {
-                if (tradeLower.includes(name) || name.includes(tradeLower)) {
+            // ── 1. تطابق تام للاسم كاملاً (حد أدنى 5 أحرف تحسباً لكلمات قصيرة) ──
+            const MIN_SUBSTR = 5;
+            if (tradeLower.length >= MIN_SUBSTR) {
+                if (tradeLower === baseNameLower || tradeLower === fullLower) {
                     bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
                 }
-                if (sciLower && (sciLower.includes(name) || name.includes(sciLower))) {
-                    bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
+                if (baseNameLower.includes(tradeLower) || fullLower.includes(tradeLower)) {
+                    bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
                 }
-
-                const nameFirst  = name.split(/\s+/)[0];
-                const tradeFirst = tradeLower.split(/\s+/)[0];
-                const sciFirst   = sciLower.split(/\s+/)[0];
-
-                if (nameFirst.length >= 4 && tradeFirst === nameFirst) {
-                    bestMatch = drug; bestScore = 0.5; bestConfidence = '95%'; break;
-                }
-                if (sciFirst && nameFirst.length >= 4 && sciFirst === nameFirst) {
-                    bestMatch = drug; bestScore = 0.5; bestConfidence = '92%'; break;
-                }
-
-                if (nameFirst.length >= 4 && tradeFirst.length >= 4) {
-                    const dist   = levenshtein(nameFirst, tradeFirst);
-                    const maxLen = Math.max(nameFirst.length, tradeFirst.length);
-                    if (dist <= Math.min(3, Math.floor(maxLen * 0.35)) && dist < bestScore) {
-                        bestMatch = drug; bestScore = dist;
-                        bestConfidence = ((1 - dist / maxLen) * 100).toFixed(0) + '%';
-                    }
-                }
-                if (sciFirst && nameFirst.length >= 4 && sciFirst.length >= 4) {
-                    const dist   = levenshtein(nameFirst, sciFirst);
-                    const maxLen = Math.max(nameFirst.length, sciFirst.length);
-                    if (dist <= Math.min(3, Math.floor(maxLen * 0.35)) && dist < bestScore) {
-                        bestMatch = drug; bestScore = dist;
-                        bestConfidence = ((1 - dist / maxLen) * 100).toFixed(0) + '%';
-                    }
+                if (baseNameLower.length >= MIN_SUBSTR && tradeLower.includes(baseNameLower)) {
+                    bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
                 }
             }
+
+            // ── 2. تطابق تام للاسم العلمي (حد أدنى 5 أحرف) ──────────────────────
+            if (sciLower.length >= MIN_SUBSTR) {
+                if (sciLower === baseNameLower || sciLower === fullLower) {
+                    bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
+                }
+                if ((baseNameLower.includes(sciLower) || sciLower.includes(baseNameLower)) && baseNameLower.length >= MIN_SUBSTR) {
+                    bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
+                }
+            }
+
+            // ── 3. تطابق تام لأول كلمة (حد أدنى 5 أحرف) ────────────────────────
+            if (extractedFirst.length >= 5 && tradeFirst === extractedFirst) {
+                bestMatch = drug; bestScore = 0.5; bestConfidence = '95%'; break;
+            }
+            if (extractedFirst.length >= 5 && sciFirst && sciFirst === extractedFirst) {
+                bestMatch = drug; bestScore = 0.5; bestConfidence = '92%'; break;
+            }
+
+            // ── 4. تطابق ضبابي صارم (أول كلمة ≥ 7 أحرف، مسافة ≤ 2 فقط) ─────────
+            const MIN_FUZZY_LEN = 7;
+            const MAX_EDIT_DIST = 2;
+
+            if (extractedFirst.length >= MIN_FUZZY_LEN && tradeFirst.length >= MIN_FUZZY_LEN) {
+                const dist = levenshtein(extractedFirst, tradeFirst);
+                if (dist <= MAX_EDIT_DIST && dist < bestScore) {
+                    bestMatch = drug; bestScore = dist;
+                    bestConfidence = ((1 - dist / Math.max(extractedFirst.length, tradeFirst.length)) * 100).toFixed(0) + '%';
+                }
+            }
+            if (extractedFirst.length >= MIN_FUZZY_LEN && sciFirst.length >= MIN_FUZZY_LEN) {
+                const dist = levenshtein(extractedFirst, sciFirst);
+                if (dist <= MAX_EDIT_DIST && dist < bestScore) {
+                    bestMatch = drug; bestScore = dist;
+                    bestConfidence = ((1 - dist / Math.max(extractedFirst.length, sciFirst.length)) * 100).toFixed(0) + '%';
+                }
+            }
+
             if (bestScore === 0) break;
         }
 
-        if (bestMatch) {
+        if (bestMatch && bestScore < Infinity) {
             matchedIds.add(bestMatch.id);
             suggestions.push({
                 id: bestMatch.id, tradeName: bestMatch.tradeName,
