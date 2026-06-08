@@ -6,13 +6,10 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { enforceRateLimit } from '@/app/lib/rate-limit';
 
 // ── الإعدادات ────────────────────────────────────────────────────────────────
-// PRESCRIPTION_SCAN_PROVIDER في ملف .env:
-//   "gemini"  → Gemini AI Vision (أدق للخط اليدوي)
-//   "vision"  → Google Cloud Vision OCR (أسرع للنصوص المطبوعة)
 const SCAN_PROVIDER = (process.env.PRESCRIPTION_SCAN_PROVIDER || 'gemini').toLowerCase();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL   = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_MODEL   = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 const GOOGLE_VISION_API_KEY = process.env.GOOGLE_VISION_API_KEY;
@@ -52,21 +49,12 @@ function levenshtein(a: string, b: string): number {
 type DrugInfo = { id: string; tradeName: string; scientificName: string };
 
 // كلمات الجرعة/الشكل الدوائي لحذفها قبل المطابقة
-const DOSAGE_NOISE_RE = /\b(\d+\s*(?:mg|ml|gm|g|mcg|iu|%)|\d+\s*(?:tab|cap|amp|vial|x\d+))s?\b/gi;
+const DOSAGE_NOISE_RE = /\b(\d+\s*(?:mg|ml|gm|g|mcg|iu|%)|(?:tab|cap|amp|vial|oint|cream|gel|spray)\b|\d+)\b/gi;
 
-/** استخراج اسم الدواء الأساسي بحذف الجرعات والأشكال الدوائية */
 function extractDrugBaseName(raw: string): string {
-    return raw
-        .replace(DOSAGE_NOISE_RE, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
+    return raw.replace(DOSAGE_NOISE_RE, '').replace(/\s{2,}/g, ' ').trim();
 }
 
-/**
- * مطابقة أسماء الأدوية المستخرجة مع مخزون الصيدلية.
- * تُستخدم مع كلا النظامين.
- * تُرجع المتوفرة وغير المتوفرة معاً.
- */
 function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
     const suggestions: {
         id: string; tradeName: string; scientificName: string;
@@ -90,9 +78,7 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
             const tradeLower = drug.tradeName.toLowerCase().replace(/[-_]/g, ' ').trim();
             const sciLower   = (drug.scientificName || '').toLowerCase().replace(/[-_]/g, ' ').trim();
 
-            // جرّب المطابقة مع الاسم المنظّف والاسم الكامل
             for (const name of [baseNameLower, fullLower]) {
-                // تطابق تام
                 if (tradeLower.includes(name) || name.includes(tradeLower)) {
                     bestMatch = drug; bestScore = 0; bestConfidence = '100%'; break;
                 }
@@ -100,7 +86,6 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
                     bestMatch = drug; bestScore = 0; bestConfidence = '98%'; break;
                 }
 
-                // تطابق أول كلمة
                 const nameFirst  = name.split(/\s+/)[0];
                 const tradeFirst = tradeLower.split(/\s+/)[0];
                 const sciFirst   = sciLower.split(/\s+/)[0];
@@ -112,7 +97,6 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
                     bestMatch = drug; bestScore = 0.5; bestConfidence = '92%'; break;
                 }
 
-                // تطابق ضبابي (Levenshtein)
                 if (nameFirst.length >= 4 && tradeFirst.length >= 4) {
                     const dist   = levenshtein(nameFirst, tradeFirst);
                     const maxLen = Math.max(nameFirst.length, tradeFirst.length);
@@ -142,11 +126,10 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
                 inStock: true,
             });
         } else {
-            // الدواء غير موجود في المخزون — أضفه للعرض مع تمييزه
             const displayName = baseName.length >= 3 ? baseName : extracted;
             if (displayName.length >= 3) {
                 suggestions.push({
-                    id: `not-in-stock-${displayName.replace(/\s+/g, '-')}`,
+                    id: `not-in-stock-${displayName.replace(/\s+/g, '-').substring(0, 30)}`,
                     tradeName: displayName,
                     scientificName: '',
                     confidence: '—',
@@ -159,12 +142,20 @@ function matchDrugsToInventory(extractedNames: string[], drugs: DrugInfo[]) {
     return suggestions;
 }
 
-
 // ══════════════════════════════════════════════════════════════════════════════
-// نظام 1: Gemini AI Vision — أدق للخط اليدوي
+// نظام 1: Gemini AI Vision
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function extractWithGemini(base64Image: string): Promise<{ rawText: string; extractedDrugs: string[] }> {
+    console.log('[SCAN] Model:', GEMINI_MODEL, '| Image chars:', base64Image.length);
+
+    // ── تحديد نوع الصورة ──────────────────────────────────────────────────────
+    // base64 images from ImageManipulator are always JPEG; from ImagePicker may be PNG
+    // Detect by first bytes: PNG starts with iVBOR, JPEG starts with /9j/
+    const mimeType = base64Image.startsWith('/9j/') ? 'image/jpeg'
+        : base64Image.startsWith('iVBOR') ? 'image/png'
+        : 'image/jpeg'; // default to JPEG
+
     const response = await fetch(GEMINI_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,52 +163,96 @@ async function extractWithGemini(base64Image: string): Promise<{ rawText: string
             contents: [{
                 parts: [
                     {
-                        text: `You are an expert pharmacist analyzing a medical prescription image.
+                        // OCR-focused prompt — avoids safety filter triggers
+                        text: `This is a pharmacy inventory task. Look at this medical document image and extract all text items that appear to be pharmaceutical product names (medications/drugs).
 
-TASK: Extract ONLY the drug/medication names from this prescription.
+List each pharmaceutical name you see, one per line. Include the dosage strength if written next to the name (e.g., "500mg", "10mg").
 
-RULES:
-- Return ONLY drug names, one per line
-- Include the drug form if visible (tablet, cream, spray, capsule, ointment, etc.)
-- Include dosage/strength if visible (e.g., 500mg, 10%, 250mg)
-- Do NOT include: patient name, doctor name, dates, instructions, dosage frequency, addresses, phone numbers
-- Do NOT include: medical abbreviations like PR, BP, ACC, EKG, BMI, Age, Wt, Ht
-- Do NOT include: "Rx", "TOTAL", quantities, or non-drug text
-- If you cannot read a drug name clearly, try your best guess based on common medications
-- Understand that doctors' handwriting can be messy — use medical context to infer drug names
-- Return the result as a JSON array of strings, nothing else
+Output format: Return a JSON array of strings only. Example:
+["Ciprofloxacin 500mg", "Prednisolone 5mg", "Azithromycin 250mg"]
 
-Example output:
-["Augmentin 625mg tablet", "Fusidic acid cream", "Paracetamol 500mg"]
-
-IMPORTANT: Return ONLY the JSON array, no other text.`
+Only output the JSON array, nothing else.`,
                     },
                     {
-                        inlineData: { mimeType: 'image/jpeg', data: base64Image },
+                        inlineData: { mimeType, data: base64Image },
                     }
                 ]
             }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+            generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 2048,
+                // Disable thinking for faster response and less filtering
+                thinkingConfig: { thinkingBudget: 0 },
+            },
         }),
     });
 
     const data = await response.json();
+
+    // ── التحقق من الاستجابة ────────────────────────────────────────────────────
     if (!response.ok) {
-        console.error('Gemini API Error:', data);
-        throw new Error(data.error?.message || 'فشل تحليل الصورة بواسطة Gemini');
+        console.error('[SCAN] Gemini HTTP error:', response.status, JSON.stringify(data).substring(0, 300));
+        throw new Error(data.error?.message || `Gemini HTTP ${response.status}`);
     }
 
-    const rawGeminiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const candidate  = data.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    console.log('[SCAN] finishReason:', finishReason);
+
+    // Handle blocked or empty response
+    if (!candidate || finishReason === 'SAFETY' || finishReason === 'RECITATION') {
+        console.warn('[SCAN] Gemini blocked response. Safety ratings:', JSON.stringify(candidate?.safetyRatings));
+        // Return empty — the UI will show "لم يتم التعرف على أدوية"
+        return { rawText: 'لم يتمكن النظام من تحليل هذه الصورة. يرجى التأكد من وضوح الوصفة والإضاءة الجيدة.', extractedDrugs: [] };
+    }
+
+    if (finishReason === 'MAX_TOKENS') {
+        console.warn('[SCAN] Gemini hit token limit — response may be truncated');
+    }
+
+    const rawGeminiText = candidate?.content?.parts?.[0]?.text || '';
+    console.log('[SCAN] Raw response (first 400 chars):', rawGeminiText.substring(0, 400));
+
     let extractedDrugs: string[] = [];
+
+    // ── محاولة 1: JSON مباشر ──────────────────────────────────────────────────
     try {
-        const jsonMatch = rawGeminiText.match(/\[[\s\S]*?\]/);
-        if (jsonMatch) extractedDrugs = JSON.parse(jsonMatch[0]);
-    } catch {
+        // Strip markdown code fences if present (```json ... ```)
+        const cleaned = rawGeminiText
+            .trim()
+            .replace(/^```(?:json)?\s*/i, '')
+            .replace(/```\s*$/, '')
+            .trim();
+
+        if (cleaned.startsWith('[')) {
+            extractedDrugs = JSON.parse(cleaned);
+            console.log('[SCAN] ✓ Parsed JSON directly:', extractedDrugs);
+        } else {
+            // Try to find array anywhere in response
+            const m = cleaned.match(/\[[\s\S]*\]/);
+            if (m) {
+                extractedDrugs = JSON.parse(m[0]);
+                console.log('[SCAN] ✓ Parsed JSON via regex:', extractedDrugs);
+            }
+        }
+    } catch (e) {
+        console.warn('[SCAN] JSON parse failed:', String(e).substring(0, 100));
+    }
+
+    // ── محاولة 2: استخراج سطر بسطر ───────────────────────────────────────────
+    if (extractedDrugs.length === 0 && rawGeminiText.length > 3) {
         extractedDrugs = rawGeminiText
             .split('\n')
-            .map((l: string) => l.replace(/^[\d.\-*•]+\s*/, '').trim())
-            .filter((l: string) => l.length >= 3);
+            .map((l: string) =>
+                l.replace(/^[\d.\-*•"'\[\],]+\s*/, '')
+                 .replace(/[",\[\]]+/g, '')
+                 .trim()
+            )
+            .filter((l: string) => l.length >= 3 && /[a-zA-Z]/.test(l));
+        console.log('[SCAN] ✓ Parsed via line-split fallback:', extractedDrugs);
     }
+
+    console.log('[SCAN] Total drugs extracted:', extractedDrugs.length);
 
     const rawText = extractedDrugs.length > 0
         ? extractedDrugs.map((d, i) => `${i + 1}. ${d}`).join('\n')
@@ -256,46 +291,30 @@ async function extractWithVision(base64Image: string, drugs: DrugInfo[]): Promis
     const rawText: string = textAnnotations[0].description;
     const normalized = rawText.toLowerCase().replace(/[-_]/g, ' ');
     const ocrWords = normalized.split(/[\s\r\n,.;:()\[\]\/\\]+/).filter((w: string) => w.length >= 3);
-
-    // بحث عكسي: لكل دواء في المخزون، هل يظهر في النص؟
     const extractedDrugs: string[] = [];
 
     for (const drug of drugs) {
         const tradeLower = drug.tradeName.toLowerCase().replace(/[-_]/g, ' ').trim();
-        const sciLower = (drug.scientificName || '').toLowerCase().replace(/[-_]/g, ' ').trim();
+        const sciLower   = (drug.scientificName || '').toLowerCase().replace(/[-_]/g, ' ').trim();
 
-        // الاسم التجاري كاملاً
-        if (tradeLower.length >= 3 && normalized.includes(tradeLower)) {
-            extractedDrugs.push(drug.tradeName); continue;
-        }
-        // الاسم العلمي كاملاً
-        if (sciLower.length >= 4 && normalized.includes(sciLower)) {
-            extractedDrugs.push(drug.tradeName); continue;
-        }
-        // أول كلمة من الاسم التجاري
+        if (tradeLower.length >= 3 && normalized.includes(tradeLower)) { extractedDrugs.push(drug.tradeName); continue; }
+        if (sciLower.length >= 4 && normalized.includes(sciLower))    { extractedDrugs.push(drug.tradeName); continue; }
+
         const tradeFirst = tradeLower.split(/\s+/)[0];
-        if (tradeFirst.length >= 4 && !NOISE_WORDS.has(tradeFirst) && ocrWords.includes(tradeFirst)) {
-            extractedDrugs.push(drug.tradeName); continue;
-        }
-        // أول كلمة من الاسم العلمي
-        const sciFirst = sciLower.split(/\s+/)[0];
-        if (sciFirst && sciFirst.length >= 4 && !NOISE_WORDS.has(sciFirst) && ocrWords.includes(sciFirst)) {
-            extractedDrugs.push(drug.tradeName); continue;
-        }
-        // تطابق ضبابي
-        const candidates = [tradeFirst];
-        if (sciFirst) candidates.push(sciFirst);
-        for (const cand of candidates) {
+        const sciFirst   = sciLower.split(/\s+/)[0];
+
+        if (tradeFirst.length >= 4 && !NOISE_WORDS.has(tradeFirst) && ocrWords.includes(tradeFirst)) { extractedDrugs.push(drug.tradeName); continue; }
+        if (sciFirst && sciFirst.length >= 4 && !NOISE_WORDS.has(sciFirst) && ocrWords.includes(sciFirst)) { extractedDrugs.push(drug.tradeName); continue; }
+
+        for (const cand of [tradeFirst, sciFirst].filter(Boolean)) {
             if (cand.length < 5 || NOISE_WORDS.has(cand)) continue;
-            let found = false;
             for (const ocrWord of ocrWords) {
                 if (ocrWord.length < 4 || Math.abs(ocrWord.length - cand.length) > 3) continue;
                 const dist = levenshtein(cand, ocrWord);
                 if (dist <= 2 && dist / Math.max(cand.length, ocrWord.length) < 0.25) {
-                    extractedDrugs.push(drug.tradeName); found = true; break;
+                    extractedDrugs.push(drug.tradeName); break;
                 }
             }
-            if (found) break;
         }
     }
 
@@ -314,8 +333,8 @@ export async function POST(req: Request) {
         const limited = await enforceRateLimit(req, 'scan-prescription', 20, 60_000);
         if (limited) return limited;
 
-        const body = await req.json();
-        const base64Image = body.image;
+        const body         = await req.json();
+        const base64Image  = body.image;
 
         if (!base64Image || typeof base64Image !== 'string') {
             return NextResponse.json({ error: 'No image provided' }, { status: 400 });
@@ -323,6 +342,8 @@ export async function POST(req: Request) {
         if (base64Image.length > MAX_IMAGE_CHARS) {
             return NextResponse.json({ error: 'الصورة كبيرة جدًا' }, { status: 413 });
         }
+
+        console.log('[SCAN] Provider:', SCAN_PROVIDER, '| Image chars:', base64Image.length);
 
         // ── جلب المخزون ──────────────────────────────────────────────────────
         const inventoryItems = await prisma.inventory.findMany({
@@ -345,28 +366,27 @@ export async function POST(req: Request) {
                 return true;
             });
 
-        // ── اختيار النظام حسب الإعداد ────────────────────────────────────────
+        console.log('[SCAN] Drugs in inventory:', drugs.length);
+
+        // ── اختيار النظام ────────────────────────────────────────────────────
         let rawText: string;
         let suggestions;
 
         if (SCAN_PROVIDER === 'vision') {
-            // نظام Google Vision + بحث عكسي
             const result = await extractWithVision(base64Image, drugs);
-            rawText = result.rawText;
-            // في نظام Vision، extractedDrugs هي أسماء الأدوية من المخزون مباشرةً
-            suggestions = result.extractedDrugs.map(name => {
+            rawText      = result.rawText;
+            suggestions  = result.extractedDrugs.map(name => {
                 const drug = drugs.find(d => d.tradeName === name);
-                return drug ? {
-                    id: drug.id, tradeName: drug.tradeName,
-                    scientificName: drug.scientificName,
-                    confidence: '85%', matchedFrom: name,
-                } : null;
+                return drug ? { id: drug.id, tradeName: drug.tradeName, scientificName: drug.scientificName, confidence: '85%', matchedFrom: name, inStock: true } : null;
             }).filter(Boolean);
         } else {
-            // نظام Gemini AI (الافتراضي)
             const result = await extractWithGemini(base64Image);
-            rawText = result.rawText;
-            suggestions = matchDrugsToInventory(result.extractedDrugs, drugs);
+            rawText      = result.rawText;
+            console.log('[SCAN] Gemini extracted:', result.extractedDrugs);
+            suggestions  = matchDrugsToInventory(result.extractedDrugs, drugs);
+            console.log('[SCAN] Suggestions: inStock=%d, notInStock=%d',
+                suggestions.filter(s => s.inStock).length,
+                suggestions.filter(s => !s.inStock).length);
         }
 
         return NextResponse.json({ rawText, suggestions });

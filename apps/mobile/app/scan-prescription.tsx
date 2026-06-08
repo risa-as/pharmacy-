@@ -115,12 +115,21 @@ export default function ScanPrescriptionScreen() {
     // ── إرسال الصورة للـ API ──────────────────────────────────────────────────
     const processImage = async (base64: string) => {
         try {
+            console.log('[PRESCRIPTION] Sending image, base64 length:', base64.length);
+            if (base64.length < 1000) {
+                console.error('[PRESCRIPTION] Image too small, likely failed capture!');
+                Alert.alert('خطأ', 'الصورة صغيرة جداً، يرجى التصوير مجدداً');
+                setLoading(false);
+                return;
+            }
             const result = await apiService.scanPrescription(base64);
+            console.log('[PRESCRIPTION] API result rawText:', result.rawText);
+            console.log('[PRESCRIPTION] API suggestions count:', result.suggestions?.length);
             const sugg = result.suggestions || [];
             setRawText(result.rawText || 'لم يتم قراءة نصوص واضحة');
             setSuggestions(sugg);
-            // تحديد كل الأدوية تلقائياً عند أول ظهور النتائج
-            setSelectedIds(new Set(sugg.map((s: any) => s.id)));
+            // تحديد الأدوية المتوفرة فقط تلقائياً
+            setSelectedIds(new Set(sugg.filter((s: any) => s.inStock !== false).map((s: any) => s.id)));
             setStep('review');
         } catch (error: any) {
             Alert.alert('خطأ', error.message || 'حدث خطأ أثناء تحليل الصورة');
