@@ -10,6 +10,10 @@ import { z } from "zod";
 const SyncShiftSchema = z.object({
     id: z.string(),
     userId: z.string(),
+    // User snapshot — lets the cloud resolve the correct user when the desktop's
+    // local userId diverges from the cloud one (same email, different IDs).
+    userEmail: z.string().nullable().optional(),
+    userName: z.string().nullable().optional(),
     branchId: z.string(),
     safeId: z.string().nullable().optional(),
     startTime: z.string().or(z.date()),
@@ -74,29 +78,57 @@ export async function POST(req: NextRequest) {
 
         const processedIds: string[] = [];
 
-        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            for (const shift of shifts) {
-                const existing = await tx.shift.findUnique({ where: { id: shift.id } });
+        // Process each shift in its own transaction so a single bad record
+        // (e.g. an unresolvable user) can't roll back the entire batch and
+        // block every shift from ever syncing.
+        for (const shift of shifts) {
+            try {
+                const didProcess = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<boolean> => {
+                    const existing = await tx.shift.findUnique({ where: { id: shift.id } });
 
-                if (existing) {
-                    // Update existing
-                    await tx.shift.update({
-                        where: { id: shift.id },
-                        data: {
-                            endTime: shift.endTime ? new Date(shift.endTime) : null,
-                            duration: shift.duration,
-                            expectedCash: shift.expectedCash,
-                            actualCash: shift.actualCash,
-                            status: shift.status,
-                            updatedAt: shift.updatedAt ? new Date(shift.updatedAt) : new Date()
-                        }
-                    });
-                } else {
-                    // Guard: branch must exist in cloud before we can create a shift
+                    if (existing) {
+                        // Update existing
+                        await tx.shift.update({
+                            where: { id: shift.id },
+                            data: {
+                                endTime: shift.endTime ? new Date(shift.endTime) : null,
+                                duration: shift.duration,
+                                expectedCash: shift.expectedCash,
+                                actualCash: shift.actualCash,
+                                status: shift.status,
+                                updatedAt: shift.updatedAt ? new Date(shift.updatedAt) : new Date()
+                            }
+                        });
+                        return true;
+                    }
+
+                    // Guard: branch must exist in cloud before we can create a shift.
+                    // Return false (not synced) so the desktop retries once the branch syncs.
                     const shiftBranch = await tx.branch.findUnique({ where: { id: shift.branchId }, select: { id: true } });
                     if (!shiftBranch) {
                         console.warn(`[Shift Sync] Branch ${shift.branchId} not yet in cloud — skipping shift ${shift.id}`);
-                        continue;
+                        return false;
+                    }
+
+                    // Resolve the user. The desktop's local userId may not exist in
+                    // the cloud when the same email was created on both sides with
+                    // different IDs. Fall back to matching by the user's email so the
+                    // FK on Shift.userId is satisfied instead of failing the sync.
+                    let resolvedUserId = shift.userId;
+                    const userById = await tx.user.findUnique({ where: { id: resolvedUserId }, select: { id: true } });
+                    if (!userById) {
+                        if (shift.userEmail) {
+                            const userByEmail = await tx.user.findUnique({ where: { email: shift.userEmail }, select: { id: true } });
+                            if (userByEmail) {
+                                resolvedUserId = userByEmail.id;
+                            } else {
+                                console.warn(`[Shift Sync] User ${shift.userId} (email ${shift.userEmail}) not in cloud — skipping shift ${shift.id}`);
+                                return false;
+                            }
+                        } else {
+                            console.warn(`[Shift Sync] User ${shift.userId} not in cloud and no email snapshot — skipping shift ${shift.id}`);
+                            return false;
+                        }
                     }
 
                     // Ensure the safe exists in cloud (desktop may have auto-created it locally)
@@ -115,7 +147,7 @@ export async function POST(req: NextRequest) {
                     await tx.shift.create({
                         data: {
                             id: shift.id,
-                            userId: shift.userId,
+                            userId: resolvedUserId,
                             branchId: shift.branchId,
                             safeId: resolvedSafeId,
                             startTime: new Date(shift.startTime),
@@ -129,21 +161,27 @@ export async function POST(req: NextRequest) {
                             updatedAt: shift.updatedAt ? new Date(shift.updatedAt) : new Date()
                         }
                     });
-                }
-                processedIds.push(shift.id);
+                    return true;
+                });
+                // Only acknowledge shifts we actually wrote, so guarded-skip shifts
+                // (branch/user not yet in cloud) are retried on the next sync.
+                if (didProcess) processedIds.push(shift.id);
+            } catch (shiftErr: any) {
+                console.error(`[Shift Sync] Failed to sync shift ${shift.id}:`, shiftErr.message);
+                // Continue with the remaining shifts
             }
+        }
 
-            // Log the action
-            await tx.syncActionLog.upsert({
-                where: { idempotencyKey },
-                update: { status: "PROCESSED" },
-                create: {
-                    idempotencyKey,
-                    actionType: "SYNC_SHIFTS",
-                    branchId,
-                    status: "PROCESSED"
-                }
-            });
+        // Log the action (outside the per-shift transactions)
+        await prisma.syncActionLog.upsert({
+            where: { idempotencyKey },
+            update: { status: "PROCESSED" },
+            create: {
+                idempotencyKey,
+                actionType: "SYNC_SHIFTS",
+                branchId,
+                status: "PROCESSED"
+            }
         });
 
         return NextResponse.json({ success: true, syncedIds: processedIds, ack: { status: 'processed', idempotencyKey } });

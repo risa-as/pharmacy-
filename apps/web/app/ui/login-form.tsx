@@ -1,21 +1,37 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useState } from "react";
 import { authenticate } from "@/app/lib/actions";
 import { Button } from "@faramace/ui";
-import { Mail, Lock, AlertCircle, ArrowLeft } from "lucide-react";
+import { Mail, Lock, AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 
 export default function LoginForm() {
-    const [errorMessage, dispatch] = useFormState(authenticate, undefined);
+    const [error, setError] = useState<string | undefined>();
+    const [pending, setPending] = useState(false);
 
-    const handleLogin = async (formData: FormData) => {
-        // We rely on ElectronSessionSync in the dashboard to update the branchId
-        // from the authenticated session, rather than trusting the potentially stale local DB here.
-        dispatch(formData);
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (pending) return;
+
+        setPending(true);
+        setError(undefined);
+
+        const formData = new FormData(e.currentTarget);
+        const result = await authenticate(undefined, formData);
+
+        if (result === '__LOGIN_SUCCESS__') {
+            // Hard navigation bypasses Next.js Router Cache so a newly logged-in
+            // user never sees stale data from a previous session.
+            window.location.href = '/dashboard';
+            return;
+        }
+
+        setError(result);
+        setPending(false);
     };
 
     return (
-        <form action={handleLogin} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex-1">
                 <h1 className="mb-6 text-2xl font-bold text-foreground text-center font-cairo">
                     تسجيل الدخول
@@ -37,6 +53,7 @@ export default function LoginForm() {
                                 placeholder="name@example.com"
                                 required
                                 dir="ltr"
+                                disabled={pending}
                             />
                             <Mail className="pointer-events-none absolute right-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground peer-focus:text-primary transition-colors" />
                         </div>
@@ -58,48 +75,44 @@ export default function LoginForm() {
                                 required
                                 minLength={6}
                                 dir="ltr"
+                                disabled={pending}
                             />
                             <Lock className="pointer-events-none absolute right-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground peer-focus:text-primary transition-colors" />
                         </div>
                     </div>
                 </div>
-                <LoginButton />
+
+                <Button
+                    type="submit"
+                    disabled={pending}
+                    className="mt-6 w-full h-11 text-base font-bold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 transition-all shadow-lg shadow-primary/30"
+                >
+                    {pending ? (
+                        <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>جاري الدخول...</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center gap-2">
+                            <span>تسجيل الدخول</span>
+                            <ArrowLeft className="w-4 h-4" />
+                        </div>
+                    )}
+                </Button>
+
                 <div
-                    className="flex h-8 items-end space-x-1"
+                    className="flex h-8 items-end space-x-1 mt-2"
                     aria-live="polite"
                     aria-atomic="true"
                 >
-                    {errorMessage && (
+                    {error && (
                         <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-2 text-destructive w-full animate-in fade-in slide-in-from-top-2">
                             <AlertCircle className="h-5 w-5" />
-                            <p className="text-sm font-medium">{errorMessage}</p>
+                            <p className="text-sm font-medium">{error}</p>
                         </div>
                     )}
                 </div>
             </div>
         </form>
-    );
-}
-
-function LoginButton() {
-    const { pending } = useFormStatus();
-
-    return (
-        <Button
-            className="mt-6 w-full h-11 text-base font-bold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 transition-all shadow-lg shadow-primary/30"
-            aria-disabled={pending}
-        >
-            {pending ? (
-                <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                    <span>جاري الدخول...</span>
-                </div>
-            ) : (
-                <div className="flex items-center justify-center gap-2">
-                    <span>تسجيل الدخول</span>
-                    <ArrowLeft className="w-4 h-4" />
-                </div>
-            )}
-        </Button>
     );
 }

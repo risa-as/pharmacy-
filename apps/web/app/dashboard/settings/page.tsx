@@ -1,7 +1,8 @@
-import { Settings, Building2, PackageOpen, Key, ShieldCheck, Gift, Shield, CreditCard, HardDrive, ChevronLeft, Bot } from "lucide-react";
+import { Settings, Building2, PackageOpen, Key, ShieldCheck, Gift, Shield, CreditCard, HardDrive, ChevronLeft, Bot, ScanLine } from "lucide-react";
 import SettingsForm from "@/app/ui/settings/settings-form";
 import BackupManager from "@/app/ui/settings/backup-manager";
 import AIUsageWidget from "@/app/ui/settings/ai-usage-widget";
+import ScanUsageWidget from "@/app/ui/settings/scan-usage-widget";
 import { getCompanySettings } from "@/app/lib/actions/settings";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
@@ -172,6 +173,15 @@ export default async function SettingsPage() {
                     <h2 className="font-bold text-foreground">المساعد الذكي — الاستخدام اليومي</h2>
                 </div>
                 <AIUsageWidget />
+            </div>
+
+            {/* Scan Usage */}
+            <div className="glass-card rounded-xl p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                    <ScanLine className="w-4 h-4 text-emerald-500" />
+                    <h2 className="font-bold text-foreground">قارئ الوصفات — الاستخدام اليومي</h2>
+                </div>
+                <ScanUsageWidget />
             </div>
 
             {/* Backup */}

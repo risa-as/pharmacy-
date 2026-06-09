@@ -5,6 +5,18 @@ import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { enforceRateLimit } from '@/app/lib/rate-limit';
 
+// ── التوقيت العراقي ──────────────────────────────────────────────────────────
+function getIraqDayStart(): Date {
+    const iraqOffset = 3 * 60 * 60 * 1000;
+    const nowInIraq  = new Date(Date.now() + iraqOffset);
+    return new Date(Date.UTC(
+        nowInIraq.getUTCFullYear(),
+        nowInIraq.getUTCMonth(),
+        nowInIraq.getUTCDate(),
+        0, 0, 0, 0
+    ) - iraqOffset);
+}
+
 // ── الإعدادات ────────────────────────────────────────────────────────────────
 const SCAN_PROVIDER = (process.env.PRESCRIPTION_SCAN_PROVIDER || 'gemini').toLowerCase();
 
@@ -387,6 +399,34 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'الصورة كبيرة جدًا' }, { status: 413 });
         }
 
+        // ── التحقق من الحد اليومي per-branch ────────────────────────────────
+        const { organizationId } = tenantCtx;
+        const branchId = tenantCtx.user.branchId;
+        if (organizationId && branchId) {
+            const dayStart = getIraqDayStart();
+            const [org, used] = await Promise.all([
+                prisma.organization.findUnique({
+                    where: { id: organizationId },
+                    select: { prescriptionScanDailyLimit: true },
+                }),
+                prisma.prescriptionScanLog.count({
+                    where: { branchId, createdAt: { gte: dayStart } },
+                }),
+            ]);
+            const limit = org?.prescriptionScanDailyLimit ?? 20;
+            if (used >= limit) {
+                return NextResponse.json(
+                    {
+                        error: `تجاوزت الحد اليومي لمسح الوصفات (${limit} مسح/يوم). يتجدد الحد منتصف الليل بتوقيت بغداد.`,
+                        limit,
+                        used,
+                        remaining: 0,
+                    },
+                    { status: 429 }
+                );
+            }
+        }
+
         console.log('[SCAN] Provider:', SCAN_PROVIDER, '| Image chars:', base64Image.length);
 
         // ── جلب المخزون ──────────────────────────────────────────────────────
@@ -431,6 +471,13 @@ export async function POST(req: Request) {
             console.log('[SCAN] Suggestions: inStock=%d, notInStock=%d',
                 suggestions.filter(s => s.inStock).length,
                 suggestions.filter(s => !s.inStock).length);
+        }
+
+        // ── تسجيل الاستخدام بعد النجاح ──────────────────────────────────────
+        if (organizationId && branchId) {
+            await prisma.prescriptionScanLog.create({
+                data: { id: crypto.randomUUID(), organizationId, branchId },
+            });
         }
 
         return NextResponse.json({ rawText, suggestions });

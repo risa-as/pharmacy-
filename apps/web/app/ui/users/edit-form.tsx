@@ -97,21 +97,25 @@ export default function EditUserForm({ user, branches }: EditUserFormProps) {
 
                 <div className="md:col-span-2">
                     <label htmlFor="branchId" className="block text-sm font-medium text-foreground mb-2">
-                        الفرع (اختياري)
+                        الفرع
                     </label>
                     <select
                         id="branchId"
                         name="branchId"
+                        required
                         defaultValue={user.branchId || ""}
                         className="w-full rounded-lg border border-border bg-background px-4 py-2 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 outline-none transition-all bg-card"
                     >
-                        <option value="">-- بدون فرع --</option>
+                        <option value="" disabled>-- اختر الفرع --</option>
                         {branches.map((branch: any) => (
                             <option key={branch.id} value={branch.id}>
                                 {branch.name}
                             </option>
                         ))}
                     </select>
+                    {(state as any).errors?.branchId && (
+                        <p className="mt-1 text-sm text-destructive">{(state as any).errors.branchId}</p>
+                    )}
                 </div>
             </div>
 

@@ -47,7 +47,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-import { handleSignOut } from "@/app/lib/actions/auth-actions";
+import { clearSession } from "@/app/lib/actions/auth-actions";
 import { type UserPermissions } from "@/app/lib/permissions";
 import { getLinkPermission } from "@/app/lib/route-permissions";
 
@@ -202,16 +202,6 @@ const sections: NavSection[] = [
             excludeFor: ["/dashboard/purchases/smart-order"],
           },
           { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order" },
-          {
-            name: "إدارة المستودعات",
-            href: "/dashboard/warehouses",
-            plan: "enterprise",
-          },
-          {
-            name: "سوق الأدوية",
-            href: "/dashboard/marketplace",
-            plan: "enterprise",
-          },
         ],
       },
     ],
@@ -642,13 +632,14 @@ export default function SideNav({
       )}
 
       {/* Sign Out */}
-      <form
-        action={handleSignOut}
-        onSubmit={() => setSigningOut(true)}
-        className="mt-2 px-0.5"
-      >
+      <div className="mt-2 px-0.5">
         <button
           disabled={signingOut}
+          onClick={async () => {
+            setSigningOut(true);
+            await clearSession();
+            window.location.href = '/login';
+          }}
           className="group flex h-9 w-full items-center gap-2.5 rounded-lg bg-destructive/10 px-3 text-[13px] font-bold text-destructive hover:bg-destructive hover:text-white transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {signingOut ? (
@@ -660,7 +651,7 @@ export default function SideNav({
             {signingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
           </span>
         </button>
-      </form>
+      </div>
 
       {/* Powered by */}
       {/* <p className="mt-3 text-center text-[10px] text-muted-foreground/50 select-none">

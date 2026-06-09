@@ -22,7 +22,7 @@ export async function PATCH(
         }
 
         const body = await request.json();
-        const { name, plan, maxBranches, maxUsers, maxDevices, maxMobileUsers, aiDailyLimit } = body;
+        const { name, plan, maxBranches, maxUsers, maxDevices, maxMobileUsers, aiDailyLimit, prescriptionScanDailyLimit } = body;
 
         // Fetch plan to validate and get its details
         let selectedPlan = null;
@@ -40,6 +40,7 @@ export async function PATCH(
                 maxDevices: maxDevices !== undefined ? Number(maxDevices) || null : undefined,
                 maxMobileUsers: maxMobileUsers !== undefined ? Number(maxMobileUsers) || null : undefined,
                 aiDailyLimit: aiDailyLimit !== undefined ? Math.max(0, Number(aiDailyLimit)) : undefined,
+                prescriptionScanDailyLimit: prescriptionScanDailyLimit !== undefined ? Math.max(0, Number(prescriptionScanDailyLimit)) : undefined,
             },
             include: { plan: true },
         });

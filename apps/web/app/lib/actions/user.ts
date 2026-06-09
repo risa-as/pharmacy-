@@ -17,7 +17,7 @@ const UserSchema = z.object({
     email: z.string().email("البريد الإلكتروني غير صالح"),
     password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"),
     role: z.enum(["ADMIN", "PHARMACIST", "CASHIER"]),
-    branchId: z.string().optional().nullable(),
+    branchId: z.string().min(1, "الفرع مطلوب"),
 });
 
 const CreateUser = UserSchema.omit({ id: true });
@@ -35,7 +35,7 @@ export async function createUser(prevState: any, formData: FormData) {
         email: formData.get("email"),
         password: formData.get("password"),
         role: formData.get("role"),
-        branchId: formData.get("branchId") || null,
+        branchId: formData.get("branchId") ?? "",
     });
 
     if (!validatedFields.success) {
@@ -112,7 +112,7 @@ export async function updateUser(
         email: formData.get("email"),
         password: passwordValue && passwordValue !== "" ? passwordValue : undefined,
         role: formData.get("role"),
-        branchId: formData.get("branchId") || null,
+        branchId: formData.get("branchId") ?? "",
     });
 
     if (!validatedFields.success) {

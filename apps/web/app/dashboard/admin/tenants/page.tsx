@@ -14,7 +14,7 @@ export default function TenantsPage() {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50 });
+    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20 });
     const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
     const [provisionResult, setProvisionResult] = useState<{
@@ -89,6 +89,7 @@ export default function TenantsPage() {
                 maxDevices: form.maxDevices,
                 maxMobileUsers: form.maxMobileUsers,
                 aiDailyLimit: form.aiDailyLimit,
+                prescriptionScanDailyLimit: form.prescriptionScanDailyLimit,
             } : form;
 
             const res = await fetch(url, {
@@ -113,7 +114,7 @@ export default function TenantsPage() {
                 }
                 setShowForm(false);
                 setEditingId(null);
-                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50 });
+                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20 });
             } else {
                 const data = await res.json();
                 alert(data.error || 'حدث خطأ');
@@ -161,6 +162,7 @@ export default function TenantsPage() {
             maxDevices: tenant.maxDevices ?? plan?.maxDevices ?? 1,
             maxMobileUsers: tenant.maxMobileUsers ?? plan?.maxMobileUsers ?? 1,
             aiDailyLimit: tenant.aiDailyLimit ?? 50,
+            prescriptionScanDailyLimit: tenant.prescriptionScanDailyLimit ?? 20,
         });
         setShowForm(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -286,7 +288,7 @@ export default function TenantsPage() {
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
                 <button onClick={() => {
                     setEditingId(null);
-                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50 });
+                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20 });
                     setShowForm(!showForm);
                 }}
                     className="flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors shadow-sm">
@@ -355,6 +357,11 @@ export default function TenantsPage() {
                                 <input type="number" min="0" value={form.aiDailyLimit} onChange={e => setForm({ ...form, aiDailyLimit: Number(e.target.value) })}
                                     className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
                             </div>
+                            <div className="col-span-2">
+                                <label className="block text-xs text-muted-foreground mb-1">💊 حد مسح الوصفات اليومي (مسح/يوم، لكل فرع)</label>
+                                <input type="number" min="0" value={form.prescriptionScanDailyLimit} onChange={e => setForm({ ...form, prescriptionScanDailyLimit: Number(e.target.value) })}
+                                    className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                            </div>
                         </div>
                     </div>
                     <button onClick={handleCreateOrUpdate} disabled={saving || !form.name || (!editingId && (!form.ownerEmail || !form.ownerPassword))}
@@ -420,6 +427,7 @@ export default function TenantsPage() {
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الفروع</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">المستخدمين</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">🤖 حد AI/يوم</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">💊 حد الوصفات/يوم</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">السعر</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الحالة</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الاشتراك</th>
@@ -444,8 +452,13 @@ export default function TenantsPage() {
                                         <td className="py-3 px-4 text-foreground">max {t.maxBranches}</td>
                                         <td className="py-3 px-4 text-foreground">max {t.maxUsers}</td>
                                         <td className="py-3 px-4">
-                                            <span className="text-xs font-bold text-violet-600 bg-violet-500/10 px-2 py-0.5 rounded-full">
+                                            <span className="text-xs font-bold text-violet-600 bg-violet-500/10 px-2 py-0.5 rounded-full whitespace-nowrap">
                                                 {t.aiDailyLimit ?? 50} رسالة
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <span className="text-xs font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                                {t.prescriptionScanDailyLimit ?? 20} مسح
                                             </span>
                                         </td>
                                         <td className="py-3 px-4 font-bold text-success" dir="ltr">

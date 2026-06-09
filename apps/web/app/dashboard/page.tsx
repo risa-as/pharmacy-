@@ -269,7 +269,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
     };
 }
 
-async function getEmployeeData(branchId?: string) {
+async function getEmployeeData(branchId?: string, userId?: string) {
     const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
     const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
     const now = new Date();
@@ -277,16 +277,28 @@ async function getEmployeeData(branchId?: string) {
     const in30Days = new Date(todayStart.getTime() + 30 * 24 * 60 * 60 * 1000);
     const branchWhere = branchId ? { branchId } : {};
 
+    // ملخص الوردية يعرض فقط مبيعات ومرتجعات هذا الموظف تحديداً
+    const myShiftSaleWhere = {
+        createdAt: { gte: todayStart },
+        ...branchWhere,
+        ...(userId ? { userId } : {}),
+    };
+    const myShiftReturnWhere = {
+        createdAt: { gte: todayStart },
+        ...branchWhere,
+        ...(userId ? { sale: { userId } } : {}),
+    };
+
     const [drugCount, inventoryCount, todaySales, todayReturns, expiringCount, alerts] = await Promise.all([
         prisma.globalDrug.count(),
         prisma.inventory.count({ where: branchWhere }),
         prisma.sale.aggregate({
             _sum: { total: true }, _count: true,
-            where: { createdAt: { gte: todayStart }, ...branchWhere },
+            where: myShiftSaleWhere,
         }),
         prisma.saleReturn.aggregate({
             _sum: { total: true }, _count: true,
-            where: { createdAt: { gte: todayStart }, ...branchWhere },
+            where: myShiftReturnWhere,
         }),
         prisma.batch.count({
             where: {
@@ -335,6 +347,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     const isSuperAdmin = role === 'SUPER_ADMIN';
     const organizationId = ((session?.user as any)?.organizationId as string) || undefined;
     const branchId = (session?.user?.branchId as string) || undefined;
+    const userId = (session?.user?.id as string) || undefined;
     const dateLabel = new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Baghdad' });
 
     /* ══════════════════════════════
@@ -829,7 +842,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     /* ══════════════════════════════
        EMPLOYEE DASHBOARD (PHARMACIST / CASHIER)
     ══════════════════════════════ */
-    const d = await getEmployeeData(branchId);
+    const d = await getEmployeeData(branchId, userId);
 
     return (
         <main dir="rtl" className="space-y-6">

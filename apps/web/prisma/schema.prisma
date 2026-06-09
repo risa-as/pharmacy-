@@ -18,7 +18,8 @@ model Organization {
   isSuspended        Boolean   @default(false)
   suspendedAt        DateTime?
   subscriptionEndsAt DateTime?
-  aiDailyLimit       Int       @default(50)
+  aiDailyLimit                  Int       @default(50)
+  prescriptionScanDailyLimit    Int       @default(20)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   minProfitMargin    Float     @default(5)
@@ -32,7 +33,8 @@ model Organization {
   customDrugs        GlobalDrug[] @relation("OrganizationCustomDrugs")
   suppliers          Supplier[]   @relation("OrganizationSuppliers")
   companySettings    CompanySettings?
-  aiUsageLogs        AiUsageLog[]
+  aiUsageLogs             AiUsageLog[]
+  prescriptionScanLogs    PrescriptionScanLog[]
   invoiceCounter     InvoiceCounter?
 
   plan               SubscriptionPlan? @relation(fields: [planId], references: [id])
@@ -1069,4 +1071,15 @@ model AiUsageLog {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
+}
+
+model PrescriptionScanLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  branchId       String
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([branchId, createdAt])
 }
