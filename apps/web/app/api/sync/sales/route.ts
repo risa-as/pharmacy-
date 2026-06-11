@@ -17,6 +17,9 @@ const SyncSaleSchema = z.object({
     userId: z.string().nullable().optional(),
     patientId: z.string().nullable().optional(),
     paymentMethod: z.string().optional().default("CASH"),
+    // Sequential number the desktop already allocated at sale time (online).
+    // When present we reuse it; when absent (offline sale) we allocate one here.
+    invoiceNumber: z.union([z.number(), z.string()]).nullable().optional(),
     items: z.array(z.object({
         drugId: z.string(),
         quantity: z.number(),
@@ -77,6 +80,9 @@ export async function POST(req: NextRequest) {
         // Note: We might want to check if sale already exists to avoid duplicates (idempotency)
 
         const processedIds: string[] = [];
+        // Maps sale id -> invoiceNumber so the desktop can reconcile offline sales
+        // (whose number was allocated here) back into its local DB.
+        const invoiceNumbers: Record<string, number> = {};
 
         // Process each sale in a separate transaction to avoid timeouts
         for (const sale of sales) {
@@ -87,9 +93,13 @@ export async function POST(req: NextRequest) {
                         return; // Already synced
                     }
 
-                    // Assign per-org sequential invoice number atomically
+                    // Reuse the number the desktop allocated at sale time (online sales).
+                    // Only allocate a fresh one here for sales created while offline.
                     let invoiceNumber: number | undefined;
-                    if (resolvedOrgId) {
+                    const providedNumber = sale.invoiceNumber != null ? Number(sale.invoiceNumber) : NaN;
+                    if (Number.isInteger(providedNumber) && providedNumber > 0) {
+                        invoiceNumber = providedNumber;
+                    } else if (resolvedOrgId) {
                         const [counter] = await tx.$queryRaw<[{ nextNumber: bigint }]>`
                             INSERT INTO "InvoiceCounter" ("organizationId", "nextNumber")
                             VALUES (${resolvedOrgId}::text, 2)
@@ -98,6 +108,9 @@ export async function POST(req: NextRequest) {
                             RETURNING "nextNumber"
                         `;
                         invoiceNumber = Number(counter.nextNumber) - 1;
+                    }
+                    if (invoiceNumber !== undefined) {
+                        invoiceNumbers[sale.id] = invoiceNumber;
                     }
 
                     const isCredit = sale.paymentMethod === "CREDIT";
@@ -246,7 +259,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, syncedIds: processedIds });
+        return NextResponse.json({ success: true, syncedIds: processedIds, invoiceNumbers });
 
     } catch (error) {
         console.error("Sync Error:", error);

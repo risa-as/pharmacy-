@@ -131,16 +131,27 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
-                    // Ensure the safe exists in cloud (desktop may have auto-created it locally)
+                    // Resolve the safe to the branch's canonical CASH_DRAWER safe so a
+                    // diverging desktop-local safe id can't create a duplicate "الصندوق الرئيسي".
                     let resolvedSafeId = shift.safeId ?? null;
                     if (resolvedSafeId) {
-                        const safeExists = await tx.safe.findUnique({ where: { id: resolvedSafeId }, select: { id: true } });
-                        if (!safeExists) {
-                            await tx.safe.upsert({
-                                where: { id: resolvedSafeId },
-                                update: {},
-                                create: { id: resolvedSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId }
+                        const exact = await tx.safe.findUnique({ where: { id: resolvedSafeId }, select: { id: true } });
+                        if (!exact) {
+                            // Reuse the existing branch safe if there is one; otherwise create it.
+                            const existingSafe = await tx.safe.findFirst({
+                                where: { branchId: shift.branchId, type: 'CASH_DRAWER' },
+                                orderBy: { createdAt: 'asc' },
+                                select: { id: true },
                             });
+                            if (existingSafe) {
+                                resolvedSafeId = existingSafe.id;
+                            } else {
+                                const created = await tx.safe.create({
+                                    data: { id: resolvedSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId },
+                                    select: { id: true },
+                                });
+                                resolvedSafeId = created.id;
+                            }
                         }
                     }
                     // Create new

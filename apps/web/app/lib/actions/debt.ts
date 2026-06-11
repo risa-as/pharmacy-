@@ -371,4 +371,125 @@ export async function makeDebtPayment(
     }
 }
 
+// تسديد دفعة سريعة على مجموع ديون عميل (موزعة على الفواتير من الأقدم)
+export async function makePatientDebtPayment(
+    patientId: string,
+    amount: number,
+    method: string = "CASH",
+    note?: string,
+    safeId?: string
+) {
+    try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
+        const { organizationId } = tenantCtx;
 
+        const patient = await prisma.patient.findFirst({
+            where: { id: patientId, ...tenantCtx.tenantBranchWhere },
+        });
+        if (!patient) return { success: false, message: "العميل غير موجود" };
+
+        const sales = await prisma.sale.findMany({
+            where: { patientId, payment: { method: "CREDIT" } },
+            include: { debtPayments: true, payment: true },
+            orderBy: { createdAt: "asc" },
+        });
+
+        const unpaidSales = sales
+            .map((s: any) => {
+                const paid = s.debtPayments.reduce((sum: number, dp: any) => sum + dp.amount, 0);
+                const remaining = s.total - s.discount - paid;
+                return { ...s, remaining };
+            })
+            .filter((s: any) => s.remaining > 0);
+
+        if (unpaidSales.length === 0) return { success: false, message: "لا توجد فواتير غير مسددة" };
+
+        let leftover = amount;
+        const ops: any[] = [];
+        let actualPaid = 0;
+
+        for (const sale of unpaidSales) {
+            if (leftover <= 0) break;
+            const payAmount = Math.min(leftover, sale.remaining);
+            leftover -= payAmount;
+            actualPaid += payAmount;
+
+            ops.push(
+                prisma.debtPayment.create({
+                    data: { saleId: sale.id, amount: payAmount, method: method as any, note: note || null },
+                })
+            );
+
+            if (payAmount >= sale.remaining) {
+                ops.push(
+                    prisma.payment.update({ where: { saleId: sale.id }, data: { status: "COMPLETED" } })
+                );
+            }
+        }
+
+        ops.push(prisma.patient.update({ where: { id: patientId }, data: { balance: { decrement: actualPaid } } }));
+
+        if (safeId && actualPaid > 0) {
+            ops.push(
+                prisma.safe.update({ where: { id: safeId }, data: { balance: { increment: actualPaid } } })
+            );
+            ops.push(
+                prisma.transaction.create({
+                    data: {
+                        safeId,
+                        type: "IN",
+                        amount: actualPaid,
+                        referenceType: "CUSTOMER_RECEIPT",
+                        description: note || `تسديد دين - العميل ${patient.name}`,
+                    },
+                })
+            );
+        }
+
+        await prisma.$transaction(ops);
+
+        revalidatePath("/dashboard/debts");
+        revalidatePath(`/dashboard/debts/${patientId}`);
+
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? "Unknown",
+            action: "CREATE",
+            entity: "DEBT",
+            entityId: patientId,
+            details: JSON.stringify({ patientId, amount: actualPaid, method, safeId }),
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
+
+        // Loyalty (non-critical)
+        try {
+            const settings = await prisma.companySettings.findFirst({
+                where: { organizationId: organizationId ?? undefined },
+            });
+            if (settings?.loyaltyEnabled && actualPaid > 0) {
+                const pointsEarned = Math.floor(actualPaid * (settings.loyaltyPointsPerDinar || 0.01));
+                if (pointsEarned > 0) {
+                    let acc = await prisma.loyaltyAccount.findUnique({ where: { patientId } });
+                    if (!acc) acc = await prisma.loyaltyAccount.create({ data: { patientId } });
+                    const newLifetime = acc.lifetimePoints + pointsEarned;
+                    const newTier = newLifetime >= 20000 ? "GOLD" : newLifetime >= 5000 ? "SILVER" : "BRONZE";
+                    await prisma.loyaltyAccount.update({
+                        where: { id: acc.id },
+                        data: { totalPoints: acc.totalPoints + pointsEarned, lifetimePoints: newLifetime, tier: newTier },
+                    });
+                    await prisma.loyaltyTransaction.create({
+                        data: { accountId: acc.id, type: "EARN", points: pointsEarned, description: "نقاط مكتسبة من تسديد دين" },
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("makePatientDebtPayment: loyalty error (non-critical):", e);
+        }
+
+        return { success: true, paid: actualPaid };
+    } catch (error: any) {
+        console.error("makePatientDebtPayment error:", error);
+        return { success: false, message: error.message };
+    }
+}

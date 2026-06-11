@@ -23,7 +23,7 @@ export default function BatchSearch({ currentQuery }: { currentQuery: string }) 
             <input
                 type="text"
                 className="w-full rounded-lg border border-border bg-background py-2 pr-9 pl-3 text-sm placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-all"
-                placeholder="بحث باسم الدواء أو الباركود..."
+                placeholder="بحث باسم الدواء أو الباركود أو رقم الدفعة..."
                 defaultValue={currentQuery}
                 onChange={(e) => handleSearch(e.target.value)}
             />

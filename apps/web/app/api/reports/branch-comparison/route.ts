@@ -31,6 +31,11 @@ export async function GET(req: Request) {
             startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         }
 
+        // Previous period of equal length (immediately before startDate) — for growth.
+        const periodLengthMs = endDate.getTime() - startDate.getTime();
+        const prevStartDate = new Date(startDate.getTime() - periodLengthMs);
+        const prevEndDate = new Date(startDate.getTime() - 1);
+
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
         const { tenantWhere } = tenantCtx;
@@ -45,7 +50,7 @@ export async function GET(req: Request) {
             const branchFilter = { branchId: branch.id };
             const dateFilter = { gte: startDate, lte: endDate };
 
-            const [salesAgg, cogsAgg, expAgg, returnsAgg, saleCount, inventoryCount] = await Promise.all([
+            const [salesAgg, cogsAgg, expAgg, returnsAgg, saleCount, inventoryCount, prevSalesAgg, batches, topItems] = await Promise.all([
                 prisma.sale.aggregate({
                     _sum: { total: true },
                     where: { ...branchFilter, createdAt: dateFilter }
@@ -65,7 +70,25 @@ export async function GET(req: Request) {
                 prisma.sale.count({
                     where: { ...branchFilter, createdAt: dateFilter }
                 }),
-                prisma.inventory.count({ where: branchFilter })
+                prisma.inventory.count({ where: branchFilter }),
+                // Previous-period revenue (growth)
+                prisma.sale.aggregate({
+                    _sum: { total: true },
+                    where: { ...branchFilter, createdAt: { gte: prevStartDate, lte: prevEndDate } }
+                }),
+                // Inventory financial value (current snapshot, in-stock batches)
+                prisma.batch.findMany({
+                    where: { quantity: { gt: 0 }, inventory: branchFilter },
+                    select: { quantity: true, costPrice: true }
+                }),
+                // Best-selling item in the period (by quantity)
+                prisma.saleItem.groupBy({
+                    by: ['drugId'],
+                    where: { sale: { ...branchFilter, createdAt: dateFilter } },
+                    _sum: { quantity: true },
+                    orderBy: { _sum: { quantity: 'desc' } },
+                    take: 1,
+                }),
             ]);
 
             const revenue = salesAgg._sum.total || 0;
@@ -74,6 +97,28 @@ export async function GET(req: Request) {
             const returns = returnsAgg._sum.total || 0;
             const netProfit = revenue - cogs - expenses - returns;
             const margin = revenue > 0 ? (netProfit / revenue * 100) : 0;
+
+            // Growth vs previous equal-length period
+            const prevRevenue = prevSalesAgg._sum.total || 0;
+            const revenueGrowth = prevRevenue > 0
+                ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100)
+                : (revenue > 0 ? 100 : 0);
+
+            // Inventory value (cost basis)
+            const inventoryValue = batches.reduce((sum: number, b: any) => sum + b.quantity * b.costPrice, 0);
+
+            // Resolve best-seller drug name
+            let topItem: { name: string; quantity: number } | null = null;
+            if (topItems.length > 0 && topItems[0].drugId) {
+                const drug = await prisma.globalDrug.findUnique({
+                    where: { id: topItems[0].drugId },
+                    select: { tradeName: true },
+                });
+                topItem = {
+                    name: drug?.tradeName || 'غير معروف',
+                    quantity: topItems[0]._sum.quantity || 0,
+                };
+            }
 
             return {
                 branchId: branch.id,
@@ -86,6 +131,9 @@ export async function GET(req: Request) {
                 profitMargin: Math.round(margin * 100) / 100,
                 salesCount: saleCount,
                 inventoryCount,
+                revenueGrowth,
+                inventoryValue: Math.round(inventoryValue),
+                topItem,
             };
         }));
 

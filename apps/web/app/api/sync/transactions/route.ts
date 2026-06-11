@@ -72,6 +72,54 @@ export async function POST(req: NextRequest) {
         const processedIds: string[] = [];
 
         await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            // Resolve a desktop-local safe id to the cloud's canonical CASH_DRAWER
+            // safe for this branch. Prevents duplicate "الصندوق الرئيسي" safes when
+            // the desktop's local safe id differs from the one already in cloud.
+            const safeIdMap = new Map<string, string>();
+            async function resolveSafeId(incomingSafeId: string): Promise<string> {
+                const cached = safeIdMap.get(incomingSafeId);
+                if (cached) return cached;
+
+                // 1. The exact safe already exists in cloud → use it as-is.
+                const exact = await tx.safe.findUnique({ where: { id: incomingSafeId }, select: { id: true } });
+                if (exact) {
+                    safeIdMap.set(incomingSafeId, exact.id);
+                    return exact.id;
+                }
+
+                // 2. A CASH_DRAWER safe already exists for this branch → reuse it
+                //    instead of creating a duplicate under the incoming id.
+                const existing = await tx.safe.findFirst({
+                    where: { branchId, type: 'CASH_DRAWER' },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true },
+                });
+                if (existing) {
+                    safeIdMap.set(incomingSafeId, existing.id);
+                    return existing.id;
+                }
+
+                // 3. No safe exists yet → create the canonical one (keep the incoming id).
+                try {
+                    const created = await tx.safe.create({
+                        data: { id: incomingSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId },
+                        select: { id: true },
+                    });
+                    safeIdMap.set(incomingSafeId, created.id);
+                    return created.id;
+                } catch {
+                    // Created concurrently — re-fetch the branch's safe.
+                    const fallback = await tx.safe.findFirst({
+                        where: { branchId, type: 'CASH_DRAWER' },
+                        orderBy: { createdAt: 'asc' },
+                        select: { id: true },
+                    });
+                    const resolved = fallback?.id ?? incomingSafeId;
+                    safeIdMap.set(incomingSafeId, resolved);
+                    return resolved;
+                }
+            }
+
             for (const txn of transactions) {
                 const existing = await tx.transaction.findUnique({ where: { id: txn.id } });
 
@@ -79,23 +127,14 @@ export async function POST(req: NextRequest) {
                     continue; // Log already exists, skip
                 }
 
-                // Ensure the safe exists in cloud (desktop may have auto-created it locally)
-                const safeExists = await tx.safe.findUnique({ where: { id: txn.safeId }, select: { id: true } });
-                if (!safeExists) {
-                    try {
-                        await tx.safe.create({
-                            data: { id: txn.safeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId }
-                        });
-                    } catch {
-                        // Safe was created concurrently — safe to ignore
-                    }
-                }
+                // Map the desktop's safe id onto the branch's canonical safe.
+                const resolvedSafeId = await resolveSafeId(txn.safeId);
 
                 // Create Transaction
                 await tx.transaction.create({
                     data: {
                         id: txn.id,
-                        safeId: txn.safeId,
+                        safeId: resolvedSafeId,
                         type: txn.type,
                         amount: txn.amount,
                         referenceType: txn.referenceType,
@@ -109,11 +148,11 @@ export async function POST(req: NextRequest) {
                 processedIds.push(txn.id);
 
                 // Update Safe Balance in Cloud DB
-                const safe = await tx.safe.findUnique({ where: { id: txn.safeId } });
+                const safe = await tx.safe.findUnique({ where: { id: resolvedSafeId } });
                 if (safe) {
                     const newBalance = txn.type === "IN" ? safe.balance + txn.amount : safe.balance - txn.amount;
                     await tx.safe.update({
-                        where: { id: txn.safeId },
+                        where: { id: resolvedSafeId },
                         data: { balance: newBalance }
                     });
                 }

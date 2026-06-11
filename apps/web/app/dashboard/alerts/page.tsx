@@ -1,121 +1,120 @@
-import { AlertTriangle, Package, Clock, Bell } from "lucide-react";
-import { getAllAlerts, getAlertStats, AlertItem } from "@/app/lib/alerts";
+import { Package, AlertTriangle, Clock, Bell, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { getAllAlerts, getAlertStats } from "@/app/lib/alerts";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
+import AlertsList from "@/app/ui/alerts/alerts-list";
+
+export const dynamic = "force-dynamic";
 
 export default async function AlertsPage() {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect("/login");
     const { organizationId, tenantBranchWhere } = tenantCtx;
     const branchId = (tenantBranchWhere as any)?.branchId;
 
-    const alerts = await getAllAlerts(branchId, organizationId);
-    const stats = await getAlertStats(branchId, organizationId);
+    const [alerts, stats] = await Promise.all([
+        getAllAlerts(branchId, organizationId),
+        getAlertStats(branchId, organizationId),
+    ]);
 
-    const getAlertIcon = (type: AlertItem['type']) => {
-        switch (type) {
-            case 'low_stock': return <Package className="w-5 h-5" />;
-            case 'expired': return <AlertTriangle className="w-5 h-5" />;
-            case 'expiring': return <Clock className="w-5 h-5" />;
-        }
-    };
-
-    const getAlertColor = (alert: AlertItem) => {
-        if (alert.severity === 'danger') {
-            return 'bg-destructive/10 border-red-200 text-destructive';
-        }
-        return 'bg-warning/10 border-warning/30 text-warning';
-    };
-
-    const getAlertMessage = (alert: AlertItem) => {
-        switch (alert.type) {
-            case 'low_stock':
-                return `الكمية: ${alert.quantity} (الحد الأدنى: ${alert.minStock})`;
-            case 'expired':
-                return `منتهي الصلاحية منذ ${Math.abs(alert.daysLeft || 0)} يوم`;
-            case 'expiring':
-                return `ينتهي خلال ${alert.daysLeft} يوم`;
-        }
-    };
-
-    const getAlertTitle = (type: AlertItem['type']) => {
-        switch (type) {
-            case 'low_stock': return 'نقص في المخزون';
-            case 'expired': return 'منتهي الصلاحية';
-            case 'expiring': return 'قارب على الانتهاء';
-        }
-    };
+    const statCards = [
+        {
+            label: "إجمالي التنبيهات",
+            value: stats.total,
+            icon: Bell,
+            tone: "text-primary",
+            bg: "bg-primary/10",
+        },
+        {
+            label: "نقص المخزون",
+            value: stats.lowStock,
+            icon: Package,
+            tone: "text-warning",
+            bg: "bg-warning/10",
+        },
+        {
+            label: "قارب على الانتهاء",
+            value: stats.expiring,
+            icon: Clock,
+            tone: "text-warning",
+            bg: "bg-warning/10",
+        },
+        {
+            label: "منتهية الصلاحية",
+            value: stats.expired,
+            icon: AlertTriangle,
+            tone: "text-destructive",
+            bg: "bg-destructive/10",
+        },
+    ];
 
     return (
-        <div className="glass-card w-full p-6">
-            {/* Header */}
-            <div className="flex w-full items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
-                    <Bell className="w-7 h-7 text-primary" />
-                    الإشعارات والتنبيهات
-                </h1>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-card rounded-xl border border-border p-4">
-                    <div className="text-3xl font-bold text-foreground">{stats.total}</div>
-                    <div className="text-sm text-muted-foreground">إجمالي التنبيهات</div>
-                </div>
-                <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
-                    <div className="text-3xl font-bold text-destructive">{stats.danger}</div>
-                    <div className="text-sm text-destructive">تنبيهات حرجة</div>
-                </div>
-                <div className="bg-warning/10 rounded-xl border border-warning/30 p-4">
-                    <div className="text-3xl font-bold text-warning">{stats.warning}</div>
-                    <div className="text-sm text-warning">تحذيرات</div>
-                </div>
-                <div className="bg-warning/10 rounded-xl border border-orange-200 p-4">
-                    <div className="text-3xl font-bold text-warning">{stats.expired}</div>
-                    <div className="text-sm text-warning">منتهي الصلاحية</div>
+        <div className="space-y-6" dir="rtl">
+            {/* الرأس */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                        <Bell className="w-6 h-6 text-primary" />
+                        الإشعارات والتنبيهات
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        متابعة نقص المخزون وانتهاء صلاحية الأدوية
+                    </p>
                 </div>
             </div>
 
-            {/* Alerts List */}
-            {alerts.length === 0 ? (
-                <div className="bg-success/10 border border-green-200 rounded-xl p-8 text-center">
-                    <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Bell className="w-8 h-8 text-success" />
-                    </div>
-                    <h3 className="text-lg font-bold text-success mb-2">لا توجد تنبيهات</h3>
-                    <p className="text-sm text-success">جميع الأدوية بحالة جيدة ولا توجد مشاكل في المخزون</p>
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {alerts.map((alert: any) => (
-                        <div
-                            key={alert.id}
-                            className={`flex items-center gap-4 p-4 rounded-xl border ${getAlertColor(alert)}`}
-                        >
-                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${alert.severity === 'danger' ? 'bg-destructive/10' : 'bg-warning/20'}`}>
-                                {getAlertIcon(alert.type)}
+            {/* بطاقات الإحصائيات */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {statCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                        <div key={card.label} className="glass-card p-5 flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}>
+                                <Icon className={`w-6 h-6 ${card.tone}`} />
                             </div>
-
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${alert.severity === 'danger' ? 'bg-destructive/20' : 'bg-warning/30'}`}>
-                                        {getAlertTitle(alert.type)}
-                                    </span>
-                                    <span className="text-sm opacity-70">{alert.branchName}</span>
-                                </div>
-                                <h4 className="font-bold">{alert.drugName}</h4>
-                                <p className="text-sm opacity-80">{getAlertMessage(alert)}</p>
+                            <div>
+                                <p className="text-sm text-muted-foreground">{card.label}</p>
+                                <p className={`text-2xl font-bold ${card.value > 0 ? card.tone : "text-foreground"}`}>
+                                    {card.value}
+                                </p>
                             </div>
-
-                            {alert.expiryDate && (
-                                <div className="text-sm opacity-70">
-                                    {new Date(alert.expiryDate).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
-                                </div>
-                            )}
                         </div>
-                    ))}
-                </div>
-            )}
+                    );
+                })}
+            </div>
+
+            {/* روابط الإجراءات السريعة */}
+            <div className="flex flex-wrap gap-3">
+                <Link
+                    href="/dashboard/inventory/shortages"
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                    <Package className="w-4 h-4 text-warning" />
+                    إدارة النواقص
+                    <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
+                </Link>
+                <Link
+                    href="/dashboard/reports/expiry"
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                    <Clock className="w-4 h-4 text-warning" />
+                    تقرير الصلاحية
+                    <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
+                </Link>
+                <Link
+                    href="/dashboard/inventory/expired-damaged"
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                    <AlertTriangle className="w-4 h-4 text-destructive" />
+                    المنتهية والتالفة
+                    <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
+                </Link>
+            </div>
+
+            {/* القائمة التفاعلية */}
+            <AlertsList alerts={alerts} />
         </div>
     );
 }

@@ -214,6 +214,45 @@ async function getAdminData(organizationId: string, branchId?: string) {
     }
     const weeklySalesChart = Object.entries(dayMap).map(([day, amount]: any) => ({ day, amount }));
 
+    // 7-day NET profit chart: gross profit (price - cost) × qty − returns − expenses, per day
+    const dayKey = (date: Date | string) =>
+        new Date(date).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' });
+
+    const [rawWeeklyItems, rawWeeklyReturns, rawWeeklyExpenses] = await Promise.all([
+        prisma.saleItem.findMany({
+            where: { sale: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere } },
+            select: { price: true, cost: true, quantity: true, sale: { select: { createdAt: true } } },
+        }),
+        prisma.saleReturn.findMany({
+            where: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere },
+            select: { total: true, createdAt: true },
+        }),
+        prisma.expense.findMany({
+            where: { date: { gte: sevenDaysAgo }, ...orgBranchWhere },
+            select: { amount: true, date: true },
+        }),
+    ]);
+
+    const netDayMap: Record<string, number> = {};
+    for (let i = 0; i < 7; i++) {
+        const dt = new Date(todayStart);
+        dt.setDate(dt.getDate() - (6 - i));
+        netDayMap[dayKey(dt)] = 0;
+    }
+    for (const item of rawWeeklyItems) {
+        const label = dayKey(item.sale.createdAt);
+        if (label in netDayMap) netDayMap[label] += (item.price - item.cost) * item.quantity;
+    }
+    for (const r of rawWeeklyReturns) {
+        const label = dayKey(r.createdAt);
+        if (label in netDayMap) netDayMap[label] -= r.total;
+    }
+    for (const e of rawWeeklyExpenses) {
+        const label = dayKey(e.date);
+        if (label in netDayMap) netDayMap[label] -= e.amount;
+    }
+    const weeklyProfitChart = Object.entries(netDayMap).map(([day, amount]: any) => ({ day, amount: Math.round(amount) }));
+
     const todayRevenue = todaySales._sum.total || 0;
     const todayExpenseAmt = todayExpenses._sum.amount || 0;
     const todayReturnsAmt = todayReturns._sum.total || 0;
@@ -266,6 +305,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
         recentSales,
         topDrugs: topDrugsWithNames,
         weeklySalesChart,
+        weeklyProfitChart,
     };
 }
 
@@ -408,7 +448,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
 
                 {/* Status cards */}
                 <div className="grid sm:grid-cols-3 gap-4">
-                    <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                    <div className="glass-card rounded-xl p-4 flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
                             <Activity className="w-5 h-5 text-success" />
                         </div>
@@ -417,7 +457,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                             <div className="text-xs text-muted-foreground">مؤسسات نشطة</div>
                         </div>
                     </div>
-                    <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                    <div className="glass-card rounded-xl p-4 flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
                             <AlertTriangle className="w-5 h-5 text-destructive" />
                         </div>
@@ -426,7 +466,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                             <div className="text-xs text-muted-foreground">مؤسسات موقوفة</div>
                         </div>
                     </div>
-                    <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                    <div className="glass-card rounded-xl p-4 flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                             <PackageOpen className="w-5 h-5 text-primary" />
                         </div>
@@ -439,7 +479,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
 
                 {/* Plan distribution */}
                 {d.distribution.length > 0 && (
-                    <div className="bg-card border border-border rounded-xl p-5">
+                    <div className="glass-card rounded-xl p-5">
                         <h2 className="font-bold text-foreground mb-4 flex items-center gap-2">
                             <Layers className="w-4 h-4 text-primary" /> توزيع المؤسسات على الباقات
                         </h2>
@@ -466,7 +506,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                 )}
 
                 {/* Recent organizations */}
-                <div className="bg-card border border-border rounded-xl p-5">
+                <div className="glass-card rounded-xl p-5">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="font-bold text-foreground flex items-center gap-2">
                             <Clock className="w-4 h-4 text-primary" /> آخر المؤسسات المسجلة
@@ -510,7 +550,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                             const Icon = link.icon;
                             return (
                                 <Link key={link.href} href={link.href}
-                                    className="flex items-center gap-3 bg-card border border-border rounded-xl p-4 hover:bg-accent hover:shadow-sm transition-all group">
+                                    className="flex items-center gap-3 glass-card rounded-xl p-4 hover:bg-accent hover:shadow-sm transition-all group">
                                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${link.color}`}>
                                         <Icon className="w-5 h-5" />
                                     </div>
@@ -629,7 +669,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                 </div>
 
                 {/* ── هذا الشهر ── */}
-                <div className="bg-card border border-border rounded-xl p-5">
+                <div className="glass-card rounded-xl p-5">
                     <h2 className="font-bold text-foreground mb-4 flex items-center gap-2 text-sm">
                         <BarChart3 className="w-4 h-4 text-primary" /> ملخص الشهر الحالي
                     </h2>
@@ -726,7 +766,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                         const Icon = card.icon;
                         return (
                             <Link key={card.label} href={card.href}
-                                className="bg-card border border-border rounded-xl p-3 flex flex-col items-center gap-2 hover:shadow-sm hover:scale-[1.02] transition-all text-center">
+                                className="glass-card rounded-xl p-3 flex flex-col items-center gap-2 hover:shadow-sm hover:scale-[1.02] transition-all text-center">
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${card.color}`}>
                                     <Icon className="w-4 h-4" />
                                 </div>
@@ -737,12 +777,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                     })}
                 </div>
 
-                {/* ── مخطط المبيعات 7 أيام ── */}
-                <SalesChart data={d.weeklySalesChart} title="مبيعات آخر 7 أيام" />
+                {/* ── مخطط المبيعات والأرباح (7 أيام) ── */}
+                <div className="grid lg:grid-cols-2 gap-6">
+                    <SalesChart data={d.weeklySalesChart} title="مبيعات آخر 7 أيام" colorVar="primary" />
+                    <SalesChart data={d.weeklyProfitChart} title="صافي الأرباح آخر 7 أيام" colorVar="success" />
+                </div>
 
                 {/* ── آخر المبيعات + الأكثر مبيعاً ── */}
                 <div className="grid lg:grid-cols-2 gap-6">
-                    <div className="bg-card border border-border rounded-xl shadow-sm p-5">
+                    <div className="glass-card rounded-xl shadow-sm p-5">
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="font-bold text-foreground flex items-center gap-2">
                                 <Clock className="w-4 h-4 text-primary" /> آخر المبيعات
@@ -771,7 +814,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                         )}
                     </div>
 
-                    <div className="bg-card border border-border rounded-xl shadow-sm p-5">
+                    <div className="glass-card rounded-xl shadow-sm p-5">
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="font-bold text-foreground flex items-center gap-2">
                                 <TrendingUp className="w-4 h-4 text-success" /> الأكثر مبيعاً هذا الشهر
@@ -821,7 +864,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                             const Icon = link.icon;
                             return (
                                 <Link key={link.href} href={link.href}
-                                    className="flex items-center gap-3 bg-card border border-border rounded-xl p-3 hover:bg-accent hover:shadow-sm transition-all group">
+                                    className="flex items-center gap-3 glass-card rounded-xl p-3 hover:bg-accent hover:shadow-sm transition-all group">
                                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${link.color}`}>
                                         <Icon className="w-4 h-4" />
                                     </div>
@@ -966,7 +1009,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
 
             {/* Info cards */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                <div className="glass-card rounded-xl p-4 flex items-center gap-3">
                     <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
                         <Pill className="w-5 h-5 text-primary" />
                     </div>
@@ -975,7 +1018,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                         <div className="text-xs text-muted-foreground">دواء مسجل</div>
                     </div>
                 </div>
-                <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                <div className="glass-card rounded-xl p-4 flex items-center gap-3">
                     <div className="w-10 h-10 bg-info/10 rounded-xl flex items-center justify-center shrink-0">
                         <Package className="w-5 h-5 text-info" />
                     </div>

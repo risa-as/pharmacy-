@@ -389,7 +389,7 @@ export default async function AnalyticsPage({
                         <p className="text-xs text-muted-foreground mt-1">بسعر التكلفة</p>
                     </div>
 
-                    <div className="rounded-xl border border-orange-200 bg-warning/5 p-4">
+                    <div className="rounded-xl border border-warning/20 bg-warning/5 p-4">
                         <div className="flex items-center gap-2 mb-2">
                             <AlertTriangle className="w-3.5 h-3.5 text-warning" />
                             <span className="text-xs font-bold text-warning">ينتهي خلال 90 يوم</span>

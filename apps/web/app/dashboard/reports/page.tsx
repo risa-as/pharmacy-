@@ -1,14 +1,25 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { BarChart3, TrendingUp, TrendingDown, FileSpreadsheet, User, AlertTriangle, DollarSign, AlertOctagon } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, FileSpreadsheet, User, AlertTriangle, DollarSign, AlertOctagon, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
+
+type Tone = "primary" | "success" | "info" | "warning" | "destructive";
+
+const TONES: Record<Tone, { bg: string; icon: string }> = {
+    primary: { bg: "bg-primary/10", icon: "text-primary" },
+    success: { bg: "bg-success/10", icon: "text-success" },
+    info: { bg: "bg-info/10", icon: "text-info" },
+    warning: { bg: "bg-warning/10", icon: "text-warning" },
+    destructive: { bg: "bg-destructive/10", icon: "text-destructive" },
+};
 
 export default async function ReportsPage() {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere } = tenantCtx;
 
     const [salesCount, purchasesCount, inventoryCount, userCount] = await Promise.all([
@@ -18,13 +29,20 @@ export default async function ReportsPage() {
         prisma.user.count({ where: tenantBranchWhere }),
     ]);
 
-    const reports = [
+    const reports: {
+        title: string;
+        description: string;
+        href: string;
+        icon: typeof TrendingUp;
+        tone: Tone;
+        count: number | null;
+    }[] = [
         {
             title: "تقرير المبيعات",
             description: "تحليل المبيعات اليومية والأسبوعية والشهرية",
             href: "/dashboard/reports/sales",
             icon: TrendingUp,
-            color: "blue",
+            tone: "primary",
             count: salesCount,
         },
         {
@@ -32,7 +50,7 @@ export default async function ReportsPage() {
             description: "حالة المخزون والكميات والتنبيهات",
             href: "/dashboard/reports/inventory",
             icon: BarChart3,
-            color: "green",
+            tone: "success",
             count: inventoryCount,
         },
         {
@@ -40,7 +58,7 @@ export default async function ReportsPage() {
             description: "تحليل المشتريات من الموردين",
             href: "/dashboard/reports/purchases",
             icon: FileSpreadsheet,
-            color: "purple",
+            tone: "info",
             count: purchasesCount,
         },
         {
@@ -48,7 +66,7 @@ export default async function ReportsPage() {
             description: "تتبع المبيعات والنشاط ونسبة المساهمة لكل موظف",
             href: "/dashboard/reports/employees",
             icon: User,
-            color: "cyan",
+            tone: "primary",
             count: userCount,
         },
         {
@@ -56,78 +74,70 @@ export default async function ReportsPage() {
             description: "قائمة الدخل التفصيلية مع مقارنة شهرية",
             href: "/dashboard/reports/profits",
             icon: DollarSign,
-            color: "orange",
+            tone: "success",
             count: null,
         },
         {
-            title: "📊 أكثر الأدوية مبيعاً",
+            title: "أكثر الأدوية مبيعاً",
             description: "ترتيب الأصناف بحسب الكمية المباعة والإيرادات",
             href: "/dashboard/reports/top-sellers",
             icon: TrendingUp,
-            color: "emerald",
+            tone: "success",
             count: null,
         },
         {
-            title: "⚠️ الأدوية الراكدة",
-            description: "أصناف لم تُباع منذ فترة وقيمة المخزون المجمد",
+            title: "الأدوية الراكدة",
+            description: "أصناف لم تُبَع منذ فترة وقيمة المخزون المجمّد",
             href: "/dashboard/reports/slow-movers",
             icon: AlertOctagon,
-            color: "red",
+            tone: "destructive",
             count: null,
         },
         {
-            title: "📅 انتهاء الصلاحية",
+            title: "انتهاء الصلاحية",
             description: "الأدوية المنتهية والقريبة من الانتهاء حسب الخطورة",
             href: "/dashboard/reports/expiry",
             icon: AlertTriangle,
-            color: "amber",
+            tone: "warning",
             count: null,
         },
         {
-            title: "💰 هامش الربح لكل دواء",
-            description: "تحليل هامش ربح كل صنف مع تصنيف لون حسب النسبة",
+            title: "هامش الربح لكل دواء",
+            description: "تحليل هامش ربح كل صنف مع تصنيف لوني حسب النسبة",
             href: "/dashboard/reports/margins",
             icon: TrendingDown,
-            color: "teal",
+            tone: "info",
             count: null,
         },
     ];
 
-    const colorClasses: Record<string, { bg: string; icon: string; border: string }> = {
-        blue: { bg: "bg-primary/10", icon: "text-primary", border: "border-primary hover:border-primary" },
-        green: { bg: "bg-success/10", icon: "text-success", border: "border-green-200 hover:border-green-400" },
-        purple: { bg: "bg-info/10", icon: "text-info", border: "border-info/20 hover:border-info/50" },
-        orange: { bg: "bg-warning/10", icon: "text-warning", border: "border-orange-200 hover:border-orange-400" },
-        cyan: { bg: "bg-cyan-50", icon: "text-cyan-600", border: "border-cyan-200 hover:border-cyan-400" },
-        emerald: { bg: "bg-success/10", icon: "text-success", border: "border-emerald-200 hover:border-emerald-400" },
-        red: { bg: "bg-destructive/10", icon: "text-destructive", border: "border-red-200 hover:border-red-400" },
-        amber: { bg: "bg-warning/10", icon: "text-warning", border: "border-warning/30 hover:border-amber-400" },
-        teal: { bg: "bg-teal-50", icon: "text-teal-600", border: "border-teal-200 hover:border-teal-400" },
-    };
-
     return (
-        <div className="glass-card w-full p-6" suppressHydrationWarning>
-            <div className="flex w-full items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
-                    <BarChart3 className="w-7 h-7 text-primary" />
+        <div className="space-y-6" dir="rtl">
+            {/* الرأس */}
+            <div>
+                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                    <BarChart3 className="w-6 h-6 text-primary" />
                     التقارير والإحصائيات
                 </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                    تحليلات شاملة للمبيعات والمخزون والأرباح وأداء الفريق
+                </p>
             </div>
 
-            {/* التقارير المتاحة */}
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
-                {reports.map((report: any) => {
+            {/* شبكة التقارير */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {reports.map((report) => {
                     const Icon = report.icon;
-                    const colors = colorClasses[report.color] || colorClasses.blue;
+                    const tone = TONES[report.tone];
                     return (
                         <Link
                             key={report.title}
                             href={report.href}
-                            className={`rounded-2xl border-2 bg-card p-6 shadow-sm transition-all hover:shadow-md ${colors.border}`}
+                            className="glass-card p-5 flex flex-col group hover:border-primary/40 hover:shadow-md transition-all"
                         >
-                            <div className="flex items-start justify-between mb-4">
-                                <div className={`p-3 rounded-xl ${colors.bg}`}>
-                                    <Icon className={`w-6 h-6 ${colors.icon}`} />
+                            <div className="flex items-start justify-between mb-3">
+                                <div className={`w-11 h-11 rounded-xl ${tone.bg} flex items-center justify-center`}>
+                                    <Icon className={`w-5 h-5 ${tone.icon}`} />
                                 </div>
                                 {report.count !== null && (
                                     <span className="text-2xl font-bold text-foreground">
@@ -135,13 +145,16 @@ export default async function ReportsPage() {
                                     </span>
                                 )}
                             </div>
-                            <h3 className="text-lg font-bold text-foreground mb-1">{report.title}</h3>
-                            <p className="text-sm text-muted-foreground">{report.description}</p>
+                            <h3 className="text-base font-bold text-foreground">{report.title}</h3>
+                            <p className="text-sm text-muted-foreground mt-1 flex-1">{report.description}</p>
+                            <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                                عرض التقرير
+                                <ArrowLeft className="w-3.5 h-3.5" />
+                            </span>
                         </Link>
                     );
                 })}
             </div>
-
         </div>
     );
 }

@@ -133,34 +133,38 @@ export default async function Page({
     };
 
     return (
-        <div className="glass-card w-full p-6" style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}>
-            <div className="flex w-full items-center justify-between mb-6">
-                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
-                    <Package className="w-7 h-7 text-primary" />
-                    جرد المخزون
-                </h1>
+        <div className="space-y-6" dir="rtl">
+            {/* الرأس */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                        <Package className="w-6 h-6 text-primary" />
+                        جرد المخزون
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        إدارة الأصناف والكميات ومتابعة حالة المخزون
+                    </p>
+                </div>
                 {canAddDrug && (
                     <Link
                         href="/dashboard/inventory/create"
-                        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
                     >
-                        <Plus className="h-5 w-5" />
+                        <Plus className="h-4 w-4" />
                         إضافة للمخزون
                     </Link>
                 )}
             </div>
 
-            {/* Branch Filter */}
-            <div className="mb-4">
-                <BranchFilter
-                    currentBranch={branchId}
-                    baseUrl="/dashboard/inventory"
-                    extraParams={query ? `query=${query}` : undefined}
-                />
-            </div>
+            {/* فلتر الفرع */}
+            <BranchFilter
+                currentBranch={branchId}
+                baseUrl="/dashboard/inventory"
+                extraParams={query ? `query=${query}` : undefined}
+            />
 
-            {/* Search + Status Filters + Count — all on one row */}
-            <div className="mb-4">
+            {/* البحث + تبويبات الحالة + العدّاد */}
+            <div className="glass-card p-4">
                 <InventoryFilters
                     counts={counts}
                     currentStatus={status}
@@ -168,31 +172,29 @@ export default async function Page({
                 />
             </div>
 
+            {/* الإدخال السريع بالباركود */}
             <QuickBarcodeEntry branches={branches} />
 
-            <div className="mt-4 flow-root">
-                <div className="overflow-x-auto">
-                    <InventoryTable items={items} canEditDrug={canEditDrug} canDeleteDrug={canDeleteDrug} canAddDrug={canAddDrug} />
+            {/* الجدول */}
+            <InventoryTable items={items} canEditDrug={canEditDrug} canDeleteDrug={canDeleteDrug} canAddDrug={canAddDrug} />
 
-                    {/* Pagination */}
-                    <div className="flex justify-center items-center gap-4 mt-6">
-                        <Link
-                            href={buildPageUrl(Math.max(1, currentPage - 1))}
-                            className={`p-2 rounded-lg border border-border ${currentPage <= 1 ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
-                        >
-                            <ChevronRight className="w-5 h-5" />
-                        </Link>
-                        <span className="text-sm text-muted-foreground font-bold">
-                            صفحة {currentPage} من {totalPages}
-                        </span>
-                        <Link
-                            href={buildPageUrl(Math.min(totalPages, currentPage + 1))}
-                            className={`p-2 rounded-lg border border-border ${currentPage >= totalPages ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
-                        >
-                            <ChevronLeft className="w-5 h-5" />
-                        </Link>
-                    </div>
-                </div>
+            {/* الترقيم */}
+            <div className="flex justify-center items-center gap-4">
+                <Link
+                    href={buildPageUrl(Math.max(1, currentPage - 1))}
+                    className={`p-2 rounded-lg border border-border ${currentPage <= 1 ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
+                >
+                    <ChevronRight className="w-5 h-5" />
+                </Link>
+                <span className="text-sm text-muted-foreground font-bold">
+                    صفحة {currentPage} من {totalPages}
+                </span>
+                <Link
+                    href={buildPageUrl(Math.min(totalPages, currentPage + 1))}
+                    className={`p-2 rounded-lg border border-border ${currentPage >= totalPages ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                </Link>
             </div>
         </div>
     );

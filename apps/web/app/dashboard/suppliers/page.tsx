@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
-import { Plus, Users, Mail, Phone, MapPin, FileText, ShoppingCart, AlertTriangle } from "lucide-react";
+import { Plus, Users, Mail, Phone, MapPin, FileText, ShoppingCart, TrendingDown, CheckCircle2, Building2 } from "lucide-react";
 import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -28,146 +28,194 @@ export default async function Page() {
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, user, organizationId } = tenantCtx;
 
-    // Super Admin sees everything. Others see only suppliers for their organization.
     let suppliers: Awaited<ReturnType<typeof getSuppliers>> = [];
     try {
         suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? undefined : tenantCtx.organizationId);
     } catch (e) {
         console.error('[Suppliers Page] Failed to load suppliers:', e);
-        // Do NOT fall back to unscoped query — return empty list instead
     }
 
-    // تنبيه الديون الكبيرة
-    const debtAlerts = suppliers.filter((s: any) => s.computedBalance > 0);
-    const totalDebt = debtAlerts.reduce((sum: number, s: any) => sum + s.computedBalance, 0);
+    const debtSuppliers = suppliers.filter((s: any) => s.computedBalance > 0);
+    const totalDebt = debtSuppliers.reduce((sum: number, s: any) => sum + s.computedBalance, 0);
+    const totalPurchases = suppliers.reduce((sum: number, s: any) => sum + s._count.purchases, 0);
 
     return (
-        <div className="glass-card w-full p-6">
-            {/* تنبيه الديون */}
-            {debtAlerts.length > 0 && (
-                <div className="mb-6 flex items-start gap-3 rounded-xl bg-warning/10 border border-warning/30 px-5 py-4">
-                    <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-                    <div>
-                        <p className="font-bold text-foreground text-sm">
-                            يوجد {debtAlerts.length} {debtAlerts.length === 1 ? 'مورد' : 'موردين'} بمبالغ مستحقة
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                            إجمالي المستحقات:{' '}
-                            <span className="font-bold text-warning" dir="ltr">
-                                {totalDebt.toLocaleString('en')} د.ع
-                            </span>
-                        </p>
-                    </div>
+        <div className="space-y-6" dir="rtl">
+            {/* الرأس */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                        <Building2 className="w-6 h-6 text-primary" />
+                        الموردين
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        إدارة الموردين وكشوف الحسابات
+                    </p>
                 </div>
-            )}
-
-            <div className="flex w-full items-center justify-between mb-8">
-                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
-                    <Users className="w-7 h-7 text-primary" />
-                    الموردين
-                </h1>
                 <Link
                     href="/dashboard/suppliers/create"
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
                 >
-                    <Plus className="h-5 w-5" />
+                    <Plus className="h-4 w-4" />
                     إضافة مورد
                 </Link>
             </div>
 
-            <div className="mt-4 flow-root">
-                <div className="overflow-x-auto">
-                    <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
+            {/* بطاقات الإحصائيات */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="glass-card p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <Users className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">إجمالي الموردين</p>
+                        <p className="text-2xl font-bold text-foreground">{suppliers.length}</p>
+                    </div>
+                </div>
+
+                <div className="glass-card p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
+                        <ShoppingCart className="w-6 h-6 text-success" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">إجمالي الفواتير</p>
+                        <p className="text-2xl font-bold text-foreground">{totalPurchases}</p>
+                    </div>
+                </div>
+
+                <div className={`glass-card p-5 flex items-center gap-4 ${totalDebt > 0 ? 'border-warning/40 bg-warning/5' : ''}`}>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${totalDebt > 0 ? 'bg-warning/15' : 'bg-success/10'}`}>
+                        {totalDebt > 0
+                            ? <TrendingDown className="w-6 h-6 text-warning" />
+                            : <CheckCircle2 className="w-6 h-6 text-success" />
+                        }
+                    </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">
+                            {totalDebt > 0 ? `مستحقات (${debtSuppliers.length} مورد)` : 'المستحقات'}
+                        </p>
+                        {totalDebt > 0 ? (
+                            <p className="text-2xl font-bold text-warning" dir="ltr">
+                                {totalDebt.toLocaleString('en')}
+                                <span className="text-sm font-medium text-muted-foreground mr-1">د.ع</span>
+                            </p>
+                        ) : (
+                            <p className="text-lg font-bold text-success">لا توجد مستحقات</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* الجدول */}
+            <div className="glass-card overflow-hidden">
+                {suppliers.length === 0 ? (
+                    <div className="py-16 text-center">
+                        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Users className="w-8 h-8 text-muted-foreground opacity-50" />
+                        </div>
+                        <p className="text-foreground font-medium">لا يوجد موردين مسجلين</p>
+                        <p className="text-sm text-muted-foreground mt-1">أضف مورداً جديداً للبدء</p>
+                        <Link
+                            href="/dashboard/suppliers/create"
+                            className="inline-flex items-center gap-2 mt-4 rounded-lg bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20 transition-colors"
+                        >
+                            <Plus className="h-4 w-4" />
+                            إضافة أول مورد
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
                         <table className="min-w-full text-foreground">
-                            <thead className="bg-muted text-right text-sm font-semibold text-foreground border-b border-border">
+                            <thead className="bg-muted/60 text-right text-xs font-semibold text-muted-foreground border-b border-border uppercase tracking-wide">
                                 <tr>
-                                    <th scope="col" className="px-6 py-4 font-cairo">
-                                        اسم المورد
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 font-cairo">
-                                        معلومات الاتصال
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 font-cairo">
-                                        الرصيد المستحق
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 font-cairo">
-                                        المشتريات
-                                    </th>
-                                    <th scope="col" className="relative py-3 pl-6 pr-3">
-                                        <span className="sr-only">إجراءات</span>
-                                    </th>
+                                    <th scope="col" className="px-6 py-3.5 font-cairo">المورد</th>
+                                    <th scope="col" className="px-6 py-3.5 font-cairo">معلومات الاتصال</th>
+                                    <th scope="col" className="px-6 py-3.5 font-cairo">الرصيد المستحق</th>
+                                    <th scope="col" className="px-6 py-3.5 font-cairo">الفواتير</th>
+                                    <th scope="col" className="px-6 py-3.5 font-cairo text-center">الإجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-200 bg-card">
+                            <tbody className="divide-y divide-border bg-card">
                                 {suppliers.map((supplier: any) => (
-                                    <tr
-                                        key={supplier.id}
-                                        className="hover:bg-muted transition-colors"
-                                    >
+                                    <tr key={supplier.id} className="hover:bg-muted/40 transition-colors group">
+                                        {/* اسم المورد */}
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                                                    <Users className="w-5 h-5 text-primary" />
+                                                <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                                                    <Building2 className="w-4 h-4 text-primary" />
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-foreground">{supplier.name}</p>
+                                                    <p className="font-semibold text-foreground text-sm">{supplier.name}</p>
                                                     {supplier.address && (
                                                         <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                                                            <MapPin className="w-3 h-3" />
-                                                            <span>{supplier.address}</span>
+                                                            <MapPin className="w-3 h-3 shrink-0" />
+                                                            <span className="truncate max-w-[160px]">{supplier.address}</span>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
                                         </td>
+
+                                        {/* معلومات الاتصال */}
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="flex flex-col gap-1">
-                                                {supplier.email && (
-                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                        <Mail className="w-4 h-4" />
-                                                        <span>{supplier.email}</span>
-                                                    </div>
-                                                )}
                                                 {supplier.phone && (
                                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                        <Phone className="w-4 h-4" />
+                                                        <Phone className="w-3.5 h-3.5 shrink-0" />
                                                         <span dir="ltr">{supplier.phone}</span>
                                                     </div>
                                                 )}
+                                                {supplier.email && (
+                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                        <Mail className="w-3.5 h-3.5 shrink-0" />
+                                                        <span>{supplier.email}</span>
+                                                    </div>
+                                                )}
                                                 {!supplier.email && !supplier.phone && (
-                                                    <span className="text-muted-foreground text-sm">غير متوفر</span>
+                                                    <span className="text-muted-foreground/60 text-xs">غير متوفر</span>
                                                 )}
                                             </div>
                                         </td>
+
+                                        {/* الرصيد */}
                                         <td className="whitespace-nowrap px-6 py-4">
                                             {supplier.computedBalance > 0 ? (
-                                                <div className="flex items-center gap-1">
-                                                    <span className="font-bold text-warning">
+                                                <div className="inline-flex items-center gap-1.5 bg-warning/10 text-warning border border-warning/20 rounded-lg px-3 py-1">
+                                                    <TrendingDown className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="font-bold text-sm" dir="ltr">
                                                         {supplier.computedBalance.toLocaleString('en-US')}
                                                     </span>
-                                                    <span className="text-xs text-muted-foreground">د.ع</span>
+                                                    <span className="text-xs opacity-80">د.ع</span>
                                                 </div>
                                             ) : (
-                                                <span className="text-success text-sm font-bold">مسدد ✓</span>
+                                                <div className="inline-flex items-center gap-1.5 bg-success/10 text-success border border-success/20 rounded-lg px-3 py-1">
+                                                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="font-bold text-sm">مسدد</span>
+                                                </div>
                                             )}
                                         </td>
+
+                                        {/* عدد الفواتير */}
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <span className="text-sm text-muted-foreground">
-                                                {supplier._count.purchases} فاتورة
+                                            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground bg-muted rounded-md px-2.5 py-1">
+                                                <ShoppingCart className="w-3.5 h-3.5" />
+                                                {supplier._count.purchases}
                                             </span>
                                         </td>
-                                        <td className="whitespace-nowrap py-3 pl-6 pr-3">
-                                            <div className="flex justify-end gap-2">
+
+                                        {/* الإجراءات */}
+                                        <td className="whitespace-nowrap px-6 py-4">
+                                            <div className="flex items-center justify-center gap-1.5">
                                                 <Link
                                                     href={`/dashboard/suppliers/${supplier.id}`}
-                                                    className="rounded-lg border border-border p-2 hover:bg-primary/10 hover:border-primary transition-colors"
+                                                    className="rounded-lg border border-border p-2 hover:bg-primary/10 hover:border-primary/50 transition-colors"
                                                     title="كشف حساب"
                                                 >
                                                     <FileText className="w-4 h-4 text-primary" />
                                                 </Link>
                                                 <Link
                                                     href={`/dashboard/suppliers/${supplier.id}/purchases`}
-                                                    className="rounded-lg border border-border p-2 hover:bg-success/10 hover:border-success transition-colors"
+                                                    className="rounded-lg border border-border p-2 hover:bg-success/10 hover:border-success/50 transition-colors"
                                                     title="فواتير الشراء"
                                                 >
                                                     <ShoppingCart className="w-4 h-4 text-success" />
@@ -178,18 +226,10 @@ export default async function Page() {
                                         </td>
                                     </tr>
                                 ))}
-                                {suppliers.length === 0 && (
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-10 text-center text-muted-foreground">
-                                            <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                                            لا يوجد موردين مسجلين
-                                        </td>
-                                    </tr>
-                                )}
                             </tbody>
                         </table>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );

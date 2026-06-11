@@ -1,13 +1,15 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { AlertTriangle, ArrowDown } from "lucide-react";
+import { AlertTriangle, Package, XCircle, TrendingDown, ShoppingCart, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
 import { requireFeature } from '@/app/lib/page-guards';
 import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
-
+import ShortagesTable, { ShortageRow } from "@/app/ui/inventory/shortages-table";
 
 export default async function ShortagesPage({
     searchParams,
@@ -15,7 +17,7 @@ export default async function ShortagesPage({
     searchParams?: { branch?: string };
 }) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, organizationId } = tenantCtx;
 
     if (organizationId) {
@@ -42,90 +44,86 @@ export default async function ShortagesPage({
         }))
         .filter((item: any) => item.currentStock < item.minStock);
 
-    return (
-        <div className="glass-card w-full p-6">
-            <div className="flex w-full items-center justify-between mb-4">
-                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-3">
-                    <AlertTriangle className="w-7 h-7 text-warning" />
-                    النواقص
-                </h1>
-            </div>
+    const depletedCount = shortages.filter((s: any) => s.currentStock === 0).length;
+    const lowCount = shortages.length - depletedCount;
 
-            <div className="mb-6">
+    const rows: ShortageRow[] = shortages.map((item: any) => ({
+        id: item.id,
+        drugName: item.drug.tradeName,
+        barcode: item.drug.barcode ?? null,
+        branchName: item.branch.name,
+        currentStock: item.currentStock,
+        minStock: item.minStock,
+    }));
+
+    const statCards = [
+        { label: "أصناف ناقصة", value: shortages.length, icon: TrendingDown, tone: "text-warning", bg: "bg-warning/10" },
+        { label: "نفدت بالكامل", value: depletedCount, icon: XCircle, tone: "text-destructive", bg: "bg-destructive/10" },
+        { label: "أقل من الحد الأدنى", value: lowCount, icon: Package, tone: "text-warning", bg: "bg-warning/10" },
+    ];
+
+    return (
+        <div className="space-y-6" dir="rtl">
+            {/* الرأس */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                        <AlertTriangle className="w-6 h-6 text-warning" />
+                        النواقص
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        الأصناف التي انخفض مخزونها عن الحد الأدنى
+                    </p>
+                </div>
                 <BranchFilter currentBranch={selectedBranchId} baseUrl="/dashboard/inventory/shortages" />
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div className="bg-card rounded-xl border border-border p-4">
-                    <div className="text-3xl font-bold text-foreground">{shortages.length}</div>
-                    <div className="text-sm text-muted-foreground">أصناف ناقصة</div>
-                </div>
-                <div className="bg-destructive/10 rounded-xl border border-red-200 p-4">
-                    <div className="text-3xl font-bold text-destructive">
-                        {shortages.filter((s: any) => s.currentStock === 0).length}
-                    </div>
-                    <div className="text-sm text-destructive">نفدت بالكامل</div>
-                </div>
-                <div className="bg-warning/10 rounded-xl border border-orange-200 p-4">
-                    <div className="text-3xl font-bold text-warning">
-                        {shortages.filter((s: any) => s.currentStock > 0 && s.currentStock <= s.minStock).length}
-                    </div>
-                    <div className="text-sm text-warning">أقل من الحد الأدنى</div>
-                </div>
+            {/* بطاقات الإحصائيات */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {statCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                        <div key={card.label} className="glass-card p-5 flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}>
+                                <Icon className={`w-6 h-6 ${card.tone}`} />
+                            </div>
+                            <div>
+                                <p className="text-sm text-muted-foreground">{card.label}</p>
+                                <p className={`text-2xl font-bold ${card.value > 0 ? card.tone : "text-foreground"}`}>
+                                    {card.value}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
-            {/* Table */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
-                {shortages.length === 0 ? (
-                    <div className="p-12 text-center text-muted-foreground">
-                        <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                        <p className="font-bold">لا توجد نواقص حالياً</p>
-                        <p className="text-sm mt-1">جميع الأصناف متوفرة بكمية كافية</p>
+            {/* رابط الإجراء */}
+            {shortages.length > 0 && (
+                <div className="flex flex-wrap gap-3">
+                    <Link
+                        href="/dashboard/purchases/smart-order"
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+                    >
+                        <ShoppingCart className="w-4 h-4" />
+                        إنشاء طلب شراء ذكي
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                    </Link>
+                </div>
+            )}
+
+            {/* الجدول */}
+            {shortages.length === 0 ? (
+                <div className="glass-card py-16 text-center">
+                    <div className="w-16 h-16 bg-success/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <Package className="w-8 h-8 text-success" />
                     </div>
-                ) : (
-                    <table className="w-full">
-                        <thead className="bg-muted text-muted-foreground text-sm border-b border-border">
-                            <tr>
-                                <th className="px-4 py-3 text-right font-bold">#</th>
-                                <th className="px-4 py-3 text-right font-bold">الدواء</th>
-                                <th className="px-4 py-3 text-right font-bold">الفرع</th>
-                                <th className="px-4 py-3 text-right font-bold">الكمية الحالية</th>
-                                <th className="px-4 py-3 text-right font-bold">الحد الأدنى</th>
-                                <th className="px-4 py-3 text-right font-bold">النقص</th>
-                                <th className="px-4 py-3 text-right font-bold">الحالة</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {shortages.map((item: any, idx: any) => (
-                                <tr key={item.id} className="hover:bg-muted">
-                                    <td className="px-4 py-3 text-muted-foreground font-mono text-sm">{idx + 1}</td>
-                                    <td className="px-4 py-3">
-                                        <div className="font-bold text-foreground">{item.drug.tradeName}</div>
-                                        <div className="text-xs text-muted-foreground">{item.drug.barcode}</div>
-                                    </td>
-                                    <td className="px-4 py-3 text-muted-foreground text-sm">{item.branch.name}</td>
-                                    <td className="px-4 py-3 font-bold text-destructive">{item.currentStock}</td>
-                                    <td className="px-4 py-3 text-muted-foreground">{item.minStock}</td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1 text-destructive font-bold">
-                                            <ArrowDown className="w-3 h-3" />
-                                            {item.minStock - item.currentStock}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        {item.currentStock === 0 ? (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">نفد</span>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-xs font-bold text-warning">منخفض</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
+                    <p className="text-foreground font-medium">لا توجد نواقص حالياً</p>
+                    <p className="text-sm text-muted-foreground mt-1">جميع الأصناف متوفرة بكمية كافية</p>
+                </div>
+            ) : (
+                <ShortagesTable rows={rows} />
+            )}
         </div>
     );
 }

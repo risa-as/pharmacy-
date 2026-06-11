@@ -178,7 +178,6 @@ const categories: Category[] = [
                 pages: [
                     { path: "/dashboard/expenses", name: "المصروفات" },
                     { path: "/dashboard/finance/safes", name: "الصناديق" },
-                    { path: "/dashboard/finance/transactions", name: "دفتر القيود" },
                     { path: "/dashboard/payments", name: "المدفوعات" },
                 ],
             },

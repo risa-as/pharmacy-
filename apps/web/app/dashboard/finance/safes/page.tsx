@@ -1,12 +1,38 @@
-import { getSafes } from '@/app/lib/actions/finance-actions';
+import { getSafes, getSafesForOrg } from '@/app/lib/actions/finance-actions';
 import { AddSafeModal, TransferModal, VoucherModal } from '@/app/ui/finance/safe-modals';
 import { Wallet, Landmark, Smartphone, Briefcase, PlusCircle, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { prisma } from '@/app/lib/prisma';
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 
 export default async function SafesPage() {
-    const branchId = 'branch-1'; // Using hardcoded branchId for now, matching other pages
-    const safes = await getSafes(branchId);
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) redirect('/login');
+
+    // Resolve the branch used for creating new safes.
+    // Branch-scoped users use their own branch; org-level admins fall back to
+    // the organization's first branch.
+    let branchId = tenantCtx.user.branchId;
+    if (!branchId && tenantCtx.organizationId) {
+        const firstBranch = await prisma.branch.findFirst({
+            where: { organizationId: tenantCtx.organizationId },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+        });
+        branchId = firstBranch?.id;
+    }
+
+    // Branch-scoped users see their branch's safes; org admins see all org safes.
+    const safes = tenantCtx.user.branchId
+        ? await getSafes(tenantCtx.user.branchId)
+        : tenantCtx.organizationId
+            ? await getSafesForOrg(tenantCtx.organizationId)
+            : [];
 
     const getIcon = (type: string) => {
         switch (type) {
@@ -45,7 +71,7 @@ export default async function SafesPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-                <AddSafeModal branchId={branchId} />
+                {branchId && <AddSafeModal branchId={branchId} />}
                 <TransferModal safes={safes} />
                 <VoucherModal type="IN" safes={safes} />
                 <VoucherModal type="OUT" safes={safes} />
@@ -84,7 +110,7 @@ export default async function SafesPage() {
                     <Wallet className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
                     <h3 className="text-lg font-bold text-muted-foreground mb-2">لا توجد صناديق مضافة</h3>
                     <p className="text-muted-foreground mb-6">ابدأ بإضافة درج الكاشير أو الحساب البنكي لمتابعة الأموال.</p>
-                    <AddSafeModal branchId={branchId} />
+                    {branchId && <AddSafeModal branchId={branchId} />}
                 </div>
             )}
         </div>

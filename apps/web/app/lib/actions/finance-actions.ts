@@ -73,13 +73,6 @@ export async function getTransactions(safeId: string) {
     });
 }
 
-export async function getBranchTransactions(branchId: string) {
-    return await prisma.transaction.findMany({
-        where: { safe: { branchId } },
-        include: { safe: true },
-        orderBy: { createdAt: 'desc' }
-    });
-}
 
 export async function createTransaction(data: { safeId: string, type: 'IN' | 'OUT', amount: number, referenceType: string, description?: string }) {
     try {

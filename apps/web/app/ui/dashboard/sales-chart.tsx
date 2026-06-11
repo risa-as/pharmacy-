@@ -12,9 +12,11 @@ interface SalesData {
 interface SalesChartProps {
     data: SalesData[];
     title?: string;
+    /** CSS design token to color the chart (e.g. "primary", "success"). */
+    colorVar?: string;
 }
 
-export default function SalesChart({ data, title = "المبيعات اليومية" }: SalesChartProps) {
+export default function SalesChart({ data, title = "المبيعات اليومية", colorVar = "primary" }: SalesChartProps) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -50,9 +52,9 @@ export default function SalesChart({ data, title = "المبيعات اليوم�
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data}>
                         <defs>
-                            <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
-                                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                            <linearGradient id={`grad-${colorVar}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={`hsl(var(--${colorVar}))`} stopOpacity={0.35} />
+                                <stop offset="95%" stopColor={`hsl(var(--${colorVar}))`} stopOpacity={0} />
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
@@ -82,10 +84,10 @@ export default function SalesChart({ data, title = "المبيعات اليوم�
                         <Area
                             type="monotone"
                             dataKey="amount"
-                            stroke="hsl(var(--primary))"
+                            stroke={`hsl(var(--${colorVar}))`}
                             strokeWidth={2.5}
                             fillOpacity={1}
-                            fill="url(#colorAmount)"
+                            fill={`url(#grad-${colorVar})`}
                         />
                     </AreaChart>
                 </ResponsiveContainer>

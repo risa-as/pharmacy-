@@ -38,7 +38,6 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
 
     // Finance / Expenses
     { path: '/dashboard/finance/safes', permission: 'canViewExpenses' },
-    { path: '/dashboard/finance/transactions', permission: 'canViewExpenses' },
     { path: '/dashboard/finance', permission: 'canViewExpenses' },
     { path: '/dashboard/expenses', permission: 'canViewExpenses' },
     { path: '/dashboard/payments', permission: 'canViewExpenses' },
