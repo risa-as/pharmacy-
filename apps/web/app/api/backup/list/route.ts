@@ -22,14 +22,33 @@ export async function GET(req: Request) {
             take: 20, // Limit to last 20 backups
         });
 
+        // Resolve branch (and org) names so the list distinguishes which branch /
+        // organisation each backup belongs to.
+        const refBranchIds = Array.from(
+            new Set(backups.map((b: any) => b.branchId).filter(Boolean) as string[])
+        );
+        const branchRows = refBranchIds.length
+            ? await prisma.branch.findMany({
+                where: { id: { in: refBranchIds } },
+                select: { id: true, name: true, organization: { select: { name: true } } },
+            })
+            : [];
+        const branchMap = new Map(branchRows.map((b: any) => [b.id, b]));
+
         // Map to format expected by UI
-        const formattedBackups = backups.map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            size: b.size,
-            date: b.createdAt,
-            url: b.url // Include URL for direct download
-        }));
+        const formattedBackups = backups.map((b: any) => {
+            const branch = b.branchId ? branchMap.get(b.branchId) : null;
+            return {
+                id: b.id,
+                name: b.name,
+                size: b.size,
+                date: b.createdAt,
+                url: b.url, // Include URL for direct download
+                branchId: b.branchId ?? null,
+                branchName: branch?.name ?? null,
+                organizationName: branch?.organization?.name ?? null,
+            };
+        });
 
         return NextResponse.json({ success: true, backups: formattedBackups });
 

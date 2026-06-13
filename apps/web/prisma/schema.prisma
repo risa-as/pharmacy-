@@ -599,12 +599,16 @@ model LoyaltyTransaction {
 }
 
 model Backup {
-  id        String   @id @default(uuid())
-  name      String
-  url       String
-  size      Int
-  branchId  String? // optional branch reference — no FK to allow orphaned backups
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  name           String
+  url            String
+  size           Int
+  branchId       String? // optional branch reference — no FK to allow orphaned backups
+  organizationId String? // owning org (denormalised so org-level scoping survives branch deletion)
+  createdAt      DateTime @default(now())
+
+  @@index([branchId])
+  @@index([organizationId])
 }
 
 // ==================== دفتر الديون ====================

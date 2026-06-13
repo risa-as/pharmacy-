@@ -7,6 +7,8 @@ interface Backup {
     name: string;
     size: number;
     date: string;
+    branchName?: string | null;
+    organizationName?: string | null;
 }
 
 export default function BackupManager() {
@@ -96,6 +98,7 @@ export default function BackupManager() {
                             <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                                 <tr>
                                     <th className="px-4 py-3 font-medium font-cairo">الملف</th>
+                                    <th className="px-4 py-3 font-medium font-cairo">الفرع</th>
                                     <th className="px-4 py-3 font-medium font-cairo">الحجم</th>
                                     <th className="px-4 py-3 font-medium font-cairo">التاريخ</th>
                                     <th className="px-4 py-3 font-medium font-cairo text-center">تحميل</th>
@@ -109,6 +112,18 @@ export default function BackupManager() {
                                                 <HardDrive className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                                                 {backup.name}
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground">
+                                            {backup.branchName ? (
+                                                <div className="flex flex-col">
+                                                    <span className="text-foreground">{backup.branchName}</span>
+                                                    {backup.organizationName && (
+                                                        <span className="text-[11px] text-muted-foreground">{backup.organizationName}</span>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs">—</span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground" dir="ltr">
                                             {formatSize(backup.size)}

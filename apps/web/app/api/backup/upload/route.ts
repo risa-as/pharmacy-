@@ -46,10 +46,29 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, message: "No file provided" }, { status: 400 });
         }
 
-        // 2. Upload to UploadThing
-        console.log(`Uploading backup: ${file.name} (${file.size} bytes)`);
+        // Resolve the owning org + names so the backup is distinguishable per
+        // branch AND per organisation — both in the DB record and in the actual
+        // uploaded filename (otherwise every org's backups look identical).
+        const branch = await prisma.branch.findUnique({
+            where: { id: branchId },
+            select: { name: true, organizationId: true, organization: { select: { name: true } } },
+        });
+        const organizationId = branch?.organizationId ?? null;
 
-        const response = await utapi.uploadFiles([file]);
+        // Keep Latin alphanumerics + Arabic letters; collapse everything else to a
+        // dash. Explicit ranges avoid the \p{} unicode flag (needs es6+ target).
+        const slug = (s?: string | null) =>
+            (s || "").trim().replace(/[^a-zA-Z0-9؀-ۿ]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "na";
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const niceName = `backup_${slug(branch?.organization?.name)}_${slug(branch?.name)}_${stamp}.db`;
+
+        // Rename without copying the bytes: File wraps the existing Blob.
+        const renamedFile = new File([file], niceName, { type: file.type || "application/octet-stream" });
+
+        // 2. Upload to UploadThing
+        console.log(`Uploading backup: ${niceName} (${file.size} bytes)`);
+
+        const response = await utapi.uploadFiles([renamedFile]);
         const uploadedFile = response[0];
 
         if (uploadedFile.error) {
@@ -64,7 +83,8 @@ export async function POST(req: Request) {
                 name: name,
                 url: url,
                 size: size,
-                branchId: branchId
+                branchId: branchId,
+                organizationId: organizationId,
             }
         });
 
