@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma"; // Adjust import
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { resolveTenantBranchIds } from "@/app/lib/backup-scope";
 
 export async function GET(req: Request) {
     try {
@@ -19,9 +20,14 @@ export async function GET(req: Request) {
             return NextResponse.json({ success: false, message: "File required" }, { status: 400 });
         }
 
-        // Find backup by name in DB
+        // Find backup by name in DB — scoped to the caller's tenant so one
+        // organization can't download another's backup by guessing the filename.
+        const branchIds = await resolveTenantBranchIds(tenantCtx);
         const backup = await prisma.backup.findFirst({
-            where: { name: filename },
+            where: {
+                name: filename,
+                ...(branchIds ? { branchId: { in: branchIds } } : {}),
+            },
             orderBy: { createdAt: 'desc' }
         });
 

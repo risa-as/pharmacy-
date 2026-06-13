@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
-import { Gift, Award, Users, TrendingUp, Star, Crown, Medal } from "lucide-react";
+import { Gift, Award, Users, TrendingUp, Star, Crown, Medal, Settings, AlertTriangle, Coins, Info } from "lucide-react";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import BranchLoyaltyToggle from '@/app/ui/loyalty/branch-loyalty-toggle';
@@ -46,9 +46,9 @@ export default async function LoyaltyDashboardPage() {
     };
 
     const tierInfo: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
-        BRONZE: { label: "برونزي", emoji: "🥉", color: "text-warning", bg: "bg-warning/10 border-orange-200" },
+        BRONZE: { label: "برونزي", emoji: "🥉", color: "text-warning", bg: "bg-warning/10 border-warning/20" },
         SILVER: { label: "فضي", emoji: "🥈", color: "text-muted-foreground", bg: "bg-muted border-border" },
-        GOLD: { label: "ذهبي", emoji: "🥇", color: "text-warning", bg: "bg-warning/10 border-warning/30" },
+        GOLD: { label: "ذهبي", emoji: "🥇", color: "text-amber-700", bg: "bg-amber-100 border-amber-300" },
     };
 
     const loyaltyEnabled = (settings as any).loyaltyEnabled ?? false;
@@ -63,26 +63,45 @@ export default async function LoyaltyDashboardPage() {
         orderBy: { name: 'asc' },
     }) : [];
 
+    const fmt = (v: number) => Math.round(v).toLocaleString("en-US");
+
+    const statCards = [
+        { label: "إجمالي الأعضاء", value: totalAccounts.toLocaleString("en-US"), sub: "عضو مسجّل", icon: Users, tone: "text-primary", bg: "bg-primary/10" },
+        { label: "النقاط النشطة", value: totalPointsOutstanding.toLocaleString("en-US"), sub: `≈ ${fmt(totalPointsOutstanding * redemptionValue)} د.ع`, icon: Star, tone: "text-info", bg: "bg-info/10" },
+        { label: "نقاط مدى الحياة", value: totalLifetimePoints.toLocaleString("en-US"), sub: "إجمالي ممنوح", icon: TrendingUp, tone: "text-success", bg: "bg-success/10" },
+        { label: "الأعضاء الذهبيون", value: tierCounts.GOLD.toLocaleString("en-US"), sub: "في الطبقة الذهبية", icon: Medal, tone: "text-warning", bg: "bg-warning/10" },
+    ];
+
+    const configItems = [
+        { label: "معدل الكسب", value: `${Math.round(1000 * pointsPerDinar)} نقطة`, sub: "لكل 1,000 د.ع", icon: TrendingUp },
+        { label: "قيمة النقطة", value: `${redemptionValue} د.ع`, sub: "عند الاستبدال", icon: Coins },
+        { label: "الحد الأدنى للاستبدال", value: `${minRedemption} نقطة`, sub: `≈ ${fmt(minRedemption * redemptionValue)} د.ع`, icon: Award },
+    ];
+
     return (
-        <div className="glass-card w-full p-6 space-y-6" dir="rtl">
-            {/* Header */}
-            <div className="flex items-center justify-between flex-wrap gap-4">
-                <h1 className="text-2xl font-bold font-cairo flex items-center gap-2">
-                    <Gift className="w-8 h-8 text-info" />
-                    🎁 برنامج الولاء
-                </h1>
+        <div className="space-y-6" dir="rtl">
+            {/* الرأس */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                        <Gift className="w-6 h-6 text-primary" />
+                        برنامج الولاء
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">نقاط المكافآت، الطبقات، وقائمة المتصدرين</p>
+                </div>
                 <Link
                     href="/dashboard/loyalty/settings"
-                    className="px-4 py-2 bg-info text-info-foreground rounded-lg font-bold text-sm hover:bg-info/90 transition-all"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm shrink-0"
                 >
-                    ⚙️ إعدادات البرنامج
+                    <Settings className="h-4 w-4" />
+                    إعدادات البرنامج
                 </Link>
             </div>
 
-            {/* Status Banner */}
+            {/* تنبيه التعطيل */}
             {!loyaltyEnabled && (
-                <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 flex items-center gap-3">
-                    <span className="text-2xl">⚠️</span>
+                <div className="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+                    <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
                     <div>
                         <p className="font-bold text-warning">برنامج الولاء غير مفعّل حالياً</p>
                         <p className="text-sm text-warning/80">
@@ -95,152 +114,164 @@ export default async function LoyaltyDashboardPage() {
                 </div>
             )}
 
-            {/* Current Settings */}
-            <div className="bg-gradient-to-l from-info to-primary/80 rounded-2xl p-6 text-primary-foreground shadow-lg">
-                <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-                    <Star className="w-5 h-5" />
-                    إعدادات النظام الحالية
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-primary-foreground/70 text-sm mb-1">معدل الكسب</div>
-                        <div className="text-xl font-bold">{Math.round(1000 * pointsPerDinar)} نقطة / 1000 د.ع</div>
+            {/* بطاقات الإحصائيات */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {statCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                        <div key={card.label} className="glass-card p-5 flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}>
+                                <Icon className={`w-6 h-6 ${card.tone}`} />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-sm text-muted-foreground truncate">{card.label}</p>
+                                <p className={`text-2xl font-bold ${card.tone}`} dir="ltr">{card.value}</p>
+                                <p className="text-xs text-muted-foreground truncate">{card.sub}</p>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* إعدادات النظام الحالية */}
+            <div className="glass-card overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <Star className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-foreground font-cairo leading-tight">إعدادات النظام الحالية</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">القيم المطبّقة على كسب واستبدال النقاط</p>
+                        </div>
                     </div>
-                    <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-primary-foreground/70 text-sm mb-1">قيمة النقطة</div>
-                        <div className="text-xl font-bold">{redemptionValue} د.ع</div>
-                    </div>
-                    <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-primary-foreground/70 text-sm mb-1">الحد الأدنى للاستبدال</div>
-                        <div className="text-xl font-bold">{minRedemption} نقطة</div>
-                    </div>
-                    <div className="bg-card/10 rounded-xl p-4 backdrop-blur-sm">
-                        <div className="text-primary-foreground/70 text-sm mb-1">الحالة</div>
-                        <div className="text-xl font-bold">{loyaltyEnabled ? "✅ مفعّل" : "❌ معطّل"}</div>
-                    </div>
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${loyaltyEnabled ? "bg-success/10 text-success border-success/30" : "bg-muted text-muted-foreground border-border"}`}>
+                        <span className={`w-2 h-2 rounded-full ${loyaltyEnabled ? "bg-success" : "bg-muted-foreground"}`} />
+                        {loyaltyEnabled ? "مفعّل" : "معطّل"}
+                    </span>
+                </div>
+                <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {configItems.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                            <div key={item.label} className="rounded-xl border border-border bg-muted/30 p-4">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                                    <Icon className="w-4 h-4" />
+                                    {item.label}
+                                </div>
+                                <div className="text-xl font-bold text-foreground">{item.value}</div>
+                                <div className="text-xs text-muted-foreground mt-0.5">{item.sub}</div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Per-Branch Loyalty Toggle */}
+            {/* تفعيل الولاء حسب الفرع */}
             {branches.length > 1 && (
                 <BranchLoyaltyToggle initialBranches={branches} orgLoyaltyEnabled={loyaltyEnabled} />
             )}
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-card p-5 rounded-xl border shadow-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <Users className="w-4 h-4" />
-                        إجمالي الأعضاء
+            {/* قائمة المتصدرين */}
+            <div className="glass-card overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
+                            <Crown className="w-4 h-4 text-warning" />
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-foreground font-cairo leading-tight">قائمة المتصدرين</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">أعلى 20 عضواً حسب نقاط مدى الحياة</p>
+                        </div>
                     </div>
-                    <div className="text-3xl font-bold text-foreground">{totalAccounts}</div>
-                </div>
-                <div className="bg-card p-5 rounded-xl border shadow-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <Star className="w-4 h-4" />
-                        إجمالي النقاط النشطة
+                    {/* توزيع الطبقات */}
+                    <div className="flex items-center gap-2">
+                        {(["BRONZE", "SILVER", "GOLD"] as const).map((t) => (
+                            <span key={t} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold ${tierInfo[t].bg} ${tierInfo[t].color}`}>
+                                {tierInfo[t].emoji} {tierCounts[t]}
+                            </span>
+                        ))}
                     </div>
-                    <div className="text-2xl font-bold text-info">{totalPointsOutstanding.toLocaleString()}</div>
-                    <div className="text-xs text-muted-foreground">قيمة تقديرية: {(totalPointsOutstanding * redemptionValue).toLocaleString()} د.ع</div>
-                </div>
-                <div className="bg-card p-5 rounded-xl border shadow-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <TrendingUp className="w-4 h-4" />
-                        نقاط ممنوحة (مدى الحياة)
-                    </div>
-                    <div className="text-2xl font-bold text-success">{totalLifetimePoints.toLocaleString()}</div>
-                </div>
-                <div className="bg-card p-5 rounded-xl border shadow-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                        <Award className="w-4 h-4" />
-                        توزيع الطبقات
-                    </div>
-                    <div className="flex gap-3 mt-1">
-                        <span className="text-sm">🥉 {tierCounts.BRONZE}</span>
-                        <span className="text-sm">🥈 {tierCounts.SILVER}</span>
-                        <span className="text-sm">🥇 {tierCounts.GOLD}</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Leaderboard */}
-            <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b bg-gradient-to-l from-yellow-50 to-orange-50">
-                    <h2 className="font-bold text-lg flex items-center gap-2">
-                        <Crown className="w-5 h-5 text-warning" />
-                        🏆 قائمة المتصدرين
-                    </h2>
                 </div>
                 {accounts.length === 0 ? (
-                    <div className="p-12 text-center text-muted-foreground">
-                        <Gift className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                        <p>لا يوجد أعضاء في برنامج الولاء بعد</p>
-                        <p className="text-sm mt-2">سيتم إنشاء الحسابات تلقائياً عند ربط المبيعات بالمرضى</p>
+                    <div className="py-16 text-center">
+                        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Gift className="w-8 h-8 text-muted-foreground opacity-50" />
+                        </div>
+                        <p className="text-foreground font-medium">لا يوجد أعضاء في برنامج الولاء بعد</p>
+                        <p className="text-sm text-muted-foreground mt-1">سيتم إنشاء الحسابات تلقائياً عند ربط المبيعات بالمرضى</p>
                     </div>
                 ) : (
-                    <table className="w-full">
-                        <thead className="bg-muted text-muted-foreground text-sm border-b">
-                            <tr>
-                                <th className="px-4 py-3 text-right font-bold">#</th>
-                                <th className="px-4 py-3 text-right font-bold">العضو</th>
-                                <th className="px-4 py-3 text-right font-bold">الطبقة</th>
-                                <th className="px-4 py-3 text-right font-bold">النقاط الحالية</th>
-                                <th className="px-4 py-3 text-right font-bold">نقاط مدى الحياة</th>
-                                <th className="px-4 py-3 text-right font-bold">آخر معاملة</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {accounts.map((acc: any, index: any) => {
-                                const tier = tierInfo[acc.tier] || tierInfo.BRONZE;
-                                const lastTx = acc.transactions[0];
-                                const rankEmojis = ["🥇", "🥈", "🥉"];
-                                return (
-                                    <tr key={acc.id} className="hover:bg-muted transition-colors">
-                                        <td className="px-4 py-3 text-center">
-                                            {index < 3 ? (
-                                                <span className="text-xl">{rankEmojis[index]}</span>
-                                            ) : (
-                                                <span className="font-bold text-muted-foreground">{index + 1}</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="font-bold text-foreground">{acc.patient.name}</div>
-                                            <div className="text-xs text-muted-foreground font-mono" dir="ltr">{acc.patient.phone}</div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${tier.bg} ${tier.color}`}>
-                                                {tier.emoji} {tier.label}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 font-bold text-info">
-                                            {acc.totalPoints.toLocaleString()} <span className="text-xs text-muted-foreground">نقطة</span>
-                                        </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
-                                            {acc.lifetimePoints.toLocaleString()}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-muted-foreground" suppressHydrationWarning>
-                                            {lastTx ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className={`font-bold ${lastTx.type === "EARN" ? "text-success" : "text-destructive"}`}>
-                                                        {lastTx.type === "EARN" ? "+" : ""}{lastTx.points.toLocaleString()} نقطة
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {new Date(lastTx.createdAt).toLocaleDateString("ar-IQ", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" })}
-                                                    </span>
-                                                </div>
-                                            ) : "-"}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border">
+                                <tr>
+                                    <th className="px-4 py-3.5 text-center font-bold font-cairo">#</th>
+                                    <th className="px-4 py-3.5 text-right font-bold font-cairo">العضو</th>
+                                    <th className="px-4 py-3.5 text-right font-bold font-cairo">الطبقة</th>
+                                    <th className="px-4 py-3.5 text-right font-bold font-cairo">النقاط الحالية</th>
+                                    <th className="px-4 py-3.5 text-right font-bold font-cairo">نقاط مدى الحياة</th>
+                                    <th className="px-4 py-3.5 text-right font-bold font-cairo">آخر معاملة</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border bg-card">
+                                {accounts.map((acc: any, index: any) => {
+                                    const tier = tierInfo[acc.tier] || tierInfo.BRONZE;
+                                    const lastTx = acc.transactions[0];
+                                    const rankEmojis = ["🥇", "🥈", "🥉"];
+                                    return (
+                                        <tr key={acc.id} className="hover:bg-muted/40 transition-colors">
+                                            <td className="px-4 py-3 text-center">
+                                                {index < 3 ? (
+                                                    <span className="text-xl">{rankEmojis[index]}</span>
+                                                ) : (
+                                                    <span className="font-bold text-muted-foreground">{index + 1}</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="font-bold text-foreground">{acc.patient.name}</div>
+                                                <div className="text-xs text-muted-foreground font-mono" dir="ltr">{acc.patient.phone}</div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${tier.bg} ${tier.color}`}>
+                                                    {tier.emoji} {tier.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 font-bold text-info">
+                                                {acc.totalPoints.toLocaleString()} <span className="text-xs text-muted-foreground">نقطة</span>
+                                            </td>
+                                            <td className="px-4 py-3 text-muted-foreground">
+                                                {acc.lifetimePoints.toLocaleString()}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-muted-foreground" suppressHydrationWarning>
+                                                {lastTx ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className={`font-bold ${lastTx.type === "EARN" ? "text-success" : "text-destructive"}`}>
+                                                            {lastTx.type === "EARN" ? "+" : ""}{lastTx.points.toLocaleString()} نقطة
+                                                        </span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {new Date(lastTx.createdAt).toLocaleDateString("ar-IQ", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" })}
+                                                        </span>
+                                                    </div>
+                                                ) : "-"}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
-            {/* Info */}
-            <div className="bg-primary/10 p-4 rounded-lg text-sm text-primary">
-                <strong>كيف يعمل البرنامج:</strong> عند إتمام عملية بيع مرتبطة بمريض مسجل، يكسب المريض نقاطاً تلقائياً. الأعضاء الذهبيون يكسبون ضعف النقاط! يمكن للمريض استبدال نقاطه بخصم على المشتريات.
+            {/* كيف يعمل البرنامج */}
+            <div className="glass-card p-5 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-info/10 flex items-center justify-center shrink-0">
+                    <Info className="w-4 h-4 text-info" />
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                    <strong className="text-foreground">كيف يعمل البرنامج:</strong> عند إتمام عملية بيع مرتبطة بمريض مسجل، يكسب المريض نقاطاً تلقائياً. الأعضاء الذهبيون يكسبون ضعف النقاط! يمكن للمريض استبدال نقاطه بخصم على المشتريات.
+                </p>
             </div>
         </div>
     );

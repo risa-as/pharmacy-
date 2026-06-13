@@ -36,6 +36,9 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                     const passwordsMatch = await bcrypt.compare(password, user.password);
                     if (!passwordsMatch) return null;
 
+                    // Reject soft-disabled (departed) employees.
+                    if ((user as any).isActive === false) return null;
+
                     // Compute subscription state at login time so middleware can enforce it
                     let subscriptionState = "active";
                     const orgId = user.branch?.organizationId;

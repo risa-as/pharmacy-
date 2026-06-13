@@ -57,5 +57,5 @@ export const config = {
     // api/auth/login and api/auth/change-password are custom endpoints (not NextAuth
     // actions) — excluding them prevents NextAuth middleware from intercepting and
     // returning a non-JSON response instead of the route handler's response.
-    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/sync|api/mobile|api/public|api/auth/login|api/auth/change-password).*)"],
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/sync|api/mobile|api/public|api/auth/login|api/auth/change-password|api/auth/refresh).*)"],
 };

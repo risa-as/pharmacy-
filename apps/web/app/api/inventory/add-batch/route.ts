@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { sendAndPersistNotification } from "@/app/lib/notifications/notificationTriggers";
 import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
+import { logAudit, resolveUserName } from "@/app/lib/audit";
 
 type AckStatus = "processed" | "duplicate" | "noop";
 
@@ -152,6 +153,17 @@ export async function POST(req: Request) {
             }
 
             return { inventory, ackStatus: "processed" as AckStatus };
+        });
+
+        // Audit the stock-in, attributed to the acting (logged-in) user.
+        await logAudit({
+            userId: syncUser.id,
+            userName: syncUser.name ?? await resolveUserName(syncUser.id),
+            action: "ADD_BATCH",
+            entity: "INVENTORY",
+            entityId: result.inventory.id,
+            details: JSON.stringify({ quantity: parsedQuantity, drugId: drugId ?? null, source: "desktop-sync" }),
+            branchId: result.inventory.branchId,
         });
 
         // T032 — Low-stock trigger: fire-and-forget after success

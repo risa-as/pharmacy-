@@ -27,14 +27,14 @@ export default function GlobalDrugSearch({ placeholder }: { placeholder: string 
                 بحث
             </label>
             <input
-                className="peer block w-full rounded-md border border-border py-[9px] pl-10 text-sm outline-2 placeholder:text-muted-foreground font-cairo text-right pr-10"
+                className="peer block w-full rounded-lg border border-border bg-muted py-2.5 pr-10 pl-3 text-sm placeholder:text-muted-foreground font-cairo text-right transition focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50"
                 placeholder={placeholder}
                 onChange={(e) => {
                     handleSearch(e.target.value);
                 }}
                 defaultValue={searchParams?.get('query')?.toString()}
             />
-            <MagnifyingGlassIcon className="absolute right-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground peer-focus:text-foreground" />
+            <MagnifyingGlassIcon className="absolute right-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground peer-focus:text-primary transition-colors" />
         </div>
     );
 }

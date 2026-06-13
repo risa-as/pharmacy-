@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser } from '@/app/lib/sync-auth';
+import { logAudit, resolveUserName } from '@/app/lib/audit';
 
 async function validateBranchAccess(syncUser: any, branchId: string): Promise<NextResponse | null> {
     const userRole = syncUser.role;
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
             payments: Array<{
                 id: string;
                 saleId: string;
+                userId?: string | null;
                 amount: number;
                 method: string;
                 note?: string;
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
                     data: {
                         id: payment.id,
                         saleId: payment.saleId,
+                        userId: payment.userId || null,
                         amount: payment.amount,
                         method: (payment.method || "CASH") as any,
                         note: payment.note || null,
@@ -144,6 +147,15 @@ export async function POST(request: NextRequest) {
             });
 
             syncedIds.push(payment.id);
+            await logAudit({
+                userId: payment.userId ?? syncUser.id,
+                userName: payment.userId ? await resolveUserName(payment.userId) : (syncUser.name ?? 'Desktop Sync'),
+                action: 'DEBT_PAYMENT',
+                entity: 'DEBT',
+                entityId: payment.id,
+                details: JSON.stringify({ saleId: payment.saleId, amount: payment.amount, source: 'desktop-sync' }),
+                branchId,
+            });
         }
 
         console.log(`[Sync] Debt payments received: ${payments.length}, synced: ${syncedIds.length}`);

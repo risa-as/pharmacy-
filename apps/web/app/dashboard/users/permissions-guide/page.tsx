@@ -36,7 +36,7 @@ const categories: Category[] = [
         icon: ShoppingCart,
         color: "text-primary",
         bgColor: "bg-primary/10",
-        borderColor: "border-primary",
+        borderColor: "border-primary/20",
         permissions: [
             {
                 key: "canViewSales",
@@ -99,7 +99,7 @@ const categories: Category[] = [
         icon: Package,
         color: "text-success",
         bgColor: "bg-success/10",
-        borderColor: "border-emerald-200",
+        borderColor: "border-success/20",
         permissions: [
             {
                 key: "canViewInventory",
@@ -194,9 +194,9 @@ const categories: Category[] = [
         id: "reports",
         name: "التقارير",
         icon: BarChart3,
-        color: "text-cyan-700",
-        bgColor: "bg-cyan-50",
-        borderColor: "border-cyan-200",
+        color: "text-cyan-600",
+        bgColor: "bg-cyan-500/10",
+        borderColor: "border-cyan-500/20",
         permissions: [
             {
                 key: "canViewReports",
@@ -237,9 +237,9 @@ const categories: Category[] = [
         id: "patients",
         name: "العملاء",
         icon: UserCircle,
-        color: "text-pink-700",
-        bgColor: "bg-pink-50",
-        borderColor: "border-pink-200",
+        color: "text-pink-600",
+        bgColor: "bg-pink-500/10",
+        borderColor: "border-pink-500/20",
         permissions: [
             {
                 key: "canViewPatients",
@@ -291,7 +291,7 @@ const categories: Category[] = [
         icon: Settings,
         color: "text-destructive",
         bgColor: "bg-destructive/10",
-        borderColor: "border-red-200",
+        borderColor: "border-destructive/20",
         permissions: [
             {
                 key: "canManageUsers",
@@ -336,9 +336,9 @@ const categories: Category[] = [
         id: "debts",
         name: "الديون",
         icon: BookOpen,
-        color: "text-teal-700",
-        bgColor: "bg-teal-50",
-        borderColor: "border-teal-200",
+        color: "text-teal-600",
+        bgColor: "bg-teal-500/10",
+        borderColor: "border-teal-500/20",
         permissions: [
             {
                 key: "canViewDebts",
@@ -415,69 +415,77 @@ export default function PermissionsGuidePage() {
     if (!mounted) return null;
 
     return (
-        <div className="glass-card w-full max-w-5xl mx-auto p-6" dir="rtl">
-            {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
-                        <Shield className="w-6 h-6 text-primary-foreground" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-foreground">دليل الصلاحيات</h1>
-                        <p className="text-sm text-muted-foreground">مرجع شامل لنظام الصلاحيات وتقييد الوصول</p>
-                    </div>
+        <div className="space-y-6 w-full max-w-5xl mx-auto" dir="rtl">
+            {/* الرأس */}
+            <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-primary/70 flex items-center justify-center shadow-sm shrink-0">
+                    <Shield className="w-6 h-6 text-primary-foreground" />
+                </div>
+                <div>
+                    <h1 className="text-2xl font-bold font-cairo text-foreground">دليل الصلاحيات</h1>
+                    <p className="text-sm text-muted-foreground mt-0.5">مرجع شامل لتقييد وصول المستخدمين للميزات والصفحات</p>
                 </div>
             </div>
 
-            {/* Overview Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-card rounded-xl border border-border p-4 text-center">
-                    <div className="text-3xl font-black text-foreground">{totalPerms}</div>
-                    <div className="text-xs text-muted-foreground font-bold mt-1">إجمالي الصلاحيات</div>
-                </div>
-                <div className="bg-card rounded-xl border border-border p-4 text-center">
-                    <div className="text-3xl font-black text-primary">{pagePerms}</div>
-                    <div className="text-xs text-muted-foreground font-bold mt-1">تتحكم بصفحات</div>
-                </div>
-                <div className="bg-card rounded-xl border border-border p-4 text-center">
-                    <div className="text-3xl font-black text-success">{totalPerms - pagePerms}</div>
-                    <div className="text-xs text-muted-foreground font-bold mt-1">تتحكم بإجراءات</div>
-                </div>
-                <div className="bg-card rounded-xl border border-border p-4 text-center">
-                    <div className="text-3xl font-black text-info">{categories.length}</div>
-                    <div className="text-xs text-muted-foreground font-bold mt-1">فئات</div>
-                </div>
+            {/* بطاقات النظرة العامة */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                    { value: totalPerms, label: "إجمالي الصلاحيات", tone: "text-foreground" },
+                    { value: pagePerms, label: "تتحكم بصفحات", tone: "text-primary" },
+                    { value: totalPerms - pagePerms, label: "تتحكم بإجراءات", tone: "text-success" },
+                    { value: categories.length, label: "فئات", tone: "text-info" },
+                ].map((s) => (
+                    <div key={s.label} className="glass-card p-4 text-center">
+                        <div className={`text-3xl font-black ${s.tone}`}>{s.value}</div>
+                        <div className="text-xs text-muted-foreground font-bold mt-1">{s.label}</div>
+                    </div>
+                ))}
             </div>
 
-            {/* How it works */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-primary p-6 mb-8">
-                <h2 className="font-bold text-primary mb-3 flex items-center gap-2">
-                    <Info className="w-5 h-5" />
-                    كيف يعمل نظام الصلاحيات؟
+            {/* كيف تقيّد مستخدماً؟ — دليل عملي */}
+            <div className="glass-card border-primary/30 p-6">
+                <h2 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-primary" />
+                    كيف تقيّد مستخدماً بميزات محددة؟
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-card/80 rounded-xl p-4 border border-primary">
-                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-black flex items-center justify-center mb-2">1</div>
-                        <div className="font-bold text-foreground text-sm mb-1">الصلاحيات الافتراضية</div>
-                        <div className="text-xs text-muted-foreground">
-                            كل دور (مدير، صيدلي، كاشير) لديه صلاحيات افتراضية محددة مسبقاً
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    {[
+                        { n: 1, t: "افتح إدارة الصلاحيات", d: "من قائمة المستخدمين، اضغط تبويب «إدارة الصلاحيات»." },
+                        { n: 2, t: "اختر المستخدم", d: "حدّد الموظف الذي تريد تقييده من القائمة." },
+                        { n: 3, t: "أطفئ الميزات", d: "ألغِ تفعيل الصلاحيات التي تريد منعه منها (مثل: عرض الأرباح، حذف فاتورة)." },
+                        { n: 4, t: "احفظ — يُطبَّق فوراً", d: "تختفي الصفحات والأزرار ويُمنع الوصول تلقائياً." },
+                    ].map((step) => (
+                        <div key={step.n} className="rounded-xl bg-muted/50 border border-border p-4">
+                            <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-black flex items-center justify-center mb-2">{step.n}</div>
+                            <div className="font-bold text-foreground text-sm mb-1">{step.t}</div>
+                            <div className="text-xs text-muted-foreground leading-relaxed">{step.d}</div>
                         </div>
-                    </div>
-                    <div className="bg-card/80 rounded-xl p-4 border border-primary">
-                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-black flex items-center justify-center mb-2">2</div>
-                        <div className="font-bold text-foreground text-sm mb-1">التخصيص لكل مستخدم</div>
-                        <div className="text-xs text-muted-foreground">
-                            يمكن للمدير تعديل صلاحيات أي مستخدم بشكل فردي من صفحة إدارة الصلاحيات
-                        </div>
-                    </div>
-                    <div className="bg-card/80 rounded-xl p-4 border border-primary">
-                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-black flex items-center justify-center mb-2">3</div>
-                        <div className="font-bold text-foreground text-sm mb-1">التطبيق التلقائي</div>
-                        <div className="text-xs text-muted-foreground">
-                            النظام يمنع الوصول للصفحات ويخفي الروابط والأزرار تلقائياً حسب الصلاحية
-                        </div>
-                    </div>
+                    ))}
                 </div>
+                <a
+                    href="/dashboard/users/permissions"
+                    className="inline-flex items-center gap-2 mt-4 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+                >
+                    <Shield className="w-4 h-4" />
+                    اذهب لإدارة الصلاحيات الآن
+                </a>
+            </div>
+
+            {/* مفتاح الرموز */}
+            <div className="glass-card p-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                <span className="font-bold text-foreground">الرموز:</span>
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center"><Eye className="w-3.5 h-3.5 text-primary" /></span>
+                    صلاحية تتحكم بصفحة كاملة
+                </span>
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="w-6 h-6 rounded-md bg-muted flex items-center justify-center"><Lock className="w-3.5 h-3.5 text-muted-foreground" /></span>
+                    «إجراء فقط» — تتحكم بزر داخل صفحة
+                </span>
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-success" /> مفعّلة افتراضياً
+                    <XCircle className="w-4 h-4 text-muted-foreground mr-2" /> غير مفعّلة
+                </span>
             </div>
 
             {/* Role Filter */}
@@ -565,7 +573,7 @@ export default function PermissionsGuidePage() {
 
                             {/* Expanded Content */}
                             {isExpanded && (
-                                <div className="bg-card divide-y divide-gray-100">
+                                <div className="bg-card divide-y divide-border">
                                     {cat.permissions.map((perm: any) => {
                                         const isEnabled = selectedRole === "ALL" || roleDefaults[selectedRole]?.[perm.key];
 

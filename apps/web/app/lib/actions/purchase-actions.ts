@@ -7,6 +7,11 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
 
+// Smart-reorder tuning (matches /api/smart-order).
+const VELOCITY_WINDOW_DAYS = 30; // sales look-back window
+const LEAD_TIME_DAYS = 14;       // typical supplier lead time in Iraq
+const SAFETY_STOCK_DAYS = 7;     // safety buffer
+
 export async function getLowStockInventory(branchId?: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return [];
@@ -44,7 +49,6 @@ export async function getLowStockInventory(branchId?: string) {
             minStock: inv.minStock,
             maxStock: inv.maxStock,
             cost: inv.cost,
-            suggestedQty: Math.max(0, inv.maxStock - currentStock),
             branchId: inv.branchId,
             branchName: inv.branch.name
         };
@@ -62,7 +66,44 @@ export async function getLowStockInventory(branchId?: string) {
         p.items.forEach((i: any) => pendingDrugIds.add(i.drugId));
     });
 
-    return lowStockItems.filter((item: any) => !pendingDrugIds.has(item.drugId));
+    const filtered = lowStockItems.filter((item: any) => !pendingDrugIds.has(item.drugId));
+    if (filtered.length === 0) return [];
+
+    // 5. Compute sales velocity per (drug, branch) so the suggested quantity is
+    //    demand-driven (avg daily sales × lead+safety) instead of a flat top-up.
+    //    Items with no recent sales fall back to "fill to max stock".
+    const neededDrugIds = filtered.map((i: any) => i.drugId);
+    const velocityStart = new Date();
+    velocityStart.setDate(velocityStart.getDate() - VELOCITY_WINDOW_DAYS);
+
+    const recentSaleItems = await prisma.saleItem.findMany({
+        where: {
+            drugId: { in: neededDrugIds },
+            sale: { createdAt: { gte: velocityStart }, ...(branchId ? { branchId } : {}) },
+        },
+        select: { drugId: true, quantity: true, sale: { select: { branchId: true } } },
+    });
+
+    const soldByKey = new Map<string, number>();
+    for (const it of recentSaleItems) {
+        const key = `${it.drugId}:${(it as any).sale?.branchId ?? ''}`;
+        soldByKey.set(key, (soldByKey.get(key) || 0) + it.quantity);
+    }
+
+    return filtered
+        .map((item: any) => {
+            const totalSold = soldByKey.get(`${item.drugId}:${item.branchId}`) || 0;
+            const averageDailySales = totalSold / VELOCITY_WINDOW_DAYS;
+            const velocityQty = Math.ceil(averageDailySales * (LEAD_TIME_DAYS + SAFETY_STOCK_DAYS));
+            const fallbackQty = Math.max(0, item.maxStock - item.currentStock);
+            return {
+                ...item,
+                suggestedQty: Math.max(1, averageDailySales > 0 ? velocityQty : fallbackQty),
+                averageDailySales: Math.round(averageDailySales * 100) / 100,
+                totalSoldLast30Days: totalSold,
+            };
+        })
+        .sort((a: any, b: any) => a.currentStock - b.currentStock);
 }
 
 export async function createSmartPurchase(branchId: string, supplierId: string, items: any[]) {

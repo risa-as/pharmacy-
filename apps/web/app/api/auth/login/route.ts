@@ -5,6 +5,7 @@ import { prisma } from "@/app/lib/prisma";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { enforceRateLimit } from "@/app/lib/rate-limit";
+import { getSubscriptionState } from "@/app/lib/subscription-state";
 
 export async function POST(request: Request) {
   try {
@@ -42,7 +43,30 @@ export async function POST(request: Request) {
       );
     }
 
+    // Reject soft-disabled (departed) employees.
+    if ((user as any).isActive === false) {
+      return NextResponse.json(
+        { message: "تم تعطيل هذا الحساب. يرجى مراجعة مدير الصيدلية." },
+        { status: 403 },
+      );
+    }
+
     const organizationId = user.branch?.organizationId ?? null;
+
+    // Block login when the organisation is suspended or past its grace window.
+    // SUPER_ADMIN has no organization and is never blocked here.
+    if (organizationId && user.role !== "SUPER_ADMIN") {
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { isSuspended: true, subscriptionEndsAt: true },
+      });
+      if (org && getSubscriptionState(org).state === "suspended") {
+        return NextResponse.json(
+          { message: "تم تعليق اشتراك مؤسستكم. يرجى تجديد الاشتراك للمتابعة." },
+          { status: 403 },
+        );
+      }
+    }
 
     if (!process.env.AUTH_SECRET) {
       console.error("CRITICAL: AUTH_SECRET env var is not set");
@@ -58,7 +82,9 @@ export async function POST(request: Request) {
     })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
-      .setExpirationTime("10d")
+      // 7d window; the mobile app calls /api/auth/refresh on startup to renew it
+      // and re-validate the account (revocation), so active users stay logged in.
+      .setExpirationTime("7d")
       .sign(secret);
 
     return NextResponse.json({

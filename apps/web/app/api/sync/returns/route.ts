@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser } from '@/app/lib/sync-auth';
+import { logAudit, resolveUserName } from '@/app/lib/audit';
 import { z } from "zod";
 
 
@@ -11,6 +12,7 @@ const SyncReturnSchema = z.object({
     id: z.string(),
     saleId: z.string(),
     safeId: z.string().nullable().optional(),
+    userId: z.string().nullable().optional(),
     total: z.number(),
     createdAt: z.string().or(z.date()),
     notes: z.string().nullable().optional(),
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
                             saleId: ret.saleId,
                             branchId: branchId,
                             safeId: ret.safeId || null,
+                            userId: ret.userId || null,
                             total: ret.total,
                             createdAt: new Date(ret.createdAt),
                             notes: ret.notes || null,
@@ -118,6 +121,15 @@ export async function POST(req: NextRequest) {
                 });
 
                 processedIds.push(ret.id);
+                await logAudit({
+                    userId: ret.userId ?? syncUser.id,
+                    userName: ret.userId ? await resolveUserName(ret.userId) : (syncUser.name ?? 'Desktop Sync'),
+                    action: 'RETURN',
+                    entity: 'SALE',
+                    entityId: ret.saleId,
+                    details: JSON.stringify({ returnId: ret.id, total: ret.total, source: 'desktop-sync' }),
+                    branchId,
+                });
             } catch (err) {
                 console.error(`Failed to sync sale return ${ret.id}:`, err);
             }

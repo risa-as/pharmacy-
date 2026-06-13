@@ -1,6 +1,15 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { PlusIcon, FileSpreadsheet } from "lucide-react";
+import {
+  PlusIcon,
+  FileSpreadsheet,
+  Pill,
+  Globe,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  PackageSearch,
+} from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
 import { UpdateDrug, DeleteDrug } from "@/app/ui/drugs/buttons";
@@ -11,224 +20,368 @@ import { NextResponse } from "next/server";
 
 const ITEMS_PER_PAGE = 50;
 
-async function getDrugs(query: string, currentPage: number, organizationId: string | undefined) {
-    const searchFilter = query ? {
+async function getDrugs(
+  query: string,
+  currentPage: number,
+  organizationId: string | undefined,
+) {
+  const orgVisible = {
+    OR: [
+      { organizationId: null },
+      ...(organizationId ? [{ organizationId }] : []),
+    ],
+  };
+
+  const searchFilter = query
+    ? {
         OR: [
-            { tradeName: { contains: query } },
-            { scientificName: { contains: query } },
-            { barcode: { contains: query } },
+          { tradeName: { contains: query } },
+          { scientificName: { contains: query } },
+          { barcode: { contains: query } },
         ],
-    } : {};
+      }
+    : {};
 
-    const where = {
-        AND: [
-            {
-                OR: [
-                    { organizationId: null },
-                    ...(organizationId ? [{ organizationId }] : [])
-                ]
-            },
-            searchFilter
-        ]
-    };
+  const where = { AND: [orgVisible, searchFilter] };
 
-    const [drugs, total] = await Promise.all([
-        prisma.globalDrug.findMany({
-            where,
-            orderBy: { tradeName: 'asc' },
-            skip: (currentPage - 1) * ITEMS_PER_PAGE,
-            take: ITEMS_PER_PAGE,
-        }),
-        prisma.globalDrug.count({ where })
-    ]);
+  const [drugs, total, totalCatalog, customCount] = await Promise.all([
+    prisma.globalDrug.findMany({
+      where,
+      orderBy: { tradeName: "asc" },
+      skip: (currentPage - 1) * ITEMS_PER_PAGE,
+      take: ITEMS_PER_PAGE,
+    }),
+    prisma.globalDrug.count({ where }),
+    prisma.globalDrug.count({ where: orgVisible }),
+    organizationId
+      ? prisma.globalDrug.count({ where: { organizationId } })
+      : Promise.resolve(0),
+  ]);
 
-    return { drugs, total };
+  return { drugs, total, totalCatalog, customCount };
+}
+
+// Deterministic accent colour per drug so the avatar fallbacks aren't all identical.
+const AVATAR_COLORS = [
+  "bg-blue-500/10 text-blue-500",
+  "bg-emerald-500/10 text-emerald-500",
+  "bg-violet-500/10 text-violet-500",
+  "bg-amber-500/10 text-amber-600",
+  "bg-rose-500/10 text-rose-500",
+  "bg-cyan-500/10 text-cyan-500",
+];
+function avatarColor(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function StatChip({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  tone: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+      <div
+        className={`flex h-9 w-9 items-center justify-center rounded-lg ${tone}`}
+      >
+        {icon}
+      </div>
+      <div>
+        <div className="text-lg font-bold leading-none text-foreground font-mono">
+          {value.toLocaleString("en-US")}
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">{label}</div>
+      </div>
+    </div>
+  );
 }
 
 export default async function Page({
-    searchParams,
+  searchParams,
 }: {
-    searchParams?: {
-        query?: string;
-        page?: string;
-    };
+  searchParams?: {
+    query?: string;
+    page?: string;
+  };
 }) {
-    const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) redirect("/login");
+  const tenantCtx = await getTenantContext();
+  if (tenantCtx instanceof NextResponse) redirect("/login");
 
-    const organizationId = tenantCtx.organizationId;
-    const isSuperAdmin = tenantCtx.user.role === 'SUPER_ADMIN';
-    const query = searchParams?.query || "";
-    const currentPage = Number(searchParams?.page) || 1;
-    const { drugs, total } = await getDrugs(query, currentPage, organizationId);
-    const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
+  const organizationId = tenantCtx.organizationId;
+  const isSuperAdmin = tenantCtx.user.role === "SUPER_ADMIN";
+  const query = searchParams?.query || "";
+  const currentPage = Number(searchParams?.page) || 1;
+  const { drugs, total, totalCatalog, customCount } = await getDrugs(
+    query,
+    currentPage,
+    organizationId,
+  );
+  const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
+  const globalCount = Math.max(0, totalCatalog - customCount);
 
+  const pageHref = (p: number) =>
+    `/dashboard/drugs?page=${p}${query ? `&query=${encodeURIComponent(query)}` : ""}`;
 
-
-    return (
-        <div className="glass-card w-full p-6" suppressHydrationWarning>
-            <div className="flex w-full items-center justify-between mb-4">
-                <h1 className="text-2xl font-bold font-cairo text-foreground">قاعدة الأدوية</h1>
-                <div className="flex items-center gap-2">
-                    {/* Moved from sidebar per MVP navigation audit */}
-                    <Link
-                        href="/dashboard/drugs/import"
-                        className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold border border-border/60 bg-card hover:bg-muted text-foreground transition-colors"
-                    >
-                        <FileSpreadsheet className="h-4 w-4" />
-                        <span className="hidden md:block">استيراد أدوية</span>
-                    </Link>
-                    <Link href="/dashboard/drugs/create" className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">
-                        <PlusIcon className="h-4 w-4" />
-                        <span className="hidden md:block">إضافة دواء جديد</span>
-                    </Link>
-                </div>
-            </div>
-
-            <div className="flex w-full max-w-md mb-8">
-                <GlobalDrugSearch placeholder="ابحث عن دواء بالاسم التجاري أو المادة الفعالة أو الباركود..." />
-            </div>
-
-            <div className="mt-4 flow-root">
-                <div className="overflow-x-auto">
-                    <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
-                        <table className="min-w-full text-foreground table-fixed">
-                            <thead className="bg-muted text-right text-sm font-semibold text-foreground border-b border-border">
-                                <tr>
-                                    <th scope="col" className="px-4 py-4 font-cairo text-right w-16">
-                                        #
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 font-cairo text-right w-36">
-                                        الباركود
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 font-cairo text-right w-1/4">
-                                        الاسم التجاري
-                                    </th>
-                                    <th scope="col" className="px-3 py-5 font-bold w-1/4">
-                                        الاسم العلمي
-                                    </th>
-                                    <th scope="col" className="px-3 py-5 font-bold">
-                                        المصدر
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 font-cairo text-right">
-                                        الحالة
-                                    </th>
-                                    <th scope="col" className="px-3 py-5 font-bold">
-                                        الإجراءات
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 bg-card">
-                                {drugs.map((drug: any, index: any) => (
-                                    <tr
-                                        key={drug.id}
-                                        className="w-full border-b text-sm last-of-type:border-none hover:bg-muted transition-colors"
-                                    >
-                                        <td className="px-4 py-4 font-mono text-muted-foreground text-right">
-                                            {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4 font-mono text-muted-foreground text-right" dir="ltr">
-                                            {drug.barcode}
-                                        </td>
-                                        <td className="px-6 py-4 font-bold text-foreground whitespace-normal break-words">
-                                            {drug.tradeName}
-                                        </td>
-                                        <td className="px-3 py-4 text-muted-foreground whitespace-normal break-words">
-                                            {drug.scientificName}
-                                        </td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-muted-foreground">
-                                            {drug.origin || '-'}
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-right">
-                                            <div className="flex flex-col gap-1 items-start">
-                                                {drug.isActive ? (
-                                                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-1 text-xs font-medium text-success ring-1 ring-inset ring-green-600/20">نشط</span>
-                                                ) : (
-                                                    <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive ring-1 ring-inset ring-red-600/20">غير نشط</span>
-                                                )}
-                                                {!drug.organizationId && (
-                                                    <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500 ring-1 ring-inset ring-blue-500/20">عالمي</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-right">
-                                            <div className="flex gap-2">
-                                                {(isSuperAdmin || drug.organizationId === organizationId) ? (
-                                                    <>
-                                                        <UpdateDrug id={drug.id} />
-                                                        <DeleteDrug id={drug.id} />
-                                                    </>
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground py-2 px-1">للقراءة فقط</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {drugs.length === 0 && (
-                                    <tr>
-                                        <td colSpan={7} className="px-6 py-10 text-center text-muted-foreground">
-                                            لا توجد أدوية مطابقة للبحث.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-
-                        {/* Pagination Controls */}
-                        {totalPages > 1 && (
-                            <div className="flex items-center justify-between border-t border-border bg-card px-4 py-3 sm:px-6 mt-auto">
-                                <div className="flex flex-1 justify-between sm:hidden">
-                                    <Link
-                                        href={`/dashboard/drugs?page=${currentPage - 1}${query ? `&query=${query}` : ''}`}
-                                        className={`relative inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-sm font-medium ${currentPage <= 1 ? 'pointer-events-none text-muted-foreground/40' : 'text-foreground hover:bg-muted'}`}
-                                    >
-                                        السابق
-                                    </Link>
-                                    <Link
-                                        href={`/dashboard/drugs?page=${currentPage + 1}${query ? `&query=${query}` : ''}`}
-                                        className={`relative ml-3 inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-sm font-medium ${currentPage >= totalPages ? 'pointer-events-none text-muted-foreground/40' : 'text-foreground hover:bg-muted'}`}
-                                    >
-                                        التالي
-                                    </Link>
-                                </div>
-                                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                                    <div>
-                                        <p className="text-sm text-foreground font-cairo">
-                                            إظهار <span className="font-medium font-mono">{((currentPage - 1) * ITEMS_PER_PAGE) + 1}</span> إلى <span className="font-medium font-mono">{Math.min(currentPage * ITEMS_PER_PAGE, total)}</span> من أصل <span className="font-medium font-mono">{total}</span> دواء
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination" dir="ltr">
-                                            <Link
-                                                href={`/dashboard/drugs?page=${currentPage - 1}${query ? `&query=${query}` : ''}`}
-                                                className={`relative inline-flex items-center rounded-l-md px-2 py-2 text-muted-foreground ring-1 ring-inset ring-gray-300 hover:bg-muted focus:z-20 focus:outline-offset-0 ${currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}`}
-                                            >
-                                                <span className="sr-only">Previous</span>
-                                                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                                    <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
-                                                </svg>
-                                            </Link>
-                                            <span className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-foreground ring-1 ring-inset ring-gray-300 focus:outline-offset-0">
-                                                صفحة {currentPage} من {totalPages}
-                                            </span>
-                                            <Link
-                                                href={`/dashboard/drugs?page=${currentPage + 1}${query ? `&query=${query}` : ''}`}
-                                                className={`relative inline-flex items-center rounded-r-md px-2 py-2 text-muted-foreground ring-1 ring-inset ring-gray-300 hover:bg-muted focus:z-20 focus:outline-offset-0 ${currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}`}
-                                            >
-                                                <span className="sr-only">Next</span>
-                                                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                                    <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                                                </svg>
-                                            </Link>
-                                        </nav>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+  return (
+    <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>
+      {/* Header */}
+      <div className="flex w-full flex-wrap items-start justify-between gap-4 mb-5">
+        <div>
+          <h1 className="text-2xl font-bold font-cairo text-foreground">
+            قاعدة الأدوية
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            إدارة كتالوج الأدوية العالمي والمخصّص لصيدليتك.
+          </p>
         </div>
-    );
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/drugs/import"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border/60 bg-card hover:bg-muted text-foreground transition-colors"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            <span className="hidden md:block">استيراد أدوية</span>
+          </Link>
+          <Link
+            href="/dashboard/drugs/create"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors shadow-sm"
+          >
+            <PlusIcon className="h-4 w-4" />
+            <span className="hidden md:block">إضافة دواء جديد</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <StatChip
+          icon={<Pill className="h-5 w-5" />}
+          label="إجمالي الأدوية"
+          value={totalCatalog}
+          tone="bg-primary/10 text-primary"
+        />
+        <StatChip
+          icon={<Building2 className="h-5 w-5" />}
+          label="مخصّصة لصيدليتك"
+          value={customCount}
+          tone="bg-emerald-500/10 text-emerald-500"
+        />
+        <StatChip
+          icon={<Globe className="h-5 w-5" />}
+          label="أدوية عالمية"
+          value={globalCount}
+          tone="bg-blue-500/10 text-blue-500"
+        />
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="w-full max-w-md">
+          <GlobalDrugSearch placeholder="ابحث بالاسم التجاري أو المادة الفعالة أو الباركود..." />
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {query ? (
+            <>
+              نتائج البحث:{" "}
+              <span className="font-bold text-foreground">
+                {total.toLocaleString("en-US")}
+              </span>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-foreground">
+            <thead className="bg-muted text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+              <tr>
+                <th scope="col" className="px-4 py-3 font-cairo w-14">
+                  #
+                </th>
+                <th scope="col" className="px-4 py-3 font-cairo">
+                  الدواء
+                </th>
+                <th scope="col" className="px-4 py-3 font-cairo w-40">
+                  الباركود
+                </th>
+                <th scope="col" className="px-4 py-3 font-cairo w-32">
+                  المصدر
+                </th>
+                <th scope="col" className="px-4 py-3 font-cairo w-32">
+                  الحالة
+                </th>
+                <th scope="col" className="px-4 py-3 font-cairo w-24">
+                  الإجراءات
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border bg-card">
+              {drugs.map((drug: any, index: number) => (
+                <tr
+                  key={drug.id}
+                  className="text-sm hover:bg-muted/50 transition-colors"
+                >
+                  <td className="px-4 py-3 font-mono text-right text-muted-foreground">
+                    {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {drug.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={drug.image}
+                          alt=""
+                          className="h-9 w-9 rounded-lg object-cover shrink-0 border border-border"
+                        />
+                      ) : (
+                        <div
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold shrink-0 ${avatarColor(drug.tradeName || drug.id)}`}
+                        >
+                          {(drug.tradeName || "?").trim().charAt(0)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-bold text-right text-foreground break-words">
+                          {drug.tradeName}
+                        </div>
+                        {drug.scientificName && (
+                          <div className="text-xs text-right text-muted-foreground break-words">
+                            {drug.scientificName}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td
+                    className="px-4 py-3 font-mono text-muted-foreground whitespace-nowrap text-right"
+                    dir="ltr"
+                  >
+                    {drug.barcode || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right text-muted-foreground whitespace-nowrap">
+                    {drug.origin || "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {drug.isActive ? (
+                        <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success ring-1 ring-inset ring-success/20">
+                          نشط
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive ring-1 ring-inset ring-destructive/20">
+                          غير نشط
+                        </span>
+                      )}
+                      {drug.organizationId ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 ring-1 ring-inset ring-emerald-500/20">
+                          خاص
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-500 ring-1 ring-inset ring-blue-500/20">
+                          عالمي
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      {isSuperAdmin ||
+                      drug.organizationId === organizationId ? (
+                        <>
+                          <UpdateDrug id={drug.id} />
+                          <DeleteDrug id={drug.id} />
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground py-2">
+                          للقراءة فقط
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {drugs.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-16 text-center">
+                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                      <PackageSearch className="h-10 w-10 opacity-40" />
+                      <p className="text-sm">
+                        {query
+                          ? "لا توجد أدوية مطابقة للبحث."
+                          : "لا توجد أدوية بعد."}
+                      </p>
+                      {query ? (
+                        <Link
+                          href="/dashboard/drugs"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          مسح البحث وإظهار الكل
+                        </Link>
+                      ) : (
+                        <Link
+                          href="/dashboard/drugs/create"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          إضافة أول دواء
+                        </Link>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border bg-card px-4 py-3">
+            <p className="text-sm text-muted-foreground hidden sm:block">
+              إظهار{" "}
+              <span className="font-medium font-mono text-foreground">
+                {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+              </span>{" "}
+              –{" "}
+              <span className="font-medium font-mono text-foreground">
+                {Math.min(currentPage * ITEMS_PER_PAGE, total)}
+              </span>{" "}
+              من{" "}
+              <span className="font-medium font-mono text-foreground">
+                {total.toLocaleString("en-US")}
+              </span>
+            </p>
+            <div className="flex items-center gap-2">
+              <Link
+                href={pageHref(currentPage - 1)}
+                aria-disabled={currentPage <= 1}
+                className={`inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border bg-card transition-colors ${currentPage <= 1 ? "pointer-events-none opacity-40" : "hover:bg-muted text-foreground"}`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+              <span className="text-sm font-medium text-foreground px-2">
+                صفحة {currentPage} من {totalPages}
+              </span>
+              <Link
+                href={pageHref(currentPage + 1)}
+                aria-disabled={currentPage >= totalPages}
+                className={`inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border bg-card transition-colors ${currentPage >= totalPages ? "pointer-events-none opacity-40" : "hover:bg-muted text-foreground"}`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

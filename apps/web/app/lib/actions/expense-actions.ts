@@ -6,7 +6,7 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
 
-export async function getExpenses() {
+export async function getExpenses(branchId?: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return [];
 
@@ -18,6 +18,9 @@ export async function getExpenses() {
         : organizationId
         ? { branch: { organizationId } }
         : {};
+
+    // Optional branch narrowing (org admins filtering a specific branch)
+    if (branchId) where.branchId = branchId;
 
     return await prisma.expense.findMany({
         where,

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma"; // Adjust import if needed
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { resolveTenantBranchIds } from "@/app/lib/backup-scope";
 
 export async function GET(req: Request) {
     try {
@@ -12,17 +13,13 @@ export async function GET(req: Request) {
             return NextResponse.json({ success: false, message: "ليس لديك صلاحية للنسخ الاحتياطي." }, { status: 403 });
         }
 
-        // Use default branch for now, matching the upload logic
-        const branchId = "default";
+        // Scope backups to the caller's tenant — never expose other organizations' backups.
+        const branchIds = await resolveTenantBranchIds(tenantCtx);
 
         const backups = await prisma.backup.findMany({
-            where: {
-                // branchId: branchId 
-            },
-            orderBy: {
-                createdAt: 'desc'
-            },
-            take: 20 // Limit to last 20 backups
+            where: branchIds ? { branchId: { in: branchIds } } : {},
+            orderBy: { createdAt: 'desc' },
+            take: 20, // Limit to last 20 backups
         });
 
         // Map to format expected by UI

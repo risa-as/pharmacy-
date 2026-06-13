@@ -9,7 +9,28 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/app/lib/prisma';
+import { getSubscriptionState } from '@/app/lib/subscription-state';
 import crypto from 'crypto';
+
+/**
+ * Returns a 403 NextResponse when the organisation is suspended or past its
+ * grace window, otherwise null. Lets a suspended tenant's desktop be cut off
+ * from sync without changing the (long-lived, backward-compatible) HMAC token.
+ */
+async function assertOrgActive(organizationId?: string): Promise<NextResponse | null> {
+    if (!organizationId) return null; // SUPER_ADMIN / unknown — handled elsewhere
+    const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { isSuspended: true, subscriptionEndsAt: true },
+    });
+    if (org && getSubscriptionState(org).state === 'suspended') {
+        return NextResponse.json(
+            { error: 'تم تعليق اشتراك مؤسستكم. المزامنة متوقفة حتى تجديد الاشتراك.', code: 'ORG_SUSPENDED' },
+            { status: 403 },
+        );
+    }
+    return null;
+}
 
 export interface SyncUser {
     id: string;
@@ -57,6 +78,10 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
             if (!verifySyncToken(syncToken, userId, branchId, orgId, role)) {
                 return NextResponse.json({ error: 'Invalid sync token' }, { status: 401 });
             }
+            if (role !== 'SUPER_ADMIN') {
+                const suspended = await assertOrgActive(orgId);
+                if (suspended) return suspended;
+            }
             return { id: userId, role, branchId, organizationId: orgId };
         } catch {
             return NextResponse.json({ error: 'Sync token validation failed' }, { status: 401 });
@@ -73,6 +98,8 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
         if (!license) {
             return NextResponse.json({ error: 'Invalid or inactive device license' }, { status: 401 });
         }
+        const suspended = await assertOrgActive(license.branch.organizationId);
+        if (suspended) return suspended;
         return {
             id: license.id,
             role: 'DEVICE',

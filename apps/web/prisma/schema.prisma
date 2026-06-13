@@ -80,6 +80,7 @@ model User {
   permissions   String? // JSON string of granular permissions
   expoPushToken String? // Expo push token for notifications
   pushEnabled   Boolean     @default(true)
+  isActive      Boolean     @default(true) // Soft-disable a departed employee without deleting (preserves sales/shift FKs)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   branch        Branch?     @relation(fields: [branchId], references: [id])
@@ -305,6 +306,7 @@ model SaleReturn {
   saleId       String
   branchId     String
   safeId       String? // The safe used to refund the customer, if CASH
+  userId       String? // Cashier who processed the return (for audit attribution)
   total        Float
   createdAt    DateTime @default(now())
   notes        String?
@@ -609,6 +611,7 @@ model Backup {
 model DebtPayment {
   id        String        @id @default(uuid())
   saleId    String
+  userId    String? // Cashier who recorded the payment (for audit attribution)
   amount    Float
   method    PaymentMethod @default(CASH)
   note      String?
@@ -616,6 +619,23 @@ model DebtPayment {
   sale      Sale          @relation(fields: [saleId], references: [id])
 
   @@index([saleId])
+}
+
+// ==================== إعدادات المنصة (سجل واحد) ====================
+// Platform-wide settings managed by SUPER_ADMIN and shown to all tenants
+// (e.g. the SaaS company's bank-transfer details on the billing page).
+model PlatformSettings {
+  id             String   @id @default("singleton")
+  bankName       String?
+  accountHolder  String?
+  accountNumber  String?
+  superKeyPhone  String? // Super Key wallet phone (linked to the same Rafidain account)
+  zainCashNumber String? // ZainCash account number / phone (separate payment method)
+  supportPhone   String? // WhatsApp number for receipts
+  supportEmail   String?
+  workingHours   String? // e.g. "9 صباحاً – 5 مساءً"
+  transferNote   String? // optional extra instructions shown under the account
+  updatedAt      DateTime @updatedAt
 }
 
 // ==================== التفاعلات الدوائية ====================

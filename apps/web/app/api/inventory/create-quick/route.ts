@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
+import { logAudit, resolveUserName } from "@/app/lib/audit";
 
 type AckStatus = "processed" | "duplicate" | "noop";
 
@@ -201,6 +202,19 @@ export async function POST(req: Request) {
 
             return { drug, inventory, ackStatus };
         });
+
+        // Audit the new product/stock, attributed to the acting (logged-in) user.
+        if (result.ackStatus !== "noop") {
+            await logAudit({
+                userId: syncUser.id,
+                userName: syncUser.name ?? await resolveUserName(syncUser.id),
+                action: "CREATE",
+                entity: "INVENTORY",
+                entityId: result.inventory?.id,
+                details: JSON.stringify({ drug: tradeName, barcode, quantity: parsedQuantity, source: "desktop-sync" }),
+                branchId,
+            });
+        }
 
         return NextResponse.json({
             success: true,

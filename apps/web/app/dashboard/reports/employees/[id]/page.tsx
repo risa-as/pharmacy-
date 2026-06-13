@@ -1,8 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { User, DollarSign, Calendar, TrendingUp, ShoppingBag } from "lucide-react";
-import { notFound } from "next/navigation";
+import { User, DollarSign, Calendar, TrendingUp, ShoppingBag, Calculator, ArrowRight, Building2 } from "lucide-react";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -18,7 +19,7 @@ import RecentSalesTable from "@/app/ui/dashboard/reports/recent-sales-table";
 
 export default async function EmployeeDetailPage({ params }: { params: { id: string } }) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, tenantWhere } = tenantCtx;
 
     const employee = await prisma.user.findFirst({
@@ -75,79 +76,92 @@ export default async function EmployeeDetailPage({ params }: { params: { id: str
     // Recent Activity (Top 20)
     const recentActivity = sales.slice(0, 20);
 
+    const fmt = (v: number) => Math.round(v).toLocaleString("en-US");
+
+    const statCards = [
+        { label: "إجمالي المبيعات (د.ع)", value: fmt(totalSales), icon: DollarSign, tone: "text-success", bg: "bg-success/10" },
+        { label: "عدد المعاملات", value: String(saleCount), icon: ShoppingBag, tone: "text-primary", bg: "bg-primary/10" },
+        { label: "متوسط قيمة السلة (د.ع)", value: fmt(averageSale), icon: Calculator, tone: "text-info", bg: "bg-info/10" },
+    ];
+
     return (
         <div className="space-y-6" dir="rtl">
-            {/* Header */}
-            <div className="flex items-center gap-4 bg-card p-6 rounded-xl border border-border shadow-sm">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-2xl">
-                    {employee.name?.charAt(0) || 'U'}
-                </div>
-                <div>
-                    <h1 className="text-2xl font-bold text-foreground">{employee.name}</h1>
-                    <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-                        <span className="flex items-center gap-1">
-                            <User className="w-4 h-4" />
-                            {employee.role}
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <ShoppingBag className="w-4 h-4" />
-                            {employee.branch?.name || 'غير محدد'}
-                        </span>
+            {/* الرأس */}
+            <div className="flex items-center gap-3">
+                <Link href="/dashboard/reports/employees" className="p-2 rounded-lg border border-border hover:bg-muted transition-colors shrink-0">
+                    <ArrowRight className="w-5 h-5 text-muted-foreground" />
+                </Link>
+                <div className="glass-card flex items-center gap-4 p-4 flex-1">
+                    <div className="w-14 h-14 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl shadow-sm shrink-0">
+                        {employee.name?.charAt(0) || 'U'}
+                    </div>
+                    <div className="min-w-0">
+                        <h1 className="text-xl font-bold text-foreground truncate">{employee.name}</h1>
+                        <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mt-1">
+                            <span className="flex items-center gap-1">
+                                <User className="w-4 h-4" />
+                                {employee.role}
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <Building2 className="w-4 h-4" />
+                                {employee.branch?.name || 'غير محدد'}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-card p-6 rounded-xl border border-border shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-muted-foreground text-sm mb-1">إجمالي المبيعات (30 يوم)</p>
-                        <h3 className="text-3xl font-bold text-foreground">{totalSales.toLocaleString()}</h3>
-                    </div>
-                    <div className="w-12 h-12 bg-success/10 rounded-full flex items-center justify-center text-success">
-                        <DollarSign className="w-6 h-6" />
-                    </div>
-                </div>
-                <div className="bg-card p-6 rounded-xl border border-border shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-muted-foreground text-sm mb-1">عدد المعاملات</p>
-                        <h3 className="text-3xl font-bold text-foreground">{saleCount}</h3>
-                    </div>
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary">
-                        <ShoppingBag className="w-6 h-6" />
-                    </div>
-                </div>
-                <div className="bg-card p-6 rounded-xl border border-border shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-muted-foreground text-sm mb-1">متوسط قيمة السلة</p>
-                        <h3 className="text-3xl font-bold text-foreground">{averageSale.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
-                    </div>
-                    <div className="w-12 h-12 bg-info rounded-full flex items-center justify-center text-info">
-                        <TrendingUp className="w-6 h-6" />
-                    </div>
-                </div>
+            {/* بطاقات الإحصائيات (آخر 30 يوم) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {statCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                        <div key={card.label} className="glass-card p-5 flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}>
+                                <Icon className={`w-6 h-6 ${card.tone}`} />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-sm text-muted-foreground truncate">{card.label}</p>
+                                <p className={`text-2xl font-bold ${card.tone}`} dir="ltr">{card.value}</p>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
-            {/* Chart Section */}
-            <div className="bg-card p-6 rounded-xl border border-border shadow-sm">
-                <h3 className="text-lg font-bold text-foreground mb-6 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-muted-foreground" />
-                    أداء المبيعات اليومي
-                </h3>
+            {/* المخطط */}
+            <div className="glass-card p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-bold text-foreground flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-primary" />
+                        أداء المبيعات اليومي
+                    </h3>
+                    <span className="text-xs text-muted-foreground">آخر 30 يوماً</span>
+                </div>
                 <div className="h-[300px] w-full">
                     <EmployeeSalesChart data={chartData} />
                 </div>
             </div>
 
-            {/* Recent Activity Table */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-border">
-                    <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-muted-foreground" />
-                        آخر العمليات
-                    </h3>
+            {/* آخر العمليات */}
+            <div className="glass-card overflow-hidden">
+                <div className="px-6 py-4 border-b border-border flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <h3 className="font-bold text-foreground">آخر العمليات</h3>
+                    <span className="mr-auto text-xs text-muted-foreground">أحدث {recentActivity.length}</span>
                 </div>
-                <RecentSalesTable sales={recentActivity} />
+                {recentActivity.length === 0 ? (
+                    <div className="py-16 text-center">
+                        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <ShoppingBag className="w-8 h-8 text-muted-foreground opacity-50" />
+                        </div>
+                        <p className="text-foreground font-medium">لا توجد عمليات خلال آخر 30 يوماً</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <RecentSalesTable sales={recentActivity} />
+                    </div>
+                )}
             </div>
         </div>
     );

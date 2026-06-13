@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { generateSyncToken } from '@/app/lib/sync-token';
 import { enforceRateLimit } from '@/app/lib/rate-limit';
+import { getSubscriptionState } from '@/app/lib/subscription-state';
 
 export async function POST(req: Request) {
     try {
@@ -32,7 +33,29 @@ export async function POST(req: Request) {
             return NextResponse.json(INVALID_CREDENTIALS, { status: 401 });
         }
 
+        // Reject soft-disabled (departed) employees.
+        if ((user as any).isActive === false) {
+            return NextResponse.json(
+                { success: false, error: 'تم تعطيل هذا الحساب. يرجى مراجعة مدير الصيدلية.' },
+                { status: 403 },
+            );
+        }
+
         const orgId = user.branch?.organizationId || '';
+
+        // Block desktop login when the organisation is suspended / past grace.
+        if (orgId && user.role !== 'SUPER_ADMIN') {
+            const org = await prisma.organization.findUnique({
+                where: { id: orgId },
+                select: { isSuspended: true, subscriptionEndsAt: true },
+            });
+            if (org && getSubscriptionState(org).state === 'suspended') {
+                return NextResponse.json(
+                    { success: false, error: 'تم تعليق اشتراك مؤسستكم. يرجى تجديد الاشتراك للمتابعة.' },
+                    { status: 403 },
+                );
+            }
+        }
         const syncToken = generateSyncToken(user.id, user.branchId || '', orgId, user.role);
 
         const { password: _, branch: __, ...userWithoutPassword } = user as any;

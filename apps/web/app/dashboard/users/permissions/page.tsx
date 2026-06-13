@@ -6,6 +6,7 @@ import PermissionsEditor from '@/app/ui/users/permissions-editor';
 import { redirect } from 'next/navigation';
 import { requireFeature } from '@/app/lib/page-guards';
 import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
+import { ShieldCheck } from 'lucide-react';
 
 export default async function PermissionsPage() {
     const session = await auth();
@@ -36,8 +37,16 @@ export default async function PermissionsPage() {
     });
 
     return (
-        <div className="glass-card p-6" dir="rtl">
-            <h1 className="text-2xl font-bold text-foreground mb-6">🔐 إدارة الصلاحيات</h1>
+        <div className="space-y-6" dir="rtl">
+            <div>
+                <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                    <ShieldCheck className="w-6 h-6 text-primary" />
+                    إدارة الصلاحيات
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                    تحكّم دقيق في صلاحيات كل مستخدم — اختر مستخدماً ثم فعّل أو عطّل الصلاحيات حسب الحاجة
+                </p>
+            </div>
             <PermissionsEditor users={users} />
         </div>
     );

@@ -40,6 +40,7 @@ import {
   Building2,
   Brain,
   Crown,
+  Landmark,
   MessageSquare,
   ShoppingBag,
   ChevronDown,
@@ -98,6 +99,12 @@ const controlTowerSections: NavSection[] = [
     label: "",
     links: [
       { name: "التراخيص", href: "/dashboard/admin/licenses", icon: Crown },
+    ],
+  },
+  {
+    label: "",
+    links: [
+      { name: "معلومات الدفع", href: "/dashboard/admin/payment-info", icon: Landmark },
     ],
   },
   {

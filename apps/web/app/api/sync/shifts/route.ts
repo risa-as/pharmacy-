@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser } from '@/app/lib/sync-auth';
+import { logAudit, resolveUserName } from '@/app/lib/audit';
 import { z } from "zod";
 
 
@@ -83,10 +84,13 @@ export async function POST(req: NextRequest) {
         // block every shift from ever syncing.
         for (const shift of shifts) {
             try {
-                const didProcess = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<boolean> => {
+                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'created' | 'closed' | 'updated' | 'skip'> => {
                     const existing = await tx.shift.findUnique({ where: { id: shift.id } });
 
                     if (existing) {
+                        // Audit the open→closed transition only (not every re-sync of
+                        // an open shift) so the log isn't flooded with duplicates.
+                        const becameClosed = existing.status !== 'CLOSED' && shift.status === 'CLOSED';
                         // Update existing
                         await tx.shift.update({
                             where: { id: shift.id },
@@ -99,7 +103,7 @@ export async function POST(req: NextRequest) {
                                 updatedAt: shift.updatedAt ? new Date(shift.updatedAt) : new Date()
                             }
                         });
-                        return true;
+                        return becameClosed ? 'closed' : 'updated';
                     }
 
                     // Guard: branch must exist in cloud before we can create a shift.
@@ -107,7 +111,7 @@ export async function POST(req: NextRequest) {
                     const shiftBranch = await tx.branch.findUnique({ where: { id: shift.branchId }, select: { id: true } });
                     if (!shiftBranch) {
                         console.warn(`[Shift Sync] Branch ${shift.branchId} not yet in cloud — skipping shift ${shift.id}`);
-                        return false;
+                        return 'skip';
                     }
 
                     // Resolve the user. The desktop's local userId may not exist in
@@ -123,11 +127,11 @@ export async function POST(req: NextRequest) {
                                 resolvedUserId = userByEmail.id;
                             } else {
                                 console.warn(`[Shift Sync] User ${shift.userId} (email ${shift.userEmail}) not in cloud — skipping shift ${shift.id}`);
-                                return false;
+                                return 'skip';
                             }
                         } else {
                             console.warn(`[Shift Sync] User ${shift.userId} not in cloud and no email snapshot — skipping shift ${shift.id}`);
-                            return false;
+                            return 'skip';
                         }
                     }
 
@@ -172,11 +176,24 @@ export async function POST(req: NextRequest) {
                             updatedAt: shift.updatedAt ? new Date(shift.updatedAt) : new Date()
                         }
                     });
-                    return true;
+                    return 'created';
                 });
                 // Only acknowledge shifts we actually wrote, so guarded-skip shifts
                 // (branch/user not yet in cloud) are retried on the next sync.
-                if (didProcess) processedIds.push(shift.id);
+                if (outcome !== 'skip') processedIds.push(shift.id);
+                // Audit shift open (created) and close transitions, attributed to the
+                // employee on duty (userName snapshot from the desktop).
+                if (outcome === 'created' || outcome === 'closed') {
+                    await logAudit({
+                        userId: shift.userId,
+                        userName: shift.userName ?? await resolveUserName(shift.userId),
+                        action: outcome === 'closed' ? 'SHIFT_CLOSE' : 'SHIFT_OPEN',
+                        entity: 'SHIFT',
+                        entityId: shift.id,
+                        details: JSON.stringify({ expectedCash: shift.expectedCash, actualCash: shift.actualCash, source: 'desktop-sync' }),
+                        branchId,
+                    });
+                }
             } catch (shiftErr: any) {
                 console.error(`[Shift Sync] Failed to sync shift ${shift.id}:`, shiftErr.message);
                 // Continue with the remaining shifts

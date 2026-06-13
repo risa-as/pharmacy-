@@ -61,34 +61,34 @@ export default function InventoryTable({ items, canEditDrug = true, canDeleteDru
         <table className="min-w-full text-foreground">
           <thead className="bg-card/50 text-right text-sm font-semibold text-foreground border-b border-border">
             <tr>
-              <th scope="col" className="px-4 py-4 font-cairo text-center w-12">
+              <th scope="col" className="px-2 py-3 font-cairo text-center w-12">
                 #
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo">
+              <th scope="col" className="px-3 py-3 font-cairo">
                 اسم الدواء
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo">
+              <th scope="col" className="px-3 py-3 font-cairo">
                 الفرع
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo">
+              <th scope="col" className="px-3 py-3 font-cairo">
                 الكمية الحالية
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo">
+              <th scope="col" className="px-3 py-3 font-cairo">
                 الحدود
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo">
+              <th scope="col" className="px-3 py-3 font-cairo">
                 الحالة
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo">
+              <th scope="col" className="px-3 py-3 font-cairo">
                 سعر الجمهور
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo text-center">
+              <th scope="col" className="px-3 py-3 font-cairo text-center">
                 <span className="flex items-center justify-center gap-1">
                   <Zap className="w-4 h-4 text-amber-500" />
                   بيع سريع
                 </span>
               </th>
-              <th scope="col" className="px-6 py-4 font-cairo">
+              <th scope="col" className="px-3 py-3 font-cairo">
                 إجراءات
               </th>
             </tr>
@@ -118,10 +118,10 @@ export default function InventoryTable({ items, canEditDrug = true, canDeleteDru
                   key={item.id}
                   className="hover:bg-muted/50 transition-colors"
                 >
-                  <td className="whitespace-nowrap px-4 py-4 text-center text-sm text-muted-foreground font-mono">
+                  <td className="whitespace-nowrap px-2 py-3 text-center text-sm text-muted-foreground font-mono">
                     {index + 1}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4">
+                  <td className="px-3 py-3 min-w-[160px]">
                     <div className="flex flex-col">
                       <span className="font-medium text-foreground">
                         {item.drug.tradeName}
@@ -136,26 +136,26 @@ export default function InventoryTable({ items, canEditDrug = true, canDeleteDru
                       </span>
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
                     {item.branch.name}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 font-bold text-foreground">
+                  <td className="whitespace-nowrap px-3 py-3 font-bold text-foreground">
                     {item.currentStock}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-muted-foreground dir-ltr text-right">
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground dir-ltr text-right">
                     {item.minStock} / {item.maxStock}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4">
+                  <td className="whitespace-nowrap px-3 py-3">
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${statusColor}`}
                     >
                       {status}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 font-bold text-foreground">
+                  <td className="whitespace-nowrap px-3 py-3 font-bold text-foreground">
                     {item.price.toFixed(2)}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-center">
+                  <td className="whitespace-nowrap px-3 py-3 text-center">
                     <button
                       dir="ltr"
                       onClick={() => handleQuickSaleToggle(item.drug.id)}
@@ -176,7 +176,7 @@ export default function InventoryTable({ items, canEditDrug = true, canDeleteDru
                       />
                     </button>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4">
+                  <td className="whitespace-nowrap px-3 py-3">
                     <div className="flex items-center gap-2">
                       {canAddDrug && (
                         <button
@@ -186,10 +186,10 @@ export default function InventoryTable({ items, canEditDrug = true, canDeleteDru
                               drugName: item.drug.tradeName,
                             })
                           }
-                          className="flex items-center gap-1 text-primary hover:text-primary hover:bg-primary/10 px-2 py-1 rounded-lg text-sm font-medium"
+                          title="إضافة دفعة"
+                          className="flex items-center justify-center text-primary hover:text-primary hover:bg-primary/10 p-2 rounded-lg border border-border/60"
                         >
                           <Plus className="w-4 h-4" />
-                          إضافة دفعة
                         </button>
                       )}
                       {canEditDrug && <UpdateInventory id={item.id} />}

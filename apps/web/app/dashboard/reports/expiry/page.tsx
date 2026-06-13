@@ -1,240 +1,346 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 import { prisma } from "@/app/lib/prisma";
-import { AlertTriangle, Clock, CheckCircle, XCircle, Package } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Package,
+  ArrowRight,
+  Info,
+  Trash2,
+} from "lucide-react";
+import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
-import { getTenantContext } from '@/app/lib/tenant-utils';
-import { NextResponse } from 'next/server';
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 import ExpiryPeriodFilter from "@/app/ui/reports/expiry-period-filter";
 
 export default async function ExpiryReportPage({
-    searchParams,
+  searchParams,
 }: {
-    searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: { [key: string]: string | string[] | undefined };
 }) {
-    const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
-    const totalDays = typeof searchParams.days === "string" ? Math.max(1, parseInt(searchParams.days) || 30) : 30;
-    const criticalDays = Math.ceil(totalDays / 2);   // النصف الأول = حرجة
-    const warningDays = totalDays;                    // النصف الثاني حتى نهاية الفترة = تحذيرية
+  const branchId =
+    typeof searchParams.branch === "string" ? searchParams.branch : undefined;
+  const totalDays =
+    typeof searchParams.days === "string"
+      ? Math.max(1, parseInt(searchParams.days) || 30)
+      : 30;
+  const criticalDays = Math.ceil(totalDays / 2); // النصف الأول = حرجة
+  const warningDays = totalDays; // النصف الثاني حتى نهاية الفترة = تحذيرية
 
-    const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
-    const { tenantBranchWhere } = tenantCtx;
+  const tenantCtx = await getTenantContext();
+  if (tenantCtx instanceof NextResponse) redirect("/login");
+  const { tenantBranchWhere } = tenantCtx;
 
-    const now = new Date();
-    const inCriticalDays = new Date();
-    inCriticalDays.setDate(inCriticalDays.getDate() + criticalDays);
-    const inWarningDays = new Date();
-    inWarningDays.setDate(inWarningDays.getDate() + warningDays);
+  const now = new Date();
+  const inCriticalDays = new Date();
+  inCriticalDays.setDate(inCriticalDays.getDate() + criticalDays);
+  const inWarningDays = new Date();
+  inWarningDays.setDate(inWarningDays.getDate() + warningDays);
 
-    // legacy aliases
-    const in30Days = inCriticalDays;
-    const in90Days = inWarningDays;
+  // legacy aliases
+  const in30Days = inCriticalDays;
+  const in90Days = inWarningDays;
 
-    // Fetch all batches with their drug info, filtered by branch
-    const batches = await prisma.batch.findMany({
-        where: {
-            quantity: { gt: 0 },
-            inventory: {
-                ...tenantBranchWhere,
-                ...(branchId ? { branchId } : {}),
-            }
-        },
+  // Fetch all batches with their drug info, filtered by branch
+  const batches = await prisma.batch.findMany({
+    where: {
+      quantity: { gt: 0 },
+      inventory: {
+        ...tenantBranchWhere,
+        ...(branchId ? { branchId } : {}),
+      },
+    },
+    include: {
+      inventory: {
         include: {
-            inventory: {
-                include: {
-                    drug: { select: { tradeName: true, barcode: true } },
-                    branch: { select: { name: true } },
-                },
-            },
+          drug: { select: { tradeName: true, barcode: true } },
+          branch: { select: { name: true } },
         },
-        orderBy: { expiryDate: "asc" },
-    });
+      },
+    },
+    orderBy: { expiryDate: "asc" },
+  });
 
-    // Categorize
-    const expired: typeof batches = [];
-    const critical: typeof batches = [];
-    const warning: typeof batches = [];
-    const safe: typeof batches = [];
+  // Categorize
+  const expired: typeof batches = [];
+  const critical: typeof batches = [];
+  const warning: typeof batches = [];
+  const safe: typeof batches = [];
 
-    batches.forEach((batch: any) => {
-        const expiry = new Date(batch.expiryDate);
-        if (expiry < now) expired.push(batch);
-        else if (expiry < in30Days) critical.push(batch);
-        else if (expiry < in90Days) warning.push(batch);
-        else safe.push(batch);
-    });
+  batches.forEach((batch: any) => {
+    const expiry = new Date(batch.expiryDate);
+    if (expiry < now) expired.push(batch);
+    else if (expiry < in30Days) critical.push(batch);
+    else if (expiry < in90Days) warning.push(batch);
+    else safe.push(batch);
+  });
 
-    const expiredValue = expired.reduce((s: any, b: any) => s + b.quantity * b.inventory.cost, 0);
-    const criticalValue = critical.reduce((s: any, b: any) => s + b.quantity * b.inventory.cost, 0);
+  const expiredValue = expired.reduce(
+    (s: any, b: any) => s + b.quantity * b.inventory.cost,
+    0,
+  );
+  const criticalValue = critical.reduce(
+    (s: any, b: any) => s + b.quantity * b.inventory.cost,
+    0,
+  );
 
-    const categories = [
-        {
-            title: "منتهية الصلاحية",
-            icon: XCircle,
-            items: expired,
-            count: expired.length,
-            color: "red",
-            bgColor: "bg-destructive/10",
-            borderColor: "border-red-200",
-            iconColor: "text-destructive",
-            textColor: "text-destructive",
-            value: expiredValue,
-        },
-        {
-            title: `حرجة (أقل من ${criticalDays} يوم)`,
-            icon: AlertTriangle,
-            items: critical,
-            count: critical.length,
-            color: "orange",
-            bgColor: "bg-warning/10",
-            borderColor: "border-orange-200",
-            iconColor: "text-warning",
-            textColor: "text-warning",
-            value: criticalValue,
-        },
-        {
-            title: `تحذيرية (${criticalDays}-${warningDays} يوم)`,
-            icon: Clock,
-            items: warning,
-            count: warning.length,
-            color: "yellow",
-            bgColor: "bg-warning/10",
-            borderColor: "border-warning/30",
-            iconColor: "text-warning",
-            textColor: "text-warning",
-            value: warning.reduce((s: any, b: any) => s + b.quantity * b.inventory.cost, 0),
-        },
-        {
-            title: `آمنة (أكثر من ${warningDays} يوم)`,
-            icon: CheckCircle,
-            items: safe,
-            count: safe.length,
-            color: "green",
-            bgColor: "bg-success/10",
-            borderColor: "border-green-200",
-            iconColor: "text-success",
-            textColor: "text-success",
-            value: null,
-        },
-    ];
+  const warningValue = warning.reduce(
+    (s: any, b: any) => s + b.quantity * b.inventory.cost,
+    0,
+  );
+  const fmt = (v: number) => Math.round(v).toLocaleString("en-US");
 
-    function getDaysRemaining(expiryDate: Date) {
-        const diff = new Date(expiryDate).getTime() - now.getTime();
-        return Math.ceil(diff / (1000 * 60 * 60 * 24));
-    }
+  const categories = [
+    {
+      title: "منتهية الصلاحية",
+      icon: XCircle,
+      items: expired,
+      tone: "text-destructive",
+      bg: "bg-destructive/10",
+      value: expiredValue,
+    },
+    {
+      title: `حرجة (أقل من ${criticalDays} يوم)`,
+      icon: AlertTriangle,
+      items: critical,
+      tone: "text-warning",
+      bg: "bg-warning/10",
+      value: criticalValue,
+    },
+    {
+      title: `تحذيرية (${criticalDays}-${warningDays} يوم)`,
+      icon: Clock,
+      items: warning,
+      tone: "text-warning",
+      bg: "bg-warning/10",
+      value: warningValue,
+    },
+    {
+      title: `آمنة (أكثر من ${warningDays} يوم)`,
+      icon: CheckCircle,
+      items: safe,
+      tone: "text-success",
+      bg: "bg-success/10",
+      value: null as number | null,
+    },
+  ];
 
-    return (
-        <div className="glass-card w-full p-6 space-y-6" dir="rtl">
-            <h1 className="text-2xl font-bold font-cairo flex items-center gap-2">
-                <AlertTriangle className="w-8 h-8 text-warning" />
-                📅 تقرير الأدوية المنتهية الصلاحية
+  function getDaysRemaining(expiryDate: Date) {
+    const diff = new Date(expiryDate).getTime() - now.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }
+
+  return (
+    <div className="space-y-6" dir="rtl">
+      {/* الرأس */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/reports"
+            className="p-2 rounded-lg border border-border hover:bg-muted transition-colors"
+          >
+            <ArrowRight className="w-5 h-5 text-muted-foreground" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+              <AlertTriangle className="w-6 h-6 text-warning" />
+              تقرير انتهاء الصلاحية
             </h1>
-
-            {/* Branch Filter */}
-            <BranchFilter currentBranch={branchId} baseUrl="/dashboard/reports/expiry" />
-
-            {/* Period Filter */}
-            <ExpiryPeriodFilter currentDays={totalDays} />
-
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {categories.map((cat: any) => {
-                    const Icon = cat.icon;
-                    return (
-                        <div
-                            key={cat.title}
-                            className={`p-5 rounded-xl border ${cat.bgColor} ${cat.borderColor}`}
-                        >
-                            <div className={`flex items-center gap-2 text-sm mb-2 ${cat.iconColor}`}>
-                                <Icon className="w-5 h-5" />
-                                <span className="font-bold">{cat.title}</span>
-                            </div>
-                            <div className={`text-3xl font-bold ${cat.textColor}`}>
-                                {cat.count} دفعة
-                            </div>
-                            {cat.value !== null && cat.value > 0 && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                    القيمة: {cat.value.toLocaleString()} د.ع
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Expired + Critical Tables */}
-            {categories.slice(0, 3).map((cat: any) => {
-                if (cat.items.length === 0) return null;
-                const Icon = cat.icon;
-                return (
-                    <div key={cat.title} className="bg-card rounded-xl border shadow-sm overflow-hidden">
-                        <div className={`px-6 py-4 ${cat.bgColor} border-b ${cat.borderColor} flex items-center gap-2`}>
-                            <Icon className={`w-5 h-5 ${cat.iconColor}`} />
-                            <h2 className={`font-bold text-lg ${cat.textColor}`}>
-                                {cat.title} ({cat.items.length})
-                            </h2>
-                        </div>
-                        <table className="w-full">
-                            <thead className="bg-muted text-muted-foreground text-sm border-b">
-                                <tr>
-                                    <th className="px-4 py-3 text-right font-bold">اسم الدواء</th>
-                                    <th className="px-4 py-3 text-right font-bold">الفرع</th>
-                                    <th className="px-4 py-3 text-right font-bold">رقم الدفعة</th>
-                                    <th className="px-4 py-3 text-right font-bold">الكمية</th>
-                                    <th className="px-4 py-3 text-right font-bold">تاريخ الانتهاء</th>
-                                    <th className="px-4 py-3 text-right font-bold">المتبقي</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {cat.items.map((batch: any) => {
-                                    const days = getDaysRemaining(batch.expiryDate);
-                                    return (
-                                        <tr key={batch.id} className="hover:bg-muted">
-                                            <td className="px-4 py-3 font-bold text-foreground">
-                                                {batch.inventory.drug.tradeName}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-muted-foreground">
-                                                {batch.inventory.branch.name}
-                                            </td>
-                                            <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
-                                                {batch.batchNumber}
-                                            </td>
-                                            <td className="px-4 py-3 font-bold">{batch.quantity}</td>
-                                            <td className="px-4 py-3 text-sm">
-                                                {new Date(batch.expiryDate).toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span
-                                                    className={`px-2 py-1 rounded-md text-xs font-bold ${days < 0
-                                                        ? "bg-destructive/10 text-destructive"
-                                                        : days < 30
-                                                            ? "bg-warning/10 text-warning"
-                                                            : "bg-warning/20 text-warning"
-                                                        }`}
-                                                >
-                                                    {days < 0 ? `منتهي منذ ${Math.abs(days)} يوم` : `${days} يوم`}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                );
-            })}
-
-            {batches.length === 0 && (
-                <div className="bg-card rounded-xl border p-12 text-center text-muted-foreground">
-                    <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                    <p>لا توجد دفعات مسجلة في المخزون.</p>
-                </div>
-            )}
-
-            <div className="bg-primary/10 p-4 rounded-lg text-sm text-primary">
-                ملاحظة: يعرض هذا التقرير الدفعات التي تحتوي على كمية أكبر من صفر فقط. الأدوية المنتهية يجب سحبها من الرفوف فوراً.
-            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              تصنيف الدفعات حسب خطورة قرب انتهاء صلاحيتها
+            </p>
+          </div>
         </div>
-    );
+        <Link
+          href={`/dashboard/inventory/expired-damaged${branchId ? `?branch=${branchId}` : ""}`}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+        >
+          <Trash2 className="w-4 h-4 text-destructive" />
+          إدارة وشطب الدفعات
+          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+        </Link>
+      </div>
+
+      {/* الفلاتر */}
+      <div className="space-y-3">
+        <BranchFilter
+          currentBranch={branchId}
+          baseUrl="/dashboard/reports/expiry"
+        />
+        <ExpiryPeriodFilter currentDays={totalDays} />
+      </div>
+
+      {/* بطاقات الملخص */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {categories.map((cat) => {
+          const Icon = cat.icon;
+          return (
+            <div key={cat.title} className="glass-card p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div
+                  className={`w-10 h-10 rounded-xl ${cat.bg} flex items-center justify-center shrink-0`}
+                >
+                  <Icon className={`w-5 h-5 ${cat.tone}`} />
+                </div>
+                <span className="text-sm font-bold text-muted-foreground">
+                  {cat.title}
+                </span>
+              </div>
+              <div
+                className={`text-2xl font-bold ${cat.items.length > 0 ? cat.tone : "text-foreground"}`}
+              >
+                {cat.items.length}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  دفعة
+                </span>
+              </div>
+              {cat.value !== null && cat.value > 0 && (
+                <div className="text-xs text-muted-foreground mt-1" dir="ltr">
+                  القيمة: {fmt(cat.value)} د.ع
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* جداول الفئات الخطرة (منتهية + حرجة + تحذيرية) */}
+      {categories.slice(0, 3).map((cat) => {
+        if (cat.items.length === 0) return null;
+        const Icon = cat.icon;
+        return (
+          <div key={cat.title} className="glass-card overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center gap-2">
+              <Icon className={`w-4 h-4 ${cat.tone}`} />
+              <h2 className="font-bold text-foreground">{cat.title}</h2>
+              <span
+                className={`mr-auto text-xs rounded-full px-2.5 py-0.5 font-bold ${cat.bg} ${cat.tone}`}
+              >
+                {cat.items.length} دفعة
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
+                  <tr>
+                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                      الدواء
+                    </th>
+                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                      الفرع
+                    </th>
+                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                      رقم الدفعة
+                    </th>
+                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                      الكمية
+                    </th>
+                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                      تاريخ الانتهاء
+                    </th>
+                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                      المتبقي
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border bg-card">
+                  {cat.items.map((batch: any) => {
+                    const days = getDaysRemaining(batch.expiryDate);
+                    return (
+                      <tr
+                        key={batch.id}
+                        className="hover:bg-muted/40 transition-colors"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${cat.bg}`}
+                            >
+                              <Package className={`w-4 h-4 ${cat.tone}`} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-foreground truncate">
+                                {batch.inventory.drug.tradeName}
+                              </p>
+                              {batch.inventory.drug.barcode && (
+                                <p
+                                  className="text-xs text-muted-foreground"
+                                  dir="ltr"
+                                >
+                                  {batch.inventory.drug.barcode}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-muted-foreground">
+                          {batch.inventory.branch.name}
+                        </td>
+                        <td
+                          className="px-6 py-4 font-mono text-xs text-muted-foreground"
+                          dir="rtl"
+                        >
+                          {batch.batchNumber}
+                        </td>
+                        <td className="px-6 py-4 font-bold text-foreground">
+                          {batch.quantity}
+                        </td>
+                        <td
+                          className="px-6 py-4 text-muted-foreground whitespace-nowrap"
+                          dir="rtl"
+                        >
+                          {new Date(batch.expiryDate).toLocaleDateString(
+                            "ar-IQ",
+                            { timeZone: "Asia/Baghdad" },
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-bold whitespace-nowrap ${
+                              days < 0
+                                ? "bg-destructive/10 text-destructive border-destructive/20"
+                                : "bg-warning/10 text-warning border-warning/20"
+                            }`}
+                          >
+                            {days < 0
+                              ? `منتهٍ منذ ${Math.abs(days)} يوم`
+                              : `${days} يوم`}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+
+      {batches.length === 0 && (
+        <div className="glass-card py-16 text-center">
+          <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Package className="w-8 h-8 text-muted-foreground opacity-50" />
+          </div>
+          <p className="text-foreground font-medium">
+            لا توجد دفعات مسجلة في المخزون
+          </p>
+        </div>
+      )}
+
+      {/* ملاحظة */}
+      <div className="glass-card border-info/30 p-4 flex items-start gap-3">
+        <Info className="w-5 h-5 text-info shrink-0 mt-0.5" />
+        <p className="text-sm text-muted-foreground">
+          يعرض هذا التقرير الدفعات ذات الكمية الأكبر من صفر فقط. الأدوية
+          المنتهية يجب سحبها من الرفوف فوراً وشطبها من صفحة الإدارة.
+        </p>
+      </div>
+    </div>
+  );
 }

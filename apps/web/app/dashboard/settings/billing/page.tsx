@@ -5,6 +5,7 @@ import SubscriptionStatusCard from "@/app/ui/billing/subscription-status-card";
 import PaymentHistoryTable from "@/app/ui/billing/payment-history-table";
 import RenewButton from "@/app/ui/billing/renew-button";
 import { verifyZainCashPayment, sweepExpiredPendingTransactions } from "@/app/lib/actions/billing";
+import { getPlatformSettings } from "@/app/lib/actions/platform-settings";
 import type { PaymentTransactionRow } from "@/app/ui/billing/payment-history-table";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,13 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                         >
                             <CreditCard className="w-5 h-5" />
                             إدارة الباقات
+                        </a>
+                        <a
+                            href="/dashboard/admin/payment-info"
+                            className="inline-flex items-center gap-2 bg-muted text-foreground font-bold px-6 py-3 rounded-xl border hover:bg-muted/80 transition-colors"
+                        >
+                            <Building2 className="w-5 h-5" />
+                            معلومات الدفع
                         </a>
                     </div>
                 </div>
@@ -205,6 +213,17 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
         console.error("[BillingPage] Failed to load payment transactions:", e);
     }
 
+    // Bank-transfer / support details configured by SUPER_ADMIN (with fallbacks).
+    const payInfo = await getPlatformSettings();
+    const bankName = payInfo.bankName ?? "بنك الرافدين";
+    const accountHolder = payInfo.accountHolder ?? "شركة فاراماس للتقنية";
+    const accountNumber = payInfo.accountNumber ?? "XXXX-XXXX-XXXX-XXXX";
+    const workingHours = payInfo.workingHours ?? "9 صباحاً – 5 مساءً";
+    // Shown under ZainCash / Super Key — both require sending the receipt to support.
+    const whatsappNote = payInfo.supportPhone
+        ? `يرجى إرسال صورة التحويل عبر واتساب إلى رقم الدعم: ${payInfo.supportPhone}`
+        : "يرجى إرسال صورة التحويل عبر واتساب إلى رقم الدعم.";
+
     return (
         <div className="w-full max-w-4xl mx-auto space-y-6">
             {/* Page header */}
@@ -358,21 +377,60 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                     <div className="bg-background rounded-lg border p-3">
                         <div className="text-xs text-muted-foreground mb-1">اسم البنك</div>
-                        <div className="font-medium">بنك الرافدين</div>
+                        <div className="font-medium">{bankName}</div>
                     </div>
                     <div className="bg-background rounded-lg border p-3">
                         <div className="text-xs text-muted-foreground mb-1">اسم صاحب الحساب</div>
-                        <div className="font-medium">شركة فاراماس للتقنية</div>
+                        <div className="font-medium">{accountHolder}</div>
                     </div>
                     <div className="bg-background rounded-lg border p-3 sm:col-span-2">
                         <div className="text-xs text-muted-foreground mb-1">رقم الحساب</div>
-                        <div className="font-mono font-bold tracking-wider" dir="ltr">XXXX-XXXX-XXXX-XXXX</div>
+                        <div className="font-mono font-bold tracking-wider" dir="ltr">{accountNumber}</div>
                     </div>
+                    {payInfo.superKeyPhone && (
+                        <div className="bg-background rounded-lg border p-3 sm:col-span-2">
+                            <div className="text-xs text-muted-foreground mb-1">دفع عن طريق سوبر كي</div>
+                            <div className="font-mono font-bold tracking-wider" dir="ltr">{payInfo.superKeyPhone}</div>
+                            <div className="text-[11px] text-muted-foreground mt-1.5">{whatsappNote}</div>
+                        </div>
+                    )}
                 </div>
+                {(payInfo.supportPhone || payInfo.supportEmail) && (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                        {payInfo.supportPhone && (
+                            <a href={`https://wa.me/${payInfo.supportPhone.replace(/[^\d]/g, "")}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 font-medium hover:bg-muted transition-colors">
+                                <PhoneCall className="w-3.5 h-3.5 text-success" />
+                                <span dir="ltr">{payInfo.supportPhone}</span>
+                            </a>
+                        )}
+                        {payInfo.supportEmail && (
+                            <a href={`mailto:${payInfo.supportEmail}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 font-medium hover:bg-muted transition-colors" dir="ltr">
+                                {payInfo.supportEmail}
+                            </a>
+                        )}
+                    </div>
+                )}
                 <p className="text-xs text-muted-foreground">
-                    بعد إرسال الإيصال، سيقوم فريقنا بتفعيل الاشتراك خلال ساعات العمل (9 صباحاً – 5 مساءً).
+                    {payInfo.transferNote ?? `بعد إرسال الإيصال، سيقوم فريقنا بتفعيل الاشتراك خلال ساعات العمل (${workingHours}).`}
                 </p>
             </div>
+
+            {/* Zain Cash Instructions */}
+            {payInfo.zainCashNumber && (
+                <div className="rounded-xl border border-border bg-muted/30 p-5 space-y-3" dir="rtl">
+                    <div className="flex items-center gap-2">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                            <Smartphone className="w-5 h-5 text-primary" />
+                        </div>
+                        <h2 className="font-bold text-base">الدفع عبر زين كاش</h2>
+                    </div>
+                    <div className="bg-background rounded-lg border p-3 text-sm">
+                        <div className="text-xs text-muted-foreground mb-1">رقم حساب زين كاش</div>
+                        <div className="font-mono font-bold tracking-wider" dir="ltr">{payInfo.zainCashNumber}</div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{whatsappNote}</p>
+                </div>
+            )}
 
             {/* Payment history */}
             <div className="space-y-3">

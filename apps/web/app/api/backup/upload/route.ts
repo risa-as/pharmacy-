@@ -8,18 +8,39 @@ const utapi = new UTApi();
 
 export async function POST(req: Request) {
     try {
-        // 1. Security Check
-        const secretKey = req.headers.get("x-backup-secret");
-        const configuredSecret = process.env.BACKUP_SECRET_KEY;
+        // 1. Authentication — prefer per-device license binding; the branchId is
+        //    then derived from the validated license, never trusted from the body.
+        //    The legacy shared secret is still accepted during the rollout so
+        //    desktop builds that predate this change keep working until updated.
+        const licenseKey = req.headers.get("x-device-license-key");
+        const headerBranchId = req.headers.get("x-branch-id");
 
-        if (!configuredSecret || secretKey !== configuredSecret) {
-            console.error("Unauthorized backup attempt");
-            return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+        let authedBranchId: string | null = null;
+
+        if (licenseKey && headerBranchId) {
+            const license = await prisma.deviceLicense.findFirst({
+                where: { licenseKey, branchId: headerBranchId, isActive: true },
+                select: { branchId: true },
+            });
+            if (!license) {
+                return NextResponse.json({ success: false, message: "Invalid or inactive device license" }, { status: 401 });
+            }
+            authedBranchId = license.branchId;
+        } else {
+            const secretKey = req.headers.get("x-backup-secret");
+            const configuredSecret = process.env.BACKUP_SECRET_KEY;
+            if (!configuredSecret || secretKey !== configuredSecret) {
+                console.error("Unauthorized backup attempt");
+                return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+            }
+            console.warn("[backup/upload] Legacy shared-secret auth used — migrate this device to license-key auth.");
         }
 
         const formData = await req.formData();
         const file = formData.get("file") as File;
-        const branchId = formData.get("branchId") as string || "default";
+        // License-bound uploads use the validated branch; legacy uploads fall back
+        // to the body value for backward compatibility.
+        const branchId = authedBranchId ?? ((formData.get("branchId") as string) || "default");
 
         if (!file) {
             return NextResponse.json({ success: false, message: "No file provided" }, { status: 400 });

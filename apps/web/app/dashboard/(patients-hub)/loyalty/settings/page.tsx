@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Save, Gift, ToggleLeft, ToggleRight, GitBranch } from "lucide-react";
+import { Settings, Save, Gift, ToggleLeft, ToggleRight, GitBranch, ArrowRight, Coins, CheckCircle2, Award } from "lucide-react";
 import Link from "next/link";
 
 interface Branch { id: string; name: string; loyaltyEnabled: boolean; }
@@ -74,36 +74,42 @@ export default function LoyaltySettingsPage() {
     if (loading) {
         return (
             <div className="w-full flex items-center justify-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-info/20 border-t-info" />
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary/20 border-t-primary" />
             </div>
         );
     }
 
     return (
-        <div className="glass-card w-full max-w-3xl mx-auto p-6 space-y-6" dir="rtl">
+        <div className="max-w-3xl mx-auto space-y-6" dir="rtl">
+            {/* الرأس */}
             <div className="flex items-center justify-between flex-wrap gap-4">
-                <h1 className="text-2xl font-bold font-cairo flex items-center gap-2">
-                    <Settings className="w-7 h-7 text-info" />
-                    إعدادات برنامج الولاء
-                </h1>
+                <div>
+                    <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                        <Settings className="w-6 h-6 text-primary" />
+                        إعدادات برنامج الولاء
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">تحكّم في معدّل كسب النقاط، قيمتها، وشروط الاستبدال</p>
+                </div>
                 <Link
                     href="/dashboard/loyalty"
-                    className="text-sm text-info hover:underline font-bold"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-bold text-foreground hover:bg-muted transition-colors"
                 >
-                    ← العودة للوحة الولاء
+                    <ArrowRight className="w-4 h-4" />
+                    لوحة الولاء
                 </Link>
             </div>
 
-            {/* Enable/Disable */}
-            <div className={`p-6 rounded-2xl border-2 transition-all ${settings.loyaltyEnabled ? "bg-success/10 border-green-300" : "bg-muted border-border"}`}>
-                <div className="flex items-center justify-between">
+            {/* تفعيل/تعطيل */}
+            <div className={`glass-card p-6 transition-all ${settings.loyaltyEnabled ? "ring-1 ring-success/30" : ""}`}>
+                <div className="flex items-center justify-between gap-4">
                     <div>
-                        <h2 className="font-bold text-lg mb-1">تفعيل برنامج الولاء</h2>
+                        <h2 className="font-bold text-lg text-foreground mb-1">تفعيل برنامج الولاء</h2>
                         <p className="text-sm text-muted-foreground">عند التفعيل، سيكسب المرضى نقاطاً تلقائياً مع كل عملية بيع</p>
                     </div>
                     <button
                         onClick={() => setSettings({ ...settings, loyaltyEnabled: !settings.loyaltyEnabled })}
-                        className="text-3xl transition-transform hover:scale-110"
+                        className="transition-transform hover:scale-110 shrink-0"
+                        aria-label="تبديل تفعيل البرنامج"
                     >
                         {settings.loyaltyEnabled ? (
                             <ToggleRight className="w-12 h-12 text-success" />
@@ -114,21 +120,25 @@ export default function LoyaltySettingsPage() {
                 </div>
             </div>
 
-            {/* Per-Branch Activation */}
+            {/* تفعيل حسب الفرع */}
             {branches.length > 1 && (
-                <div className="bg-card rounded-2xl border shadow-sm p-6">
-                    <h2 className="font-bold text-lg mb-1 flex items-center gap-2">
-                        <GitBranch className="w-5 h-5 text-info" />
-                        تفعيل الولاء حسب الفرع
-                    </h2>
-                    <p className="text-sm text-muted-foreground mb-4">
-                        يجب أن يكون البرنامج مفعّلاً على مستوى المنشأة أولاً. يمكنك هنا تحديد الفروع المشاركة.
-                    </p>
-                    <div className="space-y-3">
+                <div className="glass-card overflow-hidden">
+                    <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <GitBranch className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-foreground font-cairo leading-tight">تفعيل الولاء حسب الفرع</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                يجب تفعيل البرنامج على مستوى المنشأة أولاً، ثم تحديد الفروع المشاركة.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="p-5 space-y-3">
                         {branches.map((branch) => (
                             <div
                                 key={branch.id}
-                                className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${branch.loyaltyEnabled ? "bg-success/10 border-green-300" : "bg-muted border-border"}`}
+                                className={`flex items-center justify-between p-4 rounded-xl border transition-all ${branch.loyaltyEnabled ? "bg-success/10 border-success/30" : "bg-muted/40 border-border"}`}
                             >
                                 <div>
                                     <div className="font-bold text-foreground">{branch.name}</div>
@@ -140,7 +150,7 @@ export default function LoyaltySettingsPage() {
                                     onClick={() => toggleBranch(branch.id, !branch.loyaltyEnabled)}
                                     disabled={togglingBranch === branch.id || !settings.loyaltyEnabled}
                                     title={!settings.loyaltyEnabled ? "فعّل البرنامج على مستوى المنشأة أولاً" : undefined}
-                                    className="transition-transform hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="transition-transform hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                                 >
                                     {branch.loyaltyEnabled ? (
                                         <ToggleRight className="w-12 h-12 text-success" />
@@ -154,147 +164,172 @@ export default function LoyaltySettingsPage() {
                 </div>
             )}
 
-            {/* Settings Form */}
-            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-6">
-                {/* Points per dinar */}
-                <div>
-                    <label className="block font-bold text-foreground mb-2">
-                        معدل كسب النقاط (عدد النقاط لكل 1,000 د.ع)
-                    </label>
-                    <div className="flex items-center gap-4">
-                        <input
-                            type="number"
-                            value={pointsPer1000}
-                            onChange={(e) =>
-                                setSettings({
-                                    ...settings,
-                                    loyaltyPointsPerDinar: parseInt(e.target.value || "10") / 1000,
-                                })
-                            }
-                            className="w-32 rounded-lg border border-border px-4 py-3 text-center text-xl font-bold focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                            min={1}
-                            max={100}
-                        />
-                        <span className="text-muted-foreground">نقطة لكل 1,000 د.ع</span>
+            {/* قواعد النقاط */}
+            <div className="glass-card overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Coins className="w-4 h-4 text-primary" />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                        مثال: زبون يشتري بـ 30,000 د.ع ← يكسب <strong>{30 * pointsPer1000}</strong> نقطة
-                    </p>
+                    <div>
+                        <h2 className="font-bold text-foreground font-cairo leading-tight">قواعد كسب واستبدال النقاط</h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">المعادلات التي تحكم احتساب نقاط الزبائن</p>
+                    </div>
                 </div>
-
-                {/* Redemption value */}
-                <div>
-                    <label className="block font-bold text-foreground mb-2">
-                        قيمة كل نقطة عند الاستبدال (بالدينار العراقي)
-                    </label>
-                    <div className="flex items-center gap-4">
-                        <input
-                            type="number"
-                            value={settings.loyaltyRedemptionValue}
-                            onChange={(e) =>
-                                setSettings({
-                                    ...settings,
-                                    loyaltyRedemptionValue: parseFloat(e.target.value || "2.5"),
-                                })
-                            }
-                            className="w-32 rounded-lg border border-border px-4 py-3 text-center text-xl font-bold focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                            min={0.5}
-                            max={50}
-                            step={0.5}
-                        />
-                        <span className="text-muted-foreground">د.ع لكل نقطة</span>
+                <div className="p-5 space-y-6">
+                    {/* Points per dinar */}
+                    <div>
+                        <label className="block font-bold text-foreground mb-2">
+                            معدل كسب النقاط (عدد النقاط لكل 1,000 د.ع)
+                        </label>
+                        <div className="flex items-center gap-4">
+                            <input
+                                type="number"
+                                value={pointsPer1000}
+                                onChange={(e) =>
+                                    setSettings({
+                                        ...settings,
+                                        loyaltyPointsPerDinar: parseInt(e.target.value || "10") / 1000,
+                                    })
+                                }
+                                className="w-32 rounded-lg border border-border bg-background text-foreground px-4 py-3 text-center text-xl font-bold focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                                min={1}
+                                max={100}
+                            />
+                            <span className="text-muted-foreground">نقطة لكل 1,000 د.ع</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            مثال: زبون يشتري بـ 30,000 د.ع ← يكسب <strong className="text-foreground">{30 * pointsPer1000}</strong> نقطة
+                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                        نسبة الاسترجاع الفعلية: <strong>{((pointsPer1000 * settings.loyaltyRedemptionValue) / 1000 * 100).toFixed(1)}%</strong> من قيمة المشتريات
-                    </p>
-                </div>
 
-                {/* Min redemption */}
-                <div>
-                    <label className="block font-bold text-foreground mb-2">
-                        الحد الأدنى لاستبدال النقاط
-                    </label>
-                    <div className="flex items-center gap-4">
-                        <input
-                            type="number"
-                            value={settings.loyaltyMinRedemption}
-                            onChange={(e) =>
-                                setSettings({
-                                    ...settings,
-                                    loyaltyMinRedemption: parseInt(e.target.value || "500"),
-                                })
-                            }
-                            className="w-32 rounded-lg border border-border px-4 py-3 text-center text-xl font-bold focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                            min={10}
-                            max={10000}
-                            step={50}
-                        />
-                        <span className="text-muted-foreground">نقطة</span>
+                    {/* Redemption value */}
+                    <div>
+                        <label className="block font-bold text-foreground mb-2">
+                            قيمة كل نقطة عند الاستبدال (بالدينار العراقي)
+                        </label>
+                        <div className="flex items-center gap-4">
+                            <input
+                                type="number"
+                                value={settings.loyaltyRedemptionValue}
+                                onChange={(e) =>
+                                    setSettings({
+                                        ...settings,
+                                        loyaltyRedemptionValue: parseFloat(e.target.value || "2.5"),
+                                    })
+                                }
+                                className="w-32 rounded-lg border border-border bg-background text-foreground px-4 py-3 text-center text-xl font-bold focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                                min={0.5}
+                                max={50}
+                                step={0.5}
+                            />
+                            <span className="text-muted-foreground">د.ع لكل نقطة</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            نسبة الاسترجاع الفعلية: <strong className="text-foreground">{((pointsPer1000 * settings.loyaltyRedemptionValue) / 1000 * 100).toFixed(1)}%</strong> من قيمة المشتريات
+                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                        عند الوصول لـ {settings.loyaltyMinRedemption} نقطة ← يحصل على خصم <strong>{minRedeemValue.toLocaleString()} د.ع</strong>
-                    </p>
+
+                    {/* Min redemption */}
+                    <div>
+                        <label className="block font-bold text-foreground mb-2">
+                            الحد الأدنى لاستبدال النقاط
+                        </label>
+                        <div className="flex items-center gap-4">
+                            <input
+                                type="number"
+                                value={settings.loyaltyMinRedemption}
+                                onChange={(e) =>
+                                    setSettings({
+                                        ...settings,
+                                        loyaltyMinRedemption: parseInt(e.target.value || "500"),
+                                    })
+                                }
+                                className="w-32 rounded-lg border border-border bg-background text-foreground px-4 py-3 text-center text-xl font-bold focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                                min={10}
+                                max={10000}
+                                step={50}
+                            />
+                            <span className="text-muted-foreground">نقطة</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            عند الوصول لـ {settings.loyaltyMinRedemption} نقطة ← يحصل على خصم <strong className="text-foreground">{minRedeemValue.toLocaleString()} د.ع</strong>
+                        </p>
+                    </div>
                 </div>
             </div>
 
-            {/* Preview */}
-            <div className="bg-info/10 rounded-2xl border border-info/20 p-6">
-                <h2 className="font-bold text-info mb-3 flex items-center gap-2">
-                    <Gift className="w-5 h-5" />
-                    معاينة تجربة الزبون
-                </h2>
-                <div className="bg-card rounded-xl p-4 space-y-2 text-sm">
-                    <p>📱 الزبون يشتري بـ <strong>50,000 د.ع</strong></p>
-                    <p>⭐ يكسب <strong className="text-info">{50 * pointsPer1000} نقطة</strong></p>
-                    <p>🏪 بعد <strong>{Math.ceil(settings.loyaltyMinRedemption / (50 * pointsPer1000))} زيارة</strong> مشابهة ← يستطيع استبدال {settings.loyaltyMinRedemption} نقطة</p>
-                    <p>🎁 يحصل على خصم <strong className="text-success">{minRedeemValue.toLocaleString()} د.ع</strong></p>
-                    <p className="text-muted-foreground text-xs mt-2">الأعضاء الفضيون يكسبون 1.5× والذهبيون 2× النقاط!</p>
+            {/* معاينة تجربة الزبون */}
+            <div className="glass-card overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-info/10 flex items-center justify-center shrink-0">
+                        <Gift className="w-4 h-4 text-info" />
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-foreground font-cairo leading-tight">معاينة تجربة الزبون</h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">كيف ستبدو المكافآت بالإعدادات الحالية</p>
+                    </div>
+                </div>
+                <div className="p-5">
+                    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2 text-sm text-foreground">
+                        <p>📱 الزبون يشتري بـ <strong>50,000 د.ع</strong></p>
+                        <p>⭐ يكسب <strong className="text-info">{50 * pointsPer1000} نقطة</strong></p>
+                        <p>🏪 بعد <strong>{Math.ceil(settings.loyaltyMinRedemption / (50 * pointsPer1000))} زيارة</strong> مشابهة ← يستطيع استبدال {settings.loyaltyMinRedemption} نقطة</p>
+                        <p>🎁 يحصل على خصم <strong className="text-success">{minRedeemValue.toLocaleString()} د.ع</strong></p>
+                        <p className="text-muted-foreground text-xs mt-2">الأعضاء الفضيون يكسبون 1.5× والذهبيون 2× النقاط!</p>
+                    </div>
                 </div>
             </div>
 
-            {/* Save Button */}
-            <div className="flex gap-4">
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-gradient-to-l from-info to-primary/80 text-primary-foreground rounded-xl font-bold text-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50"
-                >
-                    {saving ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-foreground border-t-transparent" />
-                    ) : (
-                        <Save className="w-5 h-5" />
-                    )}
-                    {saving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
-                </button>
-            </div>
+            {/* زر الحفظ */}
+            <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-bold text-lg shadow-sm transition-all disabled:opacity-50"
+            >
+                {saving ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-foreground border-t-transparent" />
+                ) : (
+                    <Save className="w-5 h-5" />
+                )}
+                {saving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
+            </button>
 
             {saved && (
-                <div className="bg-success/10 text-success rounded-xl p-4 text-center font-bold animate-fade-in">
-                    ✅ تم حفظ الإعدادات بنجاح!
+                <div className="flex items-center justify-center gap-2 bg-success/10 text-success rounded-xl p-4 text-center font-bold animate-fade-in">
+                    <CheckCircle2 className="w-5 h-5" />
+                    تم حفظ الإعدادات بنجاح!
                 </div>
             )}
 
-            {/* Tier Info */}
-            <div className="bg-card rounded-2xl border shadow-sm p-6">
-                <h2 className="font-bold text-foreground mb-4">نظام الطبقات (Tiers)</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-warning/10 rounded-xl p-4 border border-orange-200 text-center">
+            {/* نظام الطبقات */}
+            <div className="glass-card overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
+                        <Award className="w-4 h-4 text-warning" />
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-foreground font-cairo leading-tight">نظام الطبقات (Tiers)</h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">تترقّى الطبقة تلقائياً حسب إجمالي النقاط المجموعة</p>
+                    </div>
+                </div>
+                <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="rounded-xl p-4 border border-warning/20 bg-warning/10 text-center">
                         <div className="text-3xl mb-2">🥉</div>
                         <div className="font-bold text-warning">برونزي</div>
                         <div className="text-sm text-muted-foreground">عند التسجيل</div>
                         <div className="text-xs text-warning mt-2 font-bold">1× نقاط</div>
                     </div>
-                    <div className="bg-muted rounded-xl p-4 border border-border text-center">
+                    <div className="rounded-xl p-4 border border-border bg-muted/40 text-center">
                         <div className="text-3xl mb-2">🥈</div>
                         <div className="font-bold text-foreground">فضي</div>
                         <div className="text-sm text-muted-foreground">5,000+ نقطة مجموعة</div>
                         <div className="text-xs text-muted-foreground mt-2 font-bold">1.5× نقاط</div>
                     </div>
-                    <div className="bg-warning/10 rounded-xl p-4 border border-warning/50 text-center">
+                    <div className="rounded-xl p-4 border border-amber-300 bg-amber-100 text-center">
                         <div className="text-3xl mb-2">🥇</div>
-                        <div className="font-bold text-warning">ذهبي</div>
-                        <div className="text-sm text-muted-foreground">20,000+ نقطة مجموعة</div>
-                        <div className="text-xs text-warning mt-2 font-bold">2× نقاط</div>
+                        <div className="font-bold text-amber-700">ذهبي</div>
+                        <div className="text-sm text-amber-700/70">20,000+ نقطة مجموعة</div>
+                        <div className="text-xs text-amber-700 mt-2 font-bold">2× نقاط</div>
                     </div>
                 </div>
             </div>

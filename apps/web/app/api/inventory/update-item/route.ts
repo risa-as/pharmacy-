@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
+import { logAudit, resolveUserName } from "@/app/lib/audit";
 
 type AckStatus = "processed" | "duplicate" | "noop";
 
@@ -93,8 +94,21 @@ export async function POST(req: Request) {
             }
             // GlobalDrug price update removed because web schema does not have price on GlobalDrug
 
-            return { inventory, ackStatus: "processed" as AckStatus };
+            return { inventory, ackStatus: "processed" as AckStatus, changed: updateData };
         });
+
+        // Audit the price/stock-level edit, attributed to the acting user.
+        if (Object.keys(result.changed).length > 0) {
+            await logAudit({
+                userId: syncUser.id,
+                userName: syncUser.name ?? await resolveUserName(syncUser.id),
+                action: "UPDATE",
+                entity: "INVENTORY",
+                entityId: result.inventory.id,
+                details: JSON.stringify({ changes: result.changed, source: "desktop-sync" }),
+                branchId: result.inventory.branchId,
+            });
+        }
 
         return NextResponse.json({
             success: true,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, HardDrive, RefreshCw } from "lucide-react";
+import { Download, HardDrive, RefreshCw, Info } from "lucide-react";
 
 interface Backup {
     name: string;
@@ -49,62 +49,88 @@ export default function BackupManager() {
     };
 
     return (
-        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-            <div className="p-4 border-b border-border flex justify-between items-center bg-muted/50">
-                <div className="flex items-center gap-2 text-foreground">
-                    <HardDrive className="w-5 h-5 text-primary" />
-                    <h3 className="font-bold">سجل النسخ الاحتياطي</h3>
-                </div>
-                <button
-                    onClick={fetchBackups}
-                    disabled={loading}
-                    className="p-1.5 rounded-lg hover:bg-card hover:shadow-sm text-muted-foreground transition-all disabled:opacity-50"
-                >
-                    <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                </button>
+        <div className="space-y-3">
+            {/* ملاحظة توضيحية لآلية النسخ */}
+            <div className="flex items-start gap-2 rounded-lg bg-info/5 border border-info/20 px-4 py-3 text-sm text-muted-foreground">
+                <Info className="w-4 h-4 text-info shrink-0 mt-0.5" />
+                <span>
+                    تُنشأ النسخ الاحتياطية <span className="font-bold text-foreground">تلقائياً من تطبيق سطح المكتب</span> وتُرفع للسحابة.
+                    من هنا يمكنك عرضها وتحميلها متى احتجت لاستعادتها.
+                </span>
             </div>
 
-            <div className="max-h-[300px] overflow-y-auto">
-                {loading ? (
-                    <div className="p-8 text-center text-muted-foreground">جاري التحميل...</div>
-                ) : backups.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground text-sm">لا توجد نسخ احتياطية حتى الآن</div>
-                ) : (
-                    <table className="w-full text-sm text-right">
-                        <thead className="text-muted-foreground bg-muted/50 text-xs">
-                            <tr>
-                                <th className="p-3 font-medium">الملف</th>
-                                <th className="p-3 font-medium">الحجم</th>
-                                <th className="p-3 font-medium">التاريخ</th>
-                                <th className="p-3 font-medium text-center">إجراء</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {backups.map((backup: any) => (
-                                <tr key={backup.name} className="hover:bg-primary/10/30 transition-colors group">
-                                    <td className="p-3 font-medium text-foreground ltr:text-left" dir="ltr">
-                                        {backup.name}
-                                    </td>
-                                    <td className="p-3 text-muted-foreground ltr:text-left" dir="ltr">
-                                        {formatSize(backup.size)}
-                                    </td>
-                                    <td className="p-3 text-muted-foreground">
-                                        {formatDate(backup.date)}
-                                    </td>
-                                    <td className="p-3 text-center">
-                                        <button
-                                            onClick={() => handleDownload(backup.name)}
-                                            className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                            title="تحميل"
-                                        >
-                                            <Download className="w-4 h-4" />
-                                        </button>
-                                    </td>
+            <div className="rounded-xl border border-border overflow-hidden">
+                <div className="p-4 border-b border-border flex justify-between items-center bg-muted/40">
+                    <div className="flex items-center gap-2 text-foreground">
+                        <HardDrive className="w-5 h-5 text-primary" />
+                        <h3 className="font-bold">سجل النسخ الاحتياطية</h3>
+                        {!loading && backups.length > 0 && (
+                            <span className="text-xs bg-muted text-muted-foreground rounded-full px-2 py-0.5">{backups.length}</span>
+                        )}
+                    </div>
+                    <button
+                        onClick={fetchBackups}
+                        disabled={loading}
+                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-all disabled:opacity-50"
+                        title="تحديث"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                    </button>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto">
+                    {loading ? (
+                        <div className="py-10 flex items-center justify-center text-muted-foreground">
+                            <RefreshCw className="w-5 h-5 animate-spin" />
+                        </div>
+                    ) : backups.length === 0 ? (
+                        <div className="py-10 text-center">
+                            <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                <HardDrive className="w-7 h-7 text-muted-foreground opacity-50" />
+                            </div>
+                            <p className="text-foreground font-medium text-sm">لا توجد نسخ احتياطية بعد</p>
+                            <p className="text-xs text-muted-foreground mt-1">ستظهر هنا بعد أول مزامنة من تطبيق سطح المكتب</p>
+                        </div>
+                    ) : (
+                        <table className="w-full text-sm text-right">
+                            <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
+                                <tr>
+                                    <th className="px-4 py-3 font-medium font-cairo">الملف</th>
+                                    <th className="px-4 py-3 font-medium font-cairo">الحجم</th>
+                                    <th className="px-4 py-3 font-medium font-cairo">التاريخ</th>
+                                    <th className="px-4 py-3 font-medium font-cairo text-center">تحميل</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+                            </thead>
+                            <tbody className="divide-y divide-border bg-card">
+                                {backups.map((backup: any) => (
+                                    <tr key={backup.name} className="hover:bg-muted/40 transition-colors group">
+                                        <td className="px-4 py-3 font-medium text-foreground" dir="ltr">
+                                            <span className="inline-flex items-center gap-2">
+                                                <HardDrive className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                                {backup.name}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground" dir="ltr">
+                                            {formatSize(backup.size)}
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground">
+                                            {formatDate(backup.date)}
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <button
+                                                onClick={() => handleDownload(backup.name)}
+                                                className="inline-flex items-center justify-center rounded-lg border border-border p-2 text-primary hover:bg-primary/10 hover:border-primary/50 transition-colors"
+                                                title="تحميل"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -30,3 +30,21 @@ export async function logAudit(params: AuditParams): Promise<void> {
         console.error('[AuditLog] Failed to write entry:', err);
     }
 }
+
+/**
+ * Resolves a user id to a human display name for audit entries. Desktop sync
+ * tokens (HMAC) carry no name, so sync routes use this to attribute an action
+ * to the real acting user instead of a generic "Desktop Sync".
+ */
+export async function resolveUserName(userId: string | null | undefined): Promise<string> {
+    if (!userId) return 'غير معروف';
+    try {
+        const u = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true, email: true },
+        });
+        return u?.name ?? u?.email ?? 'غير معروف';
+    } catch {
+        return 'غير معروف';
+    }
+}

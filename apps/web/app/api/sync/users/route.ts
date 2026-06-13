@@ -38,7 +38,8 @@ export async function GET(request: Request) {
                 email: true,
                 password: true, // bcrypt hash required for offline desktop login
                 role: true,
-                branchId: true
+                branchId: true,
+                isActive: true // so offline desktop login can reject disabled employees
             }
         });
 

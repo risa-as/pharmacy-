@@ -147,10 +147,34 @@ export default async function InventoryReportPage({
   const fmt = (v: number) => Math.round(v).toLocaleString("en-US");
 
   const statCards = [
-    { label: "إجمالي الأصناف", value: String(counts.total), icon: Package, tone: "text-primary", bg: "bg-primary/10" },
-    { label: "قيمة المخزون - بيع (د.ع)", value: fmt(totalSaleValue), icon: Tag, tone: "text-success", bg: "bg-success/10" },
-    { label: "قيمة المخزون - شراء (د.ع)", value: fmt(totalCostValue), icon: Banknote, tone: "text-info", bg: "bg-info/10" },
-    { label: "الربح المتوقع (د.ع)", value: fmt(expectedProfit), icon: TrendingUp, tone: "text-warning", bg: "bg-warning/10" },
+    {
+      label: "إجمالي الأصناف",
+      value: String(counts.total),
+      icon: Package,
+      tone: "text-primary",
+      bg: "bg-primary/10",
+    },
+    {
+      label: "قيمة المخزون - بيع (د.ع)",
+      value: fmt(totalSaleValue),
+      icon: Tag,
+      tone: "text-success",
+      bg: "bg-success/10",
+    },
+    {
+      label: "قيمة المخزون - شراء (د.ع)",
+      value: fmt(totalCostValue),
+      icon: Banknote,
+      tone: "text-info",
+      bg: "bg-info/10",
+    },
+    {
+      label: "الربح المتوقع (د.ع)",
+      value: fmt(expectedProfit),
+      icon: TrendingUp,
+      tone: "text-warning",
+      bg: "bg-warning/10",
+    },
   ];
 
   return (
@@ -177,8 +201,14 @@ export default async function InventoryReportPage({
         <ExportExcelButton
           filename="inventory-report"
           headers={[
-            "الصنف", "الفرع", "الكمية", "الحد الأدنى", "الحد الأقصى",
-            "سعر البيع", "سعر الشراء", "الحالة",
+            "الصنف",
+            "الفرع",
+            "الكمية",
+            "الحد الأدنى",
+            "الحد الأقصى",
+            "سعر البيع",
+            "سعر الشراء",
+            "الحالة",
           ]}
           data={inventoryWithQuantity.map((item: any) => [
             item.drug.tradeName,
@@ -210,13 +240,22 @@ export default async function InventoryReportPage({
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div key={card.label} className="glass-card p-5 flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}>
+            <div
+              key={card.label}
+              className="glass-card p-5 flex items-center gap-4"
+            >
+              <div
+                className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}
+              >
                 <Icon className={`w-6 h-6 ${card.tone}`} />
               </div>
               <div className="min-w-0">
-                <p className="text-sm text-muted-foreground truncate">{card.label}</p>
-                <p className={`text-2xl font-bold ${card.tone}`} dir="ltr">{card.value}</p>
+                <p className="text-sm text-muted-foreground truncate">
+                  {card.label}
+                </p>
+                <p className={`text-2xl font-bold ${card.tone}`} dir="ltr">
+                  {card.value}
+                </p>
               </div>
             </div>
           );
@@ -235,8 +274,12 @@ export default async function InventoryReportPage({
                 <AlertTriangle className="w-6 h-6 text-warning" />
               </div>
               <div className="flex-1">
-                <div className="font-bold text-foreground">{lowStock} صنف بمخزون منخفض</div>
-                <div className="text-sm text-muted-foreground">يحتاج إلى إعادة طلب · اضغط للإدارة</div>
+                <div className="font-bold text-foreground">
+                  {lowStock} صنف بمخزون منخفض
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  يحتاج إلى إعادة طلب · اضغط للإدارة
+                </div>
               </div>
               <ArrowRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-warning transition-colors shrink-0" />
             </Link>
@@ -250,8 +293,12 @@ export default async function InventoryReportPage({
                 <CalendarX className="w-6 h-6 text-warning" />
               </div>
               <div className="flex-1">
-                <div className="font-bold text-foreground">{expiringCount} دفعة تنتهي قريباً</div>
-                <div className="text-sm text-muted-foreground">خلال 30 يوم · اضغط للإدارة</div>
+                <div className="font-bold text-foreground">
+                  {expiringCount} دفعة تنتهي قريباً
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  خلال 30 يوم · اضغط للإدارة
+                </div>
               </div>
               <ArrowRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-warning transition-colors shrink-0" />
             </Link>
@@ -265,8 +312,12 @@ export default async function InventoryReportPage({
                 <AlertTriangle className="w-6 h-6 text-destructive" />
               </div>
               <div className="flex-1">
-                <div className="font-bold text-foreground">{expiredCount} دفعة منتهية الصلاحية</div>
-                <div className="text-sm text-muted-foreground">يجب شطبها · اضغط للإدارة</div>
+                <div className="font-bold text-foreground">
+                  {expiredCount} دفعة منتهية الصلاحية
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  يجب شطبها · اضغط للإدارة
+                </div>
               </div>
               <ArrowRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-destructive transition-colors shrink-0" />
             </Link>
@@ -290,21 +341,39 @@ export default async function InventoryReportPage({
             <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Package className="w-8 h-8 text-muted-foreground opacity-50" />
             </div>
-            <p className="text-foreground font-medium">لا توجد أصناف في المخزون</p>
-            <p className="text-sm text-muted-foreground mt-1">جرّب فلتراً أو بحثاً آخر</p>
+            <p className="text-foreground font-medium">
+              لا توجد أصناف في المخزون
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              جرّب فلتراً أو بحثاً آخر
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                 <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">الصنف</th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">الفرع</th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">الكمية</th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">الأدنى / الأقصى</th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">سعر البيع</th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">سعر الشراء</th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">الحالة</th>
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    الصنف
+                  </th>
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    الفرع
+                  </th>
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    الكمية
+                  </th>
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    الأدنى / الأقصى
+                  </th>
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    سعر البيع
+                  </th>
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    سعر الشراء
+                  </th>
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    الحالة
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
@@ -313,29 +382,58 @@ export default async function InventoryReportPage({
                   const isLow = !isOut && item.currentQuantity < item.minStock;
                   const isOver = item.currentQuantity > item.maxStock;
                   return (
-                    <tr key={item.id} className="hover:bg-muted/40 transition-colors">
+                    <tr
+                      key={item.id}
+                      className="hover:bg-muted/40 transition-colors"
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 bg-success/10 rounded-lg flex items-center justify-center shrink-0">
                             <Package className="w-4 h-4 text-success" />
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-foreground truncate">{item.drug.tradeName}</p>
+                            <p className="font-semibold text-foreground truncate">
+                              {item.drug.tradeName}
+                            </p>
                             {item.drug.barcode && (
-                              <p className="text-xs text-muted-foreground" dir="ltr">{item.drug.barcode}</p>
+                              <p
+                                className="text-xs text-muted-foreground"
+                                dir="ltr"
+                              >
+                                {item.drug.barcode}
+                              </p>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-muted-foreground">{item.branch.name}</td>
+                      <td className="px-6 py-4 text-muted-foreground">
+                        {item.branch.name}
+                      </td>
                       <td className="px-6 py-4">
-                        <span className={`font-bold ${isOut ? "text-destructive" : isLow ? "text-warning" : "text-foreground"}`}>
+                        <span
+                          className={`font-bold ${isOut ? "text-destructive" : isLow ? "text-warning" : "text-foreground"}`}
+                        >
                           {item.currentQuantity}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-muted-foreground" dir="ltr">{item.minStock} / {item.maxStock}</td>
-                      <td className="px-6 py-4 text-muted-foreground" dir="ltr">{fmt(item.price ?? 0)}</td>
-                      <td className="px-6 py-4 text-muted-foreground" dir="ltr">{fmt(item.cost ?? 0)}</td>
+                      <td
+                        className="px-6 py-4 text-muted-foreground text-right"
+                        dir="ltr"
+                      >
+                        {item.maxStock} / {item.minStock}
+                      </td>
+                      <td
+                        className="px-6 py-4 text-muted-foreground text-right"
+                        dir="rtl"
+                      >
+                        {fmt(item.price ?? 0)}
+                      </td>
+                      <td
+                        className="px-6 py-4 text-muted-foreground text-right"
+                        dir="rtl"
+                      >
+                        {fmt(item.cost ?? 0)}
+                      </td>
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-bold ${
@@ -348,10 +446,23 @@ export default async function InventoryReportPage({
                                   : "bg-success/10 text-success border-success/20"
                           }`}
                         >
-                          {isOut ? (<><AlertTriangle className="w-3 h-3" /> نفاد</>)
-                            : isLow ? (<><AlertTriangle className="w-3 h-3" /> منخفض</>)
-                            : isOver ? (<><AlertTriangle className="w-3 h-3" /> فائض</>)
-                            : (<><CheckCircle className="w-3 h-3" /> جيد</>)}
+                          {isOut ? (
+                            <>
+                              <AlertTriangle className="w-3 h-3" /> نفاد
+                            </>
+                          ) : isLow ? (
+                            <>
+                              <AlertTriangle className="w-3 h-3" /> منخفض
+                            </>
+                          ) : isOver ? (
+                            <>
+                              <AlertTriangle className="w-3 h-3" /> فائض
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-3 h-3" /> جيد
+                            </>
+                          )}
                         </span>
                       </td>
                     </tr>

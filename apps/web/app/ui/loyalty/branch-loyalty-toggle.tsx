@@ -39,19 +39,23 @@ export default function BranchLoyaltyToggle({ initialBranches, orgLoyaltyEnabled
     };
 
     return (
-        <div className="bg-card rounded-xl border shadow-sm p-6">
-            <h2 className="font-bold text-lg mb-1 flex items-center gap-2">
-                <GitBranch className="w-5 h-5 text-info" />
-                تفعيل الولاء حسب الفرع
-            </h2>
-            <p className="text-sm text-muted-foreground mb-4">
-                يمكنك تحديد الفروع المشاركة في برنامج الولاء. يجب أن يكون البرنامج مفعّلاً على مستوى المنشأة أولاً.
-            </p>
-            <div className="space-y-3">
+        <div className="glass-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <GitBranch className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                    <h2 className="font-bold text-foreground font-cairo leading-tight">تفعيل الولاء حسب الفرع</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        حدّد الفروع المشاركة — يجب تفعيل البرنامج على مستوى المنشأة أولاً.
+                    </p>
+                </div>
+            </div>
+            <div className="p-5 space-y-3">
                 {branches.map((branch) => (
                     <div
                         key={branch.id}
-                        className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${branch.loyaltyEnabled ? "bg-success/10 border-green-300" : "bg-muted border-border"}`}
+                        className={`flex items-center justify-between p-4 rounded-xl border transition-all ${branch.loyaltyEnabled ? "bg-success/10 border-success/30" : "bg-muted/40 border-border"}`}
                     >
                         <div>
                             <div className="font-bold text-foreground">{branch.name}</div>

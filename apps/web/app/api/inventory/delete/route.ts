@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { validateSyncUser, isBranchInSyncScope } from '@/app/lib/sync-auth';
+import { logAudit, resolveUserName } from '@/app/lib/audit';
 
 type AckStatus = 'processed' | 'already_deleted' | 'noop';
 
@@ -69,6 +70,16 @@ export async function POST(req: Request) {
 
         await prisma.inventory.delete({
             where: { id: inventoryId }
+        });
+
+        await logAudit({
+            userId: syncUser.id,
+            userName: syncUser.name ?? await resolveUserName(syncUser.id),
+            action: 'DELETE',
+            entity: 'INVENTORY',
+            entityId: inventoryId,
+            details: JSON.stringify({ source: 'desktop-sync' }),
+            branchId: target.branchId ?? undefined,
         });
 
         return NextResponse.json({

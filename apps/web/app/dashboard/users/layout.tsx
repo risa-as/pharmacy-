@@ -12,28 +12,45 @@ import HubTabNav, { type HubTab, type HubAction } from "@/app/ui/hub-tab-nav";
 import { Users, Shield, BookOpen, Plus } from "lucide-react";
 
 const TABS: HubTab[] = [
-    { name: "المستخدمين",      href: "/dashboard/users",              icon: <Users className="w-3.5 h-3.5 shrink-0" /> },
-    { name: "إدارة الصلاحيات", href: "/dashboard/users/permissions",  icon: <Shield className="w-3.5 h-3.5 shrink-0" /> },
-    { name: "دليل الصلاحيات",  href: "/dashboard/permissions-guide",  icon: <BookOpen className="w-3.5 h-3.5 shrink-0" /> },
+  {
+    name: "المستخدمين",
+    href: "/dashboard/users",
+    icon: <Users className="w-3.5 h-3.5 shrink-0" />,
+  },
+  {
+    name: "إدارة الصلاحيات",
+    href: "/dashboard/users/permissions",
+    icon: <Shield className="w-3.5 h-3.5 shrink-0" />,
+  },
+  {
+    name: "دليل الصلاحيات",
+    href: "/dashboard/users/permissions-guide",
+    icon: <BookOpen className="w-3.5 h-3.5 shrink-0" />,
+  },
 ];
 
 const ACTIONS: HubAction[] = [
-    { name: "إضافة عضو", href: "/dashboard/users/create", icon: <Plus className="w-3.5 h-3.5 shrink-0" />, variant: "primary" },
+  {
+    name: "إضافة عضو",
+    href: "/dashboard/users/create",
+    icon: <Plus className="w-3.5 h-3.5 shrink-0" />,
+    variant: "primary",
+  },
 ];
 
 export default function UsersLayout({
-    children,
+  children,
 }: {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-    return (
-        <>
-            <HubTabNav
-                tabs={TABS}
-                actions={ACTIONS}
-                skipOnPatterns={["/create", "/edit"]}
-            />
-            {children}
-        </>
-    );
+  return (
+    <>
+      <HubTabNav
+        tabs={TABS}
+        actions={ACTIONS}
+        skipOnPatterns={["/create", "/edit"]}
+      />
+      {children}
+    </>
+  );
 }

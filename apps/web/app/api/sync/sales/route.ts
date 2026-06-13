@@ -73,6 +73,20 @@ export async function POST(req: NextRequest) {
             resolvedOrgId = branch?.organizationId;
         }
 
+        // Resolve cashier names up front so each desktop-synced sale is attributed
+        // in the audit log to the actual cashier who rang it (sale.userId) — not the
+        // headless sync connection, which has no name and showed as "Desktop Sync".
+        const saleUserIds = Array.from(
+            new Set(sales.map((s) => s.userId).filter((id): id is string => !!id))
+        );
+        const cashierUsers = saleUserIds.length
+            ? await prisma.user.findMany({
+                where: { id: { in: saleUserIds } },
+                select: { id: true, name: true, email: true },
+            })
+            : [];
+        const cashierMap = new Map(cashierUsers.map((u) => [u.id, u]));
+
         // Process Sales Transactionally
         // We iterate effectively, or use createMany if possible (but we have relations)
         // For simplicity and data integrity, we process one by one or in a loop inside transaction.
@@ -153,9 +167,16 @@ export async function POST(req: NextRequest) {
                             }
 
                             if (remainingToDeduct > 0) {
-                                console.warn(`[SyncSales] Over-sell or empty batches for drugId=${item.drugId} branchId=${branchId}. Remaining after deduction: ${remainingToDeduct}`);
+                                // Policy: the sale already happened offline (goods left the
+                                // shelf), so we never reject it here. Batch quantities are
+                                // clamped at 0 (deduction = min(batch.qty, remaining)) so stock
+                                // never goes negative; the un-deductible shortfall is logged for
+                                // the pharmacist to reconcile via a stocktake.
+                                console.warn(`[SyncSales] Over-sell or empty batches for drugId=${item.drugId} branchId=${branchId}. Shortfall (not deducted): ${remainingToDeduct}`);
                             }
                         } else {
+                            // No inventory row for this drug at this branch — sale is still
+                            // recorded (it occurred), but nothing to deduct. Needs reconciliation.
                             console.error(`[SyncSales] INVENTORY NOT FOUND — drugId=${item.drugId} branchId=${branchId} saleId=${sale.id}. Stock was NOT deducted!`);
                         }
 
@@ -244,9 +265,12 @@ export async function POST(req: NextRequest) {
                     timeout: 20000 // default: 5000
                 });
                 processedIds.push(sale.id);
+                const cashier = sale.userId ? cashierMap.get(sale.userId) : undefined;
                 await logAudit({
-                    userId: syncUser.id,
-                    userName: syncUser.name ?? syncUser.email ?? 'Desktop Sync',
+                    // Attribute to the cashier who made the sale; fall back to the
+                    // sync connection only if the user can't be resolved.
+                    userId: sale.userId ?? syncUser.id,
+                    userName: cashier?.name ?? cashier?.email ?? syncUser.name ?? 'Desktop Sync',
                     action: 'CREATE',
                     entity: 'SALE',
                     entityId: sale.id,
