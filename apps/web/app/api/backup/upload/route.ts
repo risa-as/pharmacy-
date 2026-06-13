@@ -23,6 +23,10 @@ export async function POST(req: Request) {
                 select: { branchId: true },
             });
             if (!license) {
+                // Safe diagnostics — no secret/key values leaked.
+                console.warn(
+                    `[backup/upload] license auth failed: no active license for branch=${headerBranchId} keyLen=${licenseKey.length}`,
+                );
                 return NextResponse.json({ success: false, message: "Invalid or inactive device license" }, { status: 401 });
             }
             authedBranchId = license.branchId;
@@ -30,7 +34,13 @@ export async function POST(req: Request) {
             const secretKey = req.headers.get("x-backup-secret");
             const configuredSecret = process.env.BACKUP_SECRET_KEY;
             if (!configuredSecret || secretKey !== configuredSecret) {
-                console.error("Unauthorized backup attempt");
+                // Log presence + lengths (NOT values) so quote/whitespace mismatches
+                // are diagnosable from the server logs. e.g. a length of 12 means the
+                // value was stored as "R$i1999s$a" *with* the surrounding quotes.
+                console.warn(
+                    `[backup/upload] legacy secret mismatch: provided=${!!secretKey} providedLen=${secretKey?.length ?? 0} ` +
+                    `configured=${!!configuredSecret} configuredLen=${configuredSecret?.length ?? 0} match=${secretKey === configuredSecret}`,
+                );
                 return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
             }
             console.warn("[backup/upload] Legacy shared-secret auth used — migrate this device to license-key auth.");
