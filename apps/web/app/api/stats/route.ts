@@ -24,13 +24,17 @@ export async function GET(request: NextRequest) {
         const branchFilter = { ...tenantBranchWhere, ...(branchId && { branchId }) };
 
         // Run all queries in parallel for performance
+        const now = new Date();
         const [
             salesTodayAgg,
             salesCountToday,
             inventoryCount,
             inventoriesForStock,
             expiringCount,
+            expiredCount,
             debtsCount,
+            debtsTotalAgg,
+            creditCountToday,
         ] = await Promise.all([
             // 1. Sales revenue today
             prisma.sale.aggregate({
@@ -48,16 +52,33 @@ export async function GET(request: NextRequest) {
                 where: { ...branchFilter, minStock: { gt: 0 } },
                 include: { batches: { select: { quantity: true }, where: { quantity: { gt: 0 } } } },
             }),
-            // 5. Expiring batches within 90 days
+            // 5. Expiring batches within 90 days (still valid, approaching expiry)
             prisma.batch.count({
                 where: {
-                    expiryDate: { lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) },
+                    expiryDate: { gt: now, lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) },
                     quantity: { gt: 0 },
                     inventory: branchFilter,
                 },
             }),
-            // 6. Patients with outstanding balance (debts)
-            prisma.patient.count({ where: { ...tenantBranchWhere, balance: { not: 0 } } }),
+            // 6. Already-expired batches (UI referenced this but it was never returned)
+            prisma.batch.count({
+                where: {
+                    expiryDate: { lt: now },
+                    quantity: { gt: 0 },
+                    inventory: branchFilter,
+                },
+            }),
+            // 7. Patients with outstanding balance (debts) — count
+            prisma.patient.count({ where: { ...tenantBranchWhere, balance: { gt: 0 } } }),
+            // 8. Total outstanding receivables (debts) — amount
+            prisma.patient.aggregate({
+                _sum: { balance: true },
+                where: { ...tenantBranchWhere, balance: { gt: 0 } },
+            }),
+            // 9. Credit (deferred) sales count today — for the cash/credit split
+            prisma.sale.count({
+                where: { createdAt: { gte: todayStart }, ...branchFilter, payment: { method: 'CREDIT' } },
+            }),
         ]);
 
         const salesToday = salesTodayAgg._sum.total ?? 0;
@@ -72,7 +93,11 @@ export async function GET(request: NextRequest) {
             inventory: inventoryCount,
             lowStock: lowStockCount,
             expiring: expiringCount,
+            expiredCount,
             debtsCount,
+            debtsTotal: debtsTotalAgg._sum.balance ?? 0,
+            creditCount: creditCountToday,
+            cashCount: Math.max(0, salesCountToday - creditCountToday),
         });
     } catch (error) {
         console.error('API Stats Error:', error);

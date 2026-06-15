@@ -21,65 +21,11 @@ import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { requireFeature } from "@/app/lib/page-guards";
 import UpgradeRequired from "@/app/ui/plan-enforcement/UpgradeRequired";
+import { buildDateRange, filterByTimeOfDay } from "@/app/lib/report-period";
+import ExportProfitButton from "@/app/ui/reports/export-profit-button";
 
 function parseDateParam(val: string | string[] | undefined) {
   return typeof val === "string" ? val : undefined;
-}
-
-function buildDateRange(
-  from?: string,
-  to?: string,
-  fromTime?: string,
-  toTime?: string,
-) {
-  const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
-  const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
-  let start: Date, end: Date, label: string;
-  if (from && to) {
-    const [fy, fm, fd] = from.split("-").map(Number);
-    const [ty, tm, td] = to.split("-").map(Number);
-    // Parse as Baghdad dates → convert to UTC (full days for DB; time-of-day filtered in JS)
-    start = new Date(Date.UTC(fy, fm - 1, fd, 0, 0, 0, 0) - IRAQ_OFFSET);
-    end = new Date(Date.UTC(ty, tm - 1, td, 23, 59, 59, 999) - IRAQ_OFFSET);
-    label =
-      fromTime || toTime
-        ? `${from} — ${to} (${fromTime || "00:00"} → ${toTime || "23:59"})`
-        : `${from} — ${to}`;
-  } else {
-    const todayUtcIraq = Date.UTC(
-      nowIraq.getUTCFullYear(),
-      nowIraq.getUTCMonth(),
-      nowIraq.getUTCDate(),
-    );
-    end = new Date(todayUtcIraq + 24 * 60 * 60 * 1000 - 1 - IRAQ_OFFSET);
-    start = new Date(todayUtcIraq - 6 * 24 * 60 * 60 * 1000 - IRAQ_OFFSET);
-    label = "آخر 7 أيام";
-  }
-  return { start, end, label };
-}
-
-function filterByTimeOfDay<T extends { createdAt: Date | string }>(
-  items: T[],
-  fromTime?: string,
-  toTime?: string,
-): T[] {
-  if (!fromTime && !toTime) return items;
-  const toMinutes = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    return h * 60 + m;
-  };
-  const fromMin = fromTime ? toMinutes(fromTime) : 0;
-  const toMin = toTime ? toMinutes(toTime) : 23 * 60 + 59;
-  const crossesMidnight = fromMin > toMin;
-  const IRAQ_OFFSET_MS = 3 * 60 * 60 * 1000;
-  return items.filter((item) => {
-    const d = new Date(item.createdAt);
-    const iraqTime = new Date(d.getTime() + IRAQ_OFFSET_MS);
-    const min = iraqTime.getUTCHours() * 60 + iraqTime.getUTCMinutes();
-    return crossesMidnight
-      ? min >= fromMin || min <= toMin
-      : min >= fromMin && min <= toMin;
-  });
 }
 
 function getDaysBetween(start: Date, end: Date) {
@@ -139,14 +85,17 @@ export default async function ProfitsReportPage({
     pendingTotal,
     monthlySales,
     monthlyExpenses,
+    returnsRaw,
+    monthlyReturns,
   ] = await Promise.all([
-    // Period sales — revenue + per-item recorded cost
+    // Period sales — revenue (net of discount) + discount + per-item price/cost
     prisma.sale.findMany({
       where: { createdAt: { gte: start, lte: end }, ...branchWhere },
       select: {
         total: true,
+        discount: true,
         createdAt: true,
-        items: { select: { quantity: true, cost: true } },
+        items: { select: { quantity: true, price: true, cost: true } },
       },
     }),
     // Period expenses — only needed fields
@@ -181,10 +130,50 @@ export default async function ProfitsReportPage({
       where: { date: { gte: sixMonthsAgo }, ...branchWhere },
       select: { amount: true, date: true },
     }),
+    // Period sale returns — refund total + returned items, plus the original
+    // sale's recorded item cost (to back out the returned goods' COGS, since
+    // the stock is put back into inventory on return).
+    prisma.saleReturn.findMany({
+      where: { createdAt: { gte: start, lte: end }, ...branchWhere },
+      select: {
+        total: true,
+        createdAt: true,
+        items: { select: { drugId: true, quantity: true } },
+        sale: { select: { items: { select: { drugId: true, cost: true } } } },
+      },
+    }),
+    // Last 6 months sale returns for monthly breakdown
+    prisma.saleReturn.findMany({
+      where: { createdAt: { gte: sixMonthsAgo }, ...branchWhere },
+      select: {
+        total: true,
+        createdAt: true,
+        items: { select: { drugId: true, quantity: true } },
+        sale: { select: { items: { select: { drugId: true, cost: true } } } },
+      },
+    }),
   ]);
 
   // Filter period sales by time-of-day if specified
   const sales = filterByTimeOfDay(salesRaw, fromTimeParam, toTimeParam);
+  const returns = filterByTimeOfDay(returnsRaw, fromTimeParam, toTimeParam);
+
+  // Returned goods' COGS for one return = Σ (original sale's unit cost × qty
+  // returned). The returned units went back to stock, so their cost must be
+  // removed from COGS to avoid overstating profit.
+  const returnCOGSOf = (ret: {
+    items: { drugId: string; quantity: number }[];
+    sale: { items: { drugId: string; cost: number }[] } | null;
+  }) => {
+    const costByDrug = new Map(
+      (ret.sale?.items ?? []).map((si) => [si.drugId, si.cost]),
+    );
+    let cogs = 0;
+    for (const it of ret.items) {
+      cogs += (costByDrug.get(it.drugId) ?? 0) * it.quantity;
+    }
+    return cogs;
+  };
 
   // ── Current inventory value (cost basis) ───────────────────────────────────
   let totalInventoryValue = 0;
@@ -196,15 +185,30 @@ export default async function ProfitsReportPage({
   const totalPendingPurchases = pendingTotal._sum.total ?? 0;
 
   // ── Calculate Financials (COGS from recorded SaleItem.cost) ───────────────
-  let totalRevenue = 0;
-  let totalCOGS = 0;
+  let grossRevenue = 0; // Σ sale.total (already net of discount)
+  let grossLineRevenue = 0; // Σ (price × qty) before discount
+  let totalDiscount = 0;
+  let grossCOGS = 0;
   for (const sale of sales) {
-    totalRevenue += sale.total;
+    grossRevenue += sale.total;
+    totalDiscount += sale.discount || 0;
     for (const item of sale.items) {
-      totalCOGS += item.cost * item.quantity;
+      grossLineRevenue += item.price * item.quantity;
+      grossCOGS += item.cost * item.quantity;
     }
   }
 
+  // Net out returns: refunds reduce revenue, returned goods (back in stock)
+  // reduce COGS.
+  let totalReturns = 0;
+  let totalReturnsCOGS = 0;
+  for (const ret of returns) {
+    totalReturns += ret.total;
+    totalReturnsCOGS += returnCOGSOf(ret);
+  }
+
+  const totalRevenue = grossRevenue - totalReturns; // net sales
+  const totalCOGS = grossCOGS - totalReturnsCOGS; // COGS of goods that stayed sold
   const totalExpenses = expenses.reduce((s: number, e: any) => s + e.amount, 0);
   const grossProfit = totalRevenue - totalCOGS;
   const netProfit = grossProfit - totalExpenses;
@@ -235,6 +239,18 @@ export default async function ProfitsReportPage({
       );
     }
   }
+  // Subtract the margin lost to returns on the day each return was processed.
+  for (const ret of returns) {
+    const key = new Date(ret.createdAt).toLocaleDateString("en-GB", {
+      timeZone: "Asia/Baghdad",
+    });
+    if (profitByDay.has(key)) {
+      profitByDay.set(
+        key,
+        (profitByDay.get(key) || 0) - (ret.total - returnCOGSOf(ret)),
+      );
+    }
+  }
   const chartData = Array.from(profitByDay.entries()).map(([day, amount]) => ({
     day,
     amount,
@@ -244,6 +260,7 @@ export default async function ProfitsReportPage({
   const monthlyData: {
     month: string;
     revenue: number;
+    returns: number;
     cogs: number;
     expenses: number;
     netProfit: number;
@@ -272,6 +289,15 @@ export default async function ProfitsReportPage({
       }
     }
 
+    let retRev = 0;
+    let retCogs = 0;
+    for (const ret of monthlyReturns) {
+      if (monthOf(ret.createdAt) !== monthKey) continue;
+      retRev += ret.total;
+      retCogs += returnCOGSOf(ret);
+    }
+    const netCogs = cogs - retCogs;
+
     const exp = monthlyExpenses
       .filter((e: any) => monthOf(e.date) === monthKey)
       .reduce((s: number, e: any) => s + e.amount, 0);
@@ -279,9 +305,10 @@ export default async function ProfitsReportPage({
     monthlyData.push({
       month: monthLabel,
       revenue: rev,
-      cogs,
+      returns: retRev,
+      cogs: netCogs,
       expenses: exp,
-      netProfit: rev - cogs - exp,
+      netProfit: rev - retRev - netCogs - exp,
     });
   }
 
@@ -293,8 +320,8 @@ export default async function ProfitsReportPage({
   const statCards = [
     {
       label: "إجمالي الإيرادات (د.ع)",
-      value: fmt(totalRevenue),
-      sub: null,
+      value: fmt(grossRevenue),
+      sub: totalReturns > 0 ? `صافي المبيعات: ${fmt(totalRevenue)}` : null,
       icon: DollarSign,
       tone: "text-primary",
       bg: "bg-primary/10",
@@ -343,6 +370,9 @@ export default async function ProfitsReportPage({
           <p className="text-sm text-muted-foreground mt-1">
             قائمة الدخل التفصيلية — {periodLabel}
           </p>
+        </div>
+        <div className="mr-auto">
+          <ExportProfitButton />
         </div>
       </div>
 
@@ -409,21 +439,93 @@ export default async function ProfitsReportPage({
           </span>
         </div>
         <div className="p-6 space-y-3">
-          <div className="flex justify-between py-2">
-            <span className="font-bold text-foreground">إيرادات المبيعات</span>
-            <span
-              className="font-bold text-primary whitespace-nowrap"
-              dir="ltr"
-            >
-              {fmt(totalRevenue)} د.ع
-            </span>
-          </div>
-          <div className="flex justify-between py-2 text-destructive">
-            <span>(−) تكلفة البضاعة المباعة (COGS)</span>
-            <span className="whitespace-nowrap" dir="ltr">
-              {fmt(totalCOGS)} د.ع
-            </span>
-          </div>
+          {/* المبيعات والخصم */}
+          {totalDiscount > 0 ? (
+            <>
+              <div className="flex justify-between py-2">
+                <span className="font-bold text-foreground">
+                  إجمالي المبيعات (قبل الخصم)
+                </span>
+                <span
+                  className="font-bold text-primary whitespace-nowrap"
+                  dir="ltr"
+                >
+                  {fmt(grossLineRevenue)} د.ع
+                </span>
+              </div>
+              <div className="flex justify-between py-2 text-destructive">
+                <span>(−) الخصومات المطبقة</span>
+                <span className="whitespace-nowrap" dir="ltr">
+                  {fmt(totalDiscount)} د.ع
+                </span>
+              </div>
+              <div className="flex justify-between py-2 border-t border-dashed border-border font-semibold">
+                <span className="text-foreground">= صافي المبيعات بعد الخصم</span>
+                <span className="text-primary whitespace-nowrap" dir="ltr">
+                  {fmt(grossRevenue)} د.ع
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between py-2">
+              <span className="font-bold text-foreground">إيرادات المبيعات</span>
+              <span
+                className="font-bold text-primary whitespace-nowrap"
+                dir="ltr"
+              >
+                {fmt(grossRevenue)} د.ع
+              </span>
+            </div>
+          )}
+
+          {/* المرتجعات */}
+          {totalReturns > 0 && (
+            <>
+              <div className="flex justify-between py-2 text-destructive">
+                <span>(−) مرتجعات المبيعات</span>
+                <span className="whitespace-nowrap" dir="ltr">
+                  {fmt(totalReturns)} د.ع
+                </span>
+              </div>
+              <div className="flex justify-between py-2 border-t border-dashed border-border font-semibold">
+                <span className="text-foreground">= صافي المبيعات</span>
+                <span className="text-primary whitespace-nowrap" dir="ltr">
+                  {fmt(totalRevenue)} د.ع
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* تكلفة البضاعة المباعة */}
+          {totalReturnsCOGS > 0 ? (
+            <>
+              <div className="flex justify-between py-2 text-destructive">
+                <span>تكلفة البضاعة المباعة (قبل المرتجعات)</span>
+                <span className="whitespace-nowrap" dir="ltr">
+                  {fmt(grossCOGS)} د.ع
+                </span>
+              </div>
+              <div className="flex justify-between py-1 text-sm text-muted-foreground">
+                <span>(−) تكلفة البضاعة المُرجَعة (تُعاد للمخزون)</span>
+                <span className="whitespace-nowrap" dir="ltr">
+                  {fmt(totalReturnsCOGS)} د.ع
+                </span>
+              </div>
+              <div className="flex justify-between py-2 border-t border-dashed border-border font-semibold text-destructive">
+                <span>= تكلفة البضاعة المباعة (صافي)</span>
+                <span className="whitespace-nowrap" dir="ltr">
+                  {fmt(totalCOGS)} د.ع
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between py-2 text-destructive">
+              <span>(−) تكلفة البضاعة المباعة (COGS)</span>
+              <span className="whitespace-nowrap" dir="ltr">
+                {fmt(totalCOGS)} د.ع
+              </span>
+            </div>
+          )}
           <div className="flex justify-between py-2 border-t border-dashed border-border font-bold text-lg">
             <span className="text-foreground">= إجمالي الربح</span>
             <span
@@ -524,6 +626,9 @@ export default async function ProfitsReportPage({
                   الإيرادات
                 </th>
                 <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  المرتجعات
+                </th>
+                <th className="px-6 py-3.5 text-right font-medium font-cairo">
                   تكلفة البضاعة
                 </th>
                 <th className="px-6 py-3.5 text-right font-medium font-cairo">
@@ -548,6 +653,12 @@ export default async function ProfitsReportPage({
                     dir="rtl"
                   >
                     {fmt(m.revenue)} د.ع
+                  </td>
+                  <td
+                    className="px-6 py-4 text-destructive whitespace-nowrap"
+                    dir="rtl"
+                  >
+                    {m.returns > 0 ? `${fmt(m.returns)} د.ع` : "—"}
                   </td>
                   <td
                     className="px-6 py-4 text-destructive whitespace-nowrap"

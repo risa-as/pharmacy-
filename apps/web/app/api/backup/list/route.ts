@@ -19,18 +19,18 @@ export async function GET(req: Request) {
         const backups = await prisma.backup.findMany({
             where: branchIds ? { branchId: { in: branchIds } } : {},
             orderBy: { createdAt: 'desc' },
-            take: 20, // Limit to last 20 backups
+            take: 100, // enough to filter by org/branch on the client
         });
 
-        // Resolve branch (and org) names so the list distinguishes which branch /
-        // organisation each backup belongs to.
+        // Resolve branch + org names/ids so the list distinguishes which branch
+        // and organisation each backup belongs to (for filtering & restore).
         const refBranchIds = Array.from(
             new Set(backups.map((b: any) => b.branchId).filter(Boolean) as string[])
         );
         const branchRows = refBranchIds.length
             ? await prisma.branch.findMany({
                 where: { id: { in: refBranchIds } },
-                select: { id: true, name: true, organization: { select: { name: true } } },
+                select: { id: true, name: true, organizationId: true, organization: { select: { name: true } } },
             })
             : [];
         const branchMap = new Map(branchRows.map((b: any) => [b.id, b]));
@@ -46,6 +46,8 @@ export async function GET(req: Request) {
                 url: b.url, // Include URL for direct download
                 branchId: b.branchId ?? null,
                 branchName: branch?.name ?? null,
+                // Prefer the denormalised org id on the backup; fall back to the branch's.
+                organizationId: b.organizationId ?? branch?.organizationId ?? null,
                 organizationName: branch?.organization?.name ?? null,
             };
         });
