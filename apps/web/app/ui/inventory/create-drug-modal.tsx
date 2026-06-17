@@ -43,9 +43,26 @@ export default function CreateDrugModal({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+
+    // الكمية صفر = لا يُقبل الحفظ
+    const qty = parseInt(formData.get("quantity") as string, 10) || 0;
+    if (qty <= 0) {
+      toast.error("لا يمكن الحفظ: الكمية يجب أن تكون أكبر من صفر");
+      return;
+    }
+    // سعر الباكيت أقل من 125 دينار = تحذير وتأكيد قبل الحفظ
+    if (
+      packetPrice < 125 &&
+      !window.confirm(
+        `سعر الباكيت (${packetPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nهل تريد المتابعة؟`,
+      )
+    ) {
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const res = await fetch("/api/inventory/create-quick", {
@@ -250,6 +267,12 @@ export default function CreateDrugModal({
                     : "—"}
                 </span>
               </div>
+              {packetPrice > 0 && packetPrice < 125 && (
+                <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
+                  <span>⚠</span>
+                  سعر الباكيت أقل من 125 دينار — سيظهر تأكيد عند الحفظ
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4 col-span-2">
@@ -298,7 +321,7 @@ export default function CreateDrugModal({
 
             <div className="col-span-2 border-t pt-4 mt-2">
               <h4 className="text-sm font-bold text-foreground mb-3">
-                الدفعة الأولى (اختياري)
+                الدفعة الأولى
               </h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -309,9 +332,13 @@ export default function CreateDrugModal({
                     type="number"
                     name="quantity"
                     defaultValue="0"
-                    min="0"
+                    min="1"
+                    required
                     className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    * لا يُقبل الحفظ إذا كانت الكمية صفر
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-foreground mb-1">

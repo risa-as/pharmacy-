@@ -117,10 +117,28 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+
+        const formData = new FormData(e.currentTarget);
+
+        // الكمية صفر = لا يُقبل الحفظ
+        const qty = parseInt(formData.get("quantity") as string, 10) || 0;
+        if (qty <= 0) {
+            setError("لا يمكن الحفظ: الكمية يجب أن تكون أكبر من صفر");
+            return;
+        }
+        // سعر الباكيت أقل من 125 دينار = تحذير وتأكيد قبل الحفظ
+        if (
+            packetPrice < 125 &&
+            !window.confirm(
+                `سعر الباكيت (${packetPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nهل تريد المتابعة؟`,
+            )
+        ) {
+            return;
+        }
+
         setLoading(true);
         setError("");
 
-        const formData = new FormData(e.currentTarget);
         formData.set("inventoryId", inventoryId);
         formData.set("supplierId", supplierId);
         formData.set("costPrice", String(computedCost));
@@ -178,6 +196,9 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                             className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                             placeholder="0"
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            * لا يُقبل الحفظ إذا كانت الكمية صفر
+                        </p>
                     </div>
 
                     <div>
@@ -216,6 +237,12 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                                     : "—"}
                             </span>
                         </div>
+                        {packetPrice > 0 && packetPrice < 125 && (
+                            <p className="text-xs font-bold text-warning flex items-center gap-1">
+                                <span>⚠</span>
+                                سعر الباكيت أقل من 125 دينار — سيظهر تأكيد عند الحفظ
+                            </p>
+                        )}
                     </div>
 
                     <div>
