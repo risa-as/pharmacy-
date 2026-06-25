@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2, Calendar, Banknote, Hourglass } from 'lucide-react';
+import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2, Calendar, Banknote, Hourglass, Info, Package, Receipt, Activity } from 'lucide-react';
 import { suspendOrganization, reactivateOrganization, startTrial } from '@/app/lib/actions/organization-suspension';
 import { recordManualPayment } from '@/app/lib/actions/billing';
 import PlanOverridesPanel from '@/app/ui/admin/PlanOverridesPanel';
@@ -28,6 +28,7 @@ export default function TenantsPage() {
     const [trialDialog, setTrialDialog] = useState<{ open: boolean; tenantId: string; tenantName: string } | null>(null);
     const [trialDays, setTrialDays] = useState('14');
     const [trialSaving, setTrialSaving] = useState(false);
+    const [detailsId, setDetailsId] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
@@ -245,6 +246,21 @@ export default function TenantsPage() {
     };
 
     const formatDate = (d: string) => new Date(d).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' });
+    const fmtNum = (n: number) => Number(n || 0).toLocaleString('en-US');
+
+    // Derives a quick activity status from a tenant's usage stats so the super
+    // admin can tell at a glance whether the organization is really being used.
+    const getActivity = (t: any) => {
+        const st = t.stats || { salesCount: 0, productCount: 0, lastSaleAt: null };
+        if ((st.salesCount || 0) === 0 && (st.productCount || 0) === 0) {
+            return { label: 'جديدة', cls: 'bg-muted text-muted-foreground' };
+        }
+        const last = st.lastSaleAt ? new Date(st.lastSaleAt) : null;
+        const recent = last ? (Date.now() - last.getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
+        return recent
+            ? { label: 'نشطة', cls: 'bg-success/10 text-success' }
+            : { label: 'خاملة', cls: 'bg-warning/10 text-warning' };
+    };
 
     const handleCopy = (key: string) => {
         navigator.clipboard.writeText(key);
@@ -347,10 +363,139 @@ export default function TenantsPage() {
         document.body
     ) : null;
 
+    const detailsTenant = detailsId ? tenants.find((t: any) => t.id === detailsId) : null;
+
+    const detailsModal = mounted && detailsTenant ? createPortal(
+        (() => {
+            const t = detailsTenant;
+            const plan = t.plan || plans.find((p: any) => p.id === t.planId) || { name: 'غير محدد', price: 0 };
+            const st = t.stats || { branchCount: 0, userCount: 0, productCount: 0, salesCount: 0, salesTotal: 0, lastSaleAt: null };
+            const activity = getActivity(t);
+            const statCards = [
+                { icon: Package, label: 'أصناف بالمخزون', value: fmtNum(st.productCount) },
+                { icon: Receipt, label: 'فواتير مباعة', value: fmtNum(st.salesCount) },
+                { icon: Banknote, label: 'إجمالي المبيعات', value: `${fmtNum(st.salesTotal)} IQD` },
+                { icon: Building2, label: 'الفروع', value: fmtNum(st.branchCount) },
+                { icon: Users, label: 'المستخدمون', value: fmtNum(st.userCount) },
+                { icon: Calendar, label: 'آخر عملية بيع', value: st.lastSaleAt ? formatDate(st.lastSaleAt) : 'لا يوجد' },
+            ];
+            const limits = [
+                { label: 'الخطة', value: plan.name },
+                { label: 'السعر', value: t.monthlyPrice === 0 ? (plan.name?.toUpperCase() === 'FREE' ? 'مجاني' : 'مخصص') : `${fmtNum(t.monthlyPrice)} IQD/شهر` },
+                { label: 'حد الفروع', value: `max ${t.maxBranches}` },
+                { label: 'حد المستخدمين', value: `max ${t.maxUsers}` },
+                { label: 'حد الأجهزة', value: `${t.maxDevices}` },
+                { label: 'حد الموبايل', value: `${t.maxMobileUsers}` },
+                { label: '🤖 حد AI/يوم', value: `${t.aiDailyLimit} رسالة` },
+                { label: '💊 حد الوصفات/يوم', value: `${t.prescriptionScanDailyLimit} مسح` },
+            ];
+            return (
+                <div className="fixed inset-0 z-[9998] flex items-start justify-center bg-black/50 p-4 overflow-y-auto" dir="rtl">
+                    <div className="bg-card rounded-2xl shadow-xl border w-full max-w-2xl p-6 space-y-5 my-8">
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="font-bold text-lg">{t.name}</h2>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${activity.cls}`}>{activity.label}</span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${t.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                                        {t.isActive ? 'فعال' : 'معطل'}
+                                    </span>
+                                    {t.isTrial && (
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-600 font-bold flex items-center gap-0.5">
+                                            <Hourglass className="w-3 h-3" /> تجريبي
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1" dir="ltr">{t.ownerEmail}</div>
+                            </div>
+                            <button onClick={() => setDetailsId(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+                        </div>
+
+                        {/* Statistics */}
+                        <div>
+                            <h3 className="text-sm font-bold mb-2 flex items-center gap-1.5"><Activity className="w-4 h-4 text-primary" /> النشاط والإحصائيات</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {statCards.map((c, i) => {
+                                    const Icon = c.icon;
+                                    return (
+                                        <div key={i} className="bg-muted/40 border rounded-xl p-3">
+                                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                                                <Icon className="w-3.5 h-3.5" /> {c.label}
+                                            </div>
+                                            <div className="font-bold text-foreground" dir="ltr">{c.value}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Limits / configuration */}
+                        <div>
+                            <h3 className="text-sm font-bold mb-2 flex items-center gap-1.5"><Info className="w-4 h-4 text-primary" /> الحدود والإعدادات</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {limits.map((l, i) => (
+                                    <div key={i} className="bg-muted/40 border rounded-xl p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">{l.label}</div>
+                                        <div className="font-bold text-sm text-foreground">{l.value}</div>
+                                    </div>
+                                ))}
+                                <div className="bg-muted/40 border rounded-xl p-3 col-span-2 sm:col-span-4">
+                                    <div className="text-xs text-muted-foreground mb-1">انتهاء الاشتراك</div>
+                                    <div className="font-bold text-sm text-foreground">
+                                        {t.subscriptionEndsAt ? formatDate(t.subscriptionEndsAt) : 'غير محدد'}
+                                        {t.subscriptionEndsAt && (
+                                            <span className={`mr-2 text-xs px-1.5 py-0.5 rounded-full ${new Date(t.subscriptionEndsAt) > new Date() ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                                                {new Date(t.subscriptionEndsAt) > new Date() ? 'ساري' : 'منتهي'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-wrap gap-2 border-t pt-4">
+                            <button onClick={() => { setDetailsId(null); handleEditClick(t); }}
+                                className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary hover:text-white border border-primary/20 transition-colors">
+                                <Edit2 className="w-3.5 h-3.5" /> تعديل
+                            </button>
+                            <button onClick={() => { setDetailsId(null); setManualPayDialog({ open: true, tenantId: t.id, tenantName: t.name }); setManualForm({ amount: String(t.monthlyPrice || ''), months: '1', method: 'BANK_TRANSFER', reference: '', note: '' }); }}
+                                className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold bg-success/10 text-success hover:bg-success hover:text-white border border-success/20 transition-colors">
+                                <Banknote className="w-3.5 h-3.5" /> تجديد يدوي
+                            </button>
+                            <button onClick={() => { setDetailsId(null); setTrialDialog({ open: true, tenantId: t.id, tenantName: t.name }); setTrialDays('14'); }}
+                                className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold bg-violet-500/10 text-violet-600 hover:bg-violet-600 hover:text-white border border-violet-500/20 transition-colors">
+                                <Hourglass className="w-3.5 h-3.5" /> فترة تجريبية
+                            </button>
+                            <button onClick={() => handleToggleStatus(t)} disabled={actionLoading === t.id}
+                                className={`flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${t.isActive ? 'bg-warning/10 text-warning hover:bg-warning hover:text-white border-warning/20' : 'bg-success/10 text-success hover:bg-success hover:text-white border-success/20'}`}>
+                                {actionLoading === t.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (t.isActive ? <ShieldAlert className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />)}
+                                {t.isActive ? 'تعطيل' : 'تفعيل'}
+                            </button>
+                            <button onClick={() => { setDetailsId(null); handleDeleteTenant(t); }}
+                                className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold bg-destructive/10 text-destructive hover:bg-destructive hover:text-white border border-destructive/20 transition-colors mr-auto">
+                                <Trash2 className="w-3.5 h-3.5" /> حذف
+                            </button>
+                        </div>
+
+                        {/* Plan overrides */}
+                        <div className="border-t pt-4">
+                            <h3 className="text-sm font-bold mb-2">تجاوزات الخطة</h3>
+                            <PlanOverridesPanel organizationId={t.id} organizationName={t.name} plans={plans} />
+                        </div>
+                    </div>
+                </div>
+            );
+        })(),
+        document.body
+    ) : null;
+
     return (
         <>
         {manualPayModal}
         {trialModal}
+        {detailsModal}
         <div className="glass-card p-6 space-y-6" dir="rtl" style={{backdropFilter: 'none', WebkitBackdropFilter: 'none'}}>
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
@@ -503,14 +648,9 @@ export default function TenantsPage() {
                             <tr className="bg-muted border-b">
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">المؤسسة</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الخطة</th>
-                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">المالك</th>
-                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">الفروع</th>
-                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">المستخدمين</th>
-                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">🤖 حد AI/يوم</th>
-                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">💊 حد الوصفات/يوم</th>
-                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">السعر</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الحالة</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">الاشتراك</th>
+                                <th className="text-right py-3 px-4 font-bold text-muted-foreground">النشاط</th>
                                 <th className="text-right py-3 px-4 font-bold text-muted-foreground">إجراءات</th>
                             </tr>
                         </thead>
@@ -521,30 +661,12 @@ export default function TenantsPage() {
                                     <tr key={t.id} className="border-b hover:bg-muted/50">
                                         <td className="py-3 px-4">
                                             <div className="font-medium text-foreground">{t.name}</div>
-                                            <div className="text-xs text-muted-foreground">{t.slug}</div>
+                                            <div className="text-xs text-muted-foreground" dir="ltr">{t.ownerEmail}</div>
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`text-xs px-2 py-0.5 rounded-full font-bold bg-primary/10 text-primary`}>
                                                 {plan.name}
                                             </span>
-                                        </td>
-                                        <td className="py-3 px-4 text-muted-foreground text-xs">{t.ownerEmail}</td>
-                                        <td className="py-3 px-4 text-foreground">max {t.maxBranches}</td>
-                                        <td className="py-3 px-4 text-foreground">max {t.maxUsers}</td>
-                                        <td className="py-3 px-4">
-                                            <span className="text-xs font-bold text-violet-600 bg-violet-500/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                                {t.aiDailyLimit ?? 50} رسالة
-                                            </span>
-                                        </td>
-                                        <td className="py-3 px-4">
-                                            <span className="text-xs font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                                {t.prescriptionScanDailyLimit ?? 20} مسح
-                                            </span>
-                                        </td>
-                                        <td className="py-3 px-4 font-bold text-success" dir="ltr">
-                                            {t.monthlyPrice === 0
-                                                ? (plan.name?.toUpperCase() === 'FREE' ? 'مجاني' : 'مخصص')
-                                                : `${Number(t.monthlyPrice).toLocaleString('en-US')} IQD/شهر`}
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`text-xs px-2 py-0.5 rounded-full ${t.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
@@ -575,6 +697,21 @@ export default function TenantsPage() {
                                             )}
                                         </td>
                                         <td className="py-3 px-4">
+                                            {(() => {
+                                                const a = getActivity(t);
+                                                const st = t.stats || { salesCount: 0, productCount: 0 };
+                                                return (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full w-fit font-bold ${a.cls}`}>{a.label}</span>
+                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap" dir="ltr">
+                                                            <span className="flex items-center gap-0.5" title="فواتير مباعة"><Receipt className="w-3 h-3" /> {fmtNum(st.salesCount)}</span>
+                                                            <span className="flex items-center gap-0.5" title="أصناف بالمخزون"><Package className="w-3 h-3" /> {fmtNum(st.productCount)}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
+                                        <td className="py-3 px-4">
                                             <div className="flex items-center gap-1">
                                                 {actionLoading === t.id ? (
                                                     <Loader2 className="w-5 h-5 animate-spin mx-2 text-muted-foreground" />
@@ -583,8 +720,15 @@ export default function TenantsPage() {
                                                 ) : (
                                                     <div className="flex items-center gap-1">
                                                         <button
+                                                            onClick={() => setDetailsId(t.id)}
+                                                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-primary/10 text-primary hover:bg-primary hover:text-white border border-primary/20"
+                                                            title="تفاصيل المؤسسة وإجراءاتها"
+                                                        >
+                                                            <Info className="w-3.5 h-3.5" /> تفاصيل
+                                                        </button>
+                                                        <button
                                                             onClick={() => handleToggleStatus(t)}
-                                                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${t.isActive
+                                                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${t.isActive
                                                                 ? 'bg-warning/10 text-warning hover:bg-warning hover:text-white border border-warning/20'
                                                                 : 'bg-success/10 text-success hover:bg-success hover:text-white border border-success/20'
                                                                 }`}
@@ -592,46 +736,7 @@ export default function TenantsPage() {
                                                         >
                                                             {t.isActive ? <ShieldAlert className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                                                         </button>
-
-                                                        <button
-                                                            onClick={() => handleEditClick(t)}
-                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-primary/10 text-primary hover:bg-primary hover:text-white border border-primary/20"
-                                                            title="تعديل"
-                                                        >
-                                                            <Edit2 className="w-3.5 h-3.5" />
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() => handleDeleteTenant(t)}
-                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-destructive/10 text-destructive hover:bg-destructive hover:text-white border border-destructive/20"
-                                                            title="حذف"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() => {
-                                                                setManualPayDialog({ open: true, tenantId: t.id, tenantName: t.name });
-                                                                setManualForm({ amount: String(t.monthlyPrice || ''), months: '1', method: 'BANK_TRANSFER', reference: '', note: '' });
-                                                            }}
-                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-success/10 text-success hover:bg-success hover:text-white border border-success/20"
-                                                            title="تجديد يدوي"
-                                                        >
-                                                            <Banknote className="w-3.5 h-3.5" />
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() => {
-                                                                setTrialDialog({ open: true, tenantId: t.id, tenantName: t.name });
-                                                                setTrialDays('14');
-                                                            }}
-                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-violet-500/10 text-violet-600 hover:bg-violet-600 hover:text-white border border-violet-500/20"
-                                                            title="فترة تجريبية"
-                                                        >
-                                                            <Hourglass className="w-3.5 h-3.5" />
-                                                        </button>
                                                     </div>
-
                                                 )}
                                             </div>
                                         </td>
@@ -640,20 +745,6 @@ export default function TenantsPage() {
                             })}
                         </tbody>
                     </table>
-
-                    {/* Per-tenant plan override panels */}
-                    <div className="divide-y border-t">
-                        {tenants.map((t: any) => (
-                            <div key={`override-${t.id}`} className="px-4 py-2">
-                                <div className="text-xs text-muted-foreground mb-1 font-semibold">{t.name}</div>
-                                <PlanOverridesPanel
-                                    organizationId={t.id}
-                                    organizationName={t.name}
-                                    plans={plans}
-                                />
-                            </div>
-                        ))}
-                    </div>
                 </div>
             ) : (
                 <div className="text-center py-16 text-muted-foreground">

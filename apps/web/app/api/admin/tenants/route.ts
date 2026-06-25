@@ -25,6 +25,74 @@ export async function GET() {
             orderBy: { createdAt: 'desc' }
         });
 
+        // ── Per-organization activity statistics ────────────────────────────
+        // Roll branch-level aggregates up to the tenant level using a handful of
+        // cheap groupBy queries (instead of N queries per tenant). These let the
+        // super admin gauge whether a tenant is actually using the system.
+        const branchToOrg = new Map<string, string>();
+        for (const org of organizations) {
+            for (const b of org.branches) branchToOrg.set(b.id, org.id);
+        }
+        const allBranchIds = Array.from(branchToOrg.keys());
+
+        const [salesAgg, inventoryAgg, userAgg] = await Promise.all([
+            prisma.sale.groupBy({
+                by: ['branchId'],
+                where: { branchId: { in: allBranchIds } },
+                _count: { _all: true },
+                _sum: { total: true },
+                _max: { createdAt: true },
+            }),
+            prisma.inventory.groupBy({
+                by: ['branchId'],
+                where: { branchId: { in: allBranchIds } },
+                _count: { _all: true },
+            }),
+            prisma.user.groupBy({
+                by: ['branchId'],
+                where: { branchId: { in: allBranchIds } },
+                _count: { _all: true },
+            }),
+        ]);
+
+        type OrgStat = {
+            branchCount: number;
+            userCount: number;
+            productCount: number;
+            salesCount: number;
+            salesTotal: number;
+            lastSaleAt: Date | null;
+        };
+        const statsByOrg = new Map<string, OrgStat>();
+        for (const org of organizations) {
+            statsByOrg.set(org.id, {
+                branchCount: org.branches.length,
+                userCount: 0,
+                productCount: 0,
+                salesCount: 0,
+                salesTotal: 0,
+                lastSaleAt: null,
+            });
+        }
+        for (const row of salesAgg) {
+            const orgId = branchToOrg.get(row.branchId);
+            if (!orgId) continue;
+            const st = statsByOrg.get(orgId)!;
+            st.salesCount += row._count._all;
+            st.salesTotal += row._sum.total ?? 0;
+            const d = row._max.createdAt;
+            if (d && (!st.lastSaleAt || d > st.lastSaleAt)) st.lastSaleAt = d;
+        }
+        for (const row of inventoryAgg) {
+            const orgId = branchToOrg.get(row.branchId);
+            if (orgId) statsByOrg.get(orgId)!.productCount += row._count._all;
+        }
+        for (const row of userAgg) {
+            if (!row.branchId) continue;
+            const orgId = branchToOrg.get(row.branchId);
+            if (orgId) statsByOrg.get(orgId)!.userCount += row._count._all;
+        }
+
         const tenants = organizations.map((org: any) => {
             // Find the main owner/admin from the first branch
             const owner = org.branches[0]?.users[0];
@@ -45,7 +113,11 @@ export async function GET() {
                 isActive: !org.isSuspended,
                 isTrial: org.isTrial ?? false,
                 subscriptionEndsAt: org.subscriptionEndsAt ?? null,
-                isSuspended: org.isSuspended
+                isSuspended: org.isSuspended,
+                stats: statsByOrg.get(org.id) ?? {
+                    branchCount: 0, userCount: 0, productCount: 0,
+                    salesCount: 0, salesTotal: 0, lastSaleAt: null,
+                },
             };
         });
 
