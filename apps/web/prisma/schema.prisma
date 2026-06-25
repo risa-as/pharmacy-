@@ -18,6 +18,7 @@ model Organization {
   isSuspended        Boolean   @default(false)
   suspendedAt        DateTime?
   subscriptionEndsAt DateTime?
+  isTrial            Boolean   @default(false) // true while on a free trial; cleared on first paid renewal
   aiDailyLimit                  Int       @default(50)
   prescriptionScanDailyLimit    Int       @default(20)
   createdAt          DateTime  @default(now())
@@ -639,6 +640,16 @@ model PlatformSettings {
   supportEmail   String?
   workingHours   String? // e.g. "9 صباحاً – 5 مساءً"
   transferNote   String? // optional extra instructions shown under the account
+
+  // Download page (www.faramace.com/download) — managed by SUPER_ADMIN, served
+  // to the separate landing app via /api/public/download-info.
+  downloadWindowsUrl     String? // direct .exe download link
+  downloadWindowsVersion String? // e.g. "1.0.0"
+  downloadWindowsSize    String? // e.g. "110 MB"
+  downloadAndroidUrl     String? // direct .apk download link
+  downloadAndroidVersion String? // e.g. "1.0.0"
+  downloadAndroidSize    String? // e.g. "110 MB"
+
   updatedAt      DateTime @updatedAt
 }
 

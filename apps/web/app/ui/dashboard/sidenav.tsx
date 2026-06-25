@@ -46,6 +46,7 @@ import {
   ChevronDown,
   Lock,
   Loader2,
+  Download,
 } from "lucide-react";
 
 import { clearSession } from "@/app/lib/actions/auth-actions";
@@ -105,6 +106,12 @@ const controlTowerSections: NavSection[] = [
     label: "",
     links: [
       { name: "معلومات الدفع", href: "/dashboard/admin/payment-info", icon: Landmark },
+    ],
+  },
+  {
+    label: "",
+    links: [
+      { name: "إعدادات التنزيل", href: "/dashboard/admin/downloads", icon: Download },
     ],
   },
   {

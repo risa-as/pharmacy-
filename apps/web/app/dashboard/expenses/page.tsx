@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { getExpenses, deleteExpense } from "@/app/lib/actions/expense-actions";
 import { DeleteButton } from "@/app/ui/delete-button";
+import { EditExpenseButton } from "@/app/ui/expenses/edit-expense-button";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import {
@@ -275,7 +276,17 @@ export default async function ExpensesPage({
                       {expense.description || "—"}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex justify-center">
+                      <div className="flex justify-center gap-2">
+                        <EditExpenseButton
+                          expense={{
+                            id: expense.id,
+                            amount: expense.amount,
+                            category: expense.category,
+                            description: expense.description,
+                            date: expense.date,
+                          }}
+                          className="text-primary"
+                        />
                         <DeleteButton
                           action={deleteExpense.bind(null, expense.id)}
                           description="المصروف"

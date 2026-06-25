@@ -527,7 +527,7 @@ export async function getDrugInfo(searchTerm: string, ctx: AIDataContext): Promi
     const inventories = await prisma.inventory.findMany({
         where: {
             ...ctx.tenantBranchWhere,
-            drug: { tradeName: { contains: searchTerm } },
+            drug: { tradeName: { contains: searchTerm, mode: 'insensitive' } },
         },
         select: {
             price: true,
@@ -556,10 +556,12 @@ export async function getDrugInfo(searchTerm: string, ctx: AIDataContext): Promi
         );
         const stockStatus = totalQty === 0 ? '❌ نفد المخزون' : totalQty < inv.minStock ? '⚠️ أقل من الحد الأدنى' : '✅ متوفر';
 
+        const margin = inv.price > 0 ? (((inv.price - inv.cost) / inv.price) * 100).toFixed(1) : '0';
         let info = `**${inv.drug.tradeName}**`;
         if (inv.drug.scientificName) info += ` (${inv.drug.scientificName})`;
         info += ` — ${inv.branch.name}\n`;
         info += `  سعر البيع: ${fmt(inv.price)} | التكلفة: ${fmt(inv.cost)}\n`;
+        info += `  ربح الوحدة: ${fmt(inv.price - inv.cost)} | هامش الربح: ${margin}%\n`;
         info += `  الكمية: ${totalQty} وحدة (الحد الأدنى: ${inv.minStock}) ${stockStatus}`;
         if (nearExpiry.length > 0) {
             const expStr = nearExpiry.map(b => {
@@ -596,15 +598,25 @@ export async function getPurchasesSummary(from: Date, to: Date, ctx: AIDataConte
     if (!purchases.length) return '## المشتريات\nلا توجد مشتريات مسجّلة في هذه الفترة.';
 
     const totalSpent  = purchases.reduce((s, p) => s + p.total, 0);
-    const totalPaid   = purchases.reduce((s, p) => s + p.paidAmount, 0);
-    const totalUnpaid = totalSpent - totalPaid;
 
-    // Top items by cost
+    // Outstanding debt to suppliers is tracked on the supplier ledger (balance),
+    // NOT on purchase.paidAmount (which is often left at 0 — payments post to the
+    // supplier balance instead). Using paidAmount here previously overstated the
+    // amount due. Report the real current outstanding from the supplier balances.
+    const owedSuppliers = await prisma.supplier.findMany({
+        where: { organizationId: ctx.organizationId, balance: { gt: 0 } },
+        select: { name: true, balance: true },
+        orderBy: { balance: 'desc' },
+    });
+    const totalOutstanding = owedSuppliers.reduce((s, sup) => s + sup.balance, 0);
+
+    // Top items by purchased quantity (cost is a UNIT price, so summing it is
+    // meaningless — rank by quantity instead).
     const topItems = await prisma.purchaseItem.groupBy({
         by: ['drugId'],
         where: { purchase: where },
-        _sum: { quantity: true, cost: true },
-        orderBy: { _sum: { cost: 'desc' } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
         take: 5,
     });
 
@@ -619,18 +631,22 @@ export async function getPurchasesSummary(from: Date, to: Date, ctx: AIDataConte
         `- ${p.supplier.name} | ${fmt(p.total)} | مدفوع: ${fmt(p.paidAmount)} | ${p.status === 'PAID' ? '✅ مدفوعة' : '🔴 مستحقة'} | ${fmtDate(p.createdAt)}`
     );
     const topRows = topItems.map(i =>
-        `- ${drugMap.get(i.drugId) ?? '—'}: ${i._sum.quantity ?? 0} وحدة بتكلفة ${fmt(i._sum.cost ?? 0)}`
+        `- ${drugMap.get(i.drugId) ?? '—'}: ${i._sum.quantity ?? 0} وحدة`
     );
 
+    const owedRows = owedSuppliers.map(s => `- ${s.name}: ${fmt(s.balance)}`);
+
     return `## المشتريات (${fmtDate(from)} — ${fmtDate(to)})
-- إجمالي قيمة المشتريات: ${fmt(totalSpent)} (${purchases.length} فاتورة)
-- المبلغ المدفوع: ${fmt(totalPaid)}
-- المبلغ المستحق: ${fmt(totalUnpaid)}
+- إجمالي قيمة المشتريات خلال الفترة: ${fmt(totalSpent)} (${purchases.length} فاتورة)
+
+### الرصيد المستحق للموردين حالياً (من كشف الحساب)
+الإجمالي المستحق: ${fmt(totalOutstanding)}${owedRows.length ? '\n' + owedRows.join('\n') : '\n- لا توجد مستحقات حالياً (جميع الموردين مسدّدون).'}
+ملاحظة: «إجمالي قيمة المشتريات» هو قيمة الفواتير خلال الفترة بغضّ النظر عن السداد، أما «الرصيد المستحق» فهو ما تبقّى فعلياً على الصيدلية للموردين حسب كشف الحساب.
 
 ### آخر الفواتير
 ${recentRows.join('\n')}
 
-### أكثر الأدوية المشتراة (بالتكلفة)
+### أكثر الأدوية المشتراة (بالكمية)
 ${topRows.length ? topRows.join('\n') : 'لا بيانات'}`;
 }
 
@@ -668,4 +684,178 @@ export async function getSupplierDebts(ctx: AIDataContext): Promise<string> {
     const total = suppliers.reduce((s, sup) => s + sup.balance, 0);
     const rows  = suppliers.map(s => `- ${s.name}${s.phone ? ` (${s.phone})` : ''}: ${fmt(s.balance)}`);
     return `## ديون الموردين (أعلى 10)\n${rows.join('\n')}\n- **إجمالي المستحق للموردين: ${fmt(total)}**`;
+}
+
+// ─── Inventory Overview (counts) ───────────────────────────────────────────────
+// Answers "كم عدد الأدوية؟ / كم صنف لديه مخزون؟". Stock lives only in batches, so
+// a drug imported via Excel without an opening quantity is a real inventory record
+// with zero on-hand units — both numbers are reported so the count is unambiguous.
+export async function getInventoryOverview(ctx: AIDataContext): Promise<string> {
+    const inventories = await prisma.inventory.findMany({
+        where: ctx.tenantBranchWhere,
+        select: { price: true, batches: { select: { quantity: true } } },
+    });
+
+    const totalItems = inventories.length;
+    let inStock = 0;
+    let outOfStock = 0;
+    let totalUnits = 0;
+    let stockValue = 0;
+    for (const inv of inventories) {
+        const qty = inv.batches.reduce((s, b) => s + b.quantity, 0);
+        totalUnits += qty;
+        stockValue += qty * inv.price;
+        if (qty > 0) inStock++;
+        else outOfStock++;
+    }
+
+    return `## نظرة عامة على المخزون
+- إجمالي الأصناف المسجّلة في المخزون: ${totalItems} صنف
+- أصناف لها مخزون فعلي (الكمية > 0): ${inStock} صنف
+- أصناف نفد مخزونها (الكمية = 0): ${outOfStock} صنف
+- إجمالي الوحدات المتوفرة: ${totalUnits.toLocaleString('ar-IQ')} وحدة
+- القيمة التقديرية للمخزون (بسعر البيع): ${fmt(stockValue)}`;
+}
+
+// ─── Peak Sales Hours ──────────────────────────────────────────────────────────
+export async function getPeakHours(from: Date, to: Date, ctx: AIDataContext): Promise<string> {
+    const sales = await prisma.sale.findMany({
+        where: { ...ctx.tenantBranchWhere, createdAt: { gte: from, lte: to } },
+        select: { createdAt: true, total: true },
+    });
+
+    if (!sales.length) {
+        return `## ساعات الذروة (${fmtDate(from)} — ${fmtDate(to)})\nلا توجد مبيعات في هذه الفترة لتحليل ساعات الذروة.`;
+    }
+
+    const buckets = Array.from({ length: 24 }, () => ({ count: 0, total: 0 }));
+    for (const s of sales) {
+        // Iraq local hour (UTC+3, no DST)
+        const hour = new Date(s.createdAt.getTime() + 3 * 60 * 60 * 1000).getUTCHours();
+        buckets[hour].count += 1;
+        buckets[hour].total += s.total;
+    }
+
+    const ranked = buckets
+        .map((b, h) => ({ h, ...b }))
+        .filter(b => b.count > 0)
+        .sort((a, b) => b.total - a.total);
+
+    const fmtHour = (h: number) =>
+        `${String(h).padStart(2, '0')}:00 – ${String((h + 1) % 24).padStart(2, '0')}:00`;
+
+    const rows = ranked.slice(0, 6).map((b, i) =>
+        `${i + 1}. ${fmtHour(b.h)} → ${b.count} فاتورة بقيمة ${fmt(b.total)}`,
+    );
+
+    return `## ساعات الذروة في المبيعات (${fmtDate(from)} — ${fmtDate(to)})
+أكثر الساعات مبيعاً (بتوقيت بغداد):
+${rows.join('\n')}`;
+}
+
+// ─── Supplier Price Comparison for Low-Stock Drugs ─────────────────────────────
+// PurchaseItem.cost is a UNIT price (total = Σ quantity×cost), so historical unit
+// prices per supplier can be compared directly to find the cheapest source.
+export async function getSupplierPriceComparison(ctx: AIDataContext): Promise<string> {
+    const inventories = await prisma.inventory.findMany({
+        where: ctx.tenantBranchWhere,
+        select: {
+            drugId: true,
+            minStock: true,
+            drug: { select: { tradeName: true } },
+            batches: { select: { quantity: true } },
+        },
+    });
+
+    const lowDrugs = inventories
+        .map(inv => ({
+            drugId: inv.drugId,
+            name: inv.drug.tradeName,
+            current: inv.batches.reduce((s, b) => s + b.quantity, 0),
+            min: inv.minStock,
+        }))
+        .filter(inv => inv.current < inv.min);
+
+    if (!lowDrugs.length) {
+        return '## مقارنة أسعار الموردين للأدوية الناقصة\nلا توجد أدوية ناقصة حالياً لمقارنة أسعار مورديها.';
+    }
+
+    const drugIds = lowDrugs.map(d => d.drugId);
+    const items = await prisma.purchaseItem.findMany({
+        where: { drugId: { in: drugIds }, purchase: ctx.tenantBranchWhere },
+        select: {
+            drugId: true,
+            cost: true, // unit price
+            purchase: { select: { createdAt: true, supplier: { select: { name: true } } } },
+        },
+        orderBy: { purchase: { createdAt: 'desc' } },
+    });
+
+    // drugId → supplierName → latest unit price seen
+    const byDrug = new Map<string, Map<string, number>>();
+    for (const it of items) {
+        const supplier = it.purchase.supplier?.name ?? 'غير معروف';
+        if (!byDrug.has(it.drugId)) byDrug.set(it.drugId, new Map());
+        const sup = byDrug.get(it.drugId)!;
+        // keep the most recent price (items are ordered desc by date)
+        if (!sup.has(supplier)) sup.set(supplier, it.cost);
+    }
+
+    const sections = lowDrugs.map(d => {
+        const sup = byDrug.get(d.drugId);
+        if (!sup || sup.size === 0) {
+            return `### ${d.name} (متوفر ${d.current} / الحد ${d.min})\nلا يوجد سجل شراء سابق لهذا الدواء — لا يمكن مقارنة الأسعار.`;
+        }
+        const sorted = Array.from(sup.entries()).sort((a, b) => a[1] - b[1]);
+        const rows = sorted.map(([name, price], i) =>
+            `${i === 0 ? '✅ الأرخص' : '•'} ${name}: ${fmt(price)} للوحدة`,
+        );
+        return `### ${d.name} (متوفر ${d.current} / الحد ${d.min})\n${rows.join('\n')}`;
+    });
+
+    return `## مقارنة أسعار الموردين للأدوية الناقصة
+(تعتمد على آخر سعر شراء مسجّل لكل مورد)
+${sections.join('\n\n')}`;
+}
+
+// ─── Drugs Ranked by Profit Margin ─────────────────────────────────────────────
+// Per-drug margin = (سعر البيع − التكلفة) ÷ سعر البيع. Requires both price>0 and
+// cost>0 (a drug imported via Excel with cost=0 has no real margin to compute).
+export async function getTopMarginDrugs(
+    ctx: AIDataContext,
+    order: 'top' | 'bottom' = 'top',
+    limit = 15,
+): Promise<string> {
+    const inventories = await prisma.inventory.findMany({
+        where: ctx.tenantBranchWhere,
+        select: {
+            price: true,
+            cost: true,
+            drug: { select: { tradeName: true } },
+            branch: { select: { name: true } },
+        },
+    });
+
+    const ranked = inventories
+        .filter(inv => inv.price > 0 && inv.cost > 0)
+        .map(inv => ({
+            name: inv.drug.tradeName,
+            branch: inv.branch.name,
+            price: inv.price,
+            cost: inv.cost,
+            profit: inv.price - inv.cost,
+            margin: ((inv.price - inv.cost) / inv.price) * 100,
+        }))
+        .sort((a, b) => (order === 'top' ? b.margin - a.margin : a.margin - b.margin))
+        .slice(0, limit);
+
+    if (!ranked.length) {
+        return '## هامش الربح حسب الدواء\nلا تتوفر بيانات تكلفة وسعر كافية (سعر بيع وتكلفة أكبر من صفر) لحساب الهوامش. تأكّد من إدخال سعر التكلفة للأدوية.';
+    }
+
+    const title = order === 'top' ? 'أعلى الأدوية هامش ربح' : 'أدنى الأدوية هامش ربح';
+    const rows = ranked.map((d, i) =>
+        `${i + 1}. ${d.name} (${d.branch}): هامش ${d.margin.toFixed(1)}% | بيع ${fmt(d.price)} / تكلفة ${fmt(d.cost)} / ربح الوحدة ${fmt(d.profit)}`,
+    );
+    return `## ${title} (لكل وحدة)\n${rows.join('\n')}`;
 }

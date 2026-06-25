@@ -20,10 +20,13 @@ import { NextResponse } from "next/server";
 
 const ITEMS_PER_PAGE = 50;
 
+type DrugSource = "all" | "custom" | "global";
+
 async function getDrugs(
   query: string,
   currentPage: number,
   organizationId: string | undefined,
+  source: DrugSource,
 ) {
   const orgVisible = {
     OR: [
@@ -31,6 +34,19 @@ async function getDrugs(
       ...(organizationId ? [{ organizationId }] : []),
     ],
   };
+
+  // Source filter: which slice of the visible catalog to show.
+  //  - custom: only drugs this organization added
+  //  - global: only the shared global catalog (no organization)
+  //  - all:    both (default)
+  let sourceFilter: any = orgVisible;
+  if (source === "custom") {
+    sourceFilter = organizationId
+      ? { organizationId }
+      : { NOT: { organizationId: null } };
+  } else if (source === "global") {
+    sourceFilter = { organizationId: null };
+  }
 
   const searchFilter = query
     ? {
@@ -42,7 +58,7 @@ async function getDrugs(
       }
     : {};
 
-  const where = { AND: [orgVisible, searchFilter] };
+  const where = { AND: [sourceFilter, searchFilter] };
 
   const [drugs, total, totalCatalog, customCount] = await Promise.all([
     prisma.globalDrug.findMany({
@@ -81,14 +97,25 @@ function StatChip({
   label,
   value,
   tone,
+  href,
+  active,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   tone: string;
+  href: string;
+  active: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+    <Link
+      href={href}
+      className={`flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors ${
+        active
+          ? "border-primary ring-2 ring-primary/30"
+          : "border-border hover:bg-muted"
+      }`}
+    >
       <div
         className={`flex h-9 w-9 items-center justify-center rounded-lg ${tone}`}
       >
@@ -100,7 +127,7 @@ function StatChip({
         </div>
         <div className="text-xs text-muted-foreground mt-1">{label}</div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -110,6 +137,7 @@ export default async function Page({
   searchParams?: {
     query?: string;
     page?: string;
+    source?: string;
   };
 }) {
   const tenantCtx = await getTenantContext();
@@ -119,16 +147,35 @@ export default async function Page({
   const isSuperAdmin = tenantCtx.user.role === "SUPER_ADMIN";
   const query = searchParams?.query || "";
   const currentPage = Number(searchParams?.page) || 1;
+  const source: DrugSource =
+    searchParams?.source === "custom" || searchParams?.source === "global"
+      ? searchParams.source
+      : "all";
   const { drugs, total, totalCatalog, customCount } = await getDrugs(
     query,
     currentPage,
     organizationId,
+    source,
   );
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
   const globalCount = Math.max(0, totalCatalog - customCount);
 
-  const pageHref = (p: number) =>
-    `/dashboard/drugs?page=${p}${query ? `&query=${encodeURIComponent(query)}` : ""}`;
+  // Filter link (resets to page 1, preserves the search query).
+  const filterHref = (s: DrugSource) => {
+    const params = new URLSearchParams();
+    if (s !== "all") params.set("source", s);
+    if (query) params.set("query", query);
+    const qs = params.toString();
+    return qs ? `/dashboard/drugs?${qs}` : "/dashboard/drugs";
+  };
+
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    params.set("page", String(p));
+    if (query) params.set("query", query);
+    if (source !== "all") params.set("source", source);
+    return `/dashboard/drugs?${params.toString()}`;
+  };
 
   return (
     <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>
@@ -167,18 +214,24 @@ export default async function Page({
           label="إجمالي الأدوية"
           value={totalCatalog}
           tone="bg-primary/10 text-primary"
+          href={filterHref("all")}
+          active={source === "all"}
         />
         <StatChip
           icon={<Building2 className="h-5 w-5" />}
           label="مخصّصة لصيدليتك"
           value={customCount}
           tone="bg-emerald-500/10 text-emerald-500"
+          href={filterHref("custom")}
+          active={source === "custom"}
         />
         <StatChip
           icon={<Globe className="h-5 w-5" />}
           label="أدوية عالمية"
           value={globalCount}
           tone="bg-blue-500/10 text-blue-500"
+          href={filterHref("global")}
+          active={source === "global"}
         />
       </div>
 
@@ -187,13 +240,26 @@ export default async function Page({
         <div className="w-full max-w-md">
           <GlobalDrugSearch placeholder="ابحث بالاسم التجاري أو المادة الفعالة أو الباركود..." />
         </div>
-        <div className="text-sm text-muted-foreground">
-          {query ? (
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          {query || source !== "all" ? (
             <>
-              نتائج البحث:{" "}
-              <span className="font-bold text-foreground">
-                {total.toLocaleString("en-US")}
+              <span>
+                {source === "custom"
+                  ? "مخصّصة لصيدليتك"
+                  : source === "global"
+                    ? "أدوية عالمية"
+                    : "نتائج البحث"}
+                :{" "}
+                <span className="font-bold text-foreground">
+                  {total.toLocaleString("en-US")}
+                </span>
               </span>
+              <Link
+                href="/dashboard/drugs"
+                className="text-primary hover:underline"
+              >
+                إظهار الكل
+              </Link>
             </>
           ) : null}
         </div>
@@ -318,7 +384,11 @@ export default async function Page({
                       <p className="text-sm">
                         {query
                           ? "لا توجد أدوية مطابقة للبحث."
-                          : "لا توجد أدوية بعد."}
+                          : source === "custom"
+                            ? "لا توجد أدوية مخصّصة لصيدليتك بعد."
+                            : source === "global"
+                              ? "لا توجد أدوية عالمية."
+                              : "لا توجد أدوية بعد."}
                       </p>
                       {query ? (
                         <Link

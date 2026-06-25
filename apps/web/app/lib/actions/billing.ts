@@ -292,6 +292,7 @@ export async function verifyZainCashPayment(
                         subscriptionEndsAt: newExpiresAt,
                         isSuspended:        false,
                         suspendedAt:        null,
+                        isTrial:            false, // first paid renewal converts a trial to a paid subscription
                     },
                 }),
             ]);
@@ -394,6 +395,7 @@ export async function recordManualPayment(
                     subscriptionEndsAt: newExpiresAt,
                     isSuspended:        false,
                     suspendedAt:        null,
+                    isTrial:            false, // a recorded payment converts a trial to a paid subscription
                 },
             }),
         ]);

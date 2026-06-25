@@ -67,6 +67,61 @@ export async function createExpense(data: { amount: number, category: string, de
     }
 }
 
+export async function updateExpense(
+    id: string,
+    data: { amount: number; category: string; description?: string; date?: Date },
+) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    if (!tenantCtx.userPermissions.canCreateExpense) return { success: false, error: 'ليس لديك صلاحية لتعديل المصروفات.' };
+
+    const { user, organizationId } = tenantCtx;
+
+    if (!data.amount || data.amount <= 0 || !data.category) {
+        return { success: false, error: 'يرجى تعبئة المبلغ والفئة بشكل صحيح.' };
+    }
+
+    try {
+        // Verify the expense exists and belongs to this tenant's scope (no cross-tenant edits)
+        const existing = await prisma.expense.findUnique({
+            where: { id },
+            select: { branchId: true, branch: { select: { organizationId: true } } },
+        });
+        if (!existing) return { success: false, error: 'المصروف غير موجود.' };
+
+        const inScope = user.branchId
+            ? existing.branchId === user.branchId
+            : organizationId
+            ? existing.branch?.organizationId === organizationId
+            : false;
+        if (!inScope) return { success: false, error: 'لا يمكنك تعديل هذا المصروف.' };
+
+        const expense = await prisma.expense.update({
+            where: { id },
+            data: {
+                amount: data.amount,
+                category: data.category,
+                description: data.description,
+                ...(data.date ? { date: data.date } : {}),
+            },
+        });
+        await logAudit({
+            userId: user.id,
+            userName: user.name ?? user.email ?? 'Unknown',
+            action: 'UPDATE',
+            entity: 'EXPENSE',
+            entityId: expense.id,
+            details: JSON.stringify({ amount: data.amount, category: data.category }),
+            branchId: existing.branchId ?? undefined,
+        });
+        revalidatePath('/dashboard/expenses');
+        return { success: true, expense };
+    } catch (error) {
+        console.error('Update Expense Error:', error);
+        return { success: false, error: 'فشل في تعديل المصروف. يرجى المحاولة مرة أخرى.' };
+    }
+}
+
 export async function deleteExpense(id: string) {
     const tenantCtx = await getTenantContext();
     try {

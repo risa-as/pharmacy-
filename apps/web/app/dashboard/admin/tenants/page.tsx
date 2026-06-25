@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2, Calendar, Banknote } from 'lucide-react';
-import { suspendOrganization, reactivateOrganization } from '@/app/lib/actions/organization-suspension';
+import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2, Calendar, Banknote, Hourglass } from 'lucide-react';
+import { suspendOrganization, reactivateOrganization, startTrial } from '@/app/lib/actions/organization-suspension';
 import { recordManualPayment } from '@/app/lib/actions/billing';
 import PlanOverridesPanel from '@/app/ui/admin/PlanOverridesPanel';
 
@@ -14,7 +14,7 @@ export default function TenantsPage() {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20 });
+    const [form, setForm] = useState({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20, trialDays: 0 });
     const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
     const [provisionResult, setProvisionResult] = useState<{
@@ -25,6 +25,9 @@ export default function TenantsPage() {
     const [manualPayDialog, setManualPayDialog] = useState<{ open: boolean; tenantId: string; tenantName: string } | null>(null);
     const [manualForm, setManualForm] = useState({ amount: '', months: '1', method: 'BANK_TRANSFER', reference: '', note: '' });
     const [manualSaving, setManualSaving] = useState(false);
+    const [trialDialog, setTrialDialog] = useState<{ open: boolean; tenantId: string; tenantName: string } | null>(null);
+    const [trialDays, setTrialDays] = useState('14');
+    const [trialSaving, setTrialSaving] = useState(false);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
@@ -114,7 +117,7 @@ export default function TenantsPage() {
                 }
                 setShowForm(false);
                 setEditingId(null);
-                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20 });
+                setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20, trialDays: 0 });
             } else {
                 const data = await res.json();
                 alert(data.error || 'حدث خطأ');
@@ -163,6 +166,7 @@ export default function TenantsPage() {
             maxMobileUsers: tenant.maxMobileUsers ?? plan?.maxMobileUsers ?? 1,
             aiDailyLimit: tenant.aiDailyLimit ?? 50,
             prescriptionScanDailyLimit: tenant.prescriptionScanDailyLimit ?? 20,
+            trialDays: 0, // trial is managed via the dedicated trial dialog, not the edit form
         });
         setShowForm(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -212,6 +216,31 @@ export default function TenantsPage() {
             alert('حدث خطأ غير متوقع');
         } finally {
             setManualSaving(false);
+        }
+    };
+
+    const handleStartTrial = async () => {
+        if (!trialDialog) return;
+        const days = Math.floor(Number(trialDays));
+        if (!Number.isFinite(days) || days <= 0) {
+            alert('أدخل عدد أيام صحيح أكبر من صفر');
+            return;
+        }
+        setTrialSaving(true);
+        try {
+            const result = await startTrial(trialDialog.tenantId, days);
+            if (result.success) {
+                const tenantsData = await fetch('/api/admin/tenants').then(r => r.json());
+                setTenants(tenantsData.tenants || []);
+                setTrialDialog(null);
+                setTrialDays('14');
+            } else {
+                alert(result.error || 'حدث خطأ أثناء بدء الفترة التجريبية');
+            }
+        } catch (e) {
+            alert('حدث خطأ غير متوقع');
+        } finally {
+            setTrialSaving(false);
         }
     };
 
@@ -280,15 +309,54 @@ export default function TenantsPage() {
         document.body
     ) : null;
 
+    const trialModal = mounted && trialDialog ? createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" dir="rtl">
+            <div className="bg-card rounded-2xl shadow-xl border w-full max-w-md p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                    <h2 className="font-bold text-lg flex items-center gap-2"><Hourglass className="w-5 h-5 text-violet-600" /> فترة تجريبية — {trialDialog.tenantName}</h2>
+                    <button onClick={() => setTrialDialog(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                    سيتم تفعيل المؤسسة لعدد الأيام المحدد. بعد انتهاء الفترة (مع مهلة سماح 5 أيام) يُقفل النظام تلقائياً حتى تسجيل دفعة أو تجديد.
+                </p>
+                <div>
+                    <label className="text-xs text-muted-foreground block mb-1">عدد أيام التجربة *</label>
+                    <input type="number" min="1" value={trialDays} onChange={e => setTrialDays(e.target.value)}
+                        placeholder="مثال: 14" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" autoFocus />
+                    <div className="flex gap-2 mt-2">
+                        {['7', '14', '30'].map(d => (
+                            <button key={d} type="button" onClick={() => setTrialDays(d)}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${trialDays === d ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground hover:bg-violet-500/10'}`}>
+                                {d} يوم
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                    <button onClick={handleStartTrial} disabled={trialSaving || !trialDays}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 hover:bg-violet-700">
+                        {trialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Hourglass className="w-4 h-4" />}
+                        {trialSaving ? 'جاري التفعيل...' : 'بدء الفترة التجريبية'}
+                    </button>
+                    <button onClick={() => setTrialDialog(null)} className="px-4 py-2.5 border rounded-xl text-sm text-muted-foreground hover:bg-muted">
+                        إلغاء
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    ) : null;
+
     return (
         <>
         {manualPayModal}
+        {trialModal}
         <div className="glass-card p-6 space-y-6" dir="rtl" style={{backdropFilter: 'none', WebkitBackdropFilter: 'none'}}>
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
                 <button onClick={() => {
                     setEditingId(null);
-                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20 });
+                    setForm({ name: '', ownerName: '', ownerEmail: '', ownerPassword: '', phone: '', plan: '', maxBranches: 1, maxUsers: 3, maxDevices: 1, maxMobileUsers: 1, aiDailyLimit: 50, prescriptionScanDailyLimit: 20, trialDays: 0 });
                     setShowForm(!showForm);
                 }}
                     className="flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors shadow-sm">
@@ -362,6 +430,18 @@ export default function TenantsPage() {
                                 <input type="number" min="0" value={form.prescriptionScanDailyLimit} onChange={e => setForm({ ...form, prescriptionScanDailyLimit: Number(e.target.value) })}
                                     className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
                             </div>
+                            {!editingId && (
+                                <div className="col-span-2">
+                                    <label className="block text-xs text-muted-foreground mb-1">⏳ فترة تجريبية (أيام، 0 = بدون تجربة)</label>
+                                    <input type="number" min="0" value={form.trialDays} onChange={e => setForm({ ...form, trialDays: Number(e.target.value) })}
+                                        placeholder="مثال: 14" className="w-full border rounded-lg px-3 py-2 text-sm bg-muted" dir="ltr" />
+                                    {form.trialDays > 0 && (
+                                        <p className="text-xs text-violet-600 mt-1">
+                                            ستنتهي التجربة بعد {form.trialDays} يوم ثم يُقفل النظام تلقائياً (مع مهلة سماح 5 أيام).
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                     <button onClick={handleCreateOrUpdate} disabled={saving || !form.name || (!editingId && (!form.ownerEmail || !form.ownerPassword))}
@@ -478,9 +558,16 @@ export default function TenantsPage() {
                                                 return (
                                                     <div className="flex flex-col gap-0.5">
                                                         <span className="text-xs text-foreground">{d.toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}</span>
-                                                        <span className={`text-xs px-1.5 py-0.5 rounded-full w-fit ${isFuture ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                                                            {isFuture ? 'ساري' : 'منتهي'}
-                                                        </span>
+                                                        <div className="flex items-center gap-1">
+                                                            {t.isTrial && (
+                                                                <span className="text-xs px-1.5 py-0.5 rounded-full w-fit bg-violet-500/10 text-violet-600 font-bold flex items-center gap-0.5">
+                                                                    <Hourglass className="w-3 h-3" /> تجريبي
+                                                                </span>
+                                                            )}
+                                                            <span className={`text-xs px-1.5 py-0.5 rounded-full w-fit ${isFuture ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                                                                {isFuture ? 'ساري' : 'منتهي'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 );
                                             })() : (
@@ -531,6 +618,17 @@ export default function TenantsPage() {
                                                             title="تجديد يدوي"
                                                         >
                                                             <Banknote className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                setTrialDialog({ open: true, tenantId: t.id, tenantName: t.name });
+                                                                setTrialDays('14');
+                                                            }}
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm bg-violet-500/10 text-violet-600 hover:bg-violet-600 hover:text-white border border-violet-500/20"
+                                                            title="فترة تجريبية"
+                                                        >
+                                                            <Hourglass className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
 

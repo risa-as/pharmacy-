@@ -10,7 +10,19 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/app/lib/prisma';
 import { getSubscriptionState } from '@/app/lib/subscription-state';
+import { jwtVerify } from 'jose';
 import crypto from 'crypto';
+
+// Lazily encoded once per process — same secret/scheme getTenantContext uses to
+// verify the mobile app's Bearer JWT.
+let _authJwtSecret: Uint8Array | null = null;
+function getAuthJwtSecret(): Uint8Array {
+    if (!_authJwtSecret) {
+        if (!process.env.AUTH_SECRET) throw new Error('AUTH_SECRET env var is not set');
+        _authJwtSecret = new TextEncoder().encode(process.env.AUTH_SECRET);
+    }
+    return _authJwtSecret;
+}
 
 /**
  * Returns a 403 NextResponse when the organisation is suspended or past its
@@ -108,7 +120,33 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
         };
     }
 
-    // ── 3. NextAuth session (web dashboard) ──────────────────────────────────
+    // ── 3. Bearer JWT (mobile app) ───────────────────────────────────────────
+    // The mobile app authenticates with the same JWT that getTenantContext
+    // accepts (Authorization: Bearer …), not a desktop sync token. Without this
+    // path, mobile stock-in calls (add-batch / add-to-branch / create-quick)
+    // 401 and force a logout.
+    const authHeader = h.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+        try {
+            const { payload } = await jwtVerify(authHeader.slice(7), getAuthJwtSecret());
+            const jwtRole = (payload.role as string) || 'CASHIER';
+            const jwtOrg = (payload.organizationId as string) || undefined;
+            if (jwtRole !== 'SUPER_ADMIN') {
+                const suspended = await assertOrgActive(jwtOrg);
+                if (suspended) return suspended;
+            }
+            return {
+                id: payload.userId as string,
+                role: jwtRole,
+                branchId: (payload.branchId as string) || undefined,
+                organizationId: jwtOrg,
+            };
+        } catch {
+            return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
+    }
+
+    // ── 4. NextAuth session (web dashboard) ──────────────────────────────────
     const session = await auth();
     if (!session?.user?.id) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

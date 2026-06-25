@@ -43,7 +43,7 @@ export async function GET() {
                 prescriptionScanDailyLimit: org.prescriptionScanDailyLimit ?? 20,
                 monthlyPrice: org.plan?.price || 0,
                 isActive: !org.isSuspended,
-                trialEndsAt: null,
+                isTrial: org.isTrial ?? false,
                 subscriptionEndsAt: org.subscriptionEndsAt ?? null,
                 isSuspended: org.isSuspended
             };
@@ -65,7 +65,14 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { name, ownerEmail, ownerName, ownerPassword, plan, maxBranches, maxUsers, maxDevices, maxMobileUsers } = body;
+        const { name, ownerEmail, ownerName, ownerPassword, plan, maxBranches, maxUsers, maxDevices, maxMobileUsers, trialDays } = body;
+
+        // Optional free trial: when trialDays > 0, set the subscription to expire
+        // after that many days and flag the org as a trial. Reuses subscriptionEndsAt
+        // so all existing subscription enforcement applies automatically.
+        const trialDaysNum = Math.floor(Number(trialDays));
+        const hasTrial = Number.isFinite(trialDaysNum) && trialDaysNum > 0;
+        const trialEndsAt = hasTrial ? new Date(Date.now() + trialDaysNum * 24 * 60 * 60 * 1000) : null;
 
         if (!name || !ownerEmail || !ownerPassword) {
             return NextResponse.json({ error: "الاسم، الإيميل، وكلمة المرور مطلوبة" }, { status: 400 });
@@ -116,6 +123,8 @@ export async function POST(req: NextRequest) {
                     maxUsers: maxUsers || selectedPlan.maxUsers,
                     maxDevices: maxDevices !== undefined ? Number(maxDevices) : selectedPlan.maxDevices,
                     maxMobileUsers: maxMobileUsers !== undefined ? Number(maxMobileUsers) : selectedPlan.maxMobileUsers,
+                    isTrial: hasTrial,
+                    subscriptionEndsAt: trialEndsAt,
                 },
             });
 
@@ -170,7 +179,8 @@ export async function POST(req: NextRequest) {
             maxMobileUsers: result.organization.maxMobileUsers ?? selectedPlan.maxMobileUsers ?? 1,
             monthlyPrice: selectedPlan.price,
             isActive: !result.organization.isSuspended,
-            trialEndsAt: null,
+            isTrial: result.organization.isTrial ?? false,
+            subscriptionEndsAt: result.organization.subscriptionEndsAt ?? null,
             licenseKey: result.license.licenseKey // Useful to show right after creation
         };
 
