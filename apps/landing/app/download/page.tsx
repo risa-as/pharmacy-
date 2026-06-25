@@ -2,7 +2,44 @@ import { Download, Monitor, Smartphone, Globe, ArrowDownCircle, CheckCircle2 } f
 import SectionHeading from '../../components/section-heading';
 import CTAButton from '../../components/cta-button';
 
-export default function DownloadPage() {
+// Re-fetch the SUPER_ADMIN-managed download config at most every 5 minutes.
+export const revalidate = 300;
+
+interface DownloadInfo {
+  windowsUrl: string;
+  windowsVersion: string;
+  windowsSize: string;
+  androidUrl: string;
+  androidVersion: string;
+  androidSize: string;
+}
+
+// Fallback used when the dashboard API is unreachable — keeps the page working.
+const DOWNLOAD_DEFAULTS: DownloadInfo = {
+  windowsUrl: 'https://github.com/risa-as/pharmacy-/releases/download/v1.0.0/Faramace.POS.Setup.1.0.0.exe',
+  windowsVersion: '1.0.0',
+  windowsSize: '110 MB',
+  androidUrl: 'https://github.com/risa-as/pharmacy-/releases/download/v1.0.0/Faramace-mobile.apk',
+  androidVersion: '1.0.0',
+  androidSize: '110 MB',
+};
+
+async function getDownloadInfo(): Promise<DownloadInfo> {
+  const base = process.env.NEXT_PUBLIC_APP_URL || 'https://app.faramace.com';
+  try {
+    const res = await fetch(`${base}/api/public/download-info`, { next: { revalidate: 300 } });
+    if (!res.ok) return DOWNLOAD_DEFAULTS;
+    const data = (await res.json()) as Partial<DownloadInfo>;
+    // Merge so any missing field falls back to a sensible default.
+    return { ...DOWNLOAD_DEFAULTS, ...data };
+  } catch {
+    return DOWNLOAD_DEFAULTS;
+  }
+}
+
+export default async function DownloadPage() {
+  const info = await getDownloadInfo();
+
   return (
     <main className="flex-grow pt-32 pb-20 bg-slate-50">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -67,12 +104,12 @@ export default function DownloadPage() {
               <CTAButton
                 variant="primary"
                 fullWidth
-                href="https://github.com/risa-as/pharmacy-/releases/download/v1.0.0/Faramace.POS.Setup.1.0.0.exe"
+                href={info.windowsUrl}
                 icon
               >
                 تحميل للويندوز
               </CTAButton>
-              <p className="text-slate-400 text-xs mt-3">الإصدار 1.0.0 • حجم الملف: 110 MB</p>
+              <p className="text-slate-400 text-xs mt-3">الإصدار {info.windowsVersion} • حجم الملف: {info.windowsSize}</p>
             </div>
           </div>
 
@@ -125,12 +162,12 @@ export default function DownloadPage() {
               <CTAButton
                 variant="primary"
                 fullWidth
-                href="https://github.com/risa-as/pharmacy-/releases/download/v1.0.0/Faramace-mobile.apk"
+                href={info.androidUrl}
                 icon
               >
                 تحميل APK للأندرويد
               </CTAButton>
-              <p className="text-slate-400 text-xs mt-1 text-center">الإصدار 1.0.0 • حجم الملف: 110 MB</p>
+              <p className="text-slate-400 text-xs mt-1 text-center">الإصدار {info.androidVersion} • حجم الملف: {info.androidSize}</p>
             </div>
           </div>
 
