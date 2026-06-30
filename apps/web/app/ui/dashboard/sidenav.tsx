@@ -144,6 +144,10 @@ const sections: NavSection[] = [
   },
   {
     label: "",
+    links: [{ name: "نقطة البيع", href: "/dashboard/pos-temp", icon: ShoppingCart }],
+  },
+  {
+    label: "",
     links: [
       {
         name: "الصيدلة",
