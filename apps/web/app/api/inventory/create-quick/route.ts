@@ -101,9 +101,16 @@ export async function POST(req: Request) {
             // Resolve the org: prefer syncUser's org, fall back to branch's org
             const organizationId = syncUser.organizationId ?? branch.organizationId ?? null;
 
-            let drug = await tx.globalDrug.findFirst({
-                where: id ? { id } : { barcode }
-            });
+            // Barcode matching precedence: this org's own drug → the shared/global
+            // catalog (organizationId: null). Another organization's custom drug
+            // with the same barcode must NOT match — linking to it would entangle
+            // tenants (they can edit their record and mutate what we display).
+            let drug = id
+                ? await tx.globalDrug.findFirst({ where: { id } })
+                : (organizationId
+                      ? await tx.globalDrug.findFirst({ where: { barcode, organizationId } })
+                      : null) ??
+                  (await tx.globalDrug.findFirst({ where: { barcode, organizationId: null } }));
 
             if (drug) {
                 // Global drugs (organizationId: null) are read-only — use as-is without modifying.

@@ -10,9 +10,24 @@ interface ImportRow {
     price: number;
     cost: number;
     quantity: number;
-    expiryDate?: string;
+    /** ISO string, Excel serial number, or Date-parsable string. */
+    expiryDate?: string | number;
     scientificName?: string;
     manufacturer?: string;
+    batchNumber?: string;
+    minStock?: number;
+    maxStock?: number;
+}
+
+/** Excel stores dates as serial day counts (25569 = 1970-01-01). */
+function parseExpiry(value: string | number | undefined): Date | null {
+    if (value == null || value === "") return null;
+    if (typeof value === "number") {
+        if (value < 25569 || value > 80000) return null; // outside 1970..2119 → not a date
+        return new Date(Math.round((value - 25569) * 86_400_000));
+    }
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
 }
 
 export async function POST(req: NextRequest) {
@@ -31,102 +46,120 @@ export async function POST(req: NextRequest) {
                 { status: 400 }
             );
         }
-
-        // Get default branch
-        const branch = branchId
-            ? await prisma.branch.findUnique({ where: { id: branchId } })
-            : await prisma.branch.findFirst();
-
-        if (!branch) {
+        if (rows.length > 500) {
             return NextResponse.json(
-                { error: "لا يوجد فرع. يرجى إنشاء فرع أولاً" },
+                { error: "الحد الأقصى 500 صف لكل طلب — قسّم الملف على دفعات" },
                 { status: 400 }
             );
         }
 
-        let imported = 0;
-        let updated = 0;
-        let errors: string[] = [];
+        // Resolve the target branch WITHIN the tenant's organization only.
+        const tenantOrgId = tenantCtx.organizationId; // undefined for SUPER_ADMIN
+        const branch = branchId
+            ? await prisma.branch.findFirst({
+                  where: { id: branchId, ...(tenantOrgId ? { organizationId: tenantOrgId } : {}) },
+              })
+            : await prisma.branch.findFirst({
+                  where: tenantOrgId ? { organizationId: tenantOrgId } : {},
+              });
 
-        for (const row of rows) {
+        if (!branch) {
+            return NextResponse.json(
+                { error: "الفرع غير موجود أو لا ينتمي لمؤسستك" },
+                { status: 400 }
+            );
+        }
+        // Effective org: the branch's org (covers SUPER_ADMIN importing on behalf).
+        const orgId = tenantOrgId ?? branch.organizationId ?? null;
+
+        let imported = 0;   // new drugs created (org-owned)
+        let updated = 0;    // existing drugs matched
+        let batches = 0;
+        const errors: string[] = [];
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const rowLabel = row?.name || `صف ${i + 1}`;
             try {
-                if (!row.name || row.price == null) {
-                    errors.push(`تم تخطي صف: الاسم أو السعر مفقود`);
+                if (!row.name || row.price == null || Number(row.price) <= 0) {
+                    errors.push(`${rowLabel}: الاسم أو سعر البيع مفقود`);
                     continue;
                 }
+                const price = Number(row.price);
+                const cost = Number(row.cost) || 0;
+                const quantity = Math.max(0, Math.floor(Number(row.quantity) || 0));
+                const barcode = String(row.barcode ?? "").trim();
 
-                // Check if drug exists by barcode or name
-                let drug = row.barcode
-                    ? await prisma.globalDrug.findFirst({
-                        where: { barcode: row.barcode },
-                    })
-                    : null;
+                // ── Drug matching precedence ─────────────────────────────────
+                // 1. This org's own drug (by barcode, then by trade name)
+                // 2. The shared/global catalog (organizationId: null) — read-only
+                // 3. Another org's drug with the same barcode must NEVER match:
+                //    tenants stay fully isolated, so we create our own record.
+                let drug =
+                    (barcode
+                        ? (orgId
+                              ? await prisma.globalDrug.findFirst({ where: { barcode, organizationId: orgId } })
+                              : null) ??
+                          (await prisma.globalDrug.findFirst({ where: { barcode, organizationId: null } }))
+                        : null) ??
+                    (orgId
+                        ? await prisma.globalDrug.findFirst({ where: { tradeName: row.name, organizationId: orgId } })
+                        : null) ??
+                    (await prisma.globalDrug.findFirst({ where: { tradeName: row.name, organizationId: null } }));
 
                 if (!drug) {
-                    drug = await prisma.globalDrug.findFirst({
-                        where: { tradeName: row.name },
-                    });
-                }
-
-                if (!drug) {
-                    // Create new drug
                     drug = await prisma.globalDrug.create({
                         data: {
                             tradeName: row.name,
-                            barcode: row.barcode || `IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            barcode: barcode || `IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                             scientificName: row.scientificName || "",
                             origin: row.manufacturer || "",
+                            organizationId: orgId,
                         },
                     });
                     imported++;
                 } else {
+                    // Only org-owned drugs may be enriched; the shared catalog is read-only.
+                    if (orgId && drug.organizationId === orgId && (row.scientificName || row.manufacturer)) {
+                        await prisma.globalDrug.update({
+                            where: { id: drug.id },
+                            data: {
+                                ...(row.scientificName ? { scientificName: row.scientificName } : {}),
+                                ...(row.manufacturer ? { origin: row.manufacturer } : {}),
+                            },
+                        });
+                    }
                     updated++;
                 }
 
-                // Check if inventory exists for this drug + branch
-                let inventory = await prisma.inventory.findUnique({
-                    where: {
-                        drugId_branchId: {
-                            drugId: drug.id,
-                            branchId: branch.id,
-                        },
-                    },
+                const inventoryData = {
+                    price,
+                    ...(cost > 0 ? { cost } : {}),
+                    ...(row.minStock != null && Number(row.minStock) >= 0 ? { minStock: Math.floor(Number(row.minStock)) } : {}),
+                    ...(row.maxStock != null && Number(row.maxStock) > 0 ? { maxStock: Math.floor(Number(row.maxStock)) } : {}),
+                };
+
+                const inventory = await prisma.inventory.upsert({
+                    where: { drugId_branchId: { drugId: drug.id, branchId: branch.id } },
+                    create: { drugId: drug.id, branchId: branch.id, cost, ...inventoryData },
+                    update: inventoryData,
                 });
 
-                if (!inventory) {
-                    inventory = await prisma.inventory.create({
-                        data: {
-                            drugId: drug.id,
-                            branchId: branch.id,
-                            price: row.price,
-                            cost: row.cost || 0,
-                        },
-                    });
-                } else {
-                    await prisma.inventory.update({
-                        where: { id: inventory.id },
-                        data: {
-                            price: row.price,
-                            cost: row.cost || inventory.cost,
-                        },
-                    });
-                }
-
-                // Create batch if quantity provided
-                if (row.quantity > 0) {
+                if (quantity > 0) {
                     await prisma.batch.create({
                         data: {
                             inventoryId: inventory.id,
-                            quantity: row.quantity,
-                            batchNumber: `IMP-${new Date().toISOString().slice(0, 10)}`,
-                            expiryDate: row.expiryDate
-                                ? new Date(row.expiryDate)
-                                : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // default 1 year
+                            quantity,
+                            // Batch cost drives FEFO sale costing — 0 here corrupts profit reports.
+                            costPrice: cost,
+                            batchNumber: String(row.batchNumber || `IMP-${new Date().toISOString().slice(0, 10)}`),
+                            expiryDate: parseExpiry(row.expiryDate) ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
                         },
                     });
+                    batches++;
                 }
             } catch (rowError: any) {
-                errors.push(`خطأ في "${row.name}": ${rowError.message}`);
+                errors.push(`${rowLabel}: ${rowError.message}`);
             }
         }
 
@@ -134,7 +167,8 @@ export async function POST(req: NextRequest) {
             success: true,
             imported,
             updated,
-            errors: errors.slice(0, 20), // limit errors
+            batches,
+            errors: errors.slice(0, 50),
             total: rows.length,
         });
     } catch (error: any) {

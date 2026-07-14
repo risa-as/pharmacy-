@@ -190,13 +190,15 @@ export default async function Page({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href="/dashboard/drugs/import"
-            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border/60 bg-card hover:bg-muted text-foreground transition-colors"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            <span className="hidden md:block">استيراد أدوية</span>
-          </Link>
+          {isSuperAdmin && (
+            <Link
+              href="/dashboard/drugs/import"
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border/60 bg-card hover:bg-muted text-foreground transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="hidden md:block">استيراد أدوية</span>
+            </Link>
+          )}
           <Link
             href="/dashboard/drugs/create"
             className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors shadow-sm"

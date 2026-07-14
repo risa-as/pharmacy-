@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { Package, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Package, Plus, ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import InventoryTable from "@/app/ui/inventory/inventory-table";
 import InventoryFilters from "@/app/ui/inventory/inventory-filters";
@@ -146,13 +146,22 @@ export default async function Page({
                     </p>
                 </div>
                 {canAddDrug && (
-                    <Link
-                        href="/dashboard/inventory/create"
-                        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
-                    >
-                        <Plus className="h-4 w-4" />
-                        إضافة للمخزون
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href="/dashboard/inventory/import"
+                            className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted shadow-sm"
+                        >
+                            <FileSpreadsheet className="h-4 w-4 text-success" />
+                            استيراد Excel
+                        </Link>
+                        <Link
+                            href="/dashboard/inventory/create"
+                            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
+                        >
+                            <Plus className="h-4 w-4" />
+                            إضافة للمخزون
+                        </Link>
+                    </div>
                 )}
             </div>
 
