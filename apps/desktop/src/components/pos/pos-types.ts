@@ -42,6 +42,19 @@ export interface ShiftSummary {
     expectedCash: number;
 }
 
+export interface HeldInvoice {
+    id: string;
+    label: string;            // ملاحظة/اسم اختياري للتمييز بين الفواتير المعلّقة
+    createdAt: string;        // ISO timestamp
+    cart: CartItem[];
+    patient: Patient | null;
+    manualDiscount: number;
+    isRedeemingLoyalty: boolean;
+    // لقطات للعرض السريع دون إعادة حساب
+    subTotal: number;
+    itemCount: number;
+}
+
 export interface DrugInteraction {
     drug1: string;
     drug2: string;

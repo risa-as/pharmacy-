@@ -135,6 +135,18 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
         ) {
             return;
         }
+        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+        if (
+            (stripsPerPacket > 20 || (qty > 10 && stripsPerPacket >= qty)) &&
+            !window.confirm(
+                `تنبيه: عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
+                `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
+                `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع\n` +
+                `هل أنت متأكد من المتابعة؟`,
+            )
+        ) {
+            return;
+        }
 
         setLoading(true);
         setError("");
@@ -241,6 +253,12 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
                             <p className="text-xs font-bold text-warning flex items-center gap-1">
                                 <span>⚠</span>
                                 سعر الباكيت أقل من 125 دينار — سيظهر تأكيد عند الحفظ
+                            </p>
+                        )}
+                        {stripsPerPacket > 20 && (
+                            <p className="text-xs font-bold text-warning flex items-center gap-1">
+                                <span>⚠</span>
+                                هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
                             </p>
                         )}
                     </div>

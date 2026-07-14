@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#22C55E"
+      "backgroundColor": "#ffffff"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -23,8 +23,10 @@
         "NSCameraUsageDescription": "نحتاج الوصول للكاميرا لمسح الباركود",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
         "UIBackgroundModes": [
+          "remote-notification",
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -37,7 +39,8 @@
         "android.permission.CAMERA",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -82,7 +85,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "89cd48b4-b1ea-49b7-8811-d1ceda7edac7"
+        "projectId": "808c2b2a-ec42-46c1-8a3a-0e2054b7ea40"
       }
     }
   }

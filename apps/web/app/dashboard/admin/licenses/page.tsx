@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     KeyRound, Plus, Shield, ShieldOff, Monitor, MonitorOff,
     Copy, Check, Loader2, AlertTriangle, Trash2, RotateCcw,
@@ -275,8 +276,11 @@ export default function AdminLicensesPage() {
             </div>
 
             {/* ==================== Modal ==================== */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            {/* Portaled to <body>: the glass-card ancestor has backdrop-filter, which
+                turns it into the containing block for position:fixed children — the
+                overlay would cover the card only (clipped/offset) instead of the screen. */}
+            {showModal && createPortal(
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" dir="rtl">
                     <div className="bg-card border border-border rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4">
 
                         {/* Success Result */}
@@ -406,7 +410,8 @@ export default function AdminLicensesPage() {
                             </>
                         )}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ==================== Table ==================== */}

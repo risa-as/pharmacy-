@@ -1,3 +1,5 @@
+import { showAlert } from "../lib/dialog";
+
 export function formatIraqiPhoneNumber(phone: string): string | null {
     // Remove non-digit characters
     let cleaned = phone.replace(/\D/g, '');
@@ -55,10 +57,9 @@ export function generateInvoiceMessage(sale: any, branchName: string = "صيدل
 
 export function openWhatsApp(phone: string, message: string) {
     const formattedPhone = formatIraqiPhoneNumber(phone);
-    // alert(`Debug: Original Phone: ${phone}, Formatted: ${formattedPhone}`); // Debug
 
     if (!formattedPhone) {
-        alert("رقم الهاتف غير صحيح. يجب أن يبدأ بـ 07 (مثال: 07701234567)");
+        void showAlert({ variant: "warning", title: "رقم الهاتف غير صحيح", message: "يجب أن يبدأ الرقم بـ 07 (مثال: 07701234567)." });
         return;
     }
 
@@ -66,7 +67,7 @@ export function openWhatsApp(phone: string, message: string) {
     if (window.ipcRenderer) {
         window.ipcRenderer.invoke('open-external-url', `https://wa.me/${formattedPhone}?text=${message}`)
             .catch(err => {
-                alert("فشل فتح واتساب: " + err.message);
+                void showAlert({ variant: "error", title: "فشل فتح واتساب", message: err.message });
                 console.error("IPC call failed:", err);
             });
     } else {

@@ -1,4 +1,5 @@
 import { createBackup } from './backup';
+import store from './store';
 import fs from 'fs';
 import formData from 'form-data';
 import fetch from 'node-fetch'; // Electron uses Node's fetch or compatible
@@ -12,51 +13,72 @@ const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 Hours
 
 
 
-export async function uploadBackup(filePath: string, branchId: string = "default") {
+export interface UploadResult {
+    ok: boolean;
+    status?: number;
+    error?: string;
+}
+
+export async function uploadBackup(filePath: string, branchId: string = "default"): Promise<UploadResult> {
     try {
         if (!fs.existsSync(filePath)) {
             console.error(`Backup file not found for upload: ${filePath}`);
-            return false;
+            return { ok: false, error: "ملف النسخة غير موجود" };
         }
 
         const stats = fs.statSync(filePath);
-        const fileSizeInMegabytes = stats.size / (1024 * 1024);
-        console.log(`Starting upload of ${filePath} (${fileSizeInMegabytes.toFixed(2)} MB)`);
+        console.log(`Starting upload of ${filePath} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`);
 
-        const form = new formData();
-        form.append('file', fs.createReadStream(filePath));
-        form.append('branchId', branchId);
-
-        // Should fetch the setting from DB preferably, but for now we hardcode/env
         const cloudBase = (typeof __CLOUD_API_URL__ !== "undefined" && __CLOUD_API_URL__)
             || process.env.CLOUD_API_URL
             || "http://127.0.0.1:3000/api";
         const targetUrl = `${cloudBase}/backup/upload`;
 
-        const response = await fetch(targetUrl, {
-            method: 'POST',
-            body: form,
-            headers: {
-                ...form.getHeaders(),
-                "x-backup-secret": (typeof __BACKUP_SECRET_KEY__ !== "undefined" && __BACKUP_SECRET_KEY__)
-                    || process.env.BACKUP_SECRET_KEY || "R$i1999s$a"
+        const legacySecret = (typeof __BACKUP_SECRET_KEY__ !== "undefined" && __BACKUP_SECRET_KEY__)
+            || process.env.BACKUP_SECRET_KEY || "R$i1999s$a";
+        const licenseKey = store.get('licenseKey') as string | undefined;
+
+        // Each attempt needs a fresh form — the file read-stream is single-use.
+        const attempt = (authHeaders: Record<string, string>) => {
+            const form = new formData();
+            form.append('file', fs.createReadStream(filePath));
+            form.append('branchId', branchId);
+            return fetch(targetUrl, {
+                method: 'POST',
+                body: form,
+                headers: { ...form.getHeaders(), ...authHeaders },
+            });
+        };
+
+        // Prefer per-device license auth (server validates the key against the
+        // branch). Fall back to the legacy shared secret only on a 401 so a
+        // mis-bound license can't permanently block backups.
+        let response;
+        if (licenseKey) {
+            response = await attempt({ "x-device-license-key": licenseKey, "x-branch-id": branchId });
+            if (response.status === 401) {
+                console.warn("[Backup] License auth rejected (401) — retrying with legacy secret.");
+                response = await attempt({ "x-backup-secret": legacySecret });
             }
-        });
+        } else {
+            response = await attempt({ "x-backup-secret": legacySecret });
+        }
 
         if (response.ok) {
             const data = await response.json();
             console.log("Cloud backup upload successful:", data);
-            return true;
-        } else {
-            console.error(`Cloud backup upload failed: ${response.status} ${response.statusText}`);
-            const text = await response.text();
-            console.error("Response:", text);
-            return false;
+            return { ok: true, status: response.status };
         }
 
-    } catch (error) {
+        const text = await response.text().catch(() => "");
+        console.error(`Cloud backup upload failed: ${response.status} ${response.statusText} — ${text}`);
+        // Surface a short, human-readable reason from the server response.
+        let reason = text;
+        try { reason = JSON.parse(text)?.message || text; } catch { /* keep raw text */ }
+        return { ok: false, status: response.status, error: (reason || response.statusText || "").slice(0, 200) };
+    } catch (error: any) {
         console.error("Error uploading backup:", error);
-        return false;
+        return { ok: false, error: error?.message ? `تعذّر الاتصال: ${error.message}` : "تعذّر الاتصال بالخادم" };
     }
 }
 
@@ -85,9 +107,10 @@ async function performCloudBackup() {
         const result = await createBackup();
 
         if (result.success && result.path) {
-            // 2. Upload
-            // TODO: Get real branchId from settings
-            await uploadBackup(result.path, "default-branch");
+            // 2. Upload — use the real branch this device is bound to so the
+            // backup is filed under the correct branch (and license auth matches).
+            const branchId = (store.get('branchId') as string) || "default";
+            await uploadBackup(result.path, branchId);
         } else {
             console.error("Scheduled backup creation failed:", result.error);
         }

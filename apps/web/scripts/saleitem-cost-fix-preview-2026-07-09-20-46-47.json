@@ -1,0 +1,214 @@
+{
+ "org": "دار التفاؤل",
+ "window": "2026-07-01T00:00:00.000Z",
+ "minRatio": 1.25,
+ "items": [
+  {
+   "saleItemId": "022a855f-6f73-4139-b720-4ad6a9fdf145",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-07-04T10:19:00.359Z",
+   "quantity": 1,
+   "oldCost": 1764,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "03653633-3c8d-4fc0-8f8e-a7a39bf811f3",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-28T19:36:09.810Z",
+   "quantity": 1,
+   "oldCost": 882,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "08e33ae7-6fc0-4f93-b867-59eba498e1d1",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-07-02T18:32:21.599Z",
+   "quantity": 1,
+   "oldCost": 882,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "09ac38a2-b2d7-4e81-b9e4-b64f2fe21928",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-25T22:29:58.155Z",
+   "quantity": 1,
+   "oldCost": 882,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "0d08c67b-5a6a-4616-84ce-964365c5fbdb",
+   "drugId": "9004dfe6-e227-4951-b705-5c6fa74f0a44",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-07-03T15:26:35.532Z",
+   "quantity": 1,
+   "oldCost": 4562.5,
+   "newCost": 5804.75
+  },
+  {
+   "saleItemId": "1a534da1-8963-4568-bd3a-0ded97a12848",
+   "drugId": "9004dfe6-e227-4951-b705-5c6fa74f0a44",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-18T04:57:44.050Z",
+   "quantity": 1,
+   "oldCost": 4562.5,
+   "newCost": 5804.75
+  },
+  {
+   "saleItemId": "1b0c9870-28c4-4b18-a846-46c1aea172c3",
+   "drugId": "9004dfe6-e227-4951-b705-5c6fa74f0a44",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-05-19T08:15:17.645Z",
+   "quantity": 1,
+   "oldCost": 4562.5,
+   "newCost": 5804.75
+  },
+  {
+   "saleItemId": "1bd19c22-0f08-48ac-8e1e-328364d359a7",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-07-04T10:19:18.888Z",
+   "quantity": 1,
+   "oldCost": 1764,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "3cf0aae4-cb32-4eb7-b5ce-9cfdd5bf276a",
+   "drugId": "9004dfe6-e227-4951-b705-5c6fa74f0a44",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-23T20:33:22.361Z",
+   "quantity": 2,
+   "oldCost": 4562.5,
+   "newCost": 5804.75
+  },
+  {
+   "saleItemId": "54081a1d-4e82-4cb9-90ec-e172c6889557",
+   "drugId": "9004dfe6-e227-4951-b705-5c6fa74f0a44",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-19T21:22:24.356Z",
+   "quantity": 1,
+   "oldCost": 4562.5,
+   "newCost": 5804.75
+  },
+  {
+   "saleItemId": "62559fd3-ec83-4380-b068-eab226047074",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-05-30T18:48:45.072Z",
+   "quantity": 1,
+   "oldCost": 5014.5,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "6f52da32-ba69-4d4a-b0dc-3a6b957ccecf",
+   "drugId": "9004dfe6-e227-4951-b705-5c6fa74f0a44",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-07-03T12:46:30.643Z",
+   "quantity": 1,
+   "oldCost": 4562.5,
+   "newCost": 5804.75
+  },
+  {
+   "saleItemId": "7872ca97-242e-415a-b54a-319c981687bd",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-07-03T21:37:15.635Z",
+   "quantity": 5,
+   "oldCost": 882.04,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "7fd07acb-4c9b-46e0-be34-d2fdce41bc9a",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-04-09T13:54:15.549Z",
+   "quantity": 1,
+   "oldCost": 5014.5,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "82931b71-f632-490e-a9d5-6f25ef69d5fb",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-04-17T07:57:51.246Z",
+   "quantity": 1,
+   "oldCost": 5014.5,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "88b1a035-a705-4227-bd7a-82a0b767f96e",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-02T16:40:03.444Z",
+   "quantity": 1,
+   "oldCost": 5010,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "94682eee-ed9d-47ef-a1fa-1a9ac5cd025f",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-26T22:22:41.636Z",
+   "quantity": 1,
+   "oldCost": 5010,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "99692ed0-57d0-4e3d-8a4e-b3a72c23878d",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-04-15T20:49:17.196Z",
+   "quantity": 1,
+   "oldCost": 5014.5,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "a8397ee9-894f-4020-8d1f-8b227e0f3ee3",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-05-05T14:32:24.896Z",
+   "quantity": 1,
+   "oldCost": 5014.5,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "aec6b2ff-9dc1-4902-9942-a1fad0281801",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-20T22:08:46.999Z",
+   "quantity": 1,
+   "oldCost": 882,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "b431cfdf-d3ab-4c92-99a0-6f23bbee6310",
+   "drugId": "cecbe66b-44f6-4bc4-b62a-bc60fa58c17e",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-06-27T13:35:53.047Z",
+   "quantity": 2,
+   "oldCost": 882,
+   "newCost": 2500
+  },
+  {
+   "saleItemId": "c8ca7b69-a840-4d5a-a499-b1c46df813c5",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-05-29T23:39:20.081Z",
+   "quantity": 1,
+   "oldCost": 5014.5,
+   "newCost": 10029
+  },
+  {
+   "saleItemId": "fdac6c34-1703-495c-8708-ffb0e3b08127",
+   "drugId": "7bc5da0f-271a-49a7-91b1-7985d302fe3d",
+   "branchId": "98c545f3-38b2-4926-8ca1-a7b854427518",
+   "saleDate": "2026-05-30T22:03:11.573Z",
+   "quantity": 1,
+   "oldCost": 5010,
+   "newCost": 10029
+  }
+ ]
+}

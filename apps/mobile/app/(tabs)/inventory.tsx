@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
     View, Text, FlatList, TextInput, TouchableOpacity,
     RefreshControl, ActivityIndicator, Alert, Modal, ScrollView,
-    InteractionManager, StyleSheet,
+    InteractionManager, StyleSheet, Animated, PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -11,9 +11,8 @@ import { dbService } from '../../services/db';
 import { syncService } from '../../services/sync';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette, Radius } from '../../constants/colors';
 import { Badge } from '../../components/ui/Badge';
-import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
@@ -21,6 +20,19 @@ import { useSyncStatus } from '../../context/SyncContext';
 
 type TabKey = 'all' | 'low-stock' | 'expiring' | 'near-expiry';
 type SortKey = 'name' | 'quantity' | 'expiry';
+
+/**
+ * Auto-format a typed expiry date into YYYY-MM-DD as the user types digits, so
+ * they never have to enter the dashes manually. Strips non-digits, then inserts
+ * the separators after the year and month segments.
+ */
+function formatExpiry(raw: string): string {
+    const d = raw.replace(/\D/g, '').slice(0, 8); // YYYYMMDD
+    let out = d.slice(0, 4);
+    if (d.length > 4) out += '-' + d.slice(4, 6);
+    if (d.length > 6) out += '-' + d.slice(6, 8);
+    return out;
+}
 
 interface InventoryItem {
     id: string;
@@ -53,17 +65,38 @@ function getDaysToExpiry(expiryDate?: string): number | null {
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+/** Compact Arabic number abbreviation for large money figures. */
+function abbrNum(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}م`;
+    if (n >= 1_000)     return `${Math.round(n / 1_000)} ألف`;
+    return Math.round(n).toLocaleString('en-US');
+}
+
 export default function InventoryScreen() {
     const { isDarkMode } = useTheme();
     const { isAdmin, branchId: authBranchId } = useAuth();
     const { triggerSync } = useSyncStatus();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
+
+    // Outlined card matching the manager identity — light surface, soft tinted border.
+    const card = (accent: string) => ({
+        backgroundColor: C.card,
+        borderRadius: Radius.sm,
+        borderWidth: 1.5,
+        borderColor: `${accent}33`,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 } as const,
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        elevation: 2,
+    });
 
     const [items, setItems]               = useState<InventoryItem[]>([]);
     const [search, setSearch]             = useState('');
     const [activeTab, setActiveTab]       = useState<TabKey>('all');
     const [sortKey, setSortKey]           = useState<SortKey>('name');
     const [sortAsc, setSortAsc]           = useState(true);
+    const [showSortMenu, setShowSortMenu] = useState(false);
     const [isSorting, setIsSorting]       = useState(false);
     const [sorted, setSorted]             = useState<InventoryItem[]>([]);
     const [refreshing, setRefreshing]     = useState(false);
@@ -76,6 +109,9 @@ export default function InventoryScreen() {
     const [showBranchModal, setShowBranchModal] = useState<any | null>(null);
     const [showCreateModal, setShowCreateModal] = useState<string | null>(null);
     const [modalLoading, setModalLoading]       = useState(false);
+    // Packet → strip cost calculator (cost per strip = packet price ÷ strips)
+    const [packetPrice, setPacketPrice]         = useState('');
+    const [stripsPerPacket, setStripsPerPacket] = useState('1');
     const [formData, setFormData] = useState({
         tradeName: '', scientificName: '', price: '', costPrice: '',
         minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '',
@@ -92,6 +128,34 @@ export default function InventoryScreen() {
     const [supplierPickerContext, setSupplierPickerContext] = useState<'batch' | 'branch' | 'create'>('create');
 
     const params = useLocalSearchParams();
+
+    // Drag-to-dismiss for the sort bottom sheet.
+    const sortSheetY = useRef(new Animated.Value(0)).current;
+    const closeSortSheet = () => {
+        // Slide fully off-screen, THEN unmount. Don't reset the value to 0 here —
+        // doing so would render one visible frame at the resting position (a flash).
+        // The next open resets the value before showing the sheet.
+        Animated.timing(sortSheetY, { toValue: 600, duration: 200, useNativeDriver: false }).start(({ finished }) => {
+            if (finished) setShowSortMenu(false);
+        });
+    };
+    const sortPan = useRef(
+        PanResponder.create({
+            // Don't claim on touch-start (so option buttons stay tappable);
+            // claim only when the user drags vertically downward.
+            onStartShouldSetPanResponder: () => false,
+            onMoveShouldSetPanResponder: (_, g) => g.dy > 5 && g.dy > Math.abs(g.dx),
+            onPanResponderMove: (_, g) => { if (g.dy > 0) sortSheetY.setValue(g.dy); },
+            onPanResponderRelease: (_, g) => {
+                if (g.dy > 70 || g.vy > 0.5) {
+                    closeSortSheet();
+                } else {
+                    Animated.spring(sortSheetY, { toValue: 0, useNativeDriver: false, bounciness: 4 }).start();
+                }
+            },
+            onPanResponderTerminationRequest: () => false,
+        }),
+    ).current;
 
     useEffect(() => {
         if (!isAdmin && authBranchId) setSelectedBranch(authBranchId);
@@ -159,6 +223,7 @@ export default function InventoryScreen() {
         if (!showBatchModal && !showBranchModal && !showCreateModal) {
             setSelectedSupplierId(null);
             setSupplierSearch('');
+            setPacketPrice(''); setStripsPerPacket('1');
         }
     }, [showBatchModal, showBranchModal, showCreateModal]);
 
@@ -191,75 +256,129 @@ export default function InventoryScreen() {
         fetchInventory();
     }, [fetchInventory, triggerSync]);
 
+    // Shared save guard: blocks a zero quantity, then warns (soft) when the
+    // packet price is under 125 IQD, then warns when strips-per-packet looks
+    // like the TOTAL strip count, before running the actual save callback.
+    const guardAndSave = (proceed: () => void) => {
+        const qty = parseInt(formData.quantity) || 0;
+        if (qty <= 0) {
+            Alert.alert('لا يمكن الحفظ', 'الكمية يجب أن تكون أكبر من صفر.');
+            return;
+        }
+        const pkt = parseFloat(packetPrice) || 0;
+        const strips = Math.max(1, parseInt(stripsPerPacket) || 1);
+        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+        const confirmStrips = () => {
+            if (pkt > 0 && (strips > 20 || (qty > 10 && strips >= qty))) {
+                Alert.alert(
+                    'تنبيه: عدد الأشرطة في الباكيت',
+                    `عدد الأشرطة في الباكيت (${strips}) يبدو غير صحيح — هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
+                    `سعر التكلفة للشريط سيُحسب: ${pkt} ÷ ${strips} = ${(pkt / strips).toLocaleString('en', { maximumFractionDigits: 2 })} د.ع. هل أنت متأكد من المتابعة؟`,
+                    [
+                        { text: 'إلغاء', style: 'cancel' },
+                        { text: 'متابعة', onPress: () => proceed() },
+                    ],
+                );
+                return;
+            }
+            proceed();
+        };
+        if (pkt < 125) {
+            Alert.alert(
+                'تحذير: سعر الباكيت منخفض',
+                `سعر الباكيت (${pkt.toLocaleString('en-US')} د.ع) أقل من 125 دينار. هل تريد المتابعة؟`,
+                [
+                    { text: 'إلغاء', style: 'cancel' },
+                    { text: 'متابعة', onPress: () => confirmStrips() },
+                ],
+            );
+            return;
+        }
+        confirmStrips();
+    };
+
     // Modal handlers (preserved)
-    const handleAddBatch = async () => {
+    const handleAddBatch = () => {
         if (!formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء كافة الحقول الأساسية'); return;
         }
-        setModalLoading(true);
-        try {
-            await apiService.addBatch({
-                inventoryId: showBatchModal.id,
-                quantity: parseInt(formData.quantity) || 0,
-                costPrice: parseFloat(formData.costPrice) || 0,
-                expiryDate: formData.expiryDate + 'T00:00:00.000Z',
-                supplierId: selectedSupplierId || null,
-            });
-            setShowBatchModal(null);
-            setFormData(f => ({ ...f, quantity: '', expiryDate: '', costPrice: '' }));
-            fetchInventory();
-        } catch { Alert.alert('خطأ', 'فشل إضافة الجرعة'); }
-        finally { setModalLoading(false); }
+        guardAndSave(async () => {
+            setModalLoading(true);
+            try {
+                await apiService.addBatch({
+                    inventoryId: showBatchModal.id,
+                    quantity: parseInt(formData.quantity) || 0,
+                    costPrice: computedStripCost,
+                    expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                    supplierId: selectedSupplierId || null,
+                });
+                setShowBatchModal(null);
+                setFormData(f => ({ ...f, quantity: '', expiryDate: '', costPrice: '' }));
+                setPacketPrice(''); setStripsPerPacket('1');
+                fetchInventory();
+            } catch { Alert.alert('خطأ', 'فشل إضافة الجرعة'); }
+            finally { setModalLoading(false); }
+        });
     };
 
-    const handleAddToBranch = async () => {
+    const handleAddToBranch = () => {
         if (!formData.price || !formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء كافة الحقول الأساسية'); return;
         }
-        setModalLoading(true);
-        try {
-            await apiService.addToBranch({
-                drugId: showBranchModal.id, branchId: selectedBranch!,
-                price: parseFloat(formData.price) || 0,
-                cost: parseFloat(formData.costPrice) || 0,
-                minStock: parseInt(formData.minStock) || 5,
-                maxStock: parseInt(formData.maxStock) || 100,
-                quantity: parseInt(formData.quantity) || 0,
-                expiryDate: formData.expiryDate + 'T00:00:00.000Z',
-                supplierId: selectedSupplierId || null,
-            });
-            setShowBranchModal(null);
-            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
-            fetchInventory();
-        } catch { Alert.alert('خطأ', 'فشل إضافة الدواء للفرع'); }
-        finally { setModalLoading(false); }
+        guardAndSave(async () => {
+            setModalLoading(true);
+            try {
+                await apiService.addToBranch({
+                    drugId: showBranchModal.id, branchId: selectedBranch!,
+                    price: parseFloat(formData.price) || 0,
+                    cost: computedStripCost,
+                    minStock: parseInt(formData.minStock) || 5,
+                    maxStock: parseInt(formData.maxStock) || 100,
+                    quantity: parseInt(formData.quantity) || 0,
+                    expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                    supplierId: selectedSupplierId || null,
+                });
+                setShowBranchModal(null);
+                setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
+                setPacketPrice(''); setStripsPerPacket('1');
+                fetchInventory();
+            } catch { Alert.alert('خطأ', 'فشل إضافة الدواء للفرع'); }
+            finally { setModalLoading(false); }
+        });
     };
 
-    const handleCreateDrug = async () => {
+    const handleCreateDrug = () => {
         if (!formData.tradeName || !formData.price || !formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء الحقول الأساسية'); return;
         }
-        setModalLoading(true);
-        try {
-            await apiService.createQuickDrug({
-                barcode: showCreateModal!, tradeName: formData.tradeName,
-                scientificName: formData.scientificName, drugType: 'Tablet', dosage: 'Custom',
-                unit: 'Box', category: 'General', manufacturer: 'Unknown', country: 'Unknown',
-                branchId: selectedBranch!, price: parseFloat(formData.price) || 0,
-                costPrice: parseFloat(formData.costPrice) || 0,
-                minStock: parseInt(formData.minStock) || 5, maxStock: parseInt(formData.maxStock) || 100,
-                quantity: parseInt(formData.quantity) || 0,
-                expiryDate: formData.expiryDate + 'T00:00:00.000Z',
-                supplierId: selectedSupplierId || null,
-                isQuickSale,
-            });
-            setShowCreateModal(null);
-            setIsQuickSale(false);
-            setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
-            fetchInventory();
-        } catch { Alert.alert('خطأ', 'فشل تسجيل الدواء الجديد'); }
-        finally { setModalLoading(false); }
+        guardAndSave(async () => {
+            setModalLoading(true);
+            try {
+                await apiService.createQuickDrug({
+                    barcode: showCreateModal!, tradeName: formData.tradeName,
+                    scientificName: formData.scientificName, drugType: 'Tablet', dosage: 'Custom',
+                    unit: 'Box', category: 'General', manufacturer: 'Unknown', country: 'Unknown',
+                    branchId: selectedBranch!, price: parseFloat(formData.price) || 0,
+                    costPrice: computedStripCost,
+                    minStock: parseInt(formData.minStock) || 5, maxStock: parseInt(formData.maxStock) || 100,
+                    batchNumber: formData.batchNumber || '',
+                    quantity: parseInt(formData.quantity) || 0,
+                    expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                    supplierId: selectedSupplierId || null,
+                    isQuickSale,
+                });
+                setShowCreateModal(null);
+                setIsQuickSale(false);
+                setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
+                setPacketPrice(''); setStripsPerPacket('1');
+                fetchInventory();
+            } catch { Alert.alert('خطأ', 'فشل تسجيل الدواء الجديد'); }
+            finally { setModalLoading(false); }
+        });
     };
+
+    // Total inventory value at sale price (Σ quantity × price).
+    const totalValue = useMemo(() => items.reduce((s, i) => s + i.quantity * i.price, 0), [items]);
 
     // ── Counts for tab badges ──────────────────────────────────────────────────
     const counts = useMemo(() => ({
@@ -326,130 +445,111 @@ export default function InventoryScreen() {
         const isQuick     = item.drugId ? (quickSaleState[item.drugId] ?? false) : false;
 
         return (
-            <View style={{
-                backgroundColor: C.card,
-                borderRadius: 5,
-                marginBottom: 10,
-                borderWidth: 1,
-                borderColor: C.border,
-                overflow: 'hidden',
-                elevation: 2,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: isDarkMode ? 0.2 : 0.06,
-                shadowRadius: 4,
-            }}>
-                <View style={{ flexDirection: 'row-reverse' }}>
-                    {/* Colored accent bar on the right */}
-                    <View style={{ width: 4, backgroundColor: stockColor }} />
-
-                    <View style={{ flex: 1, padding: 13 }}>
-                        {/* ── Row 1: name + stock label ── */}
-                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                            <View style={{ flex: 1, paddingLeft: 10 }}>
-                                <Text
-                                    style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }}
-                                    numberOfLines={1}
-                                >
-                                    {item.drugName}
-                                </Text>
-                                {item.barcode && (
-                                    <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
-                                        {item.barcode}
-                                    </Text>
-                                )}
-                            </View>
-                            {/* Stock chip */}
-                            <View style={{ backgroundColor: stockBg, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center' }}>
-                                <Text style={{ color: stockColor, fontSize: 12, fontWeight: '800' }}>
-                                    {item.quantity}
-                                </Text>
-                                <Text style={{ color: stockColor, fontSize: 10, fontWeight: '600', opacity: 0.85 }}>
-                                    {stockLabel}
-                                </Text>
-                            </View>
-                        </View>
-
-                        {/* ── Progress bar ── */}
-                        <View style={{ marginBottom: 10 }}>
-                            <View style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
-                                <View style={{
-                                    width: `${Math.round(progress * 100)}%`,
-                                    height: '100%',
-                                    backgroundColor: stockColor,
-                                    borderRadius: 3,
-                                }} />
-                            </View>
-                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 4 }}>
-                                <Text style={{ color: stockColor, fontSize: 11, fontWeight: '700' }}>
-                                    {item.quantity} وحدة
-                                </Text>
-                                <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-                                    حد الطلب: {item.reorderLevel}
-                                </Text>
-                            </View>
-                        </View>
-
-                        {/* ── Bottom row: price + expiry + quick-sale ── */}
-                        <View style={{
-                            flexDirection: 'row-reverse', justifyContent: 'space-between',
-                            alignItems: 'center', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 9,
-                        }}>
-                            <Text style={{ color: C.primary, fontWeight: '800', fontSize: 14 }}>
-                                {item.price.toLocaleString('en-US')} <Text style={{ fontSize: 11, fontWeight: '600' }}>د.ع</Text>
+            <View style={{ ...card(stockColor), marginBottom: 10, padding: 13 }}>
+                {/* ── Row 1: name + restock + stock chip ── */}
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <View style={{ flex: 1, paddingLeft: 10 }}>
+                        <Text
+                            style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }}
+                            numberOfLines={1}
+                        >
+                            {item.drugName}
+                        </Text>
+                        {item.barcode && (
+                            <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
+                                {item.barcode}
                             </Text>
+                        )}
+                    </View>
+                    {/* Stock chip */}
+                    <View style={{ backgroundColor: stockBg, borderRadius: Radius.xs, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center' }}>
+                        <Text style={{ color: stockColor, fontSize: 12, fontWeight: '800' }}>
+                            {item.quantity}
+                        </Text>
+                        <Text style={{ color: stockColor, fontSize: 10, fontWeight: '600', opacity: 0.85 }}>
+                            {stockLabel}
+                        </Text>
+                    </View>
+                </View>
 
-                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                                {/* Expiry badge — only if ≤ 30 days */}
-                                {days !== null && days <= 30 && (
-                                    <View style={{
-                                        backgroundColor: expiryUrgent ? C.dangerBg : C.warningBg,
-                                        borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3,
-                                        flexDirection: 'row-reverse', alignItems: 'center', gap: 3,
-                                    }}>
-                                        <Ionicons
-                                            name="time-outline"
-                                            size={10}
-                                            color={expiryUrgent ? C.danger : C.warning}
-                                        />
-                                        <Text style={{
-                                            color: expiryUrgent ? C.danger : C.warning,
-                                            fontSize: 11, fontWeight: '700',
-                                        }}>
-                                            {days}ي
-                                        </Text>
-                                    </View>
-                                )}
+                {/* ── Progress bar ── */}
+                <View style={{ marginBottom: 10 }}>
+                    <View style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
+                        <View style={{
+                            width: `${Math.round(progress * 100)}%`,
+                            height: '100%',
+                            backgroundColor: stockColor,
+                            borderRadius: 3,
+                        }} />
+                    </View>
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 4 }}>
+                        <Text style={{ color: stockColor, fontSize: 11, fontWeight: '700' }}>
+                            {item.quantity} وحدة
+                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
+                            حد الطلب: {item.reorderLevel}
+                        </Text>
+                    </View>
+                </View>
 
-                                {/* Quick-sale toggle */}
-                                {item.drugId && (
-                                    <TouchableOpacity
-                                        onPress={() => handleQuickSaleToggle(item.drugId!)}
-                                        disabled={isToggling}
-                                        style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, opacity: isToggling ? 0.5 : 1 }}
-                                        activeOpacity={0.75}
-                                    >
-                                        <Ionicons
-                                            name="flash"
-                                            size={12}
-                                            color={isQuick ? '#f59e0b' : C.mutedForeground}
-                                        />
-                                        <View style={{
-                                            width: 34, height: 19, borderRadius: 10,
-                                            backgroundColor: isQuick ? '#f59e0b' : C.border,
-                                            justifyContent: 'center', paddingHorizontal: 2,
-                                        }}>
-                                            <View style={{
-                                                width: 15, height: 15, borderRadius: 8, backgroundColor: '#fff',
-                                                alignSelf: isQuick ? 'flex-end' : 'flex-start',
-                                                elevation: 2,
-                                                shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2,
-                                            }} />
-                                        </View>
-                                    </TouchableOpacity>
-                                )}
+                {/* ── Bottom row: price + expiry + quick-sale ── */}
+                <View style={{
+                    flexDirection: 'row-reverse', justifyContent: 'space-between',
+                    alignItems: 'center', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 9,
+                }}>
+                    <Text style={{ color: C.primary, fontWeight: '800', fontSize: 14 }}>
+                        {item.price.toLocaleString('en-US')} <Text style={{ fontSize: 11, fontWeight: '600' }}>د.ع</Text>
+                    </Text>
+
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                        {/* Expiry badge — only if ≤ 30 days */}
+                        {days !== null && days <= 30 && (
+                            <View style={{
+                                backgroundColor: expiryUrgent ? C.dangerBg : C.warningBg,
+                                borderRadius: Radius.xs, paddingHorizontal: 7, paddingVertical: 3,
+                                flexDirection: 'row-reverse', alignItems: 'center', gap: 3,
+                            }}>
+                                <Ionicons
+                                    name="time-outline"
+                                    size={10}
+                                    color={expiryUrgent ? C.danger : C.warning}
+                                />
+                                <Text style={{
+                                    color: expiryUrgent ? C.danger : C.warning,
+                                    fontSize: 11, fontWeight: '700',
+                                }}>
+                                    {days}ي
+                                </Text>
                             </View>
-                        </View>
+                        )}
+
+                        {/* Quick-sale toggle */}
+                        {item.drugId && (
+                            <TouchableOpacity
+                                onPress={() => handleQuickSaleToggle(item.drugId!)}
+                                disabled={isToggling}
+                                style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, opacity: isToggling ? 0.5 : 1 }}
+                                activeOpacity={0.75}
+                            >
+                                <Ionicons
+                                    name="flash"
+                                    size={12}
+                                    color={isQuick ? '#f59e0b' : C.mutedForeground}
+                                />
+                                <View style={{
+                                    width: 34, height: 19, borderRadius: 10,
+                                    backgroundColor: isQuick ? '#f59e0b' : C.border,
+                                    justifyContent: 'center', paddingHorizontal: 2,
+                                }}>
+                                    <View style={{
+                                        width: 15, height: 15, borderRadius: 8, backgroundColor: '#fff',
+                                        alignSelf: isQuick ? 'flex-end' : 'flex-start',
+                                        elevation: 2,
+                                        shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2,
+                                    }} />
+                                </View>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
             </View>
@@ -462,6 +562,151 @@ export default function InventoryScreen() {
         textAlign: 'right' as const, color: C.foreground,
     };
 
+    const sectionLabelStyle = {
+        color: C.mutedForeground, fontSize: 11, fontWeight: '700' as const,
+        textAlign: 'right' as const, letterSpacing: 0.4, marginBottom: 8, marginTop: 6,
+    };
+
+    // Cost-per-strip derived from the packet calculator.
+    const _pkt = parseFloat(packetPrice) || 0;
+    const _strips = Math.max(1, parseInt(stripsPerPacket) || 1);
+    const computedStripCost = _pkt > 0 ? _pkt / _strips : 0;
+
+    // Inline hint under the quantity field: turns red and blocks the save when 0.
+    const renderQtyHint = () => {
+        const q = parseInt(formData.quantity) || 0;
+        const bad = formData.quantity.trim().length > 0 && q <= 0;
+        return (
+            <Text style={{
+                fontSize: 11, fontWeight: '600', textAlign: 'right', marginTop: -2, marginBottom: 8,
+                color: bad ? C.danger : C.mutedForeground,
+            }}>
+                {bad ? '⚠ لا يُقبل الحفظ والكمية صفر' : '* الكمية مطلوبة ويجب أن تكون أكبر من صفر'}
+            </Text>
+        );
+    };
+
+    // Packet → strip cost calculator (mirrors the web inventory form).
+    const renderCostCalculator = () => (
+        <View>
+            <Text style={sectionLabelStyle}>سعر التكلفة (من الباكيت)</Text>
+            <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                <TextInput
+                    style={[inputStyle, { flex: 1, marginBottom: 8 }]}
+                    placeholder="سعر الباكيت" keyboardType="numeric" placeholderTextColor={C.mutedForeground}
+                    value={packetPrice} onChangeText={setPacketPrice}
+                />
+                <TextInput
+                    style={[inputStyle, { flex: 1, marginBottom: 8 }]}
+                    placeholder="عدد الأشرطة" keyboardType="numeric" placeholderTextColor={C.mutedForeground}
+                    value={stripsPerPacket} onChangeText={setStripsPerPacket}
+                />
+            </View>
+            <View style={{
+                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+                backgroundColor: C.primaryMuted, borderRadius: 5, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 12,
+            }}>
+                <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: '600' }}>سعر التكلفة للشريط</Text>
+                <Text style={{ color: C.primary, fontSize: 14, fontWeight: '800' }}>
+                    {_pkt > 0 ? `${_pkt} ÷ ${_strips} = ${computedStripCost.toLocaleString('en', { maximumFractionDigits: 2 })}` : '—'}
+                </Text>
+            </View>
+            {_pkt > 0 && _pkt < 125 ? (
+                <View style={{
+                    flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+                    backgroundColor: C.warningBg, borderRadius: 5, paddingHorizontal: 12, paddingVertical: 9, marginTop: -4, marginBottom: 12,
+                }}>
+                    <Ionicons name="warning-outline" size={14} color={C.warning} />
+                    <Text style={{ color: C.warning, fontSize: 11, fontWeight: '700', flex: 1, textAlign: 'right' }}>
+                        سعر الباكيت أقل من 125 دينار — سيظهر تأكيد عند الحفظ
+                    </Text>
+                </View>
+            ) : null}
+            {_strips > 20 ? (
+                <View style={{
+                    flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+                    backgroundColor: C.warningBg, borderRadius: 5, paddingHorizontal: 12, paddingVertical: 9, marginTop: -4, marginBottom: 12,
+                }}>
+                    <Ionicons name="warning-outline" size={14} color={C.warning} />
+                    <Text style={{ color: C.warning, fontSize: 11, fontWeight: '700', flex: 1, textAlign: 'right' }}>
+                        هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
+                    </Text>
+                </View>
+            ) : null}
+        </View>
+    );
+
+    // Branded modal action row: prominent primary save + outline cancel (radius 5).
+    const renderModalActions = (
+        saveLabel: string,
+        saveIcon: keyof typeof Ionicons.glyphMap,
+        onSave: () => void,
+        onCancel: () => void,
+    ) => (
+        <View style={{ flexDirection: 'row-reverse', gap: 10, marginTop: 8, paddingBottom: 24 }}>
+            <TouchableOpacity
+                onPress={onSave}
+                disabled={modalLoading}
+                activeOpacity={0.85}
+                style={{
+                    flex: 2, height: 50, borderRadius: 5, backgroundColor: C.primary,
+                    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    opacity: modalLoading ? 0.6 : 1,
+                    shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+                }}
+            >
+                {modalLoading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                    <>
+                        <Ionicons name={saveIcon} size={18} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>{saveLabel}</Text>
+                    </>
+                )}
+            </TouchableOpacity>
+            <TouchableOpacity
+                onPress={onCancel}
+                disabled={modalLoading}
+                activeOpacity={0.7}
+                style={{
+                    flex: 1, height: 50, borderRadius: 5,
+                    borderWidth: 1.5, borderColor: C.border,
+                    alignItems: 'center', justifyContent: 'center',
+                }}
+            >
+                <Text style={{ color: C.mutedForeground, fontSize: 15, fontWeight: '700' }}>إلغاء</Text>
+            </TouchableOpacity>
+        </View>
+    );
+
+    // Secondary controls that scroll WITH the list (branch + offline only).
+    const listHeaderEl = (
+        <View>
+            {/* Branch selector */}
+            {isAdmin && (
+                <BranchSelector
+                    selectedBranchId={selectedBranch}
+                    onSelectBranch={setSelectedBranch}
+                    hideIfSingle
+                    accent={C.primary}
+                    accentMuted={C.primaryMuted}
+                />
+            )}
+
+            {/* Offline banner */}
+            {!isOnline && (
+                <View style={{
+                    flexDirection: 'row-reverse', alignItems: 'center',
+                    backgroundColor: C.dangerBg, borderRadius: Radius.xs,
+                    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10, gap: 6,
+                }}>
+                    <Ionicons name="cloud-offline" size={14} color={C.danger} />
+                    <Text style={{ color: C.danger, fontSize: 12, fontWeight: '700' }}>وضع عدم الاتصال</Text>
+                </View>
+            )}
+        </View>
+    );
+
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
 
@@ -470,64 +715,78 @@ export default function InventoryScreen() {
 
                 {/* Title row */}
                 <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <View>
-                        <Text style={{ color: C.foreground, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>
-                            المخزون الدوائي
-                        </Text>
-                        {!loading && (
-                            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 1 }}>
-                                {counts.all} صنف  ·  {counts['low-stock']} ناقص  ·  {counts.expiring} نفاد  ·  {counts['near-expiry']} قارب الانتهاء
-                            </Text>
-                        )}
-                    </View>
+                    <Text style={{ color: C.foreground, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>
+                        المخزون الدوائي
+                    </Text>
                     {/* Refresh icon */}
                     <TouchableOpacity
                         onPress={onRefresh}
-                        style={{ backgroundColor: C.primaryMuted, borderRadius: 5, padding: 10 }}
+                        style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.xs, padding: 10 }}
                         activeOpacity={0.75}
                     >
                         <Ionicons name="refresh" size={20} color={C.primary} />
                     </TouchableOpacity>
                 </View>
 
-                {/* Branch selector */}
-                {isAdmin && (
-                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle />
-                )}
-
-                {/* Offline banner */}
-                {!isOnline && (
-                    <View style={{
-                        flexDirection: 'row-reverse', alignItems: 'center',
-                        backgroundColor: C.dangerBg, borderRadius: 5,
-                        paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10, gap: 6,
-                    }}>
-                        <Ionicons name="cloud-offline" size={14} color={C.danger} />
-                        <Text style={{ color: C.danger, fontSize: 12, fontWeight: '700' }}>وضع عدم الاتصال</Text>
+                {/* Compact inventory value summary (pinned, single thin row) */}
+                <View style={{ ...card(C.primary), flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 14, marginBottom: 10 }}>
+                    <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
+                        <Ionicons name="wallet-outline" size={16} color={C.primary} />
+                        <Text style={{ color: C.mutedForeground, fontSize: 11.5, fontWeight: '600' }}>قيمة المخزون</Text>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 2 }}>
+                            <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '900' }}>{abbrNum(totalValue)}</Text>
+                            <Text style={{ color: C.mutedForeground, fontSize: 10, fontWeight: '700' }}>د.ع</Text>
+                        </View>
                     </View>
-                )}
+                    <View style={{ width: 1, height: 18, backgroundColor: C.border, marginHorizontal: 12 }} />
+                    <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
+                        <Ionicons name="cube-outline" size={16} color={C.primary} />
+                        <Text style={{ color: C.mutedForeground, fontSize: 11.5, fontWeight: '600' }}>الأصناف</Text>
+                        <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '900' }}>{counts.all.toLocaleString('en-US')}</Text>
+                    </View>
+                </View>
 
-                {/* Search bar */}
-                <View style={{
-                    flexDirection: 'row-reverse', alignItems: 'center',
-                    backgroundColor: C.input, borderRadius: 5,
-                    borderWidth: 1, borderColor: C.border,
-                    paddingHorizontal: 12, marginBottom: 10, gap: 8,
-                }}>
-                    <Ionicons name="search" size={18} color={C.mutedForeground} />
-                    <TextInput
-                        style={{ flex: 1, color: C.foreground, paddingVertical: 11, textAlign: 'right', fontSize: 14 }}
-                        placeholder="ابحث عن دواء أو باركود..."
-                        placeholderTextColor={C.mutedForeground}
-                        value={search}
-                        onChangeText={setSearch}
-                    />
+                {/* Search + sort row */}
+                <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
+                    <View style={{
+                        flex: 1,
+                        flexDirection: 'row-reverse', alignItems: 'center',
+                        backgroundColor: C.input, borderRadius: Radius.xs,
+                        borderWidth: 1, borderColor: C.border,
+                        paddingHorizontal: 12, gap: 8,
+                    }}>
+                        <Ionicons name="search" size={18} color={C.mutedForeground} />
+                        <TextInput
+                            style={{ flex: 1, color: C.foreground, paddingVertical: 11, textAlign: 'right', fontSize: 14 }}
+                            placeholder="ابحث عن دواء أو باركود..."
+                            placeholderTextColor={C.mutedForeground}
+                            value={search}
+                            onChangeText={setSearch}
+                        />
+                        {search.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearch('')} hitSlop={8} activeOpacity={0.7}>
+                                <Ionicons name="close-circle" size={18} color={C.mutedForeground} />
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            onPress={() => router.push({ pathname: '/scan', params: { from: 'inventory' } })}
+                            style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.xs, padding: 6 }}
+                            activeOpacity={0.75}
+                        >
+                            <Ionicons name="scan-outline" size={20} color={C.primary} />
+                        </TouchableOpacity>
+                    </View>
+                    {/* Sort button — opens the sort menu */}
                     <TouchableOpacity
-                        onPress={() => router.push({ pathname: '/scan', params: { from: 'inventory' } })}
-                        style={{ backgroundColor: C.primaryMuted, borderRadius: 5, padding: 6 }}
-                        activeOpacity={0.75}
+                        onPress={() => {
+                            setShowSortMenu(true);
+                            sortSheetY.setValue(400);
+                            Animated.spring(sortSheetY, { toValue: 0, useNativeDriver: false, bounciness: 2 }).start();
+                        }}
+                        activeOpacity={0.8}
+                        style={{ width: 48, borderRadius: Radius.xs, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <Ionicons name="scan-outline" size={20} color={C.primary} />
+                        <Ionicons name="swap-vertical" size={20} color={C.primary} />
                     </TouchableOpacity>
                 </View>
 
@@ -573,56 +832,6 @@ export default function InventoryScreen() {
                     })}
                 </View>
 
-                {/* Sort bar */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Text style={{ color: C.mutedForeground, fontSize: 12, marginLeft: 4 }}>ترتيب:</Text>
-                    {SORTS.map(s => {
-                        const active = sortKey === s.key;
-                        return (
-                            <TouchableOpacity
-                                key={s.key}
-                                onPress={() => {
-                                    if (sortKey === s.key) setSortAsc(v => !v);
-                                    else { setSortKey(s.key); setSortAsc(true); }
-                                }}
-                                activeOpacity={0.75}
-                                style={{
-                                    flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
-                                    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5,
-                                    backgroundColor: active ? C.primaryMuted : 'transparent',
-                                    borderWidth: 1,
-                                    borderColor: active ? C.primary : C.border,
-                                    opacity: isSorting && active ? 0.7 : 1,
-                                }}
-                            >
-                                {/* Show spinner on active button while sorting */}
-                                {isSorting && active ? (
-                                    <ActivityIndicator size={11} color={C.primary} />
-                                ) : (
-                                    <Ionicons name={s.icon} size={12} color={active ? C.primary : C.mutedForeground} />
-                                )}
-                                <Text style={{ color: active ? C.primary : C.mutedForeground, fontSize: 12, fontWeight: active ? '700' : '500' }}>
-                                    {s.label}
-                                </Text>
-                                {active && !isSorting && (
-                                    <Ionicons
-                                        name={sortAsc ? 'chevron-up' : 'chevron-down'}
-                                        size={11}
-                                        color={C.primary}
-                                    />
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginRight: 'auto' }}>
-                        {isSorting && (
-                            <ActivityIndicator size={10} color={C.mutedForeground} />
-                        )}
-                        <Text style={{ color: C.mutedForeground, fontSize: 12 }}>
-                            {isSorting ? 'جاري الترتيب...' : `${sorted.length} نتيجة`}
-                        </Text>
-                    </View>
-                </View>
             </View>
 
             {/* ── Drug list ───────────────────────────────────────────────────── */}
@@ -636,7 +845,8 @@ export default function InventoryScreen() {
                         data={sorted}
                         keyExtractor={item => item.id}
                         renderItem={renderItem}
-                        contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 110 }}
+                        ListHeaderComponent={listHeaderEl}
+                        contentContainerStyle={{ padding: 16, paddingTop: 12, paddingBottom: 110 }}
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
                         removeClippedSubviews
                         maxToRenderPerBatch={12}
@@ -689,13 +899,22 @@ export default function InventoryScreen() {
             {/* Add Batch Modal */}
             <Modal visible={!!showBatchModal} transparent animationType="slide" onRequestClose={() => setShowBatchModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} contentContainerStyle={{ padding: 24 }}>
-                        <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 16 }}>
-                            إضافة دفعة: {showBatchModal?.drug?.tradeName}
-                        </Text>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
+                        <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 5, alignSelf: 'center', marginBottom: 16 }} />
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                            <View style={{ width: 44, height: 44, borderRadius: 5, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
+                                <Ionicons name="layers-outline" size={22} color={C.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right' }}>إضافة دفعة جديدة</Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>{showBatchModal?.drug?.tradeName}</Text>
+                            </View>
+                        </View>
+                        <Text style={sectionLabelStyle}>تفاصيل الدفعة</Text>
                         <TextInput style={inputStyle} placeholder="الكمية *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
-                        <TextInput style={inputStyle} placeholder="سعر التكلفة" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.costPrice} onChangeText={t => setFormData(f => ({ ...f, costPrice: t }))} />
-                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        {renderQtyHint()}
+                        {renderCostCalculator()}
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} />
                         <TouchableOpacity
                             onPress={() => { setSupplierPickerContext('batch'); setShowSupplierPicker(true); }}
                             style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
@@ -705,10 +924,7 @@ export default function InventoryScreen() {
                             </Text>
                             <Ionicons name="chevron-down" size={16} color={C.mutedForeground} />
                         </TouchableOpacity>
-                        <View style={{ gap: 8, marginTop: 4, paddingBottom: 24 }}>
-                            <Button label="حفظ" loading={modalLoading} onPress={handleAddBatch} />
-                            <Button label="إلغاء" variant="ghost" onPress={() => setShowBatchModal(null)} />
-                        </View>
+                        {renderModalActions('حفظ', 'save-outline', handleAddBatch, () => setShowBatchModal(null))}
                     </ScrollView>
                 </View>
             </Modal>
@@ -716,16 +932,25 @@ export default function InventoryScreen() {
             {/* Add to Branch Modal */}
             <Modal visible={!!showBranchModal} transparent animationType="slide" onRequestClose={() => setShowBranchModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} contentContainerStyle={{ padding: 24 }}>
-                        <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 16 }}>
-                            تنشيط دواء: {showBranchModal?.tradeName}
-                        </Text>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
+                        <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 5, alignSelf: 'center', marginBottom: 16 }} />
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                            <View style={{ width: 44, height: 44, borderRadius: 5, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
+                                <Ionicons name="cube-outline" size={22} color={C.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right' }}>إضافة الدواء للمخزون</Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>{showBranchModal?.tradeName}</Text>
+                            </View>
+                        </View>
+                        <Text style={sectionLabelStyle}>التسعير والحدود</Text>
                         <TextInput style={inputStyle} placeholder="سعر البيع" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
-                        <TextInput style={inputStyle} placeholder="سعر التكلفة" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.costPrice} onChangeText={t => setFormData(f => ({ ...f, costPrice: t }))} />
                         <TextInput style={inputStyle} placeholder="حد النواقص" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.minStock} onChangeText={t => setFormData(f => ({ ...f, minStock: t }))} />
-                        <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
+                        {renderCostCalculator()}
+                        <Text style={sectionLabelStyle}>المخزون الأولي</Text>
                         <TextInput style={inputStyle} placeholder="الكمية" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
-                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        {renderQtyHint()}
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} />
                         <TouchableOpacity
                             onPress={() => { setSupplierPickerContext('branch'); setShowSupplierPicker(true); }}
                             style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
@@ -735,10 +960,7 @@ export default function InventoryScreen() {
                             </Text>
                             <Ionicons name="chevron-down" size={16} color={C.mutedForeground} />
                         </TouchableOpacity>
-                        <View style={{ gap: 8, marginTop: 4, paddingBottom: 24 }}>
-                            <Button label="تنشيط وإضافة" loading={modalLoading} onPress={handleAddToBranch} />
-                            <Button label="إلغاء" variant="ghost" onPress={() => setShowBranchModal(null)} />
-                        </View>
+                        {renderModalActions('تنشيط وحفظ', 'checkmark-circle-outline', handleAddToBranch, () => setShowBranchModal(null))}
                     </ScrollView>
                 </View>
             </Modal>
@@ -746,18 +968,24 @@ export default function InventoryScreen() {
             {/* Create Drug Modal */}
             <Modal visible={!!showCreateModal} transparent animationType="slide" onRequestClose={() => setShowCreateModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} contentContainerStyle={{ padding: 24 }}>
-                        <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right', marginBottom: 2 }}>
-                            تسجيل دواء جديد
-                        </Text>
-                        <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginBottom: 16 }}>
-                            الباركود: {showCreateModal}
-                        </Text>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
+                        <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 5, alignSelf: 'center', marginBottom: 16 }} />
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                            <View style={{ width: 44, height: 44, borderRadius: 5, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
+                                <Ionicons name="medkit-outline" size={22} color={C.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '800', textAlign: 'right' }}>تسجيل دواء جديد</Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>الباركود: {showCreateModal}</Text>
+                            </View>
+                        </View>
+                        <Text style={sectionLabelStyle}>معلومات الدواء</Text>
                         <TextInput style={inputStyle} placeholder="الاسم التجاري *" placeholderTextColor={C.mutedForeground} value={formData.tradeName} onChangeText={t => setFormData(f => ({ ...f, tradeName: t }))} />
                         <TextInput style={inputStyle} placeholder="الاسم العلمي" placeholderTextColor={C.mutedForeground} value={formData.scientificName} onChangeText={t => setFormData(f => ({ ...f, scientificName: t }))} />
+                        <Text style={sectionLabelStyle}>التسعير والحدود</Text>
                         <TextInput style={inputStyle} placeholder="سعر البيع *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
-                        <TextInput style={inputStyle} placeholder="سعر التكلفة" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.costPrice} onChangeText={t => setFormData(f => ({ ...f, costPrice: t }))} />
                         <TextInput style={inputStyle} placeholder="حد النواقص" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.minStock} onChangeText={t => setFormData(f => ({ ...f, minStock: t }))} />
+                        {renderCostCalculator()}
                         <TouchableOpacity
                             onPress={() => { setSupplierPickerContext('create'); setShowSupplierPicker(true); }}
                             style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
@@ -767,9 +995,10 @@ export default function InventoryScreen() {
                             </Text>
                             <Ionicons name="chevron-down" size={16} color={C.mutedForeground} />
                         </TouchableOpacity>
-                        <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
+                        <Text style={sectionLabelStyle}>المخزون الأولي</Text>
                         <TextInput style={inputStyle} placeholder="الكمية *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
-                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: t }))} />
+                        {renderQtyHint()}
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} />
                         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, marginVertical: 4 }}>
                             <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '600' }}>بيع سريع ⚡</Text>
                             <TouchableOpacity
@@ -788,10 +1017,7 @@ export default function InventoryScreen() {
                                 }} />
                             </TouchableOpacity>
                         </View>
-                        <View style={{ gap: 8, marginTop: 4, paddingBottom: 30 }}>
-                            <Button label="حفظ الدواء" loading={modalLoading} onPress={handleCreateDrug} />
-                            <Button label="إلغاء" variant="ghost" onPress={() => setShowCreateModal(null)} />
-                        </View>
+                        {renderModalActions('حفظ', 'save-outline', handleCreateDrug, () => setShowCreateModal(null))}
                     </ScrollView>
                 </View>
             </Modal>
@@ -799,7 +1025,7 @@ export default function InventoryScreen() {
             {/* Supplier picker modal */}
             <Modal visible={showSupplierPicker} transparent animationType="slide" onRequestClose={() => setShowSupplierPicker(false)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 20, maxHeight: '70%' }}>
+                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, padding: 20, maxHeight: '70%' }}>
                         <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
                         <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '700', textAlign: 'right', marginBottom: 12 }}>اختر مورداً</Text>
                         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 5, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, marginBottom: 12, gap: 8 }}>
@@ -835,6 +1061,60 @@ export default function InventoryScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* ── Sort menu ──────────────────────────────────────────────────── */}
+            {showSortMenu && (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, elevation: 1000 }}>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} activeOpacity={1} onPress={() => setShowSortMenu(false)} />
+                <Animated.View
+                    {...sortPan.panHandlers}
+                    style={{
+                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                        backgroundColor: C.card, borderTopLeftRadius: Radius.md, borderTopRightRadius: Radius.md,
+                        paddingHorizontal: 20, paddingBottom: 32,
+                        borderTopWidth: 1, borderColor: C.border,
+                        transform: [{ translateY: sortSheetY }],
+                    }}
+                >
+                    {/* Drag the sheet down to dismiss */}
+                    <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 14 }}>
+                        <View style={{ width: 44, height: 5, backgroundColor: C.border, borderRadius: 3 }} />
+                    </View>
+                    <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right', marginBottom: 12 }}>ترتيب حسب</Text>
+                    {SORTS.map(s => {
+                        const active = sortKey === s.key;
+                        return (
+                            <TouchableOpacity
+                                key={s.key}
+                                onPress={() => {
+                                    if (sortKey === s.key) setSortAsc(v => !v);
+                                    else { setSortKey(s.key); setSortAsc(true); }
+                                    setShowSortMenu(false);
+                                }}
+                                activeOpacity={0.7}
+                                style={{
+                                    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+                                    paddingVertical: 13, paddingHorizontal: 14, borderRadius: Radius.xs, marginBottom: 8,
+                                    backgroundColor: active ? C.primaryMuted : 'transparent',
+                                    borderWidth: 1, borderColor: active ? C.primary : C.border,
+                                }}
+                            >
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                                    <Ionicons name={s.icon} size={18} color={active ? C.primary : C.mutedForeground} />
+                                    <Text style={{ color: active ? C.primary : C.foreground, fontSize: 14, fontWeight: active ? '800' : '500' }}>{s.label}</Text>
+                                </View>
+                                {active && (
+                                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
+                                        <Ionicons name={sortAsc ? 'arrow-up' : 'arrow-down'} size={15} color={C.primary} />
+                                        <Text style={{ color: C.primary, fontSize: 11, fontWeight: '700' }}>{sortAsc ? 'تصاعدي' : 'تنازلي'}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </Animated.View>
+              </View>
+            )}
         </View>
     );
 }

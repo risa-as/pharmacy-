@@ -2,21 +2,21 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette } from '../../constants/colors';
 
 const APP_VERSION = '1.0.0';
 const BUILD      = '2026.05';
 
 const INFO_ROWS = [
     { label: 'الإصدار',      value: APP_VERSION, icon: 'code-slash-outline'    as const, iconColor: (C: any) => C.primary,         iconBg: (C: any) => C.primaryMuted },
-    { label: 'رقم البناء',   value: BUILD,        icon: 'git-branch-outline'   as const, iconColor: (C: any) => C.info,            iconBg: (C: any) => C.infoBg       },
+    { label: 'رقم البناء',   value: BUILD,        icon: 'git-branch-outline'   as const, iconColor: (C: any) => C.primary,         iconBg: (C: any) => C.primaryMuted },
     { label: 'المطوّر',      value: 'Faramace Inc.', icon: 'business-outline'  as const, iconColor: (C: any) => C.warning,         iconBg: (C: any) => C.warningBg    },
     { label: 'حقوق النشر',  value: '© 2026',     icon: 'shield-outline'       as const, iconColor: (C: any) => C.mutedForeground,  iconBg: (C: any) => C.input        },
 ];
 
 export default function AboutScreen() {
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
 
     return (
         <ScrollView
@@ -27,7 +27,7 @@ export default function AboutScreen() {
             {/* App identity card */}
             <View style={{
                 backgroundColor: C.card, borderRadius: 5, padding: 24,
-                alignItems: 'center', borderWidth: 1, borderColor: C.border,
+                alignItems: 'center', borderWidth: 1.5, borderColor: `${C.primary}33`,
                 marginBottom: 20,
                 elevation: 1, shadowColor: '#000',
                 shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,
@@ -70,7 +70,7 @@ export default function AboutScreen() {
 
             <View style={{
                 backgroundColor: C.card, borderRadius: 5,
-                borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+                borderWidth: 1.5, borderColor: `${C.primary}33`, overflow: 'hidden',
                 marginBottom: 20,
                 elevation: 1, shadowColor: '#000',
                 shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,
@@ -114,14 +114,14 @@ export default function AboutScreen() {
 
             <View style={{
                 backgroundColor: C.card, borderRadius: 5,
-                borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+                borderWidth: 1.5, borderColor: `${C.primary}33`, overflow: 'hidden',
                 marginBottom: 20,
                 elevation: 1, shadowColor: '#000',
                 shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,
             }}>
                 {[
                     { label: 'الموقع الإلكتروني', url: 'https://www.faramace.com', icon: 'globe-outline'          as const, iconColor: (C: any) => C.primary,  iconBg: (C: any) => C.primaryMuted },
-                    { label: 'سياسة الخصوصية',   url: 'https://www.faramace.com/privacy', icon: 'document-text-outline' as const, iconColor: (C: any) => C.info,     iconBg: (C: any) => C.infoBg       },
+                    { label: 'سياسة الخصوصية',   url: 'https://www.faramace.com/privacy', icon: 'document-text-outline' as const, iconColor: (C: any) => C.primary,  iconBg: (C: any) => C.primaryMuted },
                     { label: 'شروط الاستخدام',   url: 'https://www.faramace.com/terms',   icon: 'reader-outline'         as const, iconColor: (C: any) => C.warning,   iconBg: (C: any) => C.warningBg    },
                 ].map((link, i, arr) => (
                     <View key={link.label}>

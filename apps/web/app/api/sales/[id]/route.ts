@@ -6,6 +6,45 @@ import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 
 /**
+ * GET /api/sales/[id]
+ * تفاصيل فاتورة بيع — الأصناف والمريض والدفع والمرتجعات السابقة.
+ * متاح لأي مستخدم موثّق ضمن نطاق مؤسسته/فرعه.
+ */
+export async function GET(
+    request: Request,
+    { params }: { params: { id: string } }
+) {
+    try {
+        const tenantCtx = await getTenantContext();
+        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const { tenantBranchWhere } = tenantCtx;
+
+        // Tenant isolation via the where clause: out-of-scope sales read as 404
+        const sale = await prisma.sale.findFirst({
+            where: { id: params.id, ...tenantBranchWhere },
+            include: {
+                items: { include: { drug: { select: { tradeName: true } } } },
+                patient: { select: { id: true, name: true } },
+                payment: true,
+                returns: {
+                    include: { items: true },
+                    orderBy: { createdAt: 'desc' },
+                },
+            },
+        });
+
+        if (!sale) {
+            return NextResponse.json({ message: 'الفاتورة غير موجودة.' }, { status: 404 });
+        }
+
+        return NextResponse.json(sale);
+    } catch (error) {
+        console.error('GET /api/sales/[id] error:', error);
+        return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+    }
+}
+
+/**
  * PUT /api/sales/[id]
  * تعديل فاتورة بيع (الكميات، الأسعار، الخصم) — للمدير فقط.
  * يعالج فروقات المخزون والصندوق/الدين بشكل ذرّي للحفاظ على السلامة المالية.

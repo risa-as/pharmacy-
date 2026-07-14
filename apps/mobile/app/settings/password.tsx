@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { authService } from '../../services/auth';
 import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette } from '../../constants/colors';
 
 interface FieldConfig {
     key: 'current' | 'new' | 'confirm';
@@ -45,7 +45,7 @@ const FIELDS: FieldConfig[] = [
 
 export default function PasswordScreen() {
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
 
     const [values, setValues] = useState({ current: '', new: '', confirm: '' });
     const [visible, setVisible] = useState({ current: false, new: false, confirm: false });
@@ -93,7 +93,7 @@ export default function PasswordScreen() {
                 <View style={{
                     flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
                     backgroundColor: C.warningBg, borderRadius: 5, padding: 13,
-                    marginBottom: 20, borderWidth: 1, borderColor: `${C.warning}30`,
+                    marginBottom: 20, borderWidth: 1.5, borderColor: `${C.warning}30`,
                 }}>
                     <View style={{ backgroundColor: C.warning, borderRadius: 5, padding: 6 }}>
                         <Ionicons name="shield-outline" size={14} color="#fff" />

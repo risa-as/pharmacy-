@@ -1,0 +1,24 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/dist/**": true,
+    "**/dist-electron/**": true,
+    "**/release/**": true,
+    "**/.turbo/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/dist": true,
+    "**/dist-electron": true,
+    "**/release": true,
+    "**/.turbo": true,
+    "**/pnpm-lock.yaml": true
+  },
+  "files.exclude": {
+    "**/release/**/win-unpacked": true
+  }
+}

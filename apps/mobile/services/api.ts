@@ -831,6 +831,14 @@ export const apiService = {
         }
     },
 
+    async getScanUsage(): Promise<{ limit: number; used: number; remaining: number }> {
+        try {
+            return await request<any>('/scan/usage');
+        } catch {
+            return { limit: 20, used: 0, remaining: 20 };
+        }
+    },
+
     // Get Loyalty Info for current branch
     async getLoyaltyInfo() {
         try {

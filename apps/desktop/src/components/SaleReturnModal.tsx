@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { X, Undo2, AlertCircle, Search, Hash, Pill } from "lucide-react";
+import { showAlert, showConfirm } from "../lib/dialog";
 
 interface SaleReturnModalProps {
     isOpen: boolean;
@@ -104,7 +105,13 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
             return;
         }
 
-        if (!confirm(`هل أنت متأكد من إرجاع بضاعة بقيمة ${totalReturnAmount.toLocaleString()} د.ع؟`)) return;
+        const ok = await showConfirm({
+            variant: "warning",
+            title: "تأكيد الإرجاع",
+            message: `هل أنت متأكد من إرجاع بضاعة بقيمة ${totalReturnAmount.toLocaleString()} د.ع؟`,
+            actionLabel: "تأكيد الإرجاع",
+        });
+        if (!ok) return;
 
         setIsLoading(true);
         setErrorMsg("");
@@ -131,7 +138,7 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
             });
 
             if (res.success) {
-                alert("تم الإرجاع بنجاح");
+                void showAlert({ variant: "success", title: "تم الإرجاع بنجاح", autoCloseMs: 2000 });
                 setReturnQuantities({});
                 setNotes("");
                 setSale(null);

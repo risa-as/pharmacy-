@@ -2,11 +2,11 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette } from '../../constants/colors';
 
 export default function ThemeScreen() {
     const { isDarkMode, toggleTheme } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
 
     const options = [
         {
@@ -49,7 +49,7 @@ export default function ThemeScreen() {
                             flexDirection: 'row-reverse',
                             backgroundColor: C.card, borderRadius: 5,
                             borderWidth: 2,
-                            borderColor: opt.active ? C.primary : C.border,
+                            borderColor: opt.active ? C.primary : `${C.primary}33`,
                             padding: 16, alignItems: 'center', gap: 14,
                             elevation: opt.active ? 2 : 1,
                             shadowColor: opt.active ? C.primary : '#000',
@@ -84,7 +84,7 @@ export default function ThemeScreen() {
                         <View style={{
                             width: 22, height: 22, borderRadius: 11,
                             borderWidth: 2,
-                            borderColor: opt.active ? C.primary : C.border,
+                            borderColor: opt.active ? C.primary : `${C.primary}33`,
                             backgroundColor: opt.active ? C.primary : 'transparent',
                             justifyContent: 'center', alignItems: 'center', flexShrink: 0,
                         }}>

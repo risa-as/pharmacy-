@@ -12,6 +12,7 @@ import {
   Zap,
   X,
   AlertTriangle,
+  PauseCircle,
 } from "lucide-react";
 import SyncHealthDashboard from "../SyncHealthDashboard";
 import { formatIQD, getExpiryStatus } from "./pos-utils";
@@ -37,6 +38,8 @@ interface Props {
   onToggleShift: () => void;
   onOpenCashDrop: () => void;
   onOpenReturn: () => void;
+  onOpenHeld: () => void;
+  heldCount: number;
   onOpenPatient: () => void;
   onClearPatient: () => void;
   onSync: () => void;
@@ -66,6 +69,8 @@ export default function POSProductGrid({
   onToggleShift,
   onOpenCashDrop,
   onOpenReturn,
+  onOpenHeld,
+  heldCount,
   onOpenPatient,
   onClearPatient,
   onSync,
@@ -78,7 +83,7 @@ export default function POSProductGrid({
   // NOTE: barcode scan does NOT set showSearchResults so no grid flash
   const showProducts = showSearchResults || showGrid;
   return (
-    <div className="flex w-[63%] flex-col border-l border-border/50 bg-muted/20 print:hidden relative">
+    <div className="flex w-[68%] flex-col border-l border-border/50 bg-muted/20 print:hidden relative">
       {/* شريط الحالة الذكي */}
       <div className="bg-zinc-900 text-white h-9 flex items-center justify-between px-4 text-xs font-medium shrink-0">
         <div className="flex items-center gap-4">
@@ -107,6 +112,8 @@ export default function POSProductGrid({
               ['F7', 'إلغاء'],
               ['F8', 'طباعة'],
               ['F9', 'إرجاع'],
+              ['F10', 'تعليق'],
+              ['F11', 'معلّقة'],
             ] as [string, string][]).map(([key, label]) => (
               <span key={key} className="flex items-center gap-1">
                 <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] tracking-wider text-zinc-300">{key}</span>
@@ -177,6 +184,23 @@ export default function POSProductGrid({
             <kbd className="text-[8px] font-mono bg-destructive/10 px-1 py-0.5 rounded border border-destructive/20 opacity-70">
               F9
             </kbd>
+          </button>
+
+          <button
+            onClick={onOpenHeld}
+            className="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 rounded-lg font-bold transition-all shadow-sm"
+            title="الفواتير المعلّقة (F11)"
+          >
+            <PauseCircle className="w-4 h-4" />
+            <span className="text-[10px]">معلّقة</span>
+            <kbd className="text-[8px] font-mono bg-primary/10 px-1 py-0.5 rounded border border-primary/20 opacity-70">
+              F11
+            </kbd>
+            {heldCount > 0 && (
+              <span className="absolute -top-2 -left-2 min-w-5 h-5 px-1 bg-primary text-primary-foreground text-[10px] font-black rounded-full flex items-center justify-center shadow-md ring-2 ring-background">
+                {heldCount}
+              </span>
+            )}
           </button>
 
           <div className="w-px h-6 bg-border mx-1"></div>

@@ -64,6 +64,15 @@ export class MobileSessionLimitError extends Error {
     }
 }
 
+// Thrown when the server rejects the session on refresh — the account was
+// disabled, the org suspended, or the token expired. Caller forces logout.
+export class SessionInvalidError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'SessionInvalidError';
+    }
+}
+
 // ── Internal session helpers ──────────────────────────────────────────────────
 
 async function startMobileSession(userId: string, jwtToken?: string): Promise<void> {
@@ -198,6 +207,50 @@ export const authService = {
     // Called on app startup — throws MobileSessionLimitError if seat is taken
     async verifySessionOnStartup(userId: string): Promise<void> {
         return refreshMobileSession(userId);
+    },
+
+    /**
+     * Renews the access token and re-validates the account against current state.
+     * - 200 → stores the fresh token + user.
+     * - 401/403 → throws SessionInvalidError (account disabled, org suspended, or
+     *   token expired) so the caller forces logout.
+     * - network/5xx error → resolves silently, keeping the current token (offline).
+     */
+    async refreshAccessToken(): Promise<void> {
+        const token = await secureGet(TOKEN_KEY);
+        if (!token) return; // not logged in
+
+        const baseUrl = await getBaseUrl();
+        let res: Response;
+        try {
+            res = await fetch(`${baseUrl}/auth/refresh`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+        } catch {
+            return; // offline — keep using the stored token
+        }
+
+        if (res.status === 200) {
+            const data = await res.json().catch(() => null);
+            if (data?.token) {
+                await secureSet(TOKEN_KEY, data.token);
+                if (data.user) await secureSet(USER_KEY, JSON.stringify(data.user));
+                setCachedToken(data.token);
+            }
+            return;
+        }
+
+        if (res.status === 401 || res.status === 403) {
+            const data = await res.json().catch(() => ({}));
+            throw new SessionInvalidError(
+                data?.message || 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.'
+            );
+        }
+        // 5xx or other — don't disturb the session; treat like offline.
     },
 
     async getCurrentUser(): Promise<User | null> {

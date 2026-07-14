@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { apiService } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
-import { Colors } from '../constants/colors';
+import { managerPalette } from '../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 
 interface Branch {
@@ -18,17 +18,23 @@ interface BranchSelectorProps {
     onSelectBranch: (branchId: string | null) => void;
     /** When true, renders nothing if only one branch exists (filter is meaningless). */
     hideIfSingle?: boolean;
+    /** Override the accent colour for the selected state (defaults to theme primary). */
+    accent?: string;
+    /** Override the muted accent colour (defaults to theme primaryMuted). */
+    accentMuted?: string;
 }
 
-const ALL_OPTION: Branch & { id: null } = { id: null as any, name: 'الكل' };
+const ALL_OPTION: { id: string | null; name: string } = { id: null, name: 'الكل' };
 const PILL_THRESHOLD = 6; // show pills for ≤ this many branches (incl. "الكل")
 
-export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle }: BranchSelectorProps) => {
+export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle, accent, accentMuted }: BranchSelectorProps) => {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
+    const primary = accent ?? C.primary;
+    const primaryMuted = accentMuted ?? C.primaryMuted;
 
     useEffect(() => {
         apiService.getBranches()
@@ -49,7 +55,7 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
         if (hideIfSingle) return null; // avoid flicker before we know the count
         return (
             <View style={{ height: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-                <ActivityIndicator size="small" color={C.primary} />
+                <ActivityIndicator size="small" color={primary} />
             </View>
         );
     }
@@ -77,10 +83,10 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
                                     paddingHorizontal: 16,
                                     paddingVertical: 9,
                                     borderRadius: 5,
-                                    backgroundColor: isSelected ? C.primary : C.card,
+                                    backgroundColor: isSelected ? primary : C.card,
                                     borderWidth: 1.5,
-                                    borderColor: isSelected ? C.primary : C.border,
-                                    shadowColor: isSelected ? C.primary : 'transparent',
+                                    borderColor: isSelected ? primary : C.border,
+                                    shadowColor: isSelected ? primary : 'transparent',
                                     shadowOffset: { width: 0, height: 2 },
                                     shadowOpacity: 0.2,
                                     shadowRadius: 4,
@@ -118,18 +124,18 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
                     paddingHorizontal: 16,
                     paddingVertical: 10,
                     borderRadius: 5,
-                    backgroundColor: selectedBranchId ? C.primaryMuted : C.card,
+                    backgroundColor: selectedBranchId ? primaryMuted : C.card,
                     borderWidth: 1.5,
-                    borderColor: selectedBranchId ? C.primary : C.border,
+                    borderColor: selectedBranchId ? primary : C.border,
                 }}
                 onPress={() => setModalVisible(true)}
                 activeOpacity={0.75}
             >
-                <Ionicons name="business" size={15} color={selectedBranchId ? C.primary : C.mutedForeground} />
-                <Text style={{ fontSize: 13, fontWeight: '600', color: selectedBranchId ? C.primary : C.foreground }}>
+                <Ionicons name="business" size={15} color={selectedBranchId ? primary : C.mutedForeground} />
+                <Text style={{ fontSize: 13, fontWeight: '600', color: selectedBranchId ? primary : C.foreground }}>
                     {selectedLabel}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={selectedBranchId ? C.primary : C.mutedForeground} />
+                <Ionicons name="chevron-down" size={14} color={selectedBranchId ? primary : C.mutedForeground} />
             </TouchableOpacity>
 
             {/* Bottom-sheet modal */}
@@ -187,16 +193,16 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
                                         paddingHorizontal: 16,
                                         borderRadius: 14,
                                         marginBottom: 6,
-                                        backgroundColor: isSelected ? C.primaryMuted : 'transparent',
+                                        backgroundColor: isSelected ? primaryMuted : 'transparent',
                                         borderWidth: 1.5,
-                                        borderColor: isSelected ? C.primary : 'transparent',
+                                        borderColor: isSelected ? primary : 'transparent',
                                     }}
                                     onPress={() => { onSelectBranch(item.id ?? null); setModalVisible(false); }}
                                     activeOpacity={0.7}
                                 >
                                     <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
                                         <View style={{
-                                            backgroundColor: isSelected ? C.primary : C.border,
+                                            backgroundColor: isSelected ? primary : C.border,
                                             borderRadius: 8,
                                             padding: 7,
                                         }}>
@@ -206,11 +212,11 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle 
                                                 color={isSelected ? '#fff' : C.mutedForeground}
                                             />
                                         </View>
-                                        <Text style={{ fontSize: 15, fontWeight: isSelected ? '700' : '500', color: isSelected ? C.primary : C.foreground }}>
+                                        <Text style={{ fontSize: 15, fontWeight: isSelected ? '700' : '500', color: isSelected ? primary : C.foreground }}>
                                             {item.name}
                                         </Text>
                                     </View>
-                                    {isSelected && <Ionicons name="checkmark-circle" size={22} color={C.primary} />}
+                                    {isSelected && <Ionicons name="checkmark-circle" size={22} color={primary} />}
                                 </TouchableOpacity>
                             );
                         }}

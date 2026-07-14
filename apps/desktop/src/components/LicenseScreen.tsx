@@ -18,7 +18,8 @@ export type SubscriptionLockReason =
     | 'suspended'
     | 'clock-tampered'
     | 'offline-limit-exceeded'
-    | 'invalid-token';
+    | 'invalid-token'
+    | 'token-missing';
 
 interface LicenseScreenProps {
     onActivated: () => void;
@@ -35,6 +36,7 @@ const LOCK_MESSAGES: Record<SubscriptionLockReason, string> = {
     'clock-tampered': 'تم اكتشاف تلاعب في ساعة النظام. الرجاء تصحيح التاريخ والوقت وإعادة التشغيل.',
     'offline-limit-exceeded': 'تجاوزت الحد الأقصى للعمل دون اتصال (14 يومًا). يرجى الاتصال بالإنترنت لتجديد الاشتراك.',
     'invalid-token': 'تعذر التحقق من حالة الاشتراك. الرجاء الاتصال بالإنترنت لإعادة التحقق.',
+    'token-missing': 'تعذر التحقق من حالة الاشتراك. الرجاء الاتصال بالإنترنت لإعادة التحقق.',
 };
 
 type ActivationState = 'idle' | 'loading' | 'success' | 'error';
@@ -43,6 +45,9 @@ export default function LicenseScreen({ onActivated, errorMessage, subscriptionL
     const [licenseKey, setLicenseKey] = useState('');
     const [state, setState] = useState<ActivationState>(errorMessage ? 'error' : 'idle');
     const [message, setMessage] = useState(errorMessage || '');
+    // From the subscription-lock screen: lets the user enter a NEW key (renewal
+    // issued under a different key) instead of being stuck retrying the old one.
+    const [showKeyEntry, setShowKeyEntry] = useState(false);
 
     const handleActivate = async () => {
         const trimmedKey = licenseKey.trim();
@@ -98,6 +103,10 @@ export default function LicenseScreen({ onActivated, errorMessage, subscriptionL
                 }
 
                 setTimeout(() => {
+                    // Activated from the subscription-lock screen: refresh the
+                    // offline token with the new key so the lock lifts without
+                    // an app restart.
+                    if (subscriptionLockReason) onRetryOnlineCheck?.();
                     onActivated();
                 }, 1500);
             } else {
@@ -123,7 +132,7 @@ export default function LicenseScreen({ onActivated, errorMessage, subscriptionL
     };
 
     // ── Subscription lock screen (separate from license entry flow) ──────────
-    if (subscriptionLockReason) {
+    if (subscriptionLockReason && !showKeyEntry) {
         const isTampered = subscriptionLockReason === 'clock-tampered';
         return (
             <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-4">
@@ -148,6 +157,13 @@ export default function LicenseScreen({ onActivated, errorMessage, subscriptionL
                             الاتصال بالإنترنت للتحديث
                         </button>
                     )}
+                    <button
+                        onClick={() => setShowKeyEntry(true)}
+                        className="mt-3 flex items-center justify-center gap-2 w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold py-3 px-4 rounded-xl border border-zinc-700/50 transition-all"
+                    >
+                        <KeyRound className="w-4 h-4" />
+                        إدخال مفتاح ترخيص جديد
+                    </button>
                     <p className="mt-4 text-zinc-600 text-xs">تواصل مع الدعم الفني للمساعدة</p>
                 </div>
             </div>
@@ -250,6 +266,15 @@ export default function LicenseScreen({ onActivated, errorMessage, subscriptionL
                     <p className="mt-6 text-center text-zinc-600 text-xs">
                         تواصل مع الدعم الفني في حال واجهتك أي مشكلة
                     </p>
+                    {subscriptionLockReason && (
+                        <button
+                            onClick={() => setShowKeyEntry(false)}
+                            disabled={state === 'loading' || state === 'success'}
+                            className="mt-3 w-full text-center text-zinc-500 hover:text-zinc-300 text-xs transition-colors disabled:opacity-50"
+                        >
+                            ← عودة إلى شاشة حالة الاشتراك
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

@@ -25,8 +25,23 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
     const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
     const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
 
+    // عدد الأشرطة في الباكيت مرتفع جداً = غالباً أُدخل إجمالي الأشرطة بالخطأ
+    const confirmStripsPerPacket = (e: React.FormEvent<HTMLFormElement>) => {
+        if (
+            stripsPerPacket > 20 &&
+            !window.confirm(
+                `تنبيه: عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
+                `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة.\n` +
+                `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع\n` +
+                `هل أنت متأكد من المتابعة؟`,
+            )
+        ) {
+            e.preventDefault();
+        }
+    };
+
     return (
-        <form action={dispatch} className="space-y-6">
+        <form action={dispatch} onSubmit={confirmStripsPerPacket} className="space-y-6">
             {/* الفرع */}
             {branches.length === 1 ? (
                 <input type="hidden" name="branchId" value={branches[0].id} />
@@ -132,6 +147,12 @@ export default function CreateInventoryForm({ branches, drugs }: { branches: Bra
                             : '—'}
                     </span>
                 </div>
+                {stripsPerPacket > 20 && (
+                    <p className="text-xs font-bold text-warning flex items-center gap-1">
+                        <span>⚠</span>
+                        هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
+                    </p>
+                )}
                 <input type="hidden" name="cost" value={computedCost} />
             </div>
 

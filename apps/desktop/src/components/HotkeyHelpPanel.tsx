@@ -11,6 +11,8 @@ const POS_SHORTCUTS: { key: string; description: string }[] = [
     { key: 'F7',     description: 'إلغاء البيع' },
     { key: 'F8',     description: 'طباعة الفاتورة' },
     { key: 'F9',     description: 'إرجاع / استرجاع' },
+    { key: 'F10',    description: 'تعليق الفاتورة الحالية' },
+    { key: 'F11',    description: 'عرض الفواتير المعلّقة' },
     { key: 'Enter',  description: 'إضافة أول نتيجة بحث' },
     { key: 'Escape', description: 'إغلاق / رجوع' },
     { key: '+',      description: 'زيادة الكمية (عند التركيز على صنف)' },

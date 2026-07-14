@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, X } from "lucide-react";
 import { ipcInvoke } from "./pos-utils";
 import type { Patient } from "./pos-types";
+import { showAlert } from "../../lib/dialog";
 
 interface Props {
     isOpen: boolean;
@@ -42,7 +43,7 @@ export default function PatientModal({ isOpen, onClose, branchId, onSelectPatien
             onSelectPatient(res.patient);
             handleClose();
         } else {
-            alert(res.error);
+            void showAlert({ variant: "error", title: "فشل حفظ المريض", message: res.error });
         }
     };
 

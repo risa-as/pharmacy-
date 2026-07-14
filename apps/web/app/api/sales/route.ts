@@ -11,10 +11,25 @@ export async function GET(request: Request) {
         if (tenantCtx instanceof NextResponse) return tenantCtx;
         const { tenantBranchWhere } = tenantCtx;
 
+        // Optional pagination/date filters — defaults keep the legacy shape (latest 20)
+        const { searchParams } = new URL(request.url);
+        const limit = Math.min(Math.max(parseInt(searchParams.get('limit') ?? '', 10) || 20, 1), 100);
+        const offset = Math.max(parseInt(searchParams.get('offset') ?? '', 10) || 0, 0);
+        const fromDate = searchParams.get('from') ? new Date(searchParams.get('from')!) : null;
+        const toDate = searchParams.get('to') ? new Date(searchParams.get('to')!) : null;
+
+        const where: any = { ...tenantBranchWhere };
+        if ((fromDate && !isNaN(fromDate.getTime())) || (toDate && !isNaN(toDate.getTime()))) {
+            where.createdAt = {};
+            if (fromDate && !isNaN(fromDate.getTime())) where.createdAt.gte = fromDate;
+            if (toDate && !isNaN(toDate.getTime())) where.createdAt.lte = toDate;
+        }
+
         const sales = await prisma.sale.findMany({
-            where: tenantBranchWhere,
+            where,
             orderBy: { createdAt: 'desc' },
-            take: 20
+            take: limit,
+            skip: offset
         });
         return NextResponse.json(sales);
     } catch (error) {

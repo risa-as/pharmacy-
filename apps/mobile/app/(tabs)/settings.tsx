@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { authService, User } from '../../services/auth';
 import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette, Radius } from '../../constants/colors';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -32,7 +32,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function SettingsScreen() {
     const [user, setUser] = useState<User | null>(null);
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
 
     useEffect(() => {
         authService.getCurrentUser().then(setUser);
@@ -82,6 +82,20 @@ export default function SettingsScreen() {
                 },
             ],
         },
+        // ── Management (non-pharmacist roles only) ────────────────────────
+        ...(user && user.role !== 'PHARMACIST' ? [{
+            title: 'الإدارة',
+            items: [
+                {
+                    label:    'المصروفات',
+                    subtitle: 'عرض وإضافة مصروفات الصيدلية',
+                    icon:     'wallet-outline' as IoniconsName,
+                    iconBg:   C.dangerBg,
+                    iconColor: C.danger,
+                    onPress: () => router.push('/accounting/expenses' as any),
+                },
+            ],
+        }] : []),
         {
             title: 'التطبيق',
             items: [
@@ -89,8 +103,8 @@ export default function SettingsScreen() {
                     label:    'الإشعارات',
                     subtitle: 'إدارة التنبيهات والإشعارات',
                     icon:     'notifications-outline',
-                    iconBg:   C.infoBg,
-                    iconColor: C.info,
+                    iconBg:   C.primaryMuted,
+                    iconColor: C.primary,
                     onPress: () => router.push('/settings/notifications' as any),
                 },
                 {
@@ -100,6 +114,14 @@ export default function SettingsScreen() {
                     iconBg:   isDarkMode ? '#2D2A4A' : '#FFF8E7',
                     iconColor: isDarkMode ? '#A78BFA' : '#F59E0B',
                     onPress: () => router.push('/settings/theme' as any),
+                },
+                {
+                    label:    'إعدادات الطابعة',
+                    subtitle: 'طابعة الفواتير الحرارية',
+                    icon:     'print-outline',
+                    iconBg:   C.infoBg,
+                    iconColor: C.info,
+                    onPress: () => router.push('/printer-settings' as any),
                 },
             ],
         },
@@ -132,69 +154,69 @@ export default function SettingsScreen() {
             contentContainerStyle={{ paddingBottom: 40 }}
             showsVerticalScrollIndicator={false}
         >
-            {/* ── Profile header ──────────────────────────────────────────── */}
-            <View style={{
-                backgroundColor: C.card,
-                borderBottomWidth: 1, borderBottomColor: C.border,
-                paddingHorizontal: 16, paddingTop: 20, paddingBottom: 20,
-            }}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 14 }}>
-                    {/* Avatar */}
-                    <View style={{
-                        width: 64, height: 64, borderRadius: 5,
-                        backgroundColor: C.primary,
-                        justifyContent: 'center', alignItems: 'center',
-                    }}>
-                        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900' }}>
-                            {initials}
-                        </Text>
-                    </View>
-
-                    {/* Info */}
-                    <View style={{ flex: 1, alignItems: 'flex-end', gap: 4 }}>
-                        <Text style={{
-                            color: C.foreground, fontSize: 18, fontWeight: '900',
-                            textAlign: 'right',
-                        }}>
-                            {user?.name || 'المستخدم'}
-                        </Text>
-                        <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right' }}>
-                            {user?.email || '—'}
-                        </Text>
-                        {user?.role && (
+            {/* ── Profile hero ────────────────────────────────────────────── */}
+            <View style={{ paddingHorizontal: 16, paddingTop: 16, marginBottom: 6 }}>
+                <View style={{
+                    borderRadius: Radius.sm,
+                    shadowColor: C.primary, shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: isDarkMode ? 0.45 : 0.28, shadowRadius: 18, elevation: 8,
+                }}>
+                    <View style={{ borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: C.primary, padding: 18 }}>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 14 }}>
+                            {/* Avatar */}
                             <View style={{
-                                backgroundColor: C.primaryMuted, borderRadius: 5,
-                                paddingHorizontal: 10, paddingVertical: 3, marginTop: 2,
+                                width: 60, height: 60, borderRadius: Radius.xs,
+                                backgroundColor: '#fff',
+                                justifyContent: 'center', alignItems: 'center',
                             }}>
-                                <Text style={{ color: C.primary, fontSize: 11, fontWeight: '700' }}>
-                                    {ROLE_LABELS[user.role] ?? user.role}
+                                <Text style={{ color: C.primary, fontSize: 22, fontWeight: '900' }}>
+                                    {initials}
                                 </Text>
                             </View>
-                        )}
+
+                            {/* Info */}
+                            <View style={{ flex: 1, alignItems: 'flex-end', gap: 4 }}>
+                                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'right' }} numberOfLines={1}>
+                                    {user?.name || 'المستخدم'}
+                                </Text>
+                                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, textAlign: 'right' }} numberOfLines={1}>
+                                    {user?.email || '—'}
+                                </Text>
+                                {user?.role && (
+                                    <View style={{
+                                        backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: Radius.xs,
+                                        paddingHorizontal: 10, paddingVertical: 3, marginTop: 2,
+                                    }}>
+                                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+                                            {ROLE_LABELS[user.role] ?? user.role}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
                     </View>
                 </View>
             </View>
 
-            <View style={{ paddingHorizontal: 16, paddingTop: 20, gap: 24 }}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 16, gap: 22 }}>
 
                 {/* ── Menu sections ────────────────────────────────────────── */}
                 {menuSections.map((section, si) => (
                     <View key={si}>
                         {/* Section label */}
-                        <Text style={{
-                            color: C.mutedForeground, fontSize: 12, fontWeight: '700',
-                            textAlign: 'right', marginBottom: 8, paddingHorizontal: 4,
-                            letterSpacing: 0.5, textTransform: 'uppercase',
-                        }}>
-                            {section.title}
-                        </Text>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 10, paddingHorizontal: 4 }}>
+                            <View style={{ width: 3, height: 13, borderRadius: 2, backgroundColor: C.primary }} />
+                            <Text style={{ color: C.mutedForeground, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>
+                                {section.title}
+                            </Text>
+                        </View>
 
                         {/* Section card */}
                         <View style={{
-                            backgroundColor: C.card, borderRadius: 5,
+                            backgroundColor: C.card, borderRadius: Radius.sm,
                             borderWidth: 1, borderColor: C.border, overflow: 'hidden',
-                            elevation: 1, shadowColor: '#000',
-                            shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,
+                            shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
                         }}>
                             {section.items.map((item, ii) => (
                                 <TouchableOpacity
@@ -213,9 +235,9 @@ export default function SettingsScreen() {
                                         },
                                     ]}
                                 >
-                                    {/* Icon bubble */}
+                                    {/* Icon tile */}
                                     <View style={{
-                                        width: 38, height: 38, borderRadius: 5,
+                                        width: 38, height: 38, borderRadius: Radius.xs,
                                         backgroundColor: item.iconBg,
                                         justifyContent: 'center', alignItems: 'center',
                                         flexShrink: 0,
@@ -225,17 +247,11 @@ export default function SettingsScreen() {
 
                                     {/* Label + subtitle */}
                                     <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                                        <Text style={{
-                                            color: C.foreground, fontSize: 15, fontWeight: '600',
-                                            textAlign: 'right',
-                                        }}>
+                                        <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '700', textAlign: 'right' }}>
                                             {item.label}
                                         </Text>
                                         {item.subtitle && (
-                                            <Text style={{
-                                                color: C.mutedForeground, fontSize: 12,
-                                                textAlign: 'right', marginTop: 1,
-                                            }}>
+                                            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 1 }}>
                                                 {item.subtitle}
                                             </Text>
                                         )}
@@ -255,13 +271,13 @@ export default function SettingsScreen() {
                     activeOpacity={0.8}
                     style={{
                         flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
-                        gap: 8, borderRadius: 5, paddingVertical: 14,
+                        gap: 8, borderRadius: Radius.sm, paddingVertical: 14,
                         borderWidth: 1.5, borderColor: `${C.danger}50`,
                         backgroundColor: C.dangerBg,
                     }}
                 >
                     <Ionicons name="log-out-outline" size={19} color={C.danger} />
-                    <Text style={{ color: C.danger, fontSize: 15, fontWeight: '700' }}>
+                    <Text style={{ color: C.danger, fontSize: 15, fontWeight: '800' }}>
                         تسجيل الخروج
                     </Text>
                 </TouchableOpacity>

@@ -49,6 +49,9 @@ pnpm-debug.log*
 *.db
 *.db-journal
 
+# Local seed / utility scripts
+add-inventory-demo.mjs
+
 # Project specific temporary and output files
 apps/web/backups/
 apps/desktop/settings_output.txt

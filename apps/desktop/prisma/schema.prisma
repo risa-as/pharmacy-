@@ -48,6 +48,7 @@ model User {
   role     String
   password String // Hashed
   branchId String?
+  isActive Boolean @default(true) // Mirrors cloud: a soft-disabled employee cannot log in (even offline)
   branch   Branch? @relation(fields: [branchId], references: [id])
   sales    Sale[]
   shifts   Shift[]
@@ -161,6 +162,7 @@ model SaleReturn {
   saleId    String
   branchId  String?
   safeId    String?          // The safe used to refund the customer, if CASH
+  userId    String?          // Cashier who processed the return (for audit attribution)
   total     Float
   createdAt DateTime         @default(now())
   notes     String?
@@ -222,6 +224,7 @@ model Payment {
 model DebtPayment {
   id        String   @id @default(uuid())
   saleId    String
+  userId    String?  // Cashier who recorded the payment (for audit attribution)
   amount    Float
   method    String   @default("CASH")
   note      String?

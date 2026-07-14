@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { apiService } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette, Radius } from '../../constants/colors';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
@@ -21,13 +21,13 @@ type FilterKey = StatusKey | 'ALL' | 'SUGGESTED';
 
 const STATUS_MAP: Record<string, {
     label: string; variant: BadgeVariantType;
-    color: (C: ReturnType<typeof Colors>) => string;
-    bg:    (C: ReturnType<typeof Colors>) => string;
+    color: (C: ReturnType<typeof managerPalette>) => string;
+    bg:    (C: ReturnType<typeof managerPalette>) => string;
 }> = {
     COMPLETED: { label: 'مكتمل',        variant: 'success', color: C => C.success, bg: C => C.successBg },
     PENDING:   { label: 'قيد الانتظار', variant: 'warning', color: C => C.warning, bg: C => C.warningBg },
     CANCELLED: { label: 'ملغى',          variant: 'danger',  color: C => C.danger,  bg: C => C.dangerBg  },
-    RECEIVED:  { label: 'تم الاستلام',  variant: 'info',    color: C => C.info,    bg: C => C.infoBg    },
+    RECEIVED:  { label: 'تم الاستلام',  variant: 'info',    color: C => C.primary, bg: C => C.primaryMuted },
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -42,8 +42,8 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 function getStatus(status: string) {
     return STATUS_MAP[status] ?? {
         label: status, variant: 'default' as BadgeVariantType,
-        color: (C: ReturnType<typeof Colors>) => C.mutedForeground,
-        bg:    (C: ReturnType<typeof Colors>) => C.border,
+        color: (C: ReturnType<typeof managerPalette>) => C.mutedForeground,
+        bg:    (C: ReturnType<typeof managerPalette>) => C.border,
     };
 }
 
@@ -53,7 +53,20 @@ export default function PurchasesScreen() {
     const { isDarkMode } = useTheme();
     const { isAdmin, branchId: authBranchId } = useAuth();
     const { triggerSync } = useSyncStatus();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
+
+    // Outlined card matching the manager identity — light surface, soft tinted border.
+    const card = (accent: string) => ({
+        backgroundColor: C.card,
+        borderRadius: Radius.sm,
+        borderWidth: 1.5,
+        borderColor: `${accent}33`,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 } as const,
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        elevation: 2,
+    });
 
     const [purchases, setPurchases]       = useState<any[]>([]);
     const [lowStockItems, setLowStockItems] = useState<any[]>([]);
@@ -153,55 +166,47 @@ export default function PurchasesScreen() {
         const progress  = Math.min(item.currentStock / maxVisual, 1);
 
         return (
-            <View style={{
-                flexDirection: 'row-reverse',
-                backgroundColor: C.card, borderRadius: 5, marginBottom: 10,
-                borderWidth: 1, borderColor: C.border, overflow: 'hidden',
-                elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05, shadowRadius: 4,
-            }}>
-                <View style={{ width: 4, backgroundColor: color }} />
-                <View style={{ flex: 1, padding: 13 }}>
-                    {/* Row 1 */}
-                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                        <View style={{ flex: 1, paddingLeft: 8 }}>
-                            <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
-                                {item.drugName}
+            <View style={{ ...card(color), padding: 14, marginBottom: 10 }}>
+                {/* Row 1: name + branch + status pill */}
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                    <View style={{ flex: 1, paddingLeft: 8 }}>
+                        <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
+                            {item.drugName}
+                        </Text>
+                        {item.branchName && (
+                            <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
+                                {item.branchName}
                             </Text>
-                            {item.branchName && (
-                                <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
-                                    {item.branchName}
-                                </Text>
-                            )}
-                        </View>
-                        <View style={{ backgroundColor: bg, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
-                            <Text style={{ color, fontSize: 11, fontWeight: '800' }}>
-                                {isOut ? 'نفاد تام' : 'نقص مخزون'}
-                            </Text>
-                        </View>
+                        )}
                     </View>
-
-                    {/* Progress bar */}
-                    <View style={{ marginBottom: 10 }}>
-                        <View style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
-                            <View style={{ width: `${Math.round(progress * 100)}%`, height: '100%', backgroundColor: color, borderRadius: 3 }} />
-                        </View>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, backgroundColor: bg, borderRadius: Radius.xs, paddingHorizontal: 9, paddingVertical: 5, flexShrink: 0 }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+                        <Text style={{ color, fontSize: 11, fontWeight: '800' }}>
+                            {isOut ? 'نفاد تام' : 'نقص مخزون'}
+                        </Text>
                     </View>
+                </View>
 
-                    {/* Stats row */}
-                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 9 }}>
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>المخزون</Text>
-                            <Text style={{ color, fontWeight: '900', fontSize: 20 }}>{item.currentStock}</Text>
-                        </View>
-                        <View style={{ alignItems: 'center' }}>
-                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>الحد الأدنى</Text>
-                            <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 20 }}>{item.minStock}</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-start' }}>
-                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>الكمية المقترحة</Text>
-                            <Text style={{ color: C.primary, fontWeight: '900', fontSize: 20 }}>{item.suggestedQty}</Text>
-                        </View>
+                {/* Progress bar */}
+                <View style={{ height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+                    <View style={{ width: `${Math.round(progress * 100)}%`, height: '100%', backgroundColor: color, borderRadius: 3 }} />
+                </View>
+
+                {/* Stats panel: stock / min / suggested */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.background, borderRadius: Radius.xs, borderWidth: 1, borderColor: C.border, paddingVertical: 10 }}>
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 10, marginBottom: 2 }}>المخزون</Text>
+                        <Text style={{ color, fontWeight: '900', fontSize: 19 }}>{item.currentStock}</Text>
+                    </View>
+                    <View style={{ width: 1, height: 28, backgroundColor: C.border }} />
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 10, marginBottom: 2 }}>الحد الأدنى</Text>
+                        <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 19 }}>{item.minStock}</Text>
+                    </View>
+                    <View style={{ width: 1, height: 28, backgroundColor: C.border }} />
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 10, marginBottom: 2 }}>المقترح</Text>
+                        <Text style={{ color: C.primary, fontWeight: '900', fontSize: 19 }}>{item.suggestedQty}</Text>
                     </View>
                 </View>
             </View>
@@ -223,103 +228,91 @@ export default function PurchasesScreen() {
             <TouchableOpacity
                 onPress={() => router.push(`/purchases/${purchase.id}` as any)}
                 activeOpacity={0.85}
-                style={{ marginBottom: 10 }}
+                style={{ ...card(accentColor), padding: 14, marginBottom: 10 }}
             >
-                <View style={{
-                    flexDirection: 'row-reverse',
-                    backgroundColor: C.card, borderRadius: 5,
-                    borderWidth: 1, borderColor: isPending ? `${accentColor}40` : C.border,
-                    overflow: 'hidden', elevation: isPending ? 2 : 1,
-                    shadowColor: accentColor, shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isPending ? 0.1 : 0.04, shadowRadius: 6,
-                }}>
-                    {/* Left accent bar */}
-                    <View style={{ width: 4, backgroundColor: accentColor }} />
-
-                    <View style={{ flex: 1, padding: 13 }}>
-                        {/* Row 1: supplier + status chip */}
-                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                            <View style={{ flex: 1, paddingLeft: 8 }}>
-                                <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
-                                    {purchase.supplier?.name ?? 'مورد غير محدد'}
-                                </Text>
-                                <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2, letterSpacing: 0.4 }}>
-                                    REF# {refId}
-                                </Text>
-                            </View>
-                            <View style={{ backgroundColor: accentBg, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0 }}>
-                                <Text style={{ color: accentColor, fontSize: 11, fontWeight: '800' }}>{label}</Text>
-                            </View>
-                        </View>
-
-                        {/* Divider */}
-                        <View style={{ height: 1, backgroundColor: C.border, marginBottom: 9 }} />
-
-                        {/* Row 2: date | items | amount */}
-                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
-                                <Ionicons name="calendar-outline" size={12} color={C.mutedForeground} />
-                                <Text style={{ color: C.mutedForeground, fontSize: 12 }}>{dateStr}</Text>
-                            </View>
-                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
-                                    <Ionicons name="cube-outline" size={12} color={C.mutedForeground} />
-                                    <Text style={{ color: C.mutedForeground, fontSize: 12 }}>
-                                        {purchase.items?.length ?? 0} صنف
-                                    </Text>
-                                </View>
-                                <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 3 }}>
-                                    <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 16 }}>
-                                        {(purchase.totalAmount ?? 0).toLocaleString('en-US')}
-                                    </Text>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 11 }}>د.ع</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Bottom actions row */}
-                        {(isPending || isDeletable) && (
-                            <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 10 }}>
-                                {isPending && (
-                                    <TouchableOpacity
-                                        onPress={() => router.push(`/purchases/${purchase.id}/receive` as any)}
-                                        activeOpacity={0.8}
-                                        style={{
-                                            flex: 1, backgroundColor: C.primary, borderRadius: 5,
-                                            paddingVertical: 9,
-                                            flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 6,
-                                        }}
-                                    >
-                                        <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-                                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>تأكيد الاستلام</Text>
-                                    </TouchableOpacity>
-                                )}
-                                {isDeletable && (
-                                    <TouchableOpacity
-                                        onPress={() => handleDelete(purchase)}
-                                        disabled={isDeleting}
-                                        activeOpacity={0.8}
-                                        style={{
-                                            flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 5,
-                                            backgroundColor: C.dangerBg, borderRadius: 5,
-                                            paddingVertical: 9, paddingHorizontal: 14,
-                                            borderWidth: 1, borderColor: `${C.danger}40`,
-                                            opacity: isDeleting ? 0.6 : 1,
-                                        }}
-                                    >
-                                        {isDeleting
-                                            ? <ActivityIndicator size="small" color={C.danger} />
-                                            : <Ionicons name="trash-outline" size={15} color={C.danger} />
-                                        }
-                                        <Text style={{ color: C.danger, fontWeight: '700', fontSize: 13 }}>
-                                            {isDeleting ? 'حذف...' : 'حذف'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        )}
+                {/* Row 1: supplier avatar + name + status pill */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <View style={{
+                        width: 40, height: 40, borderRadius: Radius.xs,
+                        backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                        <Ionicons name="business" size={19} color={C.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
+                            {purchase.supplier?.name ?? 'مورد غير محدد'}
+                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2, letterSpacing: 0.4 }}>
+                            REF# {refId}
+                        </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, backgroundColor: accentBg, borderRadius: Radius.xs, paddingHorizontal: 9, paddingVertical: 5, flexShrink: 0 }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accentColor }} />
+                        <Text style={{ color: accentColor, fontSize: 11, fontWeight: '800' }}>{label}</Text>
                     </View>
                 </View>
+
+                {/* Row 2: meta chips + amount */}
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: C.background, borderRadius: Radius.xs, borderWidth: 1, borderColor: C.border, paddingHorizontal: 8, paddingVertical: 4 }}>
+                            <Ionicons name="calendar-outline" size={12} color={C.mutedForeground} />
+                            <Text style={{ color: C.mutedForeground, fontSize: 11.5 }}>{dateStr}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: C.background, borderRadius: Radius.xs, borderWidth: 1, borderColor: C.border, paddingHorizontal: 8, paddingVertical: 4 }}>
+                            <Ionicons name="cube-outline" size={12} color={C.mutedForeground} />
+                            <Text style={{ color: C.mutedForeground, fontSize: 11.5 }}>{purchase.items?.length ?? 0} صنف</Text>
+                        </View>
+                    </View>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 3 }}>
+                        <Text style={{ color: C.foreground, fontWeight: '900', fontSize: 17 }}>
+                            {(purchase.totalAmount ?? 0).toLocaleString('en-US')}
+                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 11, fontWeight: '700' }}>د.ع</Text>
+                    </View>
+                </View>
+
+                {/* Bottom actions row */}
+                {(isPending || isDeletable) && (
+                    <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 12 }}>
+                        {isPending && (
+                            <TouchableOpacity
+                                onPress={() => router.push(`/purchases/${purchase.id}/receive` as any)}
+                                activeOpacity={0.85}
+                                style={{
+                                    flex: 1, backgroundColor: C.primary, borderRadius: Radius.xs,
+                                    paddingVertical: 10,
+                                    flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 6,
+                                }}
+                            >
+                                <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>تأكيد الاستلام</Text>
+                            </TouchableOpacity>
+                        )}
+                        {isDeletable && (
+                            <TouchableOpacity
+                                onPress={() => handleDelete(purchase)}
+                                disabled={isDeleting}
+                                activeOpacity={0.8}
+                                style={{
+                                    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 5,
+                                    backgroundColor: C.dangerBg, borderRadius: Radius.xs,
+                                    paddingVertical: 10, paddingHorizontal: 14,
+                                    borderWidth: 1, borderColor: `${C.danger}40`,
+                                    opacity: isDeleting ? 0.6 : 1,
+                                }}
+                            >
+                                {isDeleting
+                                    ? <ActivityIndicator size="small" color={C.danger} />
+                                    : <Ionicons name="trash-outline" size={15} color={C.danger} />
+                                }
+                                <Text style={{ color: C.danger, fontWeight: '700', fontSize: 13 }}>
+                                    {isDeleting ? 'حذف...' : 'حذف'}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
             </TouchableOpacity>
         );
     }, [C, router, deletingId, handleDelete]);
@@ -354,27 +347,15 @@ export default function PurchasesScreen() {
                 {/* ── Stats row — visible outside SUGGESTED ───────────────── */}
                 {!loading && activeFilter !== 'SUGGESTED' && purchases.length > 0 && (
                     <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 12 }}>
-                        <View style={{
-                            flex: 1, backgroundColor: C.card, borderRadius: 5,
-                            padding: 11, borderWidth: 1, borderColor: C.border,
-                            borderRightWidth: 3, borderRightColor: C.primary,
-                        }}>
+                        <View style={{ ...card(C.primary), flex: 1, paddingVertical: 10, paddingHorizontal: 11 }}>
                             <Text style={{ color: C.mutedForeground, fontSize: 10, textAlign: 'right', marginBottom: 3 }}>إجمالي الطلبات</Text>
                             <Text style={{ color: C.foreground, fontWeight: '900', fontSize: 20, textAlign: 'right' }}>{purchases.length}</Text>
                         </View>
-                        <View style={{
-                            flex: 1, backgroundColor: C.card, borderRadius: 5,
-                            padding: 11, borderWidth: 1, borderColor: C.border,
-                            borderRightWidth: 3, borderRightColor: C.warning,
-                        }}>
+                        <View style={{ ...card(C.warning), flex: 1, paddingVertical: 10, paddingHorizontal: 11 }}>
                             <Text style={{ color: C.mutedForeground, fontSize: 10, textAlign: 'right', marginBottom: 3 }}>قيد الانتظار</Text>
                             <Text style={{ color: C.warning, fontWeight: '900', fontSize: 20, textAlign: 'right' }}>{pendingCount}</Text>
                         </View>
-                        <View style={{
-                            flex: 1.5, backgroundColor: C.card, borderRadius: 5,
-                            padding: 11, borderWidth: 1, borderColor: C.border,
-                            borderRightWidth: 3, borderRightColor: C.success,
-                        }}>
+                        <View style={{ ...card(C.success), flex: 1.5, paddingVertical: 10, paddingHorizontal: 11 }}>
                             <Text style={{ color: C.mutedForeground, fontSize: 10, textAlign: 'right', marginBottom: 3 }}>
                                 {search || activeFilter !== 'ALL' ? 'قيمة النتائج' : 'إجمالي القيمة'}
                             </Text>
@@ -507,14 +488,13 @@ export default function PurchasesScreen() {
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
                     ListHeaderComponent={lowStockItems.length > 0 ? (
                         <View style={{
-                            backgroundColor: C.warningBg, borderRadius: 5, padding: 12,
-                            marginBottom: 12, borderWidth: 1, borderColor: `${C.warning}40`,
-                            flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
+                            ...card(C.warning), padding: 12, marginBottom: 12,
+                            flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
                         }}>
-                            <View style={{ backgroundColor: C.warning, borderRadius: 5, padding: 5 }}>
-                                <Ionicons name="alert" size={14} color="#fff" />
+                            <View style={{ width: 32, height: 32, borderRadius: Radius.xs, backgroundColor: C.warningBg, alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name="alert" size={16} color={C.warning} />
                             </View>
-                            <Text style={{ color: C.warning, fontWeight: '700', fontSize: 13, flex: 1, textAlign: 'right' }}>
+                            <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13, flex: 1, textAlign: 'right' }}>
                                 {lowStockItems.length} صنف وصل للحد الأدنى بدون طلب شراء معلق
                             </Text>
                         </View>

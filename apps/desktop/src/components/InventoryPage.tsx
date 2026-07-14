@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, ChevronDown, Zap } from "lucide-react";
 import SyncHealthDashboard from "./SyncHealthDashboard";
 import SyncFailuresPanel from "./SyncFailuresPanel";
+import Toggle from "./Toggle";
+import { showConfirm } from "../lib/dialog";
 
 function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
     return Promise.race([
@@ -96,7 +98,7 @@ export default function InventoryPage({ user }: { user: any }) {
 
     const [dlqCount, setDlqCount] = useState(0);
     const [showDLQ, setShowDLQ] = useState(false);
-    const [syncDebugLog, setSyncDebugLog] = useState<string | null>(null);
+
 
     // Modal States
     const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
@@ -471,6 +473,22 @@ export default function InventoryPage({ user }: { user: any }) {
     const handleAddBatch = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!showBatchModal) return;
+        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+        if (
+            batchPacketPrice > 0 &&
+            (batchStripsPerPacket > 20 || (batchData.quantity > 10 && batchStripsPerPacket >= batchData.quantity))
+        ) {
+            const ok = await showConfirm({
+                variant: "warning",
+                title: "تحقق من عدد الأشرطة",
+                message:
+                    `عدد الأشرطة في الباكيت (${batchStripsPerPacket}) يبدو غير صحيح.\n` +
+                    `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${batchData.quantity}).\n` +
+                    `سعر التكلفة للشريط سيُحسب: ${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
+                actionLabel: "متابعة على أي حال",
+            });
+            if (!ok) return;
+        }
         try {
             await ipcInvoke('add-inventory-batch', {
                 inventoryId: showBatchModal.id,
@@ -493,6 +511,20 @@ export default function InventoryPage({ user }: { user: any }) {
         if (!showCreateDrugModal) return;
         const formData = new FormData(e.currentTarget);
         const stripCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+        const createQty = parseInt(formData.get('quantity') as string, 10) || 0;
+        if (stripsPerPacket > 20 || (createQty > 10 && stripsPerPacket >= createQty)) {
+            const ok = await showConfirm({
+                variant: "warning",
+                title: "تحقق من عدد الأشرطة",
+                message:
+                    `عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
+                    `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${createQty}).\n` +
+                    `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${stripCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
+                actionLabel: "متابعة على أي حال",
+            });
+            if (!ok) return;
+        }
         const data = {
             barcode: showCreateDrugModal,
             tradeName: formData.get('tradeName'),
@@ -689,29 +721,6 @@ export default function InventoryPage({ user }: { user: any }) {
                         <p className="text-sm font-black text-foreground">{syncHealthView.nextRetry}</p>
                     </div>
                 </div>
-                {/* Debug log viewer */}
-                <button
-                    onClick={async () => {
-                        try {
-                            const log = await window.ipcRenderer.invoke('get-sync-debug-log');
-                            setSyncDebugLog(log);
-                        } catch { setSyncDebugLog('(error reading log)'); }
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-foreground underline mb-2"
-                >
-                    عرض سجل المزامنة
-                </button>
-                {syncDebugLog !== null && (
-                    <div className="mb-4 p-3 bg-muted rounded-xl border border-border relative">
-                        <button onClick={() => setSyncDebugLog(null)} className="absolute top-2 left-2 text-muted-foreground hover:text-foreground">
-                            <X className="w-4 h-4" />
-                        </button>
-                        <pre className="text-[10px] font-mono text-foreground whitespace-pre-wrap max-h-48 overflow-y-auto" dir="ltr">
-                            {syncDebugLog}
-                        </pre>
-                    </div>
-                )}
-
                 {syncHealthView.topError && (
                     <div className={`mb-4 rounded-xl border px-3 py-2 flex items-center gap-2 ${syncHealthView.isOffline ? 'border-border/50 bg-muted/30' : 'border-warning/20 bg-warning/5'}`}>
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${syncHealthView.isOffline ? 'bg-muted-foreground/40' : 'bg-warning/60'}`} />
@@ -984,21 +993,14 @@ export default function InventoryPage({ user }: { user: any }) {
 
                                             {/* Quick Sale Toggle */}
                                             <td className="px-4 py-3.5 text-center">
-                                                <button
-                                                    dir="ltr"
-                                                    onClick={() => handleQuickSaleToggle(item.drug.id)}
+                                                <Toggle
+                                                    size="sm"
+                                                    checked={!!quickSaleState[item.drug.id]}
+                                                    onChange={() => handleQuickSaleToggle(item.drug.id)}
                                                     disabled={togglingQuickSale === item.drug.id}
+                                                    activeClass="bg-amber-400"
                                                     title="تفعيل/إلغاء البيع السريع"
-                                                    className={`w-9 h-5 rounded-full transition-colors relative inline-flex items-center ${
-                                                        quickSaleState[item.drug.id]
-                                                            ? 'bg-amber-400'
-                                                            : 'bg-muted-foreground/30'
-                                                    } ${togglingQuickSale === item.drug.id ? 'opacity-50' : ''}`}
-                                                >
-                                                    <span className={`absolute w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                                                        quickSaleState[item.drug.id] ? 'translate-x-4' : 'translate-x-0.5'
-                                                    }`} />
-                                                </button>
+                                                />
                                             </td>
 
                                             {/* Actions */}
@@ -1268,6 +1270,12 @@ export default function InventoryPage({ user }: { user: any }) {
                                             {batchPacketPrice > 0 ? `${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })}` : "—"}
                                         </span>
                                     </div>
+                                    {batchStripsPerPacket > 20 && (
+                                        <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
+                                            <span>⚠</span>
+                                            هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-foreground mb-1">تاريخ انتهاء الصلاحية</label>
@@ -1357,6 +1365,12 @@ export default function InventoryPage({ user }: { user: any }) {
                                                     : '—'}
                                             </span>
                                         </div>
+                                        {stripsPerPacket > 20 && (
+                                            <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
+                                                <span>⚠</span>
+                                                هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
+                                            </p>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="block text-sm font-bold text-foreground mb-1">الحد الأدنى</label>

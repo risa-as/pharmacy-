@@ -11,6 +11,7 @@ import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { AuthProvider } from '../context/AuthContext';
 import { SyncProvider, useSyncStatus } from '../context/SyncContext';
 import { Colors, LightColors } from '../constants/colors';
+import ThemedAlertHost from '../components/ThemedAlert';
 
 // T049 — RTL-correct animation: slide from left for forward navigation in Arabic
 const SLIDE_ANIMATION = I18nManager.isRTL ? 'slide_from_left' : 'slide_from_right';
@@ -92,6 +93,10 @@ function RootStack() {
                 <Stack.Screen name="(tabs)"          options={{ headerShown: false }} />
                 <Stack.Screen name="settings"           options={{ headerShown: false }} />
                 <Stack.Screen name="reports/financial" options={{ headerShown: false }} />
+                <Stack.Screen name="reports/employees" options={{ headerShown: false }} />
+                <Stack.Screen name="sales-history"     options={{ headerShown: false }} />
+                <Stack.Screen name="accounting/expenses" options={{ headerShown: false }} />
+                <Stack.Screen name="scan"              options={{ headerShown: false }} />
                 <Stack.Screen name="scan-prescription" options={{ headerShown: false }} />
             </Stack>
         </>
@@ -104,6 +109,8 @@ export default function RootLayout() {
             <AuthProvider>
                 <SyncProvider>
                     <RootStack />
+                    {/* Branded replacement for native Alert.alert across the whole app */}
+                    <ThemedAlertHost />
                 </SyncProvider>
             </AuthProvider>
         </ThemeProvider>

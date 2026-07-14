@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, ArrowRight, BookOpen, Banknote, User, CheckCircle, AlertCircle, Printer, X, RefreshCw, CheckCircle2, Cloud, CloudOff } from 'lucide-react';
+import { showAlert } from '../lib/dialog';
 
 interface Debtor {
     id: string;
@@ -157,11 +158,11 @@ export default function DebtsPage() {
                     setDetails(data);
                     setView('detail');
                 } else {
-                    alert("فشل في جلب التفاصيل: " + data.error);
+                    void showAlert({ variant: "error", title: "فشل في جلب التفاصيل", message: data.error });
                 }
             } catch (err) {
                 console.error(err);
-                alert("خطأ غير متوقع");
+                void showAlert({ variant: "error", title: "خطأ غير متوقع" });
             } finally {
                 setLoading(false);
             }
@@ -179,7 +180,7 @@ export default function DebtsPage() {
 
         const amount = parseFloat(repayAmount);
         if (isNaN(amount) || amount <= 0) {
-            alert("يرجى إدخال مبلغ صحيح");
+            void showAlert({ variant: "warning", title: "مبلغ غير صحيح", message: "يرجى إدخال مبلغ صحيح." });
             return;
         }
 
@@ -192,18 +193,18 @@ export default function DebtsPage() {
             });
 
             if (res.success) {
-                alert("تم تسجيل الدفعة بنجاح");
+                void showAlert({ variant: "success", title: "تم تسجيل الدفعة بنجاح", autoCloseMs: 2000 });
                 setShowRepayModal(false);
                 setRepayAmount('');
                 setRepayNote('');
                 fetchDetails(selectedDebtorId);
                 fetchDebtors();
             } else {
-                alert("فشل التسجيل: " + res.error);
+                void showAlert({ variant: "error", title: "فشل التسجيل", message: res.error });
             }
         } catch (err) {
             console.error(err);
-            alert("خطأ في الاتصال");
+            void showAlert({ variant: "error", title: "خطأ في الاتصال" });
         } finally {
             setSubmittingRepay(false);
         }

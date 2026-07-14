@@ -30,7 +30,10 @@ export default defineConfig(({ mode }) => {
                         build: {
                             minify: false,
                             rollupOptions: {
-                                external: ['node-fetch', 'electron-store', '@prisma/client'],
+                                // electron-updater is externalized (not bundled) and shipped via
+                                // node_modules — electron-builder auto-includes production deps,
+                                // the same proven pattern as electron-store / node-fetch here.
+                                external: ['node-fetch', 'electron-store', '@prisma/client', 'electron-updater'],
                             },
                         },
                     },

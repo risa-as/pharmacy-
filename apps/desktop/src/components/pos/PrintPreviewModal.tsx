@@ -26,7 +26,7 @@ export default function PrintPreviewModal({ isOpen, sale, onClose, onWhatsApp }:
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-                <div className="p-6 max-h-[60vh] overflow-y-auto print:max-h-none print:overflow-visible">
+                <div className="p-6 max-h-[60vh] overflow-y-auto print:max-h-none print:overflow-visible flex justify-center print:block">
                     <InvoicePrint
                         ref={printRef}
                         items={sale.items}

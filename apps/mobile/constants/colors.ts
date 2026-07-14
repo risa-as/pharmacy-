@@ -75,6 +75,19 @@ export const DarkColors = {
 } as const;
 
 /**
+ * Shared corner-radius scale.
+ * Kept deliberately small for a crisp, modern look — change here to retune globally.
+ *   xs → icon tiles, pills, chips, dividers
+ *   sm → cards, hero, buttons (default surface radius)
+ *   md → large surfaces / sheets
+ */
+export const Radius = {
+    xs: 4,
+    sm: 6,
+    md: 8,
+} as const;
+
+/**
  * Convenience helper — returns the correct palette based on the OS color scheme.
  *
  * @example
@@ -84,6 +97,33 @@ export const DarkColors = {
  */
 export function Colors(isDark: boolean) {
     return isDark ? DarkColors : LightColors;
+}
+
+/**
+ * Medical-blue palette — scoped to the manager-only screens (home, reports).
+ * Mirrors the shape of `Colors` but swaps the teal brand for a clinical blue
+ * with cooler slate neutrals. Other (shared) screens keep the global theme.
+ */
+export function managerPalette(isDark: boolean) {
+    return isDark
+        ? {
+            primary: '#3B8FD6', primarySoft: '#1E6FBF', primaryMuted: '#0E2740',
+            success: '#44C47A', successBg: '#0D2B1A',
+            warning: '#D4934A', warningBg: '#2B1C08',
+            danger:  '#D86B6B', dangerBg:  '#2B0E0E',
+            info:    '#2DB3B3', infoBg:    '#0C2424',
+            background: '#0E1620', card: '#16202C', border: '#243140', input: '#243140',
+            foreground: '#EAF0F7', mutedForeground: '#94A3B8',
+        }
+        : {
+            primary: '#1E6FBF', primarySoft: '#3B8FD6', primaryMuted: '#E6F0FA',
+            success: '#2D8A52', successBg: '#E8F5EE',
+            warning: '#C47820', warningBg: '#FDF3E3',
+            danger:  '#B03030', dangerBg:  '#FAEAEA',
+            info:    '#0E8C8C', infoBg:    '#E3F4F4',
+            background: '#F4F7FB', card: '#FFFFFF', border: '#E2E8F0', input: '#E2E8F0',
+            foreground: '#16202C', mutedForeground: '#64748B',
+        };
 }
 
 export default Colors;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Database, FolderOpen, Download, RotateCcw, Check, AlertCircle, Shield, HardDrive, Clock, Info, RefreshCcw, Loader2, ChevronDown, ShoppingCart } from "lucide-react";
 import SyncFailuresTab from "./SyncFailuresTab";
+import Toggle from "./Toggle";
 
 interface Backup {
     name: string;
@@ -102,7 +103,12 @@ export default function SettingsPage() {
         try {
             const result = await window.ipcRenderer.invoke('create-backup');
             if (result.success) {
-                setToast({ type: 'success', text: 'تم إنشاء النسخة الاحتياطية بنجاح ✓' });
+                // The backup is created locally then synced to the web; reflect
+                // whether the cloud sync actually succeeded.
+                setToast({
+                    type: result.uploadedToCloud ? 'success' : 'error',
+                    text: result.message || 'تم إنشاء النسخة الاحتياطية بنجاح ✓',
+                });
                 fetchBackups();
             } else {
                 setToast({ type: 'error', text: result.error || 'فشل إنشاء النسخة الاحتياطية' });
@@ -392,13 +398,11 @@ export default function SettingsPage() {
                                     <p className="text-xs text-muted-foreground mt-0.5">عند التعطيل لن تظهر الفاتورة تلقائياً بعد إتمام البيعة</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => handleToggleReceipt(!showReceiptAfterSale)}
+                            <Toggle
+                                checked={showReceiptAfterSale}
+                                onChange={handleToggleReceipt}
                                 disabled={savingPOS}
-                                className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${showReceiptAfterSale ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-                            >
-                                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${showReceiptAfterSale ? 'translate-x-0.5' : 'translate-x-6'}`} />
-                            </button>
+                            />
                         </div>
                     </div>
                 </div>

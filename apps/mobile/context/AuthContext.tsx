@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authService, MobileSessionLimitError, User } from '../services/auth';
+import { authService, MobileSessionLimitError, SessionInvalidError, User } from '../services/auth';
 import { registerSessionExpiredHandler } from '../services/api';
 
 interface AuthContextType {
@@ -30,19 +30,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const refreshUser = useCallback(async () => {
         try {
-            const currentUser = await authService.getCurrentUser();
+            let currentUser = await authService.getCurrentUser();
 
-            // Enforce mobile session limit on startup for ADMIN/PHARMACIST.
-            // This catches users who have stored credentials but never went through
-            // the login-time session check (e.g. logged in before the feature existed).
-            // On 403 (plan limit exceeded) → force logout.
-            // On network error → allow offline access silently.
             if (currentUser && currentUser.role !== 'SUPER_ADMIN') {
+                // 1. Renew the JWT and re-validate the account (revocation point):
+                //    a disabled employee / suspended org / expired token → logout.
+                //    Network error → keep current token (offline access allowed).
                 try {
-                    await authService.verifySessionOnStartup(currentUser.id);
+                    await authService.refreshAccessToken();
+                    currentUser = await authService.getCurrentUser(); // pick up refreshed user
+                } catch (refreshError: any) {
+                    if (refreshError instanceof SessionInvalidError) {
+                        console.warn('AuthContext: session invalid on startup, forcing logout');
+                        await authService.logout();
+                        setUser(null);
+                        return;
+                    }
+                    // Other errors → allow offline access
+                }
+
+                // 2. Enforce the mobile session-seat limit on startup for ADMIN/PHARMACIST.
+                //    On 403 (plan limit exceeded) → force logout. Network error → silent.
+                try {
+                    await authService.verifySessionOnStartup(currentUser!.id);
                 } catch (sessionError: any) {
                     if (sessionError instanceof MobileSessionLimitError) {
-                        // Plan limit exceeded — another user holds the only available slot
                         console.warn('AuthContext: session limit exceeded on startup, forcing logout');
                         await authService.logout();
                         setUser(null);

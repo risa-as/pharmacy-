@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import { useRouter } from "expo-router";
 import { apiService } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
-import { Colors } from "../../constants/colors";
+import { managerPalette, Radius } from "../../constants/colors";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { BranchSelector } from "../../components/BranchSelector";
@@ -76,7 +76,7 @@ function SmoothLineChart({
   isDark: boolean;
   period: Period;
 }) {
-  const C = Colors(isDark);
+  const C = managerPalette(isDark);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   // Reset selection when data changes (period or branch switch)
@@ -251,32 +251,6 @@ function SmoothLineChart({
   );
 }
 
-// ── Stat row inside the hero card ──────────────────────────────────────────────
-function StatRow({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <View
-      style={{
-        flexDirection: "row-reverse",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <Text style={{ color, fontSize: 14, fontWeight: "700" }}>{value}</Text>
-      <Text style={{ color, fontSize: 12, fontWeight: "500", opacity: 0.75 }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 // ── KPI chip (small pill) ──────────────────────────────────────────────────────
 function KpiChip({
   icon,
@@ -299,12 +273,12 @@ function KpiChip({
         alignItems: "center",
         gap: 8,
         backgroundColor: bg,
-        borderRadius: 5,
+        borderRadius: Radius.sm,
         padding: 12,
       }}
     >
       <View
-        style={{ backgroundColor: `${color}20`, borderRadius: 5, padding: 6 }}
+        style={{ backgroundColor: `${color}20`, borderRadius: Radius.xs, padding: 6 }}
       >
         <Ionicons name={icon} size={15} color={color} />
       </View>
@@ -336,7 +310,7 @@ export default function ReportsScreen() {
   const { isPharmacist, branchId: authBranchId } = useAuth();
   const { triggerSync } = useSyncStatus();
   const router = useRouter();
-  const C = Colors(isDarkMode);
+  const C = managerPalette(isDarkMode);
 
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -345,6 +319,19 @@ export default function ReportsScreen() {
   const [selectedBranch, setSelectedBranch] = useState<string | null>(
     authBranchId,
   );
+
+  // Outlined card matching the manager home — light surface, soft tinted border.
+  const card = (accent: string) => ({
+    backgroundColor: C.card,
+    borderRadius: Radius.sm,
+    borderWidth: 1.5,
+    borderColor: `${accent}33`,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  });
 
   const fetchReport = useCallback(async () => {
     try {
@@ -418,6 +405,8 @@ export default function ReportsScreen() {
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "";
   const profit = report?.profit ?? 0;
   const profitPositive = profit >= 0;
+  const profitColor = profitPositive ? C.success : C.danger;
+  const profitBg = profitPositive ? C.successBg : C.dangerBg;
 
   // All hooks called — safe to branch
   if (isPharmacist) {
@@ -484,7 +473,7 @@ export default function ReportsScreen() {
             <Text
               style={{
                 color: C.foreground,
-                fontSize: 22,
+                fontSize: 23,
                 fontWeight: "900",
                 textAlign: "right",
               }}
@@ -492,49 +481,74 @@ export default function ReportsScreen() {
               التقارير المالية
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => router.push("/reports/financial" as any)}
-            style={{
-              backgroundColor: C.primary,
-              borderRadius: 5,
-              padding: 11,
-              shadowColor: C.primary,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 6,
-            }}
-          >
-            <Ionicons name="stats-chart" size={22} color="#fff" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row-reverse", gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => router.push("/reports/financial" as any)}
+              activeOpacity={0.85}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: Radius.sm,
+                backgroundColor: C.primary,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="stats-chart" size={22} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/reports/employees" as any)}
+              activeOpacity={0.85}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: Radius.sm,
+                backgroundColor: C.primaryMuted,
+                borderWidth: 1.5,
+                borderColor: `${C.primary}33`,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="people-outline" size={22} color={C.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
-      {/* ── Period pills ───────────────────────────────────────────────── */}
-      <View style={{ paddingHorizontal: 20, marginBottom: 4 }}>
-        <View style={{ flexDirection: "row-reverse", gap: 8 }}>
+      {/* ── Period segmented control ───────────────────────────────────── */}
+      <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+        <View
+          style={{
+            flexDirection: "row-reverse",
+            backgroundColor: C.card,
+            borderRadius: Radius.sm,
+            borderWidth: 1.5,
+            borderColor: `${C.primary}33`,
+            padding: 4,
+            gap: 4,
+          }}
+        >
           {PERIODS.map(({ key, label }) => {
             const sel = period === key;
             return (
               <TouchableOpacity
                 key={key}
                 onPress={() => setPeriod(key)}
-                activeOpacity={0.75}
+                activeOpacity={0.8}
                 style={{
-                  paddingHorizontal: 18,
-                  paddingVertical: 8,
-                  borderRadius: 5,
-                  backgroundColor: sel ? C.primary : C.card,
-                  borderWidth: 1.5,
-                  borderColor: sel ? C.primary : C.border,
-                  elevation: sel ? 3 : 0,
+                  flex: 1,
+                  paddingVertical: 9,
+                  borderRadius: Radius.xs,
+                  alignItems: "center",
+                  backgroundColor: sel ? C.primary : "transparent",
                 }}
               >
                 <Text
                   style={{
                     fontSize: 13,
-                    fontWeight: sel ? "700" : "500",
-                    color: sel ? "#fff" : C.foreground,
+                    fontWeight: sel ? "800" : "600",
+                    color: sel ? "#fff" : C.mutedForeground,
                   }}
                 >
                   {label}
@@ -551,48 +565,32 @@ export default function ReportsScreen() {
           selectedBranchId={selectedBranch}
           onSelectBranch={setSelectedBranch}
           hideIfSingle
+          accent={C.primary}
+          accentMuted={C.primaryMuted}
         />
       </View>
 
       {/* ── Loading skeleton ───────────────────────────────────────────── */}
       {loading && !refreshing ? (
         <View style={{ paddingHorizontal: 20, gap: 16, marginTop: 4 }}>
-          <Skeleton height={220} radius={20} />
-          <View style={{ flexDirection: "row-reverse", gap: 12 }}>
-            <Skeleton height={80} radius={16} style={{ flex: 1 }} />
-            <Skeleton height={80} radius={16} style={{ flex: 1 }} />
-          </View>
-          <Skeleton height={220} radius={20} />
+          <Skeleton height={230} radius={Radius.sm} />
+          <Skeleton height={200} radius={Radius.sm} />
         </View>
       ) : (
         <View style={{ paddingHorizontal: 20, gap: 16, marginTop: 4 }}>
-          {/* ── Financial summary card (distinct from dashboard) ──── */}
-          <View
-            style={{
-              backgroundColor: C.card,
-              borderRadius: 5,
-              borderWidth: 1,
-              borderColor: C.border,
-              overflow: "hidden",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: isDarkMode ? 0.3 : 0.08,
-              shadowRadius: 10,
-              elevation: 4,
-            }}
-          >
-            {/* Coloured header strip */}
+          {/* ── Financial summary card ───────────────────────────────── */}
+          <View style={{ ...card(C.primary), padding: 18, gap: 16 }}>
+            {/* Header: title + profit-margin badge */}
             <View
               style={{
-                backgroundColor: profitPositive ? C.success : C.danger,
-                paddingHorizontal: 20,
-                paddingVertical: 12,
                 flexDirection: "row-reverse",
                 justifyContent: "space-between",
                 alignItems: "center",
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>
+              <Text
+                style={{ color: C.foreground, fontSize: 13, fontWeight: "800" }}
+              >
                 التحليل المالي — {periodLabel}
               </Text>
               <View
@@ -600,152 +598,145 @@ export default function ReportsScreen() {
                   flexDirection: "row-reverse",
                   alignItems: "center",
                   gap: 5,
+                  backgroundColor: profitBg,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: Radius.xs,
                 }}
               >
                 <Ionicons
                   name={profitPositive ? "trending-up" : "trending-down"}
-                  size={16}
-                  color="#fff"
+                  size={14}
+                  color={profitColor}
                 />
                 <Text
-                  style={{
-                    color: "rgba(255,255,255,0.85)",
-                    fontSize: 12,
-                    fontWeight: "600",
-                  }}
+                  style={{ color: profitColor, fontSize: 11, fontWeight: "800" }}
                 >
                   {profitMargin.toFixed(1)}% هامش
                 </Text>
               </View>
             </View>
 
-            <View style={{ padding: 20, gap: 16 }}>
-              {/* Net profit – large number */}
-              <View style={{ alignItems: "flex-end" }}>
+            {/* Net profit – large number */}
+            <View style={{ alignItems: "flex-end" }}>
+              <Text
+                style={{
+                  color: C.mutedForeground,
+                  fontSize: 12,
+                  fontWeight: "600",
+                  marginBottom: 4,
+                }}
+              >
+                صافي الربح
+              </Text>
+              <View
+                style={{
+                  flexDirection: "row-reverse",
+                  alignItems: "baseline",
+                  gap: 6,
+                }}
+              >
+                <Text
+                  style={{ color: profitColor, fontSize: 32, fontWeight: "900" }}
+                >
+                  {Math.abs(profit).toLocaleString("en-US")}
+                </Text>
                 <Text
                   style={{
                     color: C.mutedForeground,
-                    fontSize: 12,
-                    marginBottom: 4,
+                    fontSize: 14,
+                    fontWeight: "700",
                   }}
                 >
-                  صافي الربح
+                  د.ع
+                </Text>
+              </View>
+            </View>
+
+            {/* Revenue / Expenses split bar */}
+            <View style={{ gap: 6 }}>
+              <View
+                style={{
+                  flexDirection: "row-reverse",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text
+                  style={{ color: C.success, fontSize: 13, fontWeight: "800" }}
+                >
+                  {(report?.revenue ?? 0).toLocaleString("en-US")}
                 </Text>
                 <Text
-                  style={{
-                    color: profitPositive ? C.success : C.danger,
-                    fontSize: 36,
-                    fontWeight: "900",
-                  }}
+                  style={{ color: C.danger, fontSize: 13, fontWeight: "800" }}
                 >
-                  {Math.abs(profit).toLocaleString("en-US")}
-                  {"  "}
-                  <Text style={{ fontSize: 16, fontWeight: "600" }}>د.ع</Text>
+                  {(report?.expenses ?? 0).toLocaleString("en-US")}
                 </Text>
               </View>
-
-              {/* Revenue / Expenses split bar */}
-              <View style={{ gap: 6 }}>
+              {/* Visual bar */}
+              <View
+                style={{
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: C.dangerBg,
+                  overflow: "hidden",
+                  flexDirection: "row-reverse",
+                }}
+              >
                 <View
                   style={{
-                    flexDirection: "row-reverse",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: C.success,
-                      fontSize: 13,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {(report?.revenue ?? 0).toLocaleString("en-US")}
-                  </Text>
-                  <Text
-                    style={{ color: C.danger, fontSize: 13, fontWeight: "700" }}
-                  >
-                    {(report?.expenses ?? 0).toLocaleString("en-US")}
-                  </Text>
-                </View>
-                {/* Visual bar */}
-                <View
-                  style={{
-                    height: 8,
+                    width: `${profitBarPct * 100}%`,
+                    backgroundColor: C.success,
                     borderRadius: 4,
-                    backgroundColor: C.dangerBg,
-                    overflow: "hidden",
-                    flexDirection: "row-reverse",
                   }}
-                >
-                  <View
-                    style={{
-                      width: `${profitBarPct * 100}%`,
-                      backgroundColor: C.success,
-                      borderRadius: 4,
-                    }}
-                  />
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row-reverse",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <Text style={{ color: C.mutedForeground, fontSize: 10 }}>
-                    الإيرادات
-                  </Text>
-                  <Text style={{ color: C.mutedForeground, fontSize: 10 }}>
-                    المصروفات
-                  </Text>
-                </View>
-              </View>
-
-              {/* Divider */}
-              <View style={{ height: 1, backgroundColor: C.border }} />
-
-              {/* Transaction stats */}
-              <View style={{ flexDirection: "row-reverse", gap: 12 }}>
-                <KpiChip
-                  icon="receipt"
-                  label="عدد العمليات"
-                  value={report?.transactions ?? 0}
-                  color={C.info}
-                  bg={C.infoBg}
-                />
-                <KpiChip
-                  icon="calculator"
-                  label="متوسط الفاتورة"
-                  value={avgSale}
-                  color={C.warning}
-                  bg={C.warningBg}
                 />
               </View>
+              <View
+                style={{
+                  flexDirection: "row-reverse",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text style={{ color: C.mutedForeground, fontSize: 10 }}>
+                  الإيرادات
+                </Text>
+                <Text style={{ color: C.mutedForeground, fontSize: 10 }}>
+                  المصروفات
+                </Text>
+              </View>
+            </View>
+
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: C.border }} />
+
+            {/* Transaction stats */}
+            <View style={{ flexDirection: "row-reverse", gap: 12 }}>
+              <KpiChip
+                icon="receipt"
+                label="عدد العمليات"
+                value={report?.transactions ?? 0}
+                color={C.primary}
+                bg={C.primaryMuted}
+              />
+              <KpiChip
+                icon="calculator"
+                label="متوسط الفاتورة"
+                value={avgSale}
+                color={C.primarySoft}
+                bg={C.primaryMuted}
+              />
             </View>
           </View>
 
-          {/* ── Bar chart card ────────────────────────────────────────── */}
+          {/* ── Line chart card ───────────────────────────────────────── */}
           {chartData.length >= 2 && (
-            <View
-              style={{
-                backgroundColor: C.card,
-                borderRadius: 5,
-                borderWidth: 1,
-                borderColor: C.border,
-                paddingVertical: 20,
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: isDarkMode ? 0.25 : 0.06,
-                shadowRadius: 8,
-                elevation: 2,
-              }}
-            >
+            <View style={{ ...card(C.primary), paddingVertical: 18 }}>
               {/* Chart header */}
               <View
                 style={{
                   flexDirection: "row-reverse",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  paddingHorizontal: 20,
+                  paddingHorizontal: 18,
                   marginBottom: 16,
                 }}
               >
@@ -777,7 +768,7 @@ export default function ReportsScreen() {
                 <View
                   style={{
                     backgroundColor: C.primaryMuted,
-                    borderRadius: 5,
+                    borderRadius: Radius.xs,
                     padding: 8,
                   }}
                 >
@@ -794,24 +785,21 @@ export default function ReportsScreen() {
             </View>
           )}
 
-          {/* ── Best-day trophy card ──────────────────────────────────── */}
+          {/* ── Best-day card ─────────────────────────────────────────── */}
           {bestDay && bestDay.value > 0 && (
             <View
               style={{
+                ...card(C.primary),
                 flexDirection: "row-reverse",
                 alignItems: "center",
-                backgroundColor: C.primaryMuted,
-                borderRadius: 5,
                 padding: 14,
                 gap: 12,
-                borderWidth: 1,
-                borderColor: `${C.primary}30`,
               }}
             >
               <View
                 style={{
-                  backgroundColor: `${C.primary}20`,
-                  borderRadius: 5,
+                  backgroundColor: C.primaryMuted,
+                  borderRadius: Radius.xs,
                   padding: 10,
                 }}
               >

@@ -19,6 +19,31 @@ export function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> 
     ]);
 }
 
+// ─── Held Invoices (تعليق الفاتورة) ──────────────────────────────────────────
+// تُحفظ في localStorage لتبقى بعد إغلاق التطبيق، ومنفصلة لكل مستخدم.
+import type { HeldInvoice } from "./pos-types";
+
+const HELD_INVOICES_KEY = (userId: string) => `faramace:held-invoices:${userId || "default"}`;
+
+export function loadHeldInvoices(userId: string): HeldInvoice[] {
+    try {
+        const raw = localStorage.getItem(HELD_INVOICES_KEY(userId));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+export function saveHeldInvoices(userId: string, list: HeldInvoice[]): void {
+    try {
+        localStorage.setItem(HELD_INVOICES_KEY(userId), JSON.stringify(list));
+    } catch (e) {
+        console.error("فشل حفظ الفواتير المعلّقة", e);
+    }
+}
+
 export function getExpiryStatus(
     expiryDate: string | null | undefined
 ): { label: string; color: string; urgent: boolean } | null {

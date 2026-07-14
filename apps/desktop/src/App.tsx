@@ -5,7 +5,8 @@ import DebtsPage from './components/DebtsPage';
 import SettingsPage from './components/SettingsPage';
 import InventoryPage from './components/InventoryPage';
 import LoginScreen from './components/LoginScreen';
-import LicenseScreen from './components/LicenseScreen';
+import LicenseScreen, { SubscriptionLockReason } from './components/LicenseScreen';
+import UpdateBanner from './components/UpdateBanner';
 
 import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, BookOpen, Moon, Sun, Loader2 } from 'lucide-react';
 import logoUrl from './assets/logo.png';
@@ -130,6 +131,34 @@ function App() {
     };
     // ==================== End License Guard ====================
 
+    // ==================== Offline Subscription Lock ====================
+    // The main process evaluates the signed offline token on startup / screen
+    // wake and broadcasts subscription:locked / subscription:unlocked. Without
+    // this listener the enforcement (suspension, grace, clock-tamper, deleted
+    // token) never reaches the UI.
+    const [subscriptionLockReason, setSubscriptionLockReason] = useState<SubscriptionLockReason | null>(null);
+
+    useEffect(() => {
+        const onLocked = (_event: any, data: { reason: SubscriptionLockReason }) => {
+            setSubscriptionLockReason(data?.reason ?? 'invalid-token');
+        };
+        const onUnlocked = () => setSubscriptionLockReason(null);
+        window.ipcRenderer?.on('subscription:locked', onLocked);
+        window.ipcRenderer?.on('subscription:unlocked', onUnlocked);
+        return () => {
+            window.ipcRenderer?.off('subscription:locked', onLocked);
+            window.ipcRenderer?.off('subscription:unlocked', onUnlocked);
+        };
+    }, []);
+
+    const handleRetryOnlineCheck = () => {
+        // Pass the activation key the renderer still holds so the main process
+        // can self-heal a lost store key and actually reach the server.
+        const licenseKey = localStorage.getItem('faramace_license_key') || undefined;
+        window.ipcRenderer?.invoke('subscription:recheck', licenseKey);
+    };
+    // ==================== End Offline Subscription Lock ====================
+
 
     // Theme initialisation — read persisted preference from electron-store on mount
     useEffect(() => {
@@ -201,6 +230,17 @@ function App() {
             </div>
         );
     }
+    // Offline subscription lock takes priority — blocks the whole app until the
+    // subscription state recovers (e.g. after a successful online re-verify).
+    if (subscriptionLockReason) {
+        return (
+            <LicenseScreen
+                onActivated={handleLicenseActivated}
+                subscriptionLockReason={subscriptionLockReason}
+                onRetryOnlineCheck={handleRetryOnlineCheck}
+            />
+        );
+    }
     if (licenseStatus === 'no-key' || licenseStatus === 'invalid') {
         return <LicenseScreen onActivated={handleLicenseActivated} errorMessage={licenseError} />;
     }
@@ -208,11 +248,18 @@ function App() {
 
 
     if (!currentUser) {
-        return <LoginScreen onLogin={setCurrentUser} />;
+        return (
+            <>
+                <UpdateBanner />
+                <LoginScreen onLogin={setCurrentUser} />
+            </>
+        );
     }
 
     return (
         <div className="flex h-screen bg-background font-sans text-foreground">
+            {/* Global auto-update banner (fixed, overlays top of window) */}
+            <UpdateBanner />
             {/* Sidebar */}
             <div dir="rtl" className="w-[68px] bg-zinc-900 flex flex-col items-center py-4 gap-1 shadow-2xl z-30 shrink-0">
                 {/* Brand */}

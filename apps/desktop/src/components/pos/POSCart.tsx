@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { ShoppingCart, Eraser, AlertTriangle, TicketPercent, X, Gift, Banknote, CreditCard, Building2, Plus, Minus, Trash2, Pencil } from "lucide-react";
+import { ShoppingCart, Eraser, AlertTriangle, TicketPercent, X, Gift, Banknote, CreditCard, Building2, Plus, Minus, Trash2, Pencil, PauseCircle, Loader2 } from "lucide-react";
 import { formatIQD } from "./pos-utils";
 import type { CartItem, DrugInteraction, Patient } from "./pos-types";
+import Toggle from "../Toggle";
 
 /**
  * Controlled number input that allows intermediate empty/partial states while typing.
@@ -118,10 +119,12 @@ interface Props {
     onSetItemQuantity: (id: string, qty: number) => void;
     onSetItemPrice: (id: string, price: number) => void;
     onClearCart: () => void;
+    onHold: () => void;
     onDiscountToggle: () => void;
     onDiscountChange: (v: number) => void;
     onLoyaltyToggle: () => void;
     onPayment: (method: string) => void;
+    isProcessingSale: boolean;
 }
 
 export default function POSCart({
@@ -129,8 +132,8 @@ export default function POSCart({
     manualDiscount, isRedeemingLoyalty, showDiscountInput,
     subTotal, finalTotal, loyaltyDiscountVal, pointsToRedeem,
     loyaltyMinRedemption, maxPointsForBill,
-    onUpdateQuantity, onRemoveFromCart, onSetItemQuantity, onSetItemPrice, onClearCart,
-    onDiscountToggle, onDiscountChange, onLoyaltyToggle, onPayment,
+    onUpdateQuantity, onRemoveFromCart, onSetItemQuantity, onSetItemPrice, onClearCart, onHold,
+    onDiscountToggle, onDiscountChange, onLoyaltyToggle, onPayment, isProcessingSale,
 }: Props) {
     const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
     const maxPct = companySettings?.maxDiscountPercent ?? 10;
@@ -138,7 +141,7 @@ export default function POSCart({
     const patientPoints = selectedPatient?.loyaltyAccount?.totalPoints || 0;
 
     return (
-        <div className="flex w-[37%] flex-col bg-card border-r border-border shadow-xl z-20 print:hidden h-full">
+        <div className="flex w-[32%] flex-col bg-card border-r border-border shadow-xl z-20 print:hidden h-full">
             {/* هيدر السلة */}
             <div className="flex items-center justify-between p-5 pb-3 bg-card">
                 <div className="flex items-center gap-3">
@@ -152,13 +155,22 @@ export default function POSCart({
                 </div>
                 <div className="flex items-center gap-2">
                     {cart.length > 0 && (
-                        <button
-                            onClick={onClearCart}
-                            className="p-1.5 rounded-lg bg-destructive/10 text-destructive/60 hover:bg-destructive/20 hover:text-destructive transition-all"
-                            title="مسح السلة (F5)"
-                        >
-                            <Eraser className="w-3.5 h-3.5" />
-                        </button>
+                        <>
+                            <button
+                                onClick={onHold}
+                                className="p-1.5 rounded-lg bg-primary/10 text-primary/70 hover:bg-primary/20 hover:text-primary transition-all"
+                                title="تعليق الفاتورة (F10)"
+                            >
+                                <PauseCircle className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                                onClick={onClearCart}
+                                className="p-1.5 rounded-lg bg-destructive/10 text-destructive/60 hover:bg-destructive/20 hover:text-destructive transition-all"
+                                title="مسح السلة (F5)"
+                            >
+                                <Eraser className="w-3.5 h-3.5" />
+                            </button>
+                        </>
                     )}
                     <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-black border border-primary/20">
                         {cart.length} عنصر
@@ -170,7 +182,7 @@ export default function POSCart({
 
             {/* تنبيهات التفاعلات الدوائية */}
             {(allergyWarnings.length > 0 || interactions.length > 0) && (
-                <div className="px-4 py-2 flex flex-col gap-2">
+                <div className="px-4 py-2 flex flex-col gap-2 shrink-0 max-h-[30vh] overflow-y-auto">
                     {allergyWarnings.length > 0 && (
                         <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3 flex gap-3 items-start animate-fadeIn shadow-sm">
                             <div className="bg-destructive/20 text-destructive p-2 rounded-lg shrink-0">
@@ -348,13 +360,13 @@ export default function POSCart({
                                     <span className="text-xs">استبدال نقاط ({patientPoints})</span>
                                 </div>
                                 {selectedPatient.loyaltyAccount && selectedPatient.loyaltyAccount.totalPoints >= loyaltyMinRedemption ? (
-                                    <button
-                                        onClick={onLoyaltyToggle}
+                                    <Toggle
+                                        size="sm"
+                                        checked={isRedeemingLoyalty}
+                                        onChange={onLoyaltyToggle}
                                         disabled={maxPointsForBill <= 0}
-                                        className={`relative w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none ${isRedeemingLoyalty ? 'bg-purple-600' : 'bg-muted-foreground/30'}`}
-                                    >
-                                        <span className={`absolute left-0.5 top-0.5 bg-background w-4 h-4 rounded-full transition-transform duration-200 ${isRedeemingLoyalty ? 'translate-x-4' : 'translate-x-0'}`} />
-                                    </button>
+                                        activeClass="bg-purple-600"
+                                    />
                                 ) : (
                                     <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">غير كافية</span>
                                 )}
@@ -390,31 +402,31 @@ export default function POSCart({
                 <div className="flex gap-2">
                     <button
                         className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-success py-2.5 px-3 font-bold text-white text-sm shadow-md shadow-success/25 transition-all hover:bg-success/90 hover:shadow-success/40 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed relative"
-                        disabled={cart.length === 0}
+                        disabled={cart.length === 0 || isProcessingSale}
                         onClick={() => onPayment("CASH")}
                         title="دفع نقدي (F4)"
                     >
-                        <Banknote className="w-4 h-4 shrink-0" />
+                        {isProcessingSale ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Banknote className="w-4 h-4 shrink-0" />}
                         <span>نقدي</span>
                         <span className="absolute top-1 left-1 bg-white/20 text-[9px] px-1 py-0.5 rounded font-mono leading-none">F4</span>
                     </button>
                     <button
                         className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 px-3 font-bold text-white text-sm shadow-md shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-primary/40 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed relative"
-                        disabled={cart.length === 0}
+                        disabled={cart.length === 0 || isProcessingSale}
                         onClick={() => onPayment("CARD")}
                         title="دفع بالبطاقة (F5)"
                     >
-                        <Building2 className="w-4 h-4 shrink-0" />
+                        {isProcessingSale ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Building2 className="w-4 h-4 shrink-0" />}
                         <span>بطاقة</span>
                         <span className="absolute top-1 left-1 bg-white/20 text-[9px] px-1 py-0.5 rounded font-mono leading-none">F5</span>
                     </button>
                     <button
                         className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-warning py-2.5 px-3 font-bold text-white text-sm shadow-md shadow-warning/25 transition-all hover:bg-warning/90 hover:shadow-warning/40 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed relative"
-                        disabled={cart.length === 0}
+                        disabled={cart.length === 0 || isProcessingSale}
                         onClick={() => onPayment("CREDIT")}
                         title="بيع بالآجل (F6)"
                     >
-                        <CreditCard className="w-4 h-4 shrink-0" />
+                        {isProcessingSale ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <CreditCard className="w-4 h-4 shrink-0" />}
                         <span>آجل</span>
                         <span className="absolute top-1 left-1 bg-white/20 text-[9px] px-1 py-0.5 rounded font-mono leading-none">F6</span>
                     </button>

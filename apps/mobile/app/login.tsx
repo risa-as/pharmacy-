@@ -12,6 +12,7 @@ import {
   Image,
   ScrollView,
   Dimensions,
+  Modal,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -30,6 +31,7 @@ export default function LoginScreen() {
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const [focusedField, setFocusedField] = useState<"email" | "password" | null>(null);
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
 
   useEffect(() => {
     checkBiometric();
@@ -65,6 +67,21 @@ export default function LoginScreen() {
     }
   };
 
+  const enableBiometricLogin = async () => {
+    setShowBiometricPrompt(false);
+    try {
+      await biometricService.saveCredentials(email, password);
+    } catch {
+      // Saving failed — proceed anyway; the user can enable it next time.
+    }
+    router.replace("/(tabs)");
+  };
+
+  const skipBiometricLogin = () => {
+    setShowBiometricPrompt(false);
+    router.replace("/(tabs)");
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("خطأ", "يرجى ملء جميع الحقول");
@@ -75,20 +92,8 @@ export default function LoginScreen() {
       await authService.login(email, password);
       await refreshUser();
       if (isBiometricSupported) {
-        Alert.alert(
-          "تفعيل الدخول السريع",
-          "هل تريد تفعيل الدخول بالبصمة/الوجه للمرات القادمة؟",
-          [
-            { text: "لا", style: "cancel", onPress: () => router.replace("/(tabs)") },
-            {
-              text: "نعم",
-              onPress: async () => {
-                await biometricService.saveCredentials(email, password);
-                router.replace("/(tabs)");
-              },
-            },
-          ]
-        );
+        // Show a branded prompt instead of the unstyleable native alert.
+        setShowBiometricPrompt(true);
       } else {
         router.replace("/(tabs)");
       }
@@ -134,7 +139,10 @@ export default function LoginScreen() {
           {/* Card header */}
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderAccent} />
-            <Text style={styles.cardTitle}>تسجيل الدخول</Text>
+            <View>
+              <Text style={styles.cardTitle}>تسجيل الدخول</Text>
+              <Text style={styles.cardSubtitle}>أدخل بياناتك للمتابعة</Text>
+            </View>
           </View>
 
           {/* Email field */}
@@ -163,7 +171,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name="mail-outline"
                   size={18}
-                  color={focusedField === "email" ? "#0F7575" : "#9ca3af"}
+                  color={focusedField === "email" ? "#1E6FBF" : "#9ca3af"}
                 />
               </View>
             </View>
@@ -205,7 +213,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name="lock-closed-outline"
                   size={18}
-                  color={focusedField === "password" ? "#0F7575" : "#9ca3af"}
+                  color={focusedField === "password" ? "#1E6FBF" : "#9ca3af"}
                 />
               </View>
             </View>
@@ -242,7 +250,7 @@ export default function LoginScreen() {
                 disabled={loading}
                 activeOpacity={0.85}
               >
-                <Ionicons name="finger-print" size={24} color="#0F7575" />
+                <Ionicons name="finger-print" size={24} color="#1E6FBF" />
                 <Text style={styles.biometricText}>الدخول بالبصمة</Text>
               </TouchableOpacity>
             </>
@@ -252,12 +260,49 @@ export default function LoginScreen() {
         {/* Footer */}
         <Text style={styles.footer}>© 2026 فاراماس · جميع الحقوق محفوظة</Text>
       </ScrollView>
+
+      {/* ── Branded "enable quick login" prompt ── */}
+      <Modal
+        visible={showBiometricPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={skipBiometricLogin}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconWrap}>
+              <Ionicons name="finger-print" size={36} color={PRIMARY} />
+            </View>
+            <Text style={styles.modalTitle}>تفعيل الدخول السريع</Text>
+            <Text style={styles.modalDesc}>
+              فعّل الدخول بالبصمة أو بصمة الوجه لتسجيل الدخول بسرعة وأمان في المرات القادمة.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalPrimaryBtn}
+              onPress={enableBiometricLogin}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="finger-print" size={18} color="#fff" />
+              <Text style={styles.modalPrimaryText}>نعم، تفعيل</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalGhostBtn}
+              onPress={skipBiometricLogin}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalGhostText}>لاحقاً</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
-const PRIMARY   = "#0F7575";
-const PRIMARY_D = "#0a5c5c";
+const PRIMARY   = "#1E6FBF";
+const PRIMARY_D = "#17578F";
 
 const styles = StyleSheet.create({
   container: {
@@ -367,6 +412,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     color: "#111827",
+    textAlign: "right",
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
+    textAlign: "right",
   },
 
   /* Fields */
@@ -403,7 +455,7 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   inputIconFocused: {
-    backgroundColor: "#E6F4F4",
+    backgroundColor: "#E6F0FA",
   },
   input: {
     flex: 1,
@@ -468,9 +520,9 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 50,
     borderWidth: 1.5,
-    borderColor: "#E6F4F4",
+    borderColor: "#E6F0FA",
     borderRadius: 5,
-    backgroundColor: "#f0fafa",
+    backgroundColor: "#EFF5FC",
   },
   biometricText: {
     color: PRIMARY,
@@ -485,5 +537,83 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 28,
     fontWeight: "500",
+  },
+
+  /* Biometric prompt modal */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(17,24,39,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    borderRadius: 5,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 16,
+  },
+  modalIconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "#E6F0FA",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#111827",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalDesc: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  modalPrimaryBtn: {
+    width: "100%",
+    backgroundColor: PRIMARY,
+    borderRadius: 5,
+    height: 52,
+    flexDirection: "row-reverse",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  modalPrimaryText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  modalGhostBtn: {
+    width: "100%",
+    height: 46,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  modalGhostText: {
+    color: "#6b7280",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, FlatList, TouchableOpacity, TextInput,
-    ActivityIndicator, Alert, RefreshControl, KeyboardAvoidingView, Platform,
+    ActivityIndicator, Alert, RefreshControl, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { Colors } from '../../constants/colors';
-import { EmptyState } from '../../components/ui/EmptyState';
+import { managerPalette, Radius } from '../../constants/colors';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { useSyncStatus } from '../../context/SyncContext';
 import { formatDate } from '../../utils/date';
@@ -22,10 +21,11 @@ interface Debtor {
     updatedAt: string;
 }
 
-function urgency(balance: number) {
+type Urgency = 'danger' | 'warning' | 'low';
+function urgency(balance: number): Urgency {
     if (balance > 50000) return 'danger';
     if (balance > 20000) return 'warning';
-    return 'info';
+    return 'low';
 }
 
 function getInitials(name: string) {
@@ -36,7 +36,20 @@ export default function DebtsScreen() {
     const { isDarkMode } = useTheme();
     const { branchId } = useAuth();
     const { triggerSync } = useSyncStatus();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
+
+    // Outlined card matching the system identity — light surface, soft tinted border.
+    const card = (accent: string) => ({
+        backgroundColor: C.card,
+        borderRadius: Radius.sm,
+        borderWidth: 1.5,
+        borderColor: `${accent}33`,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 } as const,
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        elevation: 2,
+    });
 
     const [debtors, setDebtors]     = useState<Debtor[]>([]);
     const [filtered, setFiltered]   = useState<Debtor[]>([]);
@@ -48,6 +61,7 @@ export default function DebtsScreen() {
     const [payAmount, setPayAmount] = useState('');
     const [payNote, setPayNote]     = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [paidAmount, setPaidAmount] = useState<number | null>(null);
 
     const fetchDebtors = useCallback(async () => {
         try {
@@ -87,8 +101,8 @@ export default function DebtsScreen() {
         try {
             await apiService.payDebt(id, amount, payNote);
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert('تم بنجاح', 'تم تسجيل الدفعة بنجاح');
             setPayingId(null); setPayAmount(''); setPayNote('');
+            setPaidAmount(amount);
             fetchDebtors();
         } catch {
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -99,178 +113,161 @@ export default function DebtsScreen() {
     }, [payAmount, payNote, fetchDebtors]);
 
     const totalDebt = debtors.reduce((s, d) => s + d.balance, 0);
+    const highCount = debtors.filter(d => urgency(d.balance) === 'danger').length;
+    const medCount  = debtors.filter(d => urgency(d.balance) === 'warning').length;
+    const lowCount  = debtors.filter(d => urgency(d.balance) === 'low').length;
 
-    const accentColor = (balance: number) => {
-        const u = urgency(balance);
-        return u === 'danger' ? C.danger : u === 'warning' ? C.warning : C.info;
-    };
-    const accentBg = (balance: number) => {
-        const u = urgency(balance);
-        return u === 'danger' ? C.dangerBg : u === 'warning' ? C.warningBg : C.infoBg;
-    };
-    const avatarColor = (balance: number) => accentColor(balance);
-    const avatarBg    = (balance: number) => accentBg(balance);
+    const urgencyColor = (u: Urgency) => u === 'danger' ? C.danger : u === 'warning' ? C.warning : C.primary;
+    const urgencyBg    = (u: Urgency) => u === 'danger' ? C.dangerBg : u === 'warning' ? C.warningBg : C.primaryMuted;
+    const urgencyLabel = (u: Urgency) => u === 'danger' ? 'مرتفع' : u === 'warning' ? 'متوسط' : 'منخفض';
 
     const renderDebtor = ({ item }: { item: Debtor }) => {
         const isPaying = payingId === item.id;
-        const color    = accentColor(item.balance);
-        const bg       = accentBg(item.balance);
+        const u        = urgency(item.balance);
+        const color    = urgencyColor(u);
+        const bg       = urgencyBg(u);
         const initials = getInitials(item.name);
 
         return (
-            <View style={{
-                backgroundColor: C.card, borderRadius: 5,
-                borderWidth: 1, borderColor: C.border,
-                marginBottom: 12, overflow: 'hidden',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: isDarkMode ? 0.2 : 0.05,
-                shadowRadius: 4, elevation: 2,
-            }}>
-                {/* Accent bar */}
-                <View style={{ height: 3, backgroundColor: color }} />
+            <View style={{ ...card(color), marginBottom: 12, padding: 14 }}>
+                {/* Top row: avatar + info + balance */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                    {/* Avatar */}
+                    <View style={{
+                        width: 46, height: 46, borderRadius: Radius.xs,
+                        backgroundColor: bg,
+                        justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+                    }}>
+                        <Text style={{ color, fontSize: 16, fontWeight: '900' }}>{initials}</Text>
+                    </View>
 
-                <View style={{ padding: 14 }}>
-                    {/* Top row: avatar + info + balance */}
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                        {/* Avatar */}
-                        <View style={{
-                            width: 44, height: 44, borderRadius: 5,
-                            backgroundColor: bg,
-                            justifyContent: 'center', alignItems: 'center', flexShrink: 0,
-                        }}>
-                            <Text style={{ color, fontSize: 16, fontWeight: '900' }}>{initials}</Text>
-                        </View>
-
-                        {/* Name + phone */}
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 15, textAlign: 'right' }}>
-                                {item.name}
-                            </Text>
-                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 3 }}>
-                                <Ionicons name="call-outline" size={12} color={C.mutedForeground} />
-                                <Text style={{ color: C.mutedForeground, fontSize: 12 }}>{item.phone}</Text>
-                            </View>
-                        </View>
-
-                        {/* Balance */}
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={{ color, fontSize: 18, fontWeight: '900' }}>
-                                {item.balance.toLocaleString('en-US')}
-                            </Text>
-                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>د.ع</Text>
+                    {/* Name + phone */}
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
+                            {item.name}
+                        </Text>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                            <Ionicons name="call-outline" size={12} color={C.mutedForeground} />
+                            <Text style={{ color: C.mutedForeground, fontSize: 12 }}>{item.phone}</Text>
                         </View>
                     </View>
 
-                    {/* Meta row: date + urgency badge */}
-                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
-                            <Ionicons name="time-outline" size={11} color={C.mutedForeground} />
-                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-                                {formatDate(item.updatedAt, { day: 'numeric', month: 'short' })}
-                            </Text>
-                        </View>
-                        <View style={{ backgroundColor: bg, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 }}>
-                            <Text style={{ color, fontSize: 10, fontWeight: '700' }}>
-                                {urgency(item.balance) === 'danger' ? 'مرتفع' : urgency(item.balance) === 'warning' ? 'متوسط' : 'منخفض'}
-                            </Text>
-                        </View>
+                    {/* Balance */}
+                    <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ color, fontSize: 18, fontWeight: '900' }}>
+                            {item.balance.toLocaleString('en-US')}
+                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 10 }}>د.ع</Text>
                     </View>
-
-                    {/* Pay form / button */}
-                    {!isPaying ? (
-                        <TouchableOpacity
-                            onPress={() => { setPayingId(item.id); setPayAmount(''); setPayNote(''); }}
-                            activeOpacity={0.8}
-                            style={{
-                                flexDirection: 'row-reverse', justifyContent: 'center',
-                                alignItems: 'center', gap: 6,
-                                backgroundColor: C.primary, borderRadius: 5,
-                                paddingVertical: 11,
-                            }}
-                        >
-                            <Ionicons name="checkmark-circle-outline" size={17} color="#fff" />
-                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>تسجيل دفعة</Text>
-                        </TouchableOpacity>
-                    ) : (
-                        <View style={{
-                            backgroundColor: C.primaryMuted, borderRadius: 5,
-                            padding: 12, gap: 10,
-                        }}>
-                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                                <Ionicons name="wallet-outline" size={15} color={C.primary} />
-                                <Text style={{ color: C.primary, fontWeight: '700', fontSize: 13 }}>
-                                    تسجيل دفعة · الرصيد {item.balance.toLocaleString('en-US')} د.ع
-                                </Text>
-                            </View>
-
-                            <TextInput
-                                style={{
-                                    backgroundColor: C.card, borderRadius: 5,
-                                    borderWidth: 1.5, borderColor: C.primary,
-                                    paddingHorizontal: 12, paddingVertical: 10,
-                                    color: C.foreground, textAlign: 'right', fontSize: 16,
-                                    fontWeight: '700',
-                                }}
-                                placeholder="المبلغ (د.ع)"
-                                placeholderTextColor={C.mutedForeground}
-                                keyboardType="numeric"
-                                value={payAmount}
-                                onChangeText={setPayAmount}
-                                autoFocus
-                            />
-                            <TextInput
-                                style={{
-                                    backgroundColor: C.card, borderRadius: 5,
-                                    borderWidth: 1, borderColor: C.border,
-                                    paddingHorizontal: 12, paddingVertical: 10,
-                                    color: C.foreground, textAlign: 'right', fontSize: 14,
-                                }}
-                                placeholder="ملاحظة (اختياري)"
-                                placeholderTextColor={C.mutedForeground}
-                                value={payNote}
-                                onChangeText={setPayNote}
-                            />
-
-                            <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                                <TouchableOpacity
-                                    onPress={() => handlePay(item.id)}
-                                    disabled={submitting}
-                                    activeOpacity={0.8}
-                                    style={{
-                                        flex: 1, flexDirection: 'row-reverse',
-                                        justifyContent: 'center', alignItems: 'center', gap: 6,
-                                        backgroundColor: C.primary, borderRadius: 5,
-                                        paddingVertical: 11, opacity: submitting ? 0.7 : 1,
-                                    }}
-                                >
-                                    {submitting
-                                        ? <ActivityIndicator size="small" color="#fff" />
-                                        : <Ionicons name="checkmark-outline" size={17} color="#fff" />
-                                    }
-                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                                        {submitting ? 'جاري...' : 'تأكيد'}
-                                    </Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => setPayingId(null)}
-                                    activeOpacity={0.75}
-                                    style={{
-                                        flex: 1, flexDirection: 'row-reverse',
-                                        justifyContent: 'center', alignItems: 'center', gap: 6,
-                                        backgroundColor: C.card, borderRadius: 5,
-                                        paddingVertical: 11,
-                                        borderWidth: 1, borderColor: C.border,
-                                    }}
-                                >
-                                    <Ionicons name="close-outline" size={17} color={C.mutedForeground} />
-                                    <Text style={{ color: C.foreground, fontWeight: '600', fontSize: 14 }}>إلغاء</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    )}
                 </View>
+
+                {/* Meta row: date + urgency pill */}
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="time-outline" size={11} color={C.mutedForeground} />
+                        <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
+                            {formatDate(item.updatedAt, { day: 'numeric', month: 'short' })}
+                        </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, backgroundColor: bg, borderRadius: Radius.xs, paddingHorizontal: 9, paddingVertical: 4 }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+                        <Text style={{ color, fontSize: 10, fontWeight: '800' }}>{urgencyLabel(u)}</Text>
+                    </View>
+                </View>
+
+                {/* Pay form / button */}
+                {!isPaying ? (
+                    <TouchableOpacity
+                        onPress={() => { setPayingId(item.id); setPayAmount(''); setPayNote(''); }}
+                        activeOpacity={0.85}
+                        style={{
+                            flexDirection: 'row-reverse', justifyContent: 'center',
+                            alignItems: 'center', gap: 6,
+                            backgroundColor: C.primary, borderRadius: Radius.xs,
+                            paddingVertical: 11,
+                        }}
+                    >
+                        <Ionicons name="checkmark-circle-outline" size={17} color="#fff" />
+                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>تسجيل دفعة</Text>
+                    </TouchableOpacity>
+                ) : (
+                    <View style={{
+                        backgroundColor: C.primaryMuted, borderRadius: Radius.xs,
+                        padding: 12, gap: 10,
+                    }}>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                            <Ionicons name="wallet-outline" size={15} color={C.primary} />
+                            <Text style={{ color: C.primary, fontWeight: '700', fontSize: 13 }}>
+                                تسجيل دفعة · الرصيد {item.balance.toLocaleString('en-US')} د.ع
+                            </Text>
+                        </View>
+
+                        <TextInput
+                            style={{
+                                backgroundColor: C.card, borderRadius: Radius.xs,
+                                borderWidth: 1.5, borderColor: C.primary,
+                                paddingHorizontal: 12, paddingVertical: 10,
+                                color: C.foreground, textAlign: 'right', fontSize: 16,
+                                fontWeight: '700',
+                            }}
+                            placeholder="المبلغ (د.ع)"
+                            placeholderTextColor={C.mutedForeground}
+                            keyboardType="numeric"
+                            value={payAmount}
+                            onChangeText={setPayAmount}
+                            autoFocus
+                        />
+                        <TextInput
+                            style={{
+                                backgroundColor: C.card, borderRadius: Radius.xs,
+                                borderWidth: 1, borderColor: C.border,
+                                paddingHorizontal: 12, paddingVertical: 10,
+                                color: C.foreground, textAlign: 'right', fontSize: 14,
+                            }}
+                            placeholder="ملاحظة (اختياري)"
+                            placeholderTextColor={C.mutedForeground}
+                            value={payNote}
+                            onChangeText={setPayNote}
+                        />
+
+                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                            <TouchableOpacity
+                                onPress={() => handlePay(item.id)}
+                                disabled={submitting}
+                                activeOpacity={0.85}
+                                style={{
+                                    flex: 1, flexDirection: 'row-reverse',
+                                    justifyContent: 'center', alignItems: 'center', gap: 6,
+                                    backgroundColor: C.primary, borderRadius: Radius.xs,
+                                    paddingVertical: 11, opacity: submitting ? 0.7 : 1,
+                                }}
+                            >
+                                {submitting
+                                    ? <ActivityIndicator size="small" color="#fff" />
+                                    : <Ionicons name="checkmark-outline" size={17} color="#fff" />
+                                }
+                                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                                    {submitting ? 'جاري...' : 'تأكيد'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => setPayingId(null)}
+                                activeOpacity={0.75}
+                                style={{
+                                    flex: 1, flexDirection: 'row-reverse',
+                                    justifyContent: 'center', alignItems: 'center', gap: 6,
+                                    backgroundColor: C.card, borderRadius: Radius.xs,
+                                    paddingVertical: 11,
+                                    borderWidth: 1, borderColor: C.border,
+                                }}
+                            >
+                                <Ionicons name="close-outline" size={17} color={C.mutedForeground} />
+                                <Text style={{ color: C.foreground, fontWeight: '600', fontSize: 14 }}>إلغاء</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
             </View>
         );
     };
@@ -284,39 +281,55 @@ export default function DebtsScreen() {
             <View style={{
                 backgroundColor: C.background,
                 paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
-                borderBottomWidth: 1, borderBottomColor: C.border,
             }}>
-                {/* Summary card */}
+                {/* Hero summary */}
                 {!loading && debtors.length > 0 && (
                     <View style={{
-                        flexDirection: 'row-reverse', alignItems: 'center',
-                        backgroundColor: C.card, borderRadius: 5,
-                        borderWidth: 1, borderColor: C.border,
-                        padding: 14, marginBottom: 12, gap: 12,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+                        borderRadius: Radius.sm, marginBottom: 12,
+                        shadowColor: C.primary, shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: isDarkMode ? 0.4 : 0.25, shadowRadius: 14, elevation: 6,
                     }}>
-                        <View style={{
-                            width: 44, height: 44, borderRadius: 5,
-                            backgroundColor: C.dangerBg,
-                            justifyContent: 'center', alignItems: 'center', flexShrink: 0,
-                        }}>
-                            <Ionicons name="book-outline" size={21} color={C.danger} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginBottom: 2 }}>
-                                إجمالي الديون المستحقة
-                            </Text>
-                            <Text style={{ color: C.danger, fontWeight: '900', fontSize: 20, textAlign: 'right' }}>
-                                {totalDebt.toLocaleString('en-US')} <Text style={{ fontSize: 13, fontWeight: '600' }}>د.ع</Text>
-                            </Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '900' }}>
-                                {debtors.length}
-                            </Text>
-                            <Text style={{ color: C.mutedForeground, fontSize: 10 }}>مدين</Text>
+                        <View style={{ borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: C.primary, padding: 16 }}>
+                            {/* Top: label + debtor count */}
+                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                                    <View style={{ width: 30, height: 30, borderRadius: Radius.xs, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Ionicons name="book-outline" size={16} color="#fff" />
+                                    </View>
+                                    <Text style={{ color: '#fff', fontSize: 12.5, fontWeight: '800' }}>إجمالي الديون المستحقة</Text>
+                                </View>
+                                <View style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: Radius.xs, paddingHorizontal: 10, paddingVertical: 4 }}>
+                                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{debtors.length} مدين</Text>
+                                </View>
+                            </View>
+
+                            {/* Total */}
+                            <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 5 }}>
+                                    <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900', letterSpacing: 0.3 }}>
+                                        {totalDebt.toLocaleString('en-US')}
+                                    </Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '700' }}>د.ع</Text>
+                                </View>
+                            </View>
+
+                            {/* Urgency breakdown */}
+                            <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 12 }}>
+                                {[
+                                    { label: 'مرتفع', count: highCount, dot: C.danger },
+                                    { label: 'متوسط', count: medCount,  dot: C.warning },
+                                    { label: 'منخفض', count: lowCount,  dot: '#fff' },
+                                ].map(b => (
+                                    <View key={b.label} style={{
+                                        flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                        backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: Radius.xs, paddingVertical: 7,
+                                    }}>
+                                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: b.dot }} />
+                                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{b.label}</Text>
+                                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '800' }}>{b.count}</Text>
+                                    </View>
+                                ))}
+                            </View>
                         </View>
                     </View>
                 )}
@@ -324,7 +337,7 @@ export default function DebtsScreen() {
                 {/* Search */}
                 <View style={{
                     flexDirection: 'row-reverse', alignItems: 'center',
-                    backgroundColor: C.input, borderRadius: 5,
+                    backgroundColor: C.input, borderRadius: Radius.xs,
                     borderWidth: 1, borderColor: C.border,
                     paddingHorizontal: 12, gap: 8,
                 }}>
@@ -347,27 +360,98 @@ export default function DebtsScreen() {
             {/* ── List ─────────────────────────────────────────────────────── */}
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 12 }}>
-                    <Skeleton height={70} radius={5} />
-                    {[1, 2, 3].map(i => <Skeleton key={i} height={160} radius={5} />)}
+                    <Skeleton height={130} radius={Radius.sm} />
+                    {[1, 2, 3].map(i => <Skeleton key={i} height={160} radius={Radius.sm} />)}
                 </View>
             ) : (
                 <FlatList
                     data={filtered}
                     keyExtractor={item => item.id}
                     renderItem={renderDebtor}
-                    contentContainerStyle={{ padding: 16, paddingBottom: 110 }}
+                    contentContainerStyle={{ padding: 16, paddingBottom: 110, flexGrow: 1 }}
                     refreshControl={
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />
                     }
                     ListEmptyComponent={
-                        <EmptyState
-                            icon="book-outline"
-                            title="لا توجد ديون"
-                            subtitle={search ? 'لا توجد نتائج للبحث' : 'جميع الحسابات مُسوَّاة'}
-                        />
+                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingBottom: 40 }}>
+                            {/* Layered icon */}
+                            <View style={{
+                                width: 104, height: 104, borderRadius: 52,
+                                backgroundColor: search ? C.primaryMuted : C.successBg,
+                                alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+                            }}>
+                                <View style={{
+                                    width: 74, height: 74, borderRadius: 37,
+                                    backgroundColor: C.card,
+                                    alignItems: 'center', justifyContent: 'center',
+                                    borderWidth: 1.5, borderColor: search ? `${C.primary}33` : `${C.success}33`,
+                                }}>
+                                    <Ionicons
+                                        name={search ? 'search-outline' : 'checkmark-done'}
+                                        size={36}
+                                        color={search ? C.primary : C.success}
+                                    />
+                                </View>
+                            </View>
+
+                            <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '900', textAlign: 'center' }}>
+                                {search ? 'لا توجد نتائج' : 'جميع الحسابات مُسوَّاة'}
+                            </Text>
+                            <Text style={{ color: C.mutedForeground, fontSize: 14, textAlign: 'center', lineHeight: 21, marginTop: 6 }}>
+                                {search
+                                    ? `لا يوجد مدين يطابق "${search}"`
+                                    : 'لا توجد ديون مستحقة حالياً — كل المبالغ محصّلة 🎉'}
+                            </Text>
+                        </View>
                     }
                 />
             )}
+
+            {/* ── Payment success modal ───────────────────────────────────── */}
+            <Modal
+                visible={paidAmount !== null}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setPaidAmount(null)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 28 }}>
+                    <View style={{ backgroundColor: C.card, borderRadius: Radius.sm, padding: 24, alignItems: 'center' }}>
+                        {/* Success icon */}
+                        <View style={{ width: 66, height: 66, borderRadius: 33, backgroundColor: C.successBg, alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                            <Ionicons name="checkmark-circle" size={42} color={C.success} />
+                        </View>
+
+                        <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '900', marginBottom: 4 }}>
+                            تمت الدفعة بنجاح
+                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13, marginBottom: 12 }}>
+                            تم تسجيل الدفعة في حساب العميل
+                        </Text>
+
+                        {/* Amount */}
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 4, marginBottom: 20 }}>
+                            <Text style={{ color: C.success, fontSize: 24, fontWeight: '900' }}>
+                                {(paidAmount ?? 0).toLocaleString('en-US')}
+                            </Text>
+                            <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: '700' }}>د.ع</Text>
+                        </View>
+
+                        {/* OK button */}
+                        <TouchableOpacity
+                            onPress={() => setPaidAmount(null)}
+                            activeOpacity={0.85}
+                            style={{
+                                width: '100%', flexDirection: 'row-reverse',
+                                justifyContent: 'center', alignItems: 'center', gap: 7,
+                                backgroundColor: C.primary, borderRadius: Radius.sm, paddingVertical: 14,
+                            }}
+                        >
+                            <Ionicons name="checkmark-outline" size={18} color="#fff" />
+                            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>موافق</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }

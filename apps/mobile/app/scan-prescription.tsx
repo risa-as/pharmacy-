@@ -1,16 +1,128 @@
 import React, { useState, useRef } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-    Image, ScrollView, Alert,
+    Image, ScrollView, Alert, useWindowDimensions, Modal, StatusBar, Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import * as ImageManipulator from 'expo-image-manipulator';
+import {
+    PinchGestureHandler, PanGestureHandler, TapGestureHandler,
+    GestureHandlerRootView, State,
+} from 'react-native-gesture-handler';
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../constants/colors';
 import { apiService } from '../services/api';
+
+// ── مشاهد الصورة بالتقريب والتحريك (Animated فقط — يعمل في Expo Go) ─────────
+function ImageZoomModal({ uri, onClose }: { uri: string; onClose: () => void }) {
+    const { width, height } = useWindowDimensions();
+
+    const baseScale  = useRef(new Animated.Value(1)).current;
+    const pinchScale = useRef(new Animated.Value(1)).current;
+    const scale      = Animated.multiply(baseScale, pinchScale);
+    const savedScale = useRef(1);
+
+    const transX      = useRef(new Animated.Value(0)).current;
+    const transY      = useRef(new Animated.Value(0)).current;
+    const savedX      = useRef(0);
+    const savedY      = useRef(0);
+
+    const pinchRef = useRef<any>(null);
+    const panRef   = useRef<any>(null);
+    const tapRef   = useRef<any>(null);
+
+    const onPinchEvent = Animated.event([{ nativeEvent: { scale: pinchScale } }], { useNativeDriver: true });
+
+    const onPinchStateChange = (e: any) => {
+        if (e.nativeEvent.oldState === State.ACTIVE) {
+            const newScale = Math.min(Math.max(savedScale.current * e.nativeEvent.scale, 1), 5);
+            savedScale.current = newScale;
+            pinchScale.setValue(1);
+            baseScale.setValue(newScale);
+            if (newScale <= 1) {
+                Animated.spring(transX, { toValue: 0, useNativeDriver: true }).start();
+                Animated.spring(transY, { toValue: 0, useNativeDriver: true }).start();
+                savedX.current = 0;
+                savedY.current = 0;
+            }
+        }
+    };
+
+    const onPanEvent = Animated.event(
+        [{ nativeEvent: { translationX: transX, translationY: transY } }],
+        { useNativeDriver: true },
+    );
+
+    const onPanStateChange = (e: any) => {
+        if (e.nativeEvent.oldState === State.ACTIVE) {
+            savedX.current += e.nativeEvent.translationX;
+            savedY.current += e.nativeEvent.translationY;
+            transX.setOffset(savedX.current);
+            transY.setOffset(savedY.current);
+            transX.setValue(0);
+            transY.setValue(0);
+        }
+    };
+
+    const onDoubleTap = (e: any) => {
+        if (e.nativeEvent.state === State.ACTIVE) {
+            savedScale.current = 1;
+            baseScale.setValue(1);
+            pinchScale.setValue(1);
+            Animated.spring(transX, { toValue: 0, useNativeDriver: true }).start();
+            Animated.spring(transY, { toValue: 0, useNativeDriver: true }).start();
+            transX.setOffset(0); transY.setOffset(0);
+            savedX.current = 0; savedY.current = 0;
+        }
+    };
+
+    return (
+        <Modal visible animationType="fade" transparent statusBarTranslucent>
+            <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000000ee', justifyContent: 'center', alignItems: 'center' }}>
+                <StatusBar hidden />
+                <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+                <TapGestureHandler ref={tapRef} numberOfTaps={2} onHandlerStateChange={onDoubleTap}>
+                    <Animated.View>
+                        <PanGestureHandler
+                            ref={panRef}
+                            simultaneousHandlers={pinchRef}
+                            onGestureEvent={onPanEvent}
+                            onHandlerStateChange={onPanStateChange}
+                            avgTouches
+                        >
+                            <Animated.View>
+                                <PinchGestureHandler
+                                    ref={pinchRef}
+                                    simultaneousHandlers={panRef}
+                                    onGestureEvent={onPinchEvent}
+                                    onHandlerStateChange={onPinchStateChange}
+                                >
+                                    <Animated.Image
+                                        source={{ uri }}
+                                        style={{
+                                            width, height: height * 0.85,
+                                            resizeMode: 'contain',
+                                            transform: [{ scale }, { translateX: transX }, { translateY: transY }],
+                                        }}
+                                    />
+                                </PinchGestureHandler>
+                            </Animated.View>
+                        </PanGestureHandler>
+                    </Animated.View>
+                </TapGestureHandler>
+                <TouchableOpacity
+                    onPress={onClose}
+                    style={{ position: 'absolute', top: 50, right: 20, backgroundColor: '#00000088', borderRadius: 20, padding: 8 }}
+                >
+                    <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+            </GestureHandlerRootView>
+        </Modal>
+    );
+}
 
 // مفتاح AsyncStorage لتمرير الأدوية المحددة إلى شاشة المبيعات
 export const PRESCRIPTION_DRUGS_KEY = 'pendingPrescriptionDrugs';
@@ -22,15 +134,24 @@ const FRAME_HEIGHT_RATIO = 0.60;
 export default function ScanPrescriptionScreen() {
     const { isDarkMode } = useTheme();
     const C = Colors(isDarkMode);
+    const { width: screenW, height: screenH } = useWindowDimensions();
     const [permission, requestPermission] = useCameraPermissions();
     const cameraRef = useRef<CameraView>(null);
 
     const [loading, setLoading]           = useState(false);
     const [photoUri, setPhotoUri]         = useState<string | null>(null);
+    const [croppedUri, setCroppedUri]     = useState<string | null>(null);
+    const [zoomVisible, setZoomVisible]   = useState(false);
     const [rawText, setRawText]           = useState<string>('');
     const [suggestions, setSuggestions]   = useState<any[]>([]);
     const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
     const [step, setStep]                 = useState<'camera' | 'review'>('camera');
+    const [scanUsage, setScanUsage]       = useState<{ limit: number; used: number; remaining: number } | null>(null);
+
+    // جلب حالة الاستخدام عند فتح الشاشة
+    React.useEffect(() => {
+        apiService.getScanUsage().then(setScanUsage);
+    }, []);
 
     if (!permission) return <View style={{ flex: 1, backgroundColor: C.background }} />;
     if (!permission.granted) {
@@ -49,20 +170,50 @@ export default function ScanPrescriptionScreen() {
         );
     }
 
-    // ── قص الصورة لتطابق الإطار الأزرق ──────────────────────────────────────
-    const cropToFrame = async (uri: string): Promise<string> => {
+    // ── قص الصورة لتطابق الإطار الأزرق بدقة ────────────────────────────────
+    const cropToFrame = async (uri: string): Promise<{ base64: string; croppedUri: string }> => {
         const info = await ImageManipulator.manipulateAsync(uri, [], { base64: false });
-        const { width: imgW, height: imgH } = info;
-        const cropW    = Math.round(imgW * FRAME_WIDTH_RATIO);
-        const cropH    = Math.round(imgH * FRAME_HEIGHT_RATIO);
-        const originX  = Math.round((imgW - cropW) / 2);
-        const originY  = Math.round((imgH - cropH) / 2);
-        const cropped  = await ImageManipulator.manipulateAsync(
-            uri,
+        let { width: imgW, height: imgH } = info;
+        let processUri = uri;
+
+        // إذا التقطت الصورة أفقياً (الهاتف مُدوَّر) نُدوِّرها لتطابق الشاشة الرأسية
+        if (imgW > imgH) {
+            const rotated = await ImageManipulator.manipulateAsync(
+                uri,
+                [{ rotate: 90 }],
+                { compress: 1, format: ImageManipulator.SaveFormat.JPEG },
+            );
+            processUri = rotated.uri;
+            [imgW, imgH] = [imgH, imgW];
+        }
+
+        const screenRatio = screenW / screenH;
+        const imageRatio  = imgW / imgH;
+
+        let visW: number, visH: number, visX: number, visY: number;
+        if (imageRatio > screenRatio) {
+            visH = imgH;
+            visW = Math.round(imgH * screenRatio);
+            visX = Math.round((imgW - visW) / 2);
+            visY = 0;
+        } else {
+            visW = imgW;
+            visH = Math.round(imgW / screenRatio);
+            visX = 0;
+            visY = Math.round((imgH - visH) / 2);
+        }
+
+        const cropW   = Math.round(visW * FRAME_WIDTH_RATIO);
+        const cropH   = Math.round(visH * FRAME_HEIGHT_RATIO);
+        const originX = visX + Math.round((visW - cropW) / 2);
+        const originY = visY + Math.round((visH - cropH) / 2);
+
+        const cropped = await ImageManipulator.manipulateAsync(
+            processUri,
             [{ crop: { originX, originY, width: cropW, height: cropH } }],
             { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
         );
-        return cropped.base64!;
+        return { base64: cropped.base64!, croppedUri: cropped.uri };
     };
 
     // ── التقاط الصورة من الكاميرا ────────────────────────────────────────────
@@ -73,8 +224,9 @@ export default function ScanPrescriptionScreen() {
                 const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
                 if (photo?.uri) {
                     setPhotoUri(photo.uri);
-                    const croppedBase64 = await cropToFrame(photo.uri);
-                    processImage(croppedBase64);
+                    const { base64, croppedUri } = await cropToFrame(photo.uri);
+                    setCroppedUri(croppedUri);
+                    processImage(base64);
                 } else {
                     setLoading(false);
                 }
@@ -103,6 +255,7 @@ export default function ScanPrescriptionScreen() {
             if (!result.canceled && result.assets?.[0]?.base64) {
                 setLoading(true);
                 setPhotoUri(result.assets[0].uri);
+                setCroppedUri(result.assets[0].uri);
                 processImage(result.assets[0].base64);
             } else if (!result.canceled) {
                 Alert.alert('خطأ', 'فشل قراءة الصورة');
@@ -131,6 +284,8 @@ export default function ScanPrescriptionScreen() {
             // تحديد الأدوية المتوفرة فقط تلقائياً
             setSelectedIds(new Set(sugg.filter((s: any) => s.inStock !== false).map((s: any) => s.id)));
             setStep('review');
+            // تحديث عداد الاستخدام بعد المسح الناجح
+            apiService.getScanUsage().then(setScanUsage);
         } catch (error: any) {
             Alert.alert('خطأ', error.message || 'حدث خطأ أثناء تحليل الصورة');
             setPhotoUri(null);
@@ -182,8 +337,22 @@ export default function ScanPrescriptionScreen() {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 110 : 30 }}
                 >
-                    {photoUri && (
-                        <Image source={{ uri: photoUri }} style={{ width: '100%', height: 180, resizeMode: 'cover' }} />
+                    {croppedUri && (
+                        <>
+                            <TouchableOpacity activeOpacity={0.9} onPress={() => setZoomVisible(true)}>
+                                <Image source={{ uri: croppedUri }} style={{ width: '100%', height: 180, resizeMode: 'cover' }} />
+                                <View style={{
+                                    position: 'absolute', bottom: 8, right: 8,
+                                    backgroundColor: '#00000066', borderRadius: 14, padding: 6,
+                                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                                }}>
+                                    <Ionicons name="expand-outline" size={16} color="#fff" />
+                                </View>
+                            </TouchableOpacity>
+                            {zoomVisible && (
+                                <ImageZoomModal uri={croppedUri} onClose={() => setZoomVisible(false)} />
+                            )}
+                        </>
                     )}
 
                     {/* النص المقروء */}
@@ -354,11 +523,31 @@ export default function ScanPrescriptionScreen() {
     // ════════════════════════════════════════════════════════════════════════════
     return (
         <View style={{ flex: 1 }}>
-            <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 10, flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16 }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 8 }}>
-                    <Ionicons name="close" size={28} color="#fff" />
-                </TouchableOpacity>
-                <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginRight: 16 }}>تصوير الوصفة (AI)</Text>
+            {/* شريط العنوان + مؤشر الاستخدام — متكدسان رأسياً */}
+            <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 10, alignItems: 'center', gap: 8 }}>
+                {/* صف العنوان وزر الإغلاق */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', width: '100%', paddingHorizontal: 16 }}>
+                    <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 8 }}>
+                        <Ionicons name="close" size={28} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginRight: 16 }}>تصوير الوصفة (AI)</Text>
+                </View>
+
+                {/* مؤشر الاستخدام اليومي */}
+                {scanUsage && (
+                    <View style={{
+                        backgroundColor: scanUsage.remaining === 0 ? 'rgba(220,38,38,0.85)' : 'rgba(0,0,0,0.6)',
+                        paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20,
+                        flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+                    }}>
+                        <Ionicons name="scan" size={14} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
+                            {scanUsage.remaining === 0
+                                ? 'نفذت مسوحات اليوم — تتجدد منتصف الليل'
+                                : `${scanUsage.remaining} من ${scanUsage.limit} مسح متبقٍ اليوم`}
+                        </Text>
+                    </View>
+                )}
             </View>
 
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} autofocus={'on'} />
@@ -382,28 +571,33 @@ export default function ScanPrescriptionScreen() {
             </View>
 
             {/* أزرار الكاميرا */}
-            <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 30 }}>
-                <TouchableOpacity
-                    style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
-                    onPress={pickImage}
-                    disabled={loading}
-                >
-                    <Ionicons name="images" size={28} color="#fff" />
-                </TouchableOpacity>
+            {(() => {
+                const limitReached = scanUsage !== null && scanUsage.remaining === 0;
+                return (
+                    <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 30 }}>
+                        <TouchableOpacity
+                            style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', opacity: limitReached ? 0.4 : 1 }}
+                            onPress={pickImage}
+                            disabled={loading || limitReached}
+                        >
+                            <Ionicons name="images" size={28} color="#fff" />
+                        </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: '#fff', padding: 4, justifyContent: 'center', alignItems: 'center', opacity: loading ? 0.8 : 1 }}
-                    onPress={takePicture}
-                    disabled={loading}
-                >
-                    {loading
-                        ? <ActivityIndicator color={C.primary} size="large" />
-                        : <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.primary }} />
-                    }
-                </TouchableOpacity>
+                        <TouchableOpacity
+                            style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: '#fff', padding: 4, justifyContent: 'center', alignItems: 'center', opacity: (loading || limitReached) ? 0.4 : 1 }}
+                            onPress={takePicture}
+                            disabled={loading || limitReached}
+                        >
+                            {loading
+                                ? <ActivityIndicator color={C.primary} size="large" />
+                                : <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: limitReached ? '#9ca3af' : C.primary }} />
+                            }
+                        </TouchableOpacity>
 
-                <View style={{ width: 50, height: 50 }} />
-            </View>
+                        <View style={{ width: 50, height: 50 }} />
+                    </View>
+                );
+            })()}
 
             {loading && (
                 <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', zIndex: 20 }]}>

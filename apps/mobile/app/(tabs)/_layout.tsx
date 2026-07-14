@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { pollingService } from '../../services/polling';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSyncStatus } from '../../context/SyncContext';
-import { Colors } from '../../constants/colors';
+import { Colors, managerPalette, Radius } from '../../constants/colors';
 
 // Relative time helper (Arabic)
 function timeAgoAr(date: Date): string {
@@ -20,60 +20,90 @@ function timeAgoAr(date: Date): string {
     return `منذ ${Math.floor(hrs / 24)} ي`;
 }
 
-// Custom Header — sync status dot + آخر تحديث label
+// Custom Header — page title + sync status ("آخر تحديث") + user avatar.
 const CustomHeader = ({ title }: { title: string }) => {
     const { isDarkMode } = useTheme();
     const { isSyncing, lastSyncedAt } = useSyncStatus();
-    const C = Colors(isDarkMode);
+    const { user } = useAuth();
+    const C = managerPalette(isDarkMode);
 
     // Most recent sync across all tracked keys
     const lastSync = Object.values(lastSyncedAt)
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
-    const dotColor = isSyncing ? C.warning : lastSync ? C.success : C.border;
-    const syncLabel = isSyncing
-        ? 'جاري التحديث...'
-        : lastSync
-            ? `آخر تحديث: ${timeAgoAr(lastSync)}`
-            : '';
+    const synced = !isSyncing && !!lastSync;
+    const chipColor = isSyncing ? C.warning : synced ? C.success : C.mutedForeground;
+    const chipBg    = isSyncing ? C.warningBg : synced ? C.successBg : C.input;
+    const chipIcon: keyof typeof Ionicons.glyphMap = isSyncing ? 'sync-outline' : synced ? 'cloud-done-outline' : 'cloud-offline-outline';
+    const syncLabel = isSyncing ? 'جاري التحديث' : synced ? `آخر تحديث ${timeAgoAr(lastSync)}` : 'غير محدّث';
+
+    const initial = user?.name?.trim().charAt(0).toUpperCase() ?? '';
 
     return (
         <View
             style={{
                 backgroundColor: C.card,
-                paddingTop: Platform.OS === 'android' ? 40 : 50,
-                paddingBottom: syncLabel ? 12 : 16,
+                paddingTop: Platform.OS === 'android' ? 38 : 50,
+                paddingBottom: 14,
                 paddingHorizontal: 20,
                 borderBottomWidth: 1,
                 borderBottomColor: C.border,
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 2,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.04,
+                shadowRadius: 6,
                 elevation: 2,
                 zIndex: 100,
             }}
         >
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 22, fontWeight: 'bold', color: C.foreground }}>{title}</Text>
+                {/* Title + sync chip */}
+                <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 22, fontWeight: '900', color: C.foreground, textAlign: 'right', letterSpacing: 0.2 }}>
+                        {title}
+                    </Text>
+                    <View style={{
+                        flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
+                        alignSelf: 'flex-end', marginTop: 6,
+                        backgroundColor: chipBg, borderRadius: Radius.xs,
+                        paddingHorizontal: 8, paddingVertical: 4,
+                    }}>
+                        <Ionicons name={chipIcon} size={11} color={chipColor} />
+                        <Text style={{ color: chipColor, fontSize: 10.5, fontWeight: '700' }}>{syncLabel}</Text>
+                    </View>
+                </View>
+
+                {/* Avatar → settings */}
                 <TouchableOpacity
-                    style={{ padding: 4, backgroundColor: C.primaryMuted, borderRadius: 50 }}
+                    onPress={() => router.push('/(tabs)/settings' as any)}
+                    activeOpacity={0.8}
+                    style={{
+                        width: 44, height: 44, borderRadius: Radius.sm,
+                        backgroundColor: C.primary,
+                        alignItems: 'center', justifyContent: 'center',
+                        shadowColor: C.primary, shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+                    }}
                 >
-                    <Ionicons name="person-circle-outline" size={32} color={C.primary} />
+                    {initial
+                        ? <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{initial}</Text>
+                        : <Ionicons name="person" size={20} color="#fff" />}
+                    {/* Presence dot */}
+                    <View style={{
+                        position: 'absolute', bottom: -2, left: -2,
+                        width: 14, height: 14, borderRadius: 7,
+                        backgroundColor: C.success, borderWidth: 2.5, borderColor: C.card,
+                    }} />
                 </TouchableOpacity>
             </View>
-            {syncLabel ? (
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, marginTop: 5 }}>
-                    <View style={{
-                        width: 7, height: 7, borderRadius: 4,
-                        backgroundColor: dotColor,
-                    }} />
-                    <Text style={{ color: C.mutedForeground, fontSize: 11 }}>{syncLabel}</Text>
-                </View>
-            ) : null}
         </View>
     );
 };
+
+/** Tab icon — active glyph is slightly larger and tinted with the brand colour. */
+function TabBarIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: string; focused: boolean }) {
+    return <Ionicons name={name} size={focused ? 24 : 22} color={color} />;
+}
 
 export default function TabLayout() {
     const [alertsCount, setAlertsCount] = useState(0);
@@ -82,6 +112,8 @@ export default function TabLayout() {
     const insets = useSafeAreaInsets();
     const { markSynced, setSyncing, registerTrigger } = useSyncStatus();
     const C = Colors(isDarkMode);
+    // Medical-blue brand accent for the navigation bar (matches manager dashboard).
+    const brand = isDarkMode ? '#3B8FD6' : '#1E6FBF';
 
     useEffect(() => {
         if (isLoading) return;
@@ -130,7 +162,7 @@ export default function TabLayout() {
             screenOptions={{
                 headerShown: true,
                 header: ({ options }) => <CustomHeader title={options.title || ''} />,
-                tabBarActiveTintColor: C.primary,
+                tabBarActiveTintColor: brand,
                 tabBarInactiveTintColor: C.mutedForeground,
                 tabBarStyle: {
                     backgroundColor: C.card,
@@ -138,12 +170,12 @@ export default function TabLayout() {
                     borderTopColor: C.border,
                     elevation: 0,
                     shadowColor: '#000',
-                    shadowOpacity: 0.06,
-                    shadowRadius: 8,
-                    shadowOffset: { width: 0, height: -2 },
-                    height: 54 + insets.bottom,
-                    paddingBottom: insets.bottom + 4,
-                    paddingTop: 6,
+                    shadowOpacity: 0.08,
+                    shadowRadius: 12,
+                    shadowOffset: { width: 0, height: -3 },
+                    height: 60 + insets.bottom,
+                    paddingBottom: insets.bottom + 8,
+                    paddingTop: 8,
                 },
                 tabBarItemStyle: {
                     justifyContent: 'center',
@@ -151,7 +183,8 @@ export default function TabLayout() {
                 },
                 tabBarLabelStyle: {
                     fontSize: 10,
-                    marginTop: 4,
+                    fontWeight: '700',
+                    marginTop: 3,
                 },
             }}
         >
@@ -159,8 +192,8 @@ export default function TabLayout() {
                 name="index"
                 options={{
                     title: 'الرئيسية',
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="home" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="home" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -171,8 +204,8 @@ export default function TabLayout() {
                 options={{
                     title: 'التقارير',
                     href: isPharmacist ? null : '/reports',
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="stats-chart" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="stats-chart" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -182,8 +215,8 @@ export default function TabLayout() {
                 options={{
                     title: 'نقطة بيع',
                     href: isPharmacist ? '/sales' : null,
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="cart" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="cart" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -193,8 +226,8 @@ export default function TabLayout() {
                 options={{
                     title: 'الديون',
                     href: isPharmacist ? '/debts' : null,
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="book" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="book" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -203,8 +236,8 @@ export default function TabLayout() {
                 name="inventory"
                 options={{
                     title: 'المخزون',
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="cube" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="cube" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -215,8 +248,8 @@ export default function TabLayout() {
                     title: 'تنبيهات',
                     href: '/alerts',
                     tabBarBadge: alertsCount > 0 ? alertsCount : undefined,
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="notifications" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="notifications" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -226,8 +259,8 @@ export default function TabLayout() {
                 options={{
                     title: 'الطلبات',
                     href: isPharmacist ? null : '/smart-orders',
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="bulb" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="bulb" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -237,8 +270,8 @@ export default function TabLayout() {
                 options={{
                     title: 'المشتريات',
                     href: isPharmacist ? null : '/purchases',
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="receipt" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="receipt" color={color} focused={focused} />
                     ),
                 }}
             />
@@ -247,8 +280,8 @@ export default function TabLayout() {
                 name="settings"
                 options={{
                     title: 'الإعدادات',
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="settings" size={size} color={color} />
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon name="settings" color={color} focused={focused} />
                     ),
                 }}
             />

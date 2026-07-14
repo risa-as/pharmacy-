@@ -496,7 +496,7 @@ export default function TenantsPage() {
         {manualPayModal}
         {trialModal}
         {detailsModal}
-        <div className="glass-card p-6 space-y-6" dir="rtl" style={{backdropFilter: 'none', WebkitBackdropFilter: 'none'}}>
+        <div className="glass-card p-6 space-y-6" dir="rtl">
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-foreground">🏢 إدارة المؤسسات (SaaS)</h1>
                 <button onClick={() => {

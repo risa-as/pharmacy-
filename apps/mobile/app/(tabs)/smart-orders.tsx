@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import { apiService } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette, Radius } from '../../constants/colors';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
@@ -51,7 +51,7 @@ function getUrgency(item: SmartOrderItem): 'critical' | 'low' {
 export default function SmartOrdersScreen() {
     const { isDarkMode } = useTheme();
     const { isAdmin, branchId: authBranchId } = useAuth();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
 
     // ── Main list state ───────────────────────────────────────────────────────
     const [items, setItems]             = useState<SmartOrderItem[]>([]);
@@ -207,147 +207,136 @@ export default function SmartOrdersScreen() {
         const accentColor = isCritical ? C.danger : C.warning;
         const accentBg    = isCritical ? C.dangerBg : C.warningBg;
         const days        = item.daysUntilStockout;
+        const subtitle    = [item.drug?.scientificName, item.branch?.name].filter(Boolean).join('  ·  ');
+        const daysColor   = days === undefined ? C.mutedForeground : days <= 3 ? C.danger : days <= 7 ? C.warning : C.primary;
+        const daysBg      = days === undefined ? C.border : days <= 3 ? C.dangerBg : days <= 7 ? C.warningBg : C.primaryMuted;
 
         return (
             <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => toggleSelect(item.id)}
                 style={{
-                    flexDirection: 'row-reverse',
-                    backgroundColor: isSelected
-                        ? (isCritical ? `${C.danger}12` : `${C.warning}12`)
-                        : C.card,
-                    borderRadius: 5,
-                    marginBottom: 10,
-                    borderWidth: 1.5,
-                    borderColor: isSelected ? accentColor : C.border,
-                    overflow: 'hidden',
-                    elevation: isSelected ? 3 : 1,
-                    shadowColor: accentColor,
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isSelected ? 0.15 : 0.05,
-                    shadowRadius: 6,
+                    backgroundColor: C.card,
+                    borderRadius: Radius.sm,
+                    marginBottom: 12,
+                    borderWidth: isSelected ? 2 : 1.5,
+                    borderColor: isSelected ? accentColor : `${accentColor}40`,
+                    padding: 14,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 8,
+                    elevation: isSelected ? 2 : 1,
                 }}
             >
-                {/* Accent bar */}
-                <View style={{ width: 4, backgroundColor: accentColor }} />
-
-                <View style={{ flex: 1, padding: 13 }}>
-                    {/* Row 1: name + urgency badge + checkbox */}
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-                        {/* Checkbox */}
-                        <View style={{
-                            width: 22, height: 22, borderRadius: 5,
-                            borderWidth: 2, borderColor: isSelected ? accentColor : C.border,
-                            backgroundColor: isSelected ? accentColor : 'transparent',
-                            justifyContent: 'center', alignItems: 'center', flexShrink: 0,
-                        }}>
-                            {isSelected && <Ionicons name="checkmark" size={13} color="#fff" />}
-                        </View>
-
-                        {/* Drug info */}
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
-                                {item.drug?.tradeName ?? 'دواء غير محدد'}
-                            </Text>
-                            {item.drug?.scientificName && (
-                                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }}>
-                                    {item.drug.scientificName}
-                                </Text>
-                            )}
-                            {item.branch?.name && (
-                                <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 1 }}>
-                                    {item.branch.name}
-                                </Text>
-                            )}
-                        </View>
-
-                        {/* Urgency badge */}
-                        <View style={{
-                            backgroundColor: accentBg, borderRadius: 5,
-                            paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0,
-                        }}>
-                            <Text style={{ color: accentColor, fontSize: 11, fontWeight: '800' }}>
-                                {isCritical ? '⚠ عاجل' : 'مراقبة'}
-                            </Text>
-                        </View>
+                {/* ── Header: checkbox + name/subtitle + urgency pill ── */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    {/* Checkbox */}
+                    <View style={{
+                        width: 22, height: 22, borderRadius: Radius.xs,
+                        borderWidth: 2, borderColor: isSelected ? accentColor : C.border,
+                        backgroundColor: isSelected ? accentColor : 'transparent',
+                        justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+                    }}>
+                        {isSelected && <Ionicons name="checkmark" size={13} color="#fff" />}
                     </View>
 
-                    {/* Row 2: stock stats */}
-                    <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
-                        <View style={{
-                            flex: 1, backgroundColor: accentBg, borderRadius: 5,
-                            padding: 10, alignItems: 'center',
-                        }}>
-                            <Text style={{ color: accentColor, fontSize: 22, fontWeight: '900' }}>
-                                {item.currentQuantity}
+                    {/* Drug info */}
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
+                            {item.drug?.tradeName ?? 'دواء غير محدد'}
+                        </Text>
+                        {!!subtitle && (
+                            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>
+                                {subtitle}
                             </Text>
-                            <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 2 }}>
-                                المخزون الحالي
-                            </Text>
-                        </View>
+                        )}
+                    </View>
 
-                        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-                            <Ionicons name="arrow-back" size={18} color={C.mutedForeground} />
-                        </View>
+                    {/* Urgency pill */}
+                    <View style={{
+                        flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
+                        backgroundColor: accentBg, borderRadius: Radius.xs,
+                        paddingHorizontal: 9, paddingVertical: 5, flexShrink: 0,
+                    }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accentColor }} />
+                        <Text style={{ color: accentColor, fontSize: 11, fontWeight: '800' }}>
+                            {isCritical ? 'عاجل' : 'مراقبة'}
+                        </Text>
+                    </View>
+                </View>
 
-                        <View style={{
-                            flex: 1, backgroundColor: C.successBg, borderRadius: 5,
-                            padding: 10, alignItems: 'center',
-                        }}>
-                            <Text style={{ color: C.success, fontSize: 22, fontWeight: '900' }}>
+                {/* ── Reorder flow: current → suggested (one unified panel) ── */}
+                <View style={{
+                    flexDirection: 'row-reverse', alignItems: 'center',
+                    backgroundColor: C.background, borderRadius: Radius.xs,
+                    borderWidth: 1, borderColor: C.border,
+                    paddingVertical: 12, paddingHorizontal: 14, marginBottom: 12,
+                }}>
+                    {/* Current */}
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 10.5, fontWeight: '600', marginBottom: 4 }}>
+                            المخزون الحالي
+                        </Text>
+                        <Text style={{ color: accentColor, fontSize: 24, fontWeight: '900' }}>
+                            {item.currentQuantity}
+                        </Text>
+                    </View>
+
+                    {/* Arrow */}
+                    <View style={{
+                        width: 30, height: 30, borderRadius: Radius.xs,
+                        backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center',
+                        marginHorizontal: 6,
+                    }}>
+                        <Ionicons name="arrow-back" size={16} color={C.primary} />
+                    </View>
+
+                    {/* Suggested */}
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 10.5, fontWeight: '600', marginBottom: 4 }}>
+                            الكمية المقترحة
+                        </Text>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 3 }}>
+                            <Text style={{ color: C.primary, fontSize: 24, fontWeight: '900' }}>
                                 {item.suggestedReorderQuantity}
                             </Text>
-                            <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 2 }}>
-                                الكمية المقترحة
-                            </Text>
+                            <Text style={{ color: C.mutedForeground, fontSize: 10, fontWeight: '700' }}>وحدة</Text>
                         </View>
                     </View>
+                </View>
 
-                    {/* Row 3: days until stockout + order button */}
-                    <View style={{
-                        flexDirection: 'row-reverse', justifyContent: 'space-between',
-                        alignItems: 'center', paddingTop: 10,
-                        borderTopWidth: 1, borderTopColor: C.border,
-                    }}>
-                        {days !== undefined ? (
-                            <View style={{
-                                flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
-                                backgroundColor: days <= 3 ? C.dangerBg : days <= 7 ? C.warningBg : C.infoBg,
-                                borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4,
-                            }}>
-                                <Ionicons
-                                    name="timer-outline"
-                                    size={12}
-                                    color={days <= 3 ? C.danger : days <= 7 ? C.warning : C.info}
-                                />
-                                <Text style={{
-                                    fontSize: 12, fontWeight: '700',
-                                    color: days <= 3 ? C.danger : days <= 7 ? C.warning : C.info,
-                                }}>
-                                    {days === 0 ? 'نفاد اليوم' : `${days} يوم للنفاد`}
-                                </Text>
-                            </View>
-                        ) : (
-                            <View />
-                        )}
-
-                        {/* Quick order button */}
-                        <TouchableOpacity
-                            onPress={() => openCreateModal(item)}
-                            activeOpacity={0.75}
-                            style={{
-                                flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-                                backgroundColor: C.primary, borderRadius: 5,
-                                paddingHorizontal: 12, paddingVertical: 7,
-                            }}
-                        >
-                            <Ionicons name="cart-outline" size={14} color="#fff" />
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-                                إنشاء طلب
+                {/* ── Footer: days + order button ── */}
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {days !== undefined ? (
+                        <View style={{
+                            flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
+                            backgroundColor: daysBg, borderRadius: Radius.xs, paddingHorizontal: 9, paddingVertical: 5,
+                        }}>
+                            <Ionicons name="timer-outline" size={12} color={daysColor} />
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: daysColor }}>
+                                {days === 0 ? 'نفاد اليوم' : `${days} يوم للنفاد`}
                             </Text>
-                        </TouchableOpacity>
-                    </View>
+                        </View>
+                    ) : (
+                        <View />
+                    )}
+
+                    {/* Quick order button */}
+                    <TouchableOpacity
+                        onPress={() => openCreateModal(item)}
+                        activeOpacity={0.85}
+                        style={{
+                            flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+                            backgroundColor: C.primary, borderRadius: Radius.xs,
+                            paddingHorizontal: 14, paddingVertical: 8,
+                        }}
+                    >
+                        <Ionicons name="cart-outline" size={15} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 12.5, fontWeight: '800' }}>
+                            إنشاء طلب
+                        </Text>
+                    </TouchableOpacity>
                 </View>
             </TouchableOpacity>
         );
@@ -495,8 +484,8 @@ export default function SmartOrdersScreen() {
             {/* ── Bottom action bar (multi-select) ───────────────────────── */}
             {selectedIds.size > 0 && (
                 <View style={{
-                    position: 'absolute', bottom: 80, left: 16, right: 16,
-                    backgroundColor: C.primary, borderRadius: 5,
+                    position: 'absolute', bottom: 12, left: 12, right: 12,
+                    backgroundColor: C.primary, borderRadius: Radius.sm,
                     padding: 14, flexDirection: 'row-reverse',
                     alignItems: 'center', justifyContent: 'space-between',
                     elevation: 8,

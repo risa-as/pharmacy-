@@ -9,11 +9,13 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { prisma, runMigrations } from "./db";
 import bcrypt from "bcryptjs";
+import { autoUpdater } from "electron-updater";
 import {
   startSyncService,
   getConnectionStatus,
   syncSales,
   syncProducts,
+  syncSuppliers,
   syncShifts,
   syncTransactions,
   syncDebtPayments,
@@ -24,6 +26,8 @@ import {
   pushAddBatchToCloud,
   pushUpdateInventoryToCloud,
   pushQuickSaleToggle,
+  allocateInvoiceNumber,
+  refreshOfflineToken,
 } from "./sync";
 import {
   createBackup,
@@ -31,7 +35,7 @@ import {
   getBackupList,
   cleanupOldBackups,
 } from "./backup";
-import { initBackupScheduler } from "./cloudBackup";
+import { initBackupScheduler, uploadBackup } from "./cloudBackup";
 import store from "./store";
 import { getApiCandidates, setApiBaseUrl } from "./api-config";
 import crypto from "crypto";
@@ -835,33 +839,131 @@ cIUKx7KdK9yNKScvEx0VoPjKouXQMkY+V50pm58uxKfZHQxf7r95v57X01Kzq/7E
  * Checks the offline JWT on every startup and screen wake.
  * Sends subscription:locked IPC event to the renderer if enforcement is needed.
  */
+// How long the desktop may keep operating offline since its last successful
+// online verification. Matches the server token's MAX_OFFLINE_DAYS so both
+// enforcement paths agree.
+const OFFLINE_GRACE_DAYS = 14;
+
 async function checkOfflineSubscription(): Promise<void> {
-  const rawToken = loadOfflineToken();
-  if (!rawToken) {
-    console.warn(
-      "[OfflineToken] No token found — subscription check skipped (first run or token missing).",
+  const lastSeenRaw = store.get("lastSeenAt") as string | undefined;
+  const lastSeenAt = lastSeenRaw ? new Date(lastSeenRaw) : null;
+
+  const lock = (reason: string, payload?: unknown) =>
+    BrowserWindow.getAllWindows().forEach((w) =>
+      w.webContents.send(
+        "subscription:locked",
+        payload ? { reason, payload } : { reason },
+      ),
     );
+  const unlock = () =>
+    BrowserWindow.getAllWindows().forEach((w) =>
+      w.webContents.send("subscription:unlocked"),
+    );
+
+  // Are we still within the offline grace window since the last verified
+  // online check-in? (lastSeenAt is only stamped after a successful, licensed
+  // online token fetch — so its mere existence proves the device was genuine.)
+  const daysSinceSeen = lastSeenAt
+    ? (Date.now() - lastSeenAt.getTime()) / 86_400_000
+    : Infinity;
+  const withinOfflineWindow = daysSinceSeen >= 0 && daysSinceSeen <= OFFLINE_GRACE_DAYS;
+
+  const rawToken = loadOfflineToken();
+
+  // ── Ambiguous cases: token missing or unverifiable ──────────────────────────
+  // These previously hard-locked with a "subscription suspended / couldn't
+  // verify" screen, which wrongly locked paying pharmacies out of an OFFLINE POS
+  // over a missing cache file, clock skew, or an expired-but-recent token. We
+  // have no payload to read here, so fall back to the offline grace window: keep
+  // working if the device was verified online within OFFLINE_GRACE_DAYS, and
+  // only lock (asking to reconnect) once that window is exceeded. A genuine
+  // first run (no lastSeenAt) is allowed through.
+  if (!rawToken) {
+    if (!lastSeenAt) {
+      console.warn("[OfflineToken] No token found — check skipped (genuine first run).");
+      return;
+    }
+    if (withinOfflineWindow) {
+      console.warn("[OfflineToken] Token missing but within offline grace — allowing offline use.");
+      unlock();
+      return;
+    }
+    console.warn("[OfflineToken] Token missing and offline window exceeded — locking.");
+    lock("offline-limit-exceeded");
     return;
   }
 
   const payload = await verifyAndDecodeToken(rawToken, BUNDLED_PUBLIC_KEY);
   if (!payload) {
-    BrowserWindow.getAllWindows().forEach((w) =>
-      w.webContents.send("subscription:locked", { reason: "invalid-token" }),
-    );
+    if (withinOfflineWindow) {
+      console.warn("[OfflineToken] Token unverifiable but within offline grace — allowing offline use.");
+      unlock();
+      return;
+    }
+    console.warn("[OfflineToken] Token unverifiable and offline window exceeded — locking.");
+    lock("offline-limit-exceeded");
     return;
   }
 
-  const lastSeenAt = store.get("lastSeenAt")
-    ? new Date(store.get("lastSeenAt") as string)
-    : null;
+  // ── Token verified: enforce the authoritative last-known server state ───────
   const state = evaluateSubscriptionState(payload, lastSeenAt);
-
   if (state !== "active") {
-    BrowserWindow.getAllWindows().forEach((w) =>
-      w.webContents.send("subscription:locked", { reason: state, payload }),
-    );
+    lock(state, payload);
+  } else {
+    // State recovered (e.g. after a successful online re-verify) — clear any lock.
+    unlock();
   }
+}
+
+// ── Auto-update (electron-updater → GitHub Releases) ─────────────────────────
+// Strategy (per product decision): download new versions silently in the
+// background and install them on the next app quit. Because some pharmacies
+// keep the app open for many days and never trigger that quit, we ALSO surface
+// an in-app banner the moment an update is downloaded, with a "restart now"
+// button — so the update isn't stuck waiting for a close that never comes.
+let autoUpdaterStarted = false;
+
+function broadcastToRenderers(channel: string, payload?: unknown): void {
+  BrowserWindow.getAllWindows().forEach((w) => w.webContents.send(channel, payload));
+}
+
+function setupAutoUpdater(): void {
+  // Only meaningful in a packaged build — dev has no app-update.yml and would throw.
+  if (!app.isPackaged || autoUpdaterStarted) return;
+  autoUpdaterStarted = true;
+
+  autoUpdater.autoDownload = true;          // background download
+  autoUpdater.autoInstallOnAppQuit = true;  // install on next quit
+  autoUpdater.logger = console as any;
+
+  autoUpdater.on("update-available", (info) => {
+    console.log("[AutoUpdate] Update available:", info.version);
+    broadcastToRenderers("update:available", { version: info.version });
+  });
+
+  autoUpdater.on("download-progress", (p) => {
+    broadcastToRenderers("update:download-progress", { percent: Math.round(p.percent) });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    console.log("[AutoUpdate] Update downloaded:", info.version);
+    // The banner with a restart button is shown by the renderer in response.
+    broadcastToRenderers("update:downloaded", { version: info.version });
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("[AutoUpdate] Error:", err);
+    broadcastToRenderers("update:error", { message: err?.message ?? String(err) });
+  });
+
+  // Initial check shortly after launch, then every 4 hours so long-running
+  // installs (pharmacies that never close) still pick up new versions.
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((e) => console.warn("[AutoUpdate] check failed:", e));
+  }, 15000);
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch((e) => console.warn("[AutoUpdate] check failed:", e));
+  }, 4 * 60 * 60 * 1000);
 }
 
 app.whenReady().then(async () => {
@@ -933,6 +1035,9 @@ app.whenReady().then(async () => {
     void checkOfflineSubscription();
   });
 
+  // Start background auto-updates (no-op in dev / unpackaged).
+  setupAutoUpdater();
+
   // Start Background Sync Service
   startSyncService();
   setTimeout(() => {
@@ -945,6 +1050,40 @@ app.whenReady().then(async () => {
   // IPC Handlers
   ipcMain.handle("get-connection-status", () => {
     return getConnectionStatus();
+  });
+
+  // "Retry online check" from the subscription-lock screen: fetch a fresh signed
+  // token from the server, then re-evaluate. checkOfflineSubscription emits
+  // subscription:unlocked when the state is active again.
+  ipcMain.handle("subscription:recheck", async (_e: unknown, licenseKey?: string) => {
+    try {
+      // Self-heal: if the renderer still has the activation key (localStorage)
+      // but the main-process store lost it (installs activated before the key
+      // was persisted), save it so refreshOfflineToken can actually reach the
+      // server and clear a stale lock.
+      if (licenseKey && !store.get("licenseKey")) {
+        store.set("licenseKey", licenseKey);
+      }
+      await refreshOfflineToken();
+      await checkOfflineSubscription();
+      return { success: true };
+    } catch (e) {
+      console.error("[OfflineToken] Recheck failed:", e);
+      return { success: false };
+    }
+  });
+
+  // "Restart now to update" from the update banner — quits and installs the
+  // already-downloaded update immediately. isSilent=false, isForceRunAfter=true
+  // so the app reopens after the installer runs.
+  ipcMain.handle("update:install-now", () => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+      return { success: true };
+    } catch (e) {
+      console.error("[AutoUpdate] quitAndInstall failed:", e);
+      return { success: false };
+    }
   });
 
   // --- Theme preference (persisted in electron-store) ---
@@ -970,6 +1109,21 @@ app.whenReady().then(async () => {
         branchName: string;
       },
     ) => {
+      // A live login session from a DIFFERENT organization would go half-and-half
+      // with the new license (sync token signed for the old org/branch, headers
+      // claiming the new one → 401 on every sync). Clear it so the user
+      // re-authenticates with an account of the licensed organization.
+      const sessionOrgId = String(store.get("syncOrgId") || "");
+      if (sessionOrgId && sessionOrgId !== context.organizationId) {
+        console.warn(
+          "[License] License belongs to a different organization than the logged-in session — clearing stale session.",
+        );
+        store.set("syncToken", "");
+        store.set("syncUserId", "");
+        store.set("syncUserRole", "");
+        store.set("syncOrgId", "");
+        store.set("loggedInUserId", "");
+      }
       store.set("organizationId", context.organizationId);
       store.set("organizationName", context.organizationName);
       store.set("branchId", context.branchId);
@@ -1002,6 +1156,11 @@ app.whenReady().then(async () => {
           clearTimeout(timeoutId);
           setApiBaseUrl(base);
           const data = await res.json();
+          // Persist the device license key so the main process can authenticate
+          // cloud backup uploads (and offline-token refresh) without the renderer.
+          if (res.ok && payload.licenseKey) {
+            store.set("licenseKey", payload.licenseKey);
+          }
           return { ok: res.ok, status: res.status, data };
         } catch {
           // try next candidate
@@ -1030,6 +1189,11 @@ app.whenReady().then(async () => {
           clearTimeout(timeoutId);
           setApiBaseUrl(base);
           const data = await res.json();
+          // Persist the device license key so the main process can authenticate
+          // cloud backup uploads (and offline-token refresh) without the renderer.
+          if (res.ok && payload.licenseKey) {
+            store.set("licenseKey", payload.licenseKey);
+          }
           return { ok: res.ok, status: res.status, data };
         } catch {
           // try next candidate
@@ -1219,6 +1383,31 @@ app.whenReady().then(async () => {
           const data = await response.json();
           if (data.success && data.user) {
             const cloudUser = data.user;
+
+            // ── Plan enforcement: the account must belong to the same
+            // organization as this device's license. Mixing them breaks the
+            // sync-token binding (signed over user+branch+org, while the
+            // license overwrites the device branch) and pollutes the local DB
+            // with another pharmacy's data.
+            const licensedOrgId = String(store.get("organizationId") || "");
+            const licensedOrgName = String(store.get("organizationName") || "");
+            if (
+              licensedOrgId &&
+              cloudUser.organizationId &&
+              cloudUser.organizationId !== licensedOrgId &&
+              cloudUser.role !== "SUPER_ADMIN"
+            ) {
+              console.warn(
+                `[Login] Blocked cross-org login: account org=${cloudUser.organizationId}, licensed org=${licensedOrgId}`,
+              );
+              return {
+                success: false,
+                error: licensedOrgName
+                  ? `هذا الحساب لا ينتمي إلى الصيدلية المرخّصة على هذا الجهاز (${licensedOrgName}). يرجى استخدام حساب يتبع نفس الصيدلية.`
+                  : "هذا الحساب لا ينتمي إلى الصيدلية المرخّصة على هذا الجهاز.",
+              };
+            }
+
             console.log(
               "Cloud Auth Success. Updating Local DB for:",
               cloudUser.email,
@@ -1307,6 +1496,11 @@ app.whenReady().then(async () => {
               void syncProducts().catch((err: unknown) => {
                 console.error("Background product sync failed:", err);
               });
+              // Sync suppliers too so they get tagged with the current org
+              // immediately after login (the dropdown filters by org).
+              void syncSuppliers().catch((err: unknown) => {
+                console.error("Background supplier sync failed:", err);
+              });
             }
 
             store.set("loggedInUserId", safeUser.id);
@@ -1334,6 +1528,14 @@ app.whenReady().then(async () => {
           success: false,
           error: "البريد الإلكتروني غير موجود",
         };
+
+      // Reject soft-disabled (departed) employees even in offline mode.
+      if ((user as any).isActive === false) {
+        return {
+          success: false,
+          error: "تم تعطيل هذا الحساب. يرجى مراجعة مدير الصيدلية.",
+        };
+      }
 
       // Verify password
       const isMatch = bcrypt.compareSync(password, user.password);
@@ -1716,6 +1918,13 @@ ipcMain.handle("get-products", async (_, arg: any) => {
     const whereClause: any = {
       AND: [
         { isActive: true },
+        // Only show drugs that actually have an inventory row in THIS branch.
+        // Without this, drugs left over from a previous organization on the same
+        // machine stay isActive (they still have old-branch inventory) and leak
+        // into POS with stock 0. Scoping to current-branch inventory hides them.
+        effectiveBranchId
+          ? { inventory: { some: { branchId: String(effectiveBranchId) } } }
+          : {},
         term
           ? {
               OR: [
@@ -1840,7 +2049,13 @@ ipcMain.handle("toggle-quick-sale", async (_, { drugId, isQuickSale }: { drugId:
 ipcMain.handle("get-quick-sale-products", async (_, { branchId }: { branchId: string }) => {
   try {
     const drugs = await prisma.globalDrug.findMany({
-      where: { isQuickSale: true, isActive: true },
+      where: {
+        isQuickSale: true,
+        isActive: true,
+        // Restrict to drugs stocked in the current branch so leftover drugs from
+        // a previous organization on this machine don't appear in quick-sale.
+        ...(branchId ? { inventory: { some: { branchId } } } : {}),
+      },
       include: {
         inventory: {
           where: branchId ? { branchId } : {},
@@ -2363,7 +2578,13 @@ ipcMain.handle(
 
 ipcMain.handle("get-local-suppliers", async () => {
   try {
+    // Scope suppliers to the current organization so a different org that
+    // previously used this machine can't leak its suppliers into the dropdown.
+    // Falls back to all suppliers in license-only mode (no cloud org known) —
+    // such devices are inherently single-branch.
+    const orgId = String(store.get("syncOrgId") || "").trim();
     return await prisma.supplier.findMany({
+      where: orgId ? { organizationId: orgId } : {},
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
@@ -2441,7 +2662,11 @@ ipcMain.handle("create-patient", async (_event, data) => {
         gender: data.gender,
         allergies: "",
         chronicDiseases: "",
-        branchId: data.branchId || null,
+        // Bind the patient to this device's branch. A null branch made the
+        // cloud's branch-scoped patient pull exclude the patient, which then
+        // deleted it locally on the next sync — so a credit customer wouldn't
+        // appear in Debts until the sale synced and the cloud assigned a branch.
+        branchId: data.branchId || String(store.get("branchId") || "") || null,
       },
       include: { loyaltyAccount: true },
     });
@@ -2497,6 +2722,15 @@ ipcMain.handle(
     },
   ) => {
     try {
+      // Allocate the per-org sequential invoice number from the cloud BEFORE the
+      // DB transaction (network I/O must not run inside a Prisma transaction).
+      // When online this is the SAME number the web dashboard shows. When offline
+      // we store null so /sync/sales allocates the real sequential number later and
+      // we reconcile it back — the receipt shows a temporary display number only.
+      const allocatedNumber = await allocateInvoiceNumber();
+      const invoiceNumber: string | null =
+        allocatedNumber != null ? String(allocatedNumber) : null;
+
       const result = await prisma.$transaction(async (tx: any) => {
         const validUser = userId
           ? await tx.user.findUnique({ where: { id: userId } })
@@ -2616,9 +2850,6 @@ ipcMain.handle(
             cost: unitCost,
           });
         }
-
-        // Generate a unique 8-digit invoice number
-        const invoiceNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
 
         const sale = await tx.sale.create({
           data: {
@@ -2902,17 +3133,40 @@ ipcMain.handle("open-external-url", async (_event, url) => {
 
 // ===== IPC Handlers للنسخ الاحتياطي =====
 
-// إنشاء نسخة احتياطية
+// إنشاء نسخة احتياطية — تُنشأ محلياً ثم تُرفع فوراً إلى السحابة (مزامنة مباشرة).
 ipcMain.handle("create-backup", async () => {
   const result = await createBackup();
-  if (result.success && result.path) {
-    return {
-      success: true,
-      message: "تم إنشاء النسخة الاحتياطية بنجاح",
-      path: result.path,
-    };
+  if (!result.success || !result.path) {
+    return { success: false, error: result.error };
   }
-  return { success: false, error: result.error };
+
+  // Immediately sync the new backup to the web. The local backup already
+  // succeeded, so a failed upload (offline / server) must not fail the whole
+  // operation — we report it so the UI can show "saved locally, not synced".
+  let uploadedToCloud = false;
+  let uploadError = "";
+  let uploadStatus: number | undefined;
+  try {
+    const branchId = (store.get("branchId") as string) || "default";
+    const up = await uploadBackup(result.path, branchId);
+    uploadedToCloud = up.ok;
+    uploadError = up.error || "";
+    uploadStatus = up.status;
+  } catch (e: any) {
+    console.error("[Backup] Immediate cloud upload failed:", e);
+    uploadError = e?.message || "خطأ غير متوقع";
+  }
+
+  const reason = uploadError ? ` السبب: ${uploadError}${uploadStatus ? ` (${uploadStatus})` : ""}` : "";
+
+  return {
+    success: true,
+    message: uploadedToCloud
+      ? "تم إنشاء النسخة الاحتياطية ومزامنتها مع الموقع بنجاح"
+      : `تم إنشاء النسخة محلياً، لكن تعذّرت مزامنتها مع الموقع.${reason}`,
+    path: result.path,
+    uploadedToCloud,
+  };
 });
 
 // الحصول على قائمة النسخ الاحتياطية
@@ -2923,6 +3177,14 @@ ipcMain.handle("get-backups", async () => {
 // استعادة نسخة احتياطية
 ipcMain.handle("restore-backup", async (_event, backupPath) => {
   const result = await restoreBackup(backupPath);
+  // A restore swaps the DB file out from under the Prisma engine and
+  // disconnects it — the app must restart to cleanly re-open the new database.
+  if (result.success) {
+    setTimeout(() => {
+      app.relaunch();
+      app.exit(0);
+    }, 600);
+  }
   return result;
 });
 
@@ -3051,6 +3313,7 @@ ipcMain.handle(
         const payment = await tx.debtPayment.create({
           data: {
             saleId: lastSale.id, // Linking to last sale for reference
+            userId: (store.get("loggedInUserId") as string) || null,
             amount: amount,
             method: "CASH",
             note: note || "تسديد دفعة",
@@ -3322,6 +3585,7 @@ ipcMain.handle(
             saleId,
             branchId: branchId || "default",
             safeId: safeId || null,
+            userId: (store.get("loggedInUserId") as string) || null,
             total: returnAmount,
             notes: notes || null,
             items: {

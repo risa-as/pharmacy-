@@ -9,8 +9,9 @@
     "preinstall": "npx only-allow pnpm"
   },
   "devDependencies": {
+    "prettier": "^3.2.5",
     "turbo": "latest",
-    "prettier": "^3.2.5"
+    "vitest": "^4.1.8"
   },
   "packageManager": "pnpm@8.15.4",
   "workspaces": [
@@ -19,11 +20,5 @@
   ],
   "engines": {
     "node": ">=18"
-  },
-  "pnpm": {
-    "overrides": {
-      "react": "^18.2.0",
-      "react-dom": "^18.2.0"
-    }
   }
 }

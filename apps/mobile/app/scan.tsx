@@ -1,13 +1,13 @@
-﻿import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform, Animated, Easing, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { apiService } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
-import { Colors } from '../constants/colors';
+import { managerPalette, Radius } from '../constants/colors';
 import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
 
 interface DrugResult {
     id: string;
@@ -18,15 +18,30 @@ interface DrugResult {
     reorderLevel: number;
 }
 
+const FRAME = 250;
+
 export default function ScanScreen() {
     const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
     const [loading, setLoading] = useState(false);
     const [drugResult, setDrugResult] = useState<DrugResult | null>(null);
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
     const params = useLocalSearchParams();
     const fromScreen = params.from as string | undefined;
+
+    // Animated scanning line
+    const scanLine = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+        const anim = Animated.loop(
+            Animated.sequence([
+                Animated.timing(scanLine, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+                Animated.timing(scanLine, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+            ]),
+        );
+        anim.start();
+        return () => anim.stop();
+    }, [scanLine]);
 
     if (!permission) {
         return <View style={{ flex: 1, backgroundColor: '#000' }} />;
@@ -35,10 +50,11 @@ export default function ScanScreen() {
     if (!permission.granted) {
         return (
             <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-                <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: 24, marginBottom: 20 }}>
-                    <Ionicons name="camera-outline" size={56} color="#fff" />
+                <Stack.Screen options={{ headerShown: false }} />
+                <View style={{ backgroundColor: `${C.primary}33`, borderRadius: 999, padding: 26, marginBottom: 22 }}>
+                    <Ionicons name="camera-outline" size={56} color={C.primary} />
                 </View>
-                <Text style={{ color: '#fff', textAlign: 'center', fontSize: 16, marginBottom: 8, fontWeight: '700' }}>
+                <Text style={{ color: '#fff', textAlign: 'center', fontSize: 17, marginBottom: 8, fontWeight: '800' }}>
                     إذن الكاميرا مطلوب
                 </Text>
                 <Text style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontSize: 14, marginBottom: 28 }}>
@@ -46,9 +62,10 @@ export default function ScanScreen() {
                 </Text>
                 <TouchableOpacity
                     onPress={requestPermission}
-                    style={{ backgroundColor: C.primary, borderRadius: 14, paddingHorizontal: 28, paddingVertical: 14 }}
+                    activeOpacity={0.85}
+                    style={{ backgroundColor: C.primary, borderRadius: Radius.sm, paddingHorizontal: 30, paddingVertical: 14 }}
                 >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>منح الإذن</Text>
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>منح الإذن</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -64,9 +81,11 @@ export default function ScanScreen() {
             return;
         }
 
-        // Sales flow: navigate back with barcode param for cart lookup
+        // Sales flow: hand the barcode off via storage and return to the EXISTING
+        // sales screen with router.back so its in-progress cart is preserved.
         if (fromScreen === 'sales') {
-            router.replace({ pathname: '/(tabs)/sales', params: { scannedBarcode: data } });
+            await AsyncStorage.setItem('pendingScanBarcode', data);
+            router.back();
             return;
         }
 
@@ -116,8 +135,24 @@ export default function ScanScreen() {
         ? (drugResult.quantity === 0 ? 'danger' as const : drugResult.quantity <= drugResult.reorderLevel ? 'warning' as const : 'success' as const)
         : 'info' as const;
 
+    // One corner bracket of the scan frame.
+    const corner = (pos: { top?: number; bottom?: number; left?: number; right?: number }, radius: object) => (
+        <View
+            style={{
+                position: 'absolute', width: 34, height: 34,
+                borderColor: C.primary,
+                borderTopWidth: pos.top !== undefined ? 4 : 0,
+                borderBottomWidth: pos.bottom !== undefined ? 4 : 0,
+                borderLeftWidth: pos.left !== undefined ? 4 : 0,
+                borderRightWidth: pos.right !== undefined ? 4 : 0,
+                ...pos, ...radius,
+            }}
+        />
+    );
+
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
+            <Stack.Screen options={{ headerShown: false }} />
             {/* Camera fills entire screen */}
             <CameraView
                 style={{ flex: 1 }}
@@ -132,35 +167,66 @@ export default function ScanScreen() {
                 position: 'absolute', top: Platform.OS === 'ios' ? 56 : 40, left: 0, right: 0,
                 flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
                 paddingHorizontal: 20, paddingVertical: 12,
-                backgroundColor: 'rgba(0,0,0,0.55)',
             }}>
-                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>مسح الباركود</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                    <View style={{ width: 32, height: 32, borderRadius: Radius.xs, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="barcode-outline" size={18} color="#fff" />
+                    </View>
+                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>مسح الباركود</Text>
+                </View>
                 <TouchableOpacity
                     onPress={() => router.back()}
-                    style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, padding: 8 }}
+                    activeOpacity={0.8}
+                    style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: Radius.xs, padding: 8 }}
                 >
                     <Ionicons name="close" size={22} color="#fff" />
                 </TouchableOpacity>
             </View>
 
-            {/* Scan frame + instruction (shown while scanning) */}
+            {/* Spotlight overlay + scan frame (while scanning) */}
             {!drugResult && (
-                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
-                    <View style={{
-                        width: 240, height: 240,
-                        borderWidth: 3, borderColor: C.primary, borderRadius: 5,
-                        backgroundColor: 'transparent',
-                    }} />
-                    <Text style={{
-                        color: '#fff', marginTop: 24, fontSize: 14, fontWeight: '600',
-                        backgroundColor: 'rgba(0,0,0,0.65)',
-                        paddingHorizontal: 20, paddingVertical: 10, borderRadius: 5,
-                    }}>
-                        {loading ? 'جاري البحث...' : 'وجه الكاميرا نحو الباركود'}
-                    </Text>
-                    {loading && (
-                        <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 16 }} />
-                    )}
+                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                    {/* Top dim */}
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+
+                    {/* Middle row: left dim | window | right dim */}
+                    <View style={{ flexDirection: 'row', height: FRAME }}>
+                        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+                        <View style={{ width: FRAME, height: FRAME }}>
+                            {corner({ top: 0, right: 0 }, { borderTopRightRadius: 14 })}
+                            {corner({ top: 0, left: 0 }, { borderTopLeftRadius: 14 })}
+                            {corner({ bottom: 0, right: 0 }, { borderBottomRightRadius: 14 })}
+                            {corner({ bottom: 0, left: 0 }, { borderBottomLeftRadius: 14 })}
+                            {/* Scanning line */}
+                            <Animated.View
+                                style={{
+                                    position: 'absolute', left: 8, right: 8, height: 2.5, borderRadius: 2,
+                                    backgroundColor: C.primary,
+                                    shadowColor: C.primary, shadowOpacity: 0.9, shadowRadius: 8, elevation: 4,
+                                    transform: [{
+                                        translateY: scanLine.interpolate({ inputRange: [0, 1], outputRange: [8, FRAME - 12] }),
+                                    }],
+                                }}
+                            />
+                        </View>
+                        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+                    </View>
+
+                    {/* Bottom dim + instruction */}
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', paddingTop: 28 }}>
+                        <View style={{
+                            flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
+                            backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: Radius.sm,
+                            paddingHorizontal: 18, paddingVertical: 11,
+                        }}>
+                            {loading
+                                ? <ActivityIndicator size="small" color={C.primary} />
+                                : <Ionicons name="barcode-outline" size={18} color={C.primary} />}
+                            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+                                {loading ? 'جاري البحث...' : 'وجّه الكاميرا نحو الباركود'}
+                            </Text>
+                        </View>
+                    </View>
                 </View>
             )}
 
@@ -169,23 +235,23 @@ export default function ScanScreen() {
                 <View style={{
                     position: 'absolute', bottom: 0, left: 0, right: 0,
                     backgroundColor: C.card,
-                    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-                    padding: 24, paddingBottom: Platform.OS === 'ios' ? 44 : 28,
+                    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+                    padding: 22, paddingBottom: Platform.OS === 'ios' ? 44 : 26,
                 }}>
+                    {/* Drag handle */}
+                    <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 18 }} />
+
                     {/* Drug header */}
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 18 }}>
-                        <View style={{
-                            backgroundColor: `${C.primary}18`, borderRadius: 5,
-                            padding: 12, marginLeft: 14,
-                        }}>
-                            <Ionicons name="medkit" size={28} color={C.primary} />
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                        <View style={{ width: 52, height: 52, borderRadius: Radius.sm, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="medkit" size={26} color={C.primary} />
                         </View>
                         <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 17, textAlign: 'right' }}>
+                            <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 17, textAlign: 'right' }} numberOfLines={1}>
                                 {drugResult.name}
                             </Text>
                             {drugResult.scientificName && (
-                                <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }}>
+                                <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>
                                     {drugResult.scientificName}
                                 </Text>
                             )}
@@ -194,30 +260,49 @@ export default function ScanScreen() {
 
                     {/* Price + Stock stats */}
                     <View style={{ flexDirection: 'row-reverse', gap: 12, marginBottom: 20 }}>
-                        <View style={{ flex: 1, backgroundColor: C.background, borderRadius: 14, padding: 14, alignItems: 'center' }}>
+                        <View style={{ flex: 1, backgroundColor: C.background, borderRadius: Radius.sm, borderWidth: 1.5, borderColor: `${C.primary}33`, padding: 14, alignItems: 'center' }}>
                             <Text style={{ color: C.mutedForeground, fontSize: 11, marginBottom: 6 }}>السعر</Text>
-                            <Text style={{ color: C.primary, fontWeight: '900', fontSize: 18 }}>
-                                {drugResult.price.toLocaleString()}
-                            </Text>
-                            <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 2 }}>د.ع</Text>
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 3 }}>
+                                <Text style={{ color: C.primary, fontWeight: '900', fontSize: 19 }}>
+                                    {drugResult.price.toLocaleString()}
+                                </Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 11, fontWeight: '700' }}>د.ع</Text>
+                            </View>
                         </View>
-                        <View style={{ flex: 1, backgroundColor: C.background, borderRadius: 14, padding: 14, alignItems: 'center' }}>
-                            <Text style={{ color: C.mutedForeground, fontSize: 11, marginBottom: 6 }}>المخزون</Text>
+                        <View style={{ flex: 1, backgroundColor: C.background, borderRadius: Radius.sm, borderWidth: 1.5, borderColor: `${C.primary}33`, padding: 14, alignItems: 'center', gap: 6 }}>
+                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>المخزون</Text>
                             <Badge label={String(drugResult.quantity)} variant={stockVariant} />
-                            <Text style={{ color: C.mutedForeground, fontSize: 11, marginTop: 6 }}>
+                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
                                 حد الطلب: {drugResult.reorderLevel}
                             </Text>
                         </View>
                     </View>
 
-                    {/* Action buttons side by side */}
+                    {/* Action buttons */}
                     <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
-                        <View style={{ flex: 1 }}>
-                            <Button label="إضافة للسلة" onPress={handleAddToCart} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Button label="مسح مرة أخرى" variant="secondary" onPress={handleReset} />
-                        </View>
+                        <TouchableOpacity
+                            onPress={handleAddToCart}
+                            activeOpacity={0.85}
+                            style={{
+                                flex: 2, flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 7,
+                                backgroundColor: C.primary, borderRadius: Radius.sm, paddingVertical: 14,
+                            }}
+                        >
+                            <Ionicons name="cart-outline" size={18} color="#fff" />
+                            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>إضافة للسلة</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleReset}
+                            activeOpacity={0.8}
+                            style={{
+                                flex: 1, flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 6,
+                                backgroundColor: C.card, borderRadius: Radius.sm, paddingVertical: 14,
+                                borderWidth: 1.5, borderColor: C.border,
+                            }}
+                        >
+                            <Ionicons name="scan-outline" size={17} color={C.foreground} />
+                            <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 14 }}>مسح آخر</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             )}

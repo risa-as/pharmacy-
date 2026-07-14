@@ -33,7 +33,7 @@ if (app.isPackaged) {
     );
 }
 
-function getDbPath(): string {
+export function getDbPath(): string {
     if (app.isPackaged) {
         // In production: store the database in the user's data directory
         // so it persists between updates and is writable
@@ -285,6 +285,9 @@ export async function runMigrations(): Promise<void> {
     await addColumn('Shift', 'branchId', 'TEXT NOT NULL DEFAULT \'\'');
     await addColumn('Sale', 'hasPriceOverride', 'BOOLEAN NOT NULL DEFAULT false');
     await addColumn('SaleItem', 'originalPrice', 'REAL');
+    await addColumn('User', 'isActive', 'BOOLEAN NOT NULL DEFAULT true');
+    await addColumn('SaleReturn', 'userId', 'TEXT');
+    await addColumn('DebtPayment', 'userId', 'TEXT');
 
     console.log('[DB Migration] Schema migrations complete.');
 }

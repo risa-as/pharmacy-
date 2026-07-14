@@ -3,7 +3,7 @@ import { View, Text, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { authService, User } from '../../services/auth';
 import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette } from '../../constants/colors';
 
 const ROLE_LABELS: Record<string, { label: string; color: (C: any) => string; bg: (C: any) => string }> = {
     ADMIN:      { label: 'مدير',     color: C => C.primary, bg: C => C.primaryMuted },
@@ -15,7 +15,7 @@ const ROLE_LABELS: Record<string, { label: string; color: (C: any) => string; bg
 export default function AccountScreen() {
     const [user, setUser] = useState<User | null>(null);
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
 
     useEffect(() => {
         authService.getCurrentUser().then(setUser);
@@ -29,7 +29,7 @@ export default function AccountScreen() {
 
     const rows = [
         { label: 'الاسم الكامل',     icon: 'person-outline' as const,       value: user?.name  || '—', iconBg: C.primaryMuted, iconColor: C.primary },
-        { label: 'البريد الإلكتروني', icon: 'mail-outline' as const,          value: user?.email || '—', iconBg: C.infoBg,       iconColor: C.info    },
+        { label: 'البريد الإلكتروني', icon: 'mail-outline' as const,          value: user?.email || '—', iconBg: C.primaryMuted, iconColor: C.primary },
         { label: 'الدور الوظيفي',    icon: 'shield-checkmark-outline' as const, value: roleInfo?.label ?? (user?.role || '—'), iconBg: C.warningBg, iconColor: C.warning },
         { label: 'معرف الحساب',      icon: 'finger-print-outline' as const,  value: user?.id ? user.id.slice(0, 16) + '...' : '—', iconBg: C.input, iconColor: C.mutedForeground },
     ];
@@ -87,7 +87,7 @@ export default function AccountScreen() {
 
                 <View style={{
                     backgroundColor: C.card, borderRadius: 5,
-                    borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+                    borderWidth: 1.5, borderColor: `${C.primary}33`, overflow: 'hidden',
                     elevation: 1, shadowColor: '#000',
                     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,
                 }}>

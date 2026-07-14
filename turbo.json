@@ -10,7 +10,26 @@
             ],
             "env": [
                 "WEB_APP_URL",
-                "WHATSAPP_PHONE_NUMBER"
+                "WHATSAPP_PHONE_NUMBER",
+                "DATABASE_URL",
+                "AUTH_SECRET",
+                "ZAINCASH_MERCHANT_ID",
+                "ZAINCASH_MERCHANT_SECRET",
+                "ZAINCASH_MSISDN",
+                "ZAINCASH_API_URL",
+                "UPLOADTHING_TOKEN",
+                "BACKUP_SECRET_KEY",
+                "GOOGLE_VISION_API_KEY",
+                "OFFLINE_TOKEN_PUBLIC_KEY",
+                "OFFLINE_TOKEN_PRIVATE_KEY",
+                "AI_PROVIDER",
+                "GEMINI_API_KEY",
+                "GEMINI_MODEL",
+                "OPENAI_API_KEY",
+                "UPSTASH_REDIS_REST_URL",
+                "UPSTASH_REDIS_REST_TOKEN",
+                "SYNC_TOKEN_SECRET",
+                "PRESCRIPTION_SCAN_PROVIDER"
             ],
             "outputs": [
                 "dist/**",

@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { managerPalette } from '../../constants/colors';
 import { notificationsService } from '../../services/notifications';
 
 const PREFS_KEY = 'notification_prefs';
@@ -39,14 +39,14 @@ const CATEGORIES = [
         title:       'طلبات الشراء',
         description: 'عند إنشاء أو استلام طلب شراء جديد',
         icon:        'receipt' as const,
-        iconColor:   (C: any) => C.info,
-        iconBg:      (C: any) => C.infoBg,
+        iconColor:   (C: any) => C.primary,
+        iconBg:      (C: any) => C.primaryMuted,
     },
 ];
 
 export default function NotificationsSettingsScreen() {
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const C = managerPalette(isDarkMode);
 
     const [prefs, setPrefs]           = useState<NotifPrefs>(DEFAULT_PREFS);
     const [pushToken, setPushToken]   = useState<string | null>(null);
@@ -100,7 +100,7 @@ export default function NotificationsSettingsScreen() {
             <View style={{
                 flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
                 backgroundColor: C.card, borderRadius: 5, padding: 14,
-                borderWidth: 1, borderColor: C.border, marginBottom: 20,
+                borderWidth: 1.5, borderColor: `${C.primary}33`, marginBottom: 20,
             }}>
                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
                     <View style={{ backgroundColor: C.primaryMuted, borderRadius: 5, padding: 8 }}>
@@ -135,7 +135,7 @@ export default function NotificationsSettingsScreen() {
 
             <View style={{
                 backgroundColor: C.card, borderRadius: 5,
-                borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+                borderWidth: 1.5, borderColor: `${C.primary}33`, overflow: 'hidden',
                 marginBottom: 20,
                 elevation: 1, shadowColor: '#000',
                 shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,
@@ -186,7 +186,7 @@ export default function NotificationsSettingsScreen() {
 
             <View style={{
                 backgroundColor: C.card, borderRadius: 5,
-                borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+                borderWidth: 1.5, borderColor: `${C.primary}33`, overflow: 'hidden',
                 marginBottom: 20,
             }}>
                 <TouchableOpacity
@@ -232,7 +232,7 @@ export default function NotificationsSettingsScreen() {
                     </Text>
                     <View style={{
                         backgroundColor: C.card, borderRadius: 5,
-                        borderWidth: 1, borderColor: C.border, padding: 14,
+                        borderWidth: 1.5, borderColor: `${C.primary}33`, padding: 14,
                     }}>
                         <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginBottom: 6 }}>
                             Push Token

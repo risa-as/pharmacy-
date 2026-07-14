@@ -17,9 +17,10 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { apiService } from "../../services/api";
 import { dbService } from "../../services/db";
@@ -27,7 +28,7 @@ import { syncService } from "../../services/sync";
 import { printerService } from "../../services/printer";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
-import { Colors } from "../../constants/colors";
+import { managerPalette, Radius } from "../../constants/colors";
 
 interface CartItem {
   id: string;
@@ -55,123 +56,87 @@ const CartItemRow = React.memo(
     onRemove,
   }: {
     item: CartItem;
-    C: ReturnType<typeof Colors>;
+    C: ReturnType<typeof managerPalette>;
     onUpdateQuantity: (id: string, change: number) => void;
     onRemove: (id: string) => void;
   }) => (
     <View
       style={{
+        backgroundColor: C.card,
+        borderRadius: Radius.sm,
+        borderWidth: 1.5,
+        borderColor: `${C.primary}33`,
+        marginBottom: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
         flexDirection: "row-reverse",
         alignItems: "center",
-        paddingVertical: 11,
-        paddingHorizontal: 14,
-        gap: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: C.border,
+        gap: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 1,
       }}
     >
-      {/* Drug icon */}
+      {/* Icon */}
       <View
         style={{
-          width: 38,
-          height: 38,
-          borderRadius: 5,
+          width: 34, height: 34, borderRadius: Radius.xs,
           backgroundColor: C.primaryMuted,
-          justifyContent: "center",
-          alignItems: "center",
-          flexShrink: 0,
+          justifyContent: "center", alignItems: "center", flexShrink: 0,
         }}
       >
-        <Ionicons name="medical" size={18} color={C.primary} />
+        <Ionicons name="medical" size={16} color={C.primary} />
       </View>
 
-      {/* Drug info */}
+      {/* Name + price */}
       <View style={{ flex: 1 }}>
         <Text
-          style={{
-            color: C.foreground,
-            fontWeight: "700",
-            fontSize: 13,
-            textAlign: "right",
-          }}
+          style={{ color: C.foreground, fontWeight: "700", fontSize: 13, textAlign: "right" }}
           numberOfLines={1}
         >
           {item.tradeName ?? item.name}
         </Text>
-        <Text
-          style={{
-            color: C.success,
-            fontSize: 12,
-            textAlign: "right",
-            marginTop: 1,
-          }}
-        >
-          {item.price.toLocaleString("en-US")} د.ع
-        </Text>
-        {item.stock !== undefined && item.stock <= 5 && (
-          <View
-            style={{
-              flexDirection: "row-reverse",
-              alignItems: "center",
-              gap: 3,
-              marginTop: 1,
-            }}
-          >
-            <Ionicons name="warning-outline" size={10} color={C.warning} />
-            <Text style={{ color: C.warning, fontSize: 10 }}>
-              متبقي {item.stock}
-            </Text>
-          </View>
-        )}
+        <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 6, marginTop: 1 }}>
+          <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
+            {item.price.toLocaleString("en-US")} د.ع
+          </Text>
+          {item.stock !== undefined && item.stock <= 5 && (
+            <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 2 }}>
+              <Ionicons name="warning-outline" size={9} color={C.warning} />
+              <Text style={{ color: C.warning, fontSize: 9, fontWeight: "700" }}>{item.stock}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Qty controls */}
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: C.input,
-          borderRadius: 5,
-          borderWidth: 1,
-          borderColor: C.border,
-          overflow: "hidden",
+          flexDirection: "row", alignItems: "center",
+          backgroundColor: C.input, borderRadius: Radius.xs,
+          borderWidth: 1, borderColor: C.border, overflow: "hidden",
         }}
       >
-        <TouchableOpacity
-          onPress={() => onUpdateQuantity(item.id, -1)}
-          style={{ padding: 7 }}
-        >
+        <TouchableOpacity onPress={() => onUpdateQuantity(item.id, -1)} style={{ paddingVertical: 5, paddingHorizontal: 9 }}>
           <Ionicons name="remove" size={15} color={C.danger} />
         </TouchableOpacity>
-        <Text
-          style={{
-            color: C.foreground,
-            fontWeight: "800",
-            minWidth: 26,
-            textAlign: "center",
-            fontSize: 14,
-          }}
-        >
+        <Text style={{ color: C.foreground, fontWeight: "800", minWidth: 24, textAlign: "center", fontSize: 14 }}>
           {item.quantity}
         </Text>
-        <TouchableOpacity
-          onPress={() => onUpdateQuantity(item.id, 1)}
-          style={{ padding: 7 }}
-        >
+        <TouchableOpacity onPress={() => onUpdateQuantity(item.id, 1)} style={{ paddingVertical: 5, paddingHorizontal: 9 }}>
           <Ionicons name="add" size={15} color={C.success} />
         </TouchableOpacity>
       </View>
 
       {/* Line total + remove */}
-      <View style={{ alignItems: "flex-end", gap: 6, minWidth: 54 }}>
-        <Text style={{ color: C.foreground, fontWeight: "800", fontSize: 13 }}>
+      <View style={{ alignItems: "flex-end", gap: 3, minWidth: 50 }}>
+        <Text style={{ color: C.foreground, fontWeight: "900", fontSize: 13 }}>
           {(item.price * item.quantity).toLocaleString("en-US")}
         </Text>
-        <TouchableOpacity
-          onPress={() => onRemove(item.id)}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <Ionicons name="trash-outline" size={15} color={C.danger} />
+        <TouchableOpacity onPress={() => onRemove(item.id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Ionicons name="trash-outline" size={14} color={C.danger} />
         </TouchableOpacity>
       </View>
     </View>
@@ -182,7 +147,7 @@ const CartItemRow = React.memo(
 export default function SalesScreen() {
   const { isDarkMode } = useTheme();
   const { branchId } = useAuth();
-  const C = Colors(isDarkMode);
+  const C = managerPalette(isDarkMode);
   const params = useLocalSearchParams();
 
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -207,6 +172,10 @@ export default function SalesScreen() {
 
   const [manualDiscount, setManualDiscount] = useState(0);
   const [manualDiscountInput, setManualDiscountInput] = useState("");
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<{ cart: CartItem[]; total: number } | null>(null);
+  const [confirmMethod, setConfirmMethod] = useState<"CASH" | "CREDIT" | null>(null);
+  const [showNeedPatient, setShowNeedPatient] = useState(false);
   const [loyaltySettings, setLoyaltySettings] = useState<{
     loyaltyEnabled: boolean;
     loyaltyPointsPerDinar: number;
@@ -318,6 +287,56 @@ export default function SalesScreen() {
     notFoundTimer.current = setTimeout(() => setNotFoundMsg(null), 3500);
   }, []);
 
+  const addToCart = useCallback(
+    (drug: any) => {
+      setCart((prev) => {
+        const existing = prev.find((i) => i.id === drug.id);
+        if (existing) {
+          if (
+            drug.quantity !== undefined &&
+            existing.quantity >= drug.quantity
+          ) {
+            Alert.alert("تنبيه", `الكمية المتوفرة فقط ${drug.quantity}`);
+            return prev;
+          }
+          return prev.map((i) =>
+            i.id === drug.id ? { ...i, quantity: i.quantity + 1 } : i,
+          );
+        }
+        if (drug.quantity !== undefined && drug.quantity <= 0) {
+          Alert.alert("نفاد المخزون", "هذا الدواء غير متوفر حالياً في المخزون");
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            id: drug.id,
+            name: drug.name,
+            tradeName: drug.tradeName,
+            price: drug.price,
+            quantity: 1,
+            stock: drug.quantity,
+            scientificName: drug.scientificName,
+          },
+        ];
+      });
+      const allNames = cart
+        .map((i) => i.scientificName ?? i.name)
+        .concat(drug.scientificName ?? drug.name);
+      if (allNames.length > 1) {
+        apiService
+          .checkPharmacovigilance(allNames, selectedPatient?.id)
+          .then((result) => {
+            if (result?.interactions) setInteractions(result.interactions);
+            if (result?.allergyWarnings)
+              setAllergyWarnings(result.allergyWarnings);
+          })
+          .catch(() => {});
+      }
+    },
+    [cart, selectedPatient],
+  );
+
   const handleBarcodeAdd = useCallback(
     async (code: string) => {
       const trimmed = code.trim();
@@ -369,56 +388,6 @@ export default function SalesScreen() {
     [branchId, addToCart, showNotFound],
   );
 
-  const addToCart = useCallback(
-    (drug: any) => {
-      setCart((prev) => {
-        const existing = prev.find((i) => i.id === drug.id);
-        if (existing) {
-          if (
-            drug.quantity !== undefined &&
-            existing.quantity >= drug.quantity
-          ) {
-            Alert.alert("تنبيه", `الكمية المتوفرة فقط ${drug.quantity}`);
-            return prev;
-          }
-          return prev.map((i) =>
-            i.id === drug.id ? { ...i, quantity: i.quantity + 1 } : i,
-          );
-        }
-        if (drug.quantity !== undefined && drug.quantity <= 0) {
-          Alert.alert("نفاد المخزون", "هذا الدواء غير متوفر حالياً في المخزون");
-          return prev;
-        }
-        return [
-          ...prev,
-          {
-            id: drug.id,
-            name: drug.name,
-            tradeName: drug.tradeName,
-            price: drug.price,
-            quantity: 1,
-            stock: drug.quantity,
-            scientificName: drug.scientificName,
-          },
-        ];
-      });
-      const allNames = cart
-        .map((i) => i.scientificName ?? i.name)
-        .concat(drug.scientificName ?? drug.name);
-      if (allNames.length > 1) {
-        apiService
-          .checkPharmacovigilance(allNames, selectedPatient?.id)
-          .then((result) => {
-            if (result?.interactions) setInteractions(result.interactions);
-            if (result?.allergyWarnings)
-              setAllergyWarnings(result.allergyWarnings);
-          })
-          .catch(() => {});
-      }
-    },
-    [cart, selectedPatient],
-  );
-
   const handleSelectNameResult = useCallback(
     (drug: any) => {
       addToCart(drug);
@@ -426,6 +395,28 @@ export default function SalesScreen() {
       setBarcode("");
     },
     [addToCart],
+  );
+
+  // When returning from the barcode scanner (which uses router.back to keep this
+  // screen — and its cart — mounted), pick up the handed-off code and add it.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const code = await AsyncStorage.getItem("pendingScanBarcode");
+          if (code && active) {
+            await AsyncStorage.removeItem("pendingScanBarcode");
+            handleBarcodeAdd(code);
+          }
+        } catch {
+          /* ignore */
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, [handleBarcodeAdd]),
   );
 
   // Cleanup timer on unmount
@@ -519,22 +510,10 @@ export default function SalesScreen() {
         return;
       }
       if (method === "CREDIT" && !selectedPatient) {
-        Alert.alert("تنبيه", "يجب اختيار عميل للبيع الآجل", [
-          { text: "اختيار عميل", onPress: () => setShowPatientModal(true) },
-          { text: "إلغاء" },
-        ]);
+        setShowNeedPatient(true);
         return;
       }
-      const discountLine =
-        totalDiscount > 0 ? `\nخصم: ${totalDiscount.toLocaleString()} د.ع` : "";
-      Alert.alert(
-        "تأكيد البيع",
-        `الإجمالي: ${total.toLocaleString()} د.ع${discountLine}\nطريقة الدفع: ${method === "CASH" ? "نقدي" : "آجل"}${selectedPatient ? `\nالعميل: ${selectedPatient.name}` : ""}`,
-        [
-          { text: "إلغاء", style: "cancel" },
-          { text: "تأكيد", onPress: () => processSale(method) },
-        ],
-      );
+      setConfirmMethod(method);
     },
     [cart, selectedPatient, total, totalDiscount],
   );
@@ -608,14 +587,7 @@ export default function SalesScreen() {
             .slice(0, 5);
         });
         resetCart();
-        Alert.alert("تمت العملية", "تمت عملية البيع", [
-          {
-            text: "طباعة",
-            onPress: () =>
-              printReceipt(creditCartSnapshot, creditTotalSnapshot),
-          },
-          { text: "موافق" },
-        ]);
+        setSuccessInfo({ cart: creditCartSnapshot, total: creditTotalSnapshot });
       } catch {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert(
@@ -686,13 +658,7 @@ export default function SalesScreen() {
     });
     resetCart();
     setLoading(false);
-    Alert.alert("تمت العملية", "تمت عملية البيع", [
-      {
-        text: "طباعة",
-        onPress: () => printReceipt(cartSnapshot, finalSnapshot),
-      },
-      { text: "موافق" },
-    ]);
+    setSuccessInfo({ cart: cartSnapshot, total: finalSnapshot });
     void syncService.syncData();
     if (
       patientSnapshot &&
@@ -733,7 +699,10 @@ export default function SalesScreen() {
   ) => {
     const printer = await printerService.getSavedPrinter();
     if (!printer) {
-      Alert.alert("تنبيه", "لا توجد طابعة متصلة");
+      Alert.alert("تنبيه", "لا توجد طابعة متصلة", [
+        { text: "إلغاء", style: "cancel" },
+        { text: "إعداد الطابعة", onPress: () => router.push("/printer-settings" as any) },
+      ]);
       return;
     }
     await printerService.printReceipt(
@@ -787,19 +756,19 @@ export default function SalesScreen() {
               alignItems: "center",
               gap: 5,
               backgroundColor: selectedPatient ? C.primaryMuted : C.input,
-              borderRadius: 5,
+              borderRadius: Radius.sm,
               paddingHorizontal: 10,
               paddingVertical: 7,
               borderWidth: 1,
               borderColor: selectedPatient ? `${C.primary}40` : C.border,
-              maxWidth: 140,
+              maxWidth: 180,
             }}
           >
             <View
               style={{
                 width: 20,
                 height: 20,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 backgroundColor: selectedPatient ? C.primary : C.border,
                 justifyContent: "center",
                 alignItems: "center",
@@ -834,32 +803,6 @@ export default function SalesScreen() {
               </TouchableOpacity>
             )}
           </TouchableOpacity>
-
-          {/* Scan button */}
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: "/scan",
-                params: { from: "sales" },
-              } as any)
-            }
-            activeOpacity={0.8}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 5,
-              backgroundColor: C.primary,
-              justifyContent: "center",
-              alignItems: "center",
-              shadowColor: C.primary,
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: 0.3,
-              shadowRadius: 6,
-              elevation: 4,
-            }}
-          >
-            <Ionicons name="scan" size={19} color="#fff" />
-          </TouchableOpacity>
         </View>
 
         {/* Barcode / name search */}
@@ -870,7 +813,7 @@ export default function SalesScreen() {
               flexDirection: "row-reverse",
               alignItems: "center",
               backgroundColor: C.input,
-              borderRadius: 5,
+              borderRadius: Radius.sm,
               borderWidth: 1,
               borderColor: notFoundMsg
                 ? C.danger
@@ -925,12 +868,29 @@ export default function SalesScreen() {
               )
             )}
           </View>
+          {/* Scan button */}
+          <TouchableOpacity
+            onPress={() =>
+              router.push({ pathname: "/scan", params: { from: "sales" } } as any)
+            }
+            activeOpacity={0.8}
+            style={{
+              width: 44,
+              borderRadius: Radius.xs,
+              backgroundColor: C.primary,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <Ionicons name="scan" size={19} color="#fff" />
+          </TouchableOpacity>
+          {/* Search / add button */}
           <TouchableOpacity
             onPress={() => handleBarcodeAdd(barcode)}
             activeOpacity={0.8}
             style={{
               width: 44,
-              borderRadius: 5,
+              borderRadius: Radius.xs,
               backgroundColor: C.success,
               justifyContent: "center",
               alignItems: "center",
@@ -948,7 +908,7 @@ export default function SalesScreen() {
               alignItems: "center",
               gap: 8,
               backgroundColor: C.dangerBg,
-              borderRadius: 5,
+              borderRadius: Radius.sm,
               borderWidth: 1,
               borderColor: `${C.danger}40`,
               paddingHorizontal: 12,
@@ -959,7 +919,7 @@ export default function SalesScreen() {
               style={{
                 width: 28,
                 height: 28,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 backgroundColor: `${C.danger}20`,
                 justifyContent: "center",
                 alignItems: "center",
@@ -1005,7 +965,7 @@ export default function SalesScreen() {
           <View
             style={{
               backgroundColor: C.card,
-              borderRadius: 5,
+              borderRadius: Radius.sm,
               borderWidth: 1,
               borderColor: C.primary,
               overflow: "hidden",
@@ -1051,7 +1011,7 @@ export default function SalesScreen() {
                     style={{
                       width: 32,
                       height: 32,
-                      borderRadius: 5,
+                      borderRadius: Radius.sm,
                       backgroundColor: C.primaryMuted,
                       justifyContent: "center",
                       alignItems: "center",
@@ -1126,7 +1086,7 @@ export default function SalesScreen() {
             <View
               style={{
                 backgroundColor: C.dangerBg,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 borderWidth: 1,
                 borderColor: `${C.danger}40`,
                 padding: 12,
@@ -1150,7 +1110,7 @@ export default function SalesScreen() {
                 style={{
                   width: 32,
                   height: 32,
-                  borderRadius: 5,
+                  borderRadius: Radius.sm,
                   backgroundColor: `${C.danger}20`,
                   justifyContent: "center",
                   alignItems: "center",
@@ -1193,7 +1153,7 @@ export default function SalesScreen() {
                 key={i}
                 style={{
                   backgroundColor: bg,
-                  borderRadius: 5,
+                  borderRadius: Radius.sm,
                   borderWidth: 1,
                   borderColor: `${color}40`,
                   padding: 12,
@@ -1217,7 +1177,7 @@ export default function SalesScreen() {
                   style={{
                     width: 32,
                     height: 32,
-                    borderRadius: 5,
+                    borderRadius: Radius.sm,
                     backgroundColor: `${color}20`,
                     justifyContent: "center",
                     alignItems: "center",
@@ -1283,7 +1243,7 @@ export default function SalesScreen() {
                   activeOpacity={0.75}
                   style={{
                     backgroundColor: C.card,
-                    borderRadius: 5,
+                    borderRadius: Radius.sm,
                     borderWidth: 1,
                     borderColor: C.border,
                     paddingHorizontal: 12,
@@ -1327,6 +1287,37 @@ export default function SalesScreen() {
         </View>
       )}
 
+      {/* ── Cart header (count + clear) ──────────────────────────────────── */}
+      {cart.length > 0 && (
+        <View
+          style={{
+            flexDirection: "row-reverse",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingHorizontal: 14,
+            paddingTop: 12,
+            paddingBottom: 4,
+          }}
+        >
+          <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: "800", letterSpacing: 0.3 }}>
+            السلة · {itemCount} صنف
+          </Text>
+          <TouchableOpacity
+            onPress={() =>
+              Alert.alert("إفراغ السلة", "هل تريد إزالة كل الأصناف من السلة؟", [
+                { text: "إلغاء", style: "cancel" },
+                { text: "إفراغ", style: "destructive", onPress: resetCart },
+              ])
+            }
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ flexDirection: "row-reverse", alignItems: "center", gap: 4 }}
+          >
+            <Ionicons name="trash-outline" size={13} color={C.danger} />
+            <Text style={{ color: C.danger, fontSize: 12, fontWeight: "700" }}>إفراغ السلة</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── Cart list ────────────────────────────────────────────────────── */}
       <FlatList
         data={cart}
@@ -1340,7 +1331,7 @@ export default function SalesScreen() {
         )}
         keyExtractor={(item) => item.id}
         style={{ flex: 1 }}
-        contentContainerStyle={cart.length === 0 ? { flex: 1 } : undefined}
+        contentContainerStyle={cart.length === 0 ? { flex: 1 } : { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 8 }}
         ListEmptyComponent={
           <View
             style={{
@@ -1355,7 +1346,7 @@ export default function SalesScreen() {
               style={{
                 width: 72,
                 height: 72,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 backgroundColor: C.input,
                 justifyContent: "center",
                 alignItems: "center",
@@ -1392,84 +1383,6 @@ export default function SalesScreen() {
           gap: 10,
         }}
       >
-        {/* Manual discount */}
-        {cart.length > 0 && (
-          <View
-            style={{
-              flexDirection: "row-reverse",
-              alignItems: "center",
-              backgroundColor: C.background,
-              borderRadius: 5,
-              borderWidth: 1,
-              borderColor: C.border,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              gap: 10,
-            }}
-          >
-            <View
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 5,
-                backgroundColor: C.warningBg,
-                justifyContent: "center",
-                alignItems: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Ionicons name="pricetag-outline" size={14} color={C.warning} />
-            </View>
-            <Text
-              style={{
-                color: C.foreground,
-                fontSize: 13,
-                fontWeight: "600",
-                flex: 1,
-                textAlign: "right",
-              }}
-            >
-              خصم يدوي
-            </Text>
-            <View
-              style={{
-                flexDirection: "row-reverse",
-                alignItems: "center",
-                backgroundColor: C.input,
-                borderRadius: 5,
-                borderWidth: 1,
-                borderColor: C.border,
-                paddingHorizontal: 10,
-                height: 34,
-                gap: 4,
-                minWidth: 100,
-              }}
-            >
-              <TextInput
-                style={{
-                  color: C.foreground,
-                  fontSize: 14,
-                  fontWeight: "700",
-                  textAlign: "right",
-                  flex: 1,
-                }}
-                placeholder="0"
-                placeholderTextColor={C.mutedForeground}
-                keyboardType="numeric"
-                value={manualDiscountInput}
-                onChangeText={(v) => {
-                  setManualDiscountInput(v);
-                  const n = parseFloat(v) || 0;
-                  setManualDiscount(Math.min(n, subTotal));
-                }}
-              />
-              <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-                د.ع
-              </Text>
-            </View>
-          </View>
-        )}
-
         {/* Loyalty row */}
         {cart.length > 0 &&
           selectedPatient &&
@@ -1478,7 +1391,7 @@ export default function SalesScreen() {
             <View
               style={{
                 backgroundColor: C.primaryMuted,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 borderWidth: 1,
                 borderColor: `${C.primary}30`,
                 padding: 12,
@@ -1531,7 +1444,7 @@ export default function SalesScreen() {
                   onPress={() => setPointsToRedeem((p) => Math.max(0, p - 100))}
                   style={{
                     backgroundColor: C.card,
-                    borderRadius: 5,
+                    borderRadius: Radius.sm,
                     padding: 6,
                     borderWidth: 1,
                     borderColor: C.border,
@@ -1572,7 +1485,7 @@ export default function SalesScreen() {
                   }}
                   style={{
                     backgroundColor: C.card,
-                    borderRadius: 5,
+                    borderRadius: Radius.sm,
                     padding: 6,
                     borderWidth: 1,
                     borderColor: C.border,
@@ -1601,12 +1514,12 @@ export default function SalesScreen() {
             flexDirection: "row-reverse",
             justifyContent: "space-between",
             alignItems: "center",
-            backgroundColor: C.background,
-            borderRadius: 5,
-            borderWidth: 1,
-            borderColor: C.border,
+            backgroundColor: C.primaryMuted,
+            borderRadius: Radius.sm,
+            borderWidth: 1.5,
+            borderColor: `${C.primary}33`,
             paddingHorizontal: 14,
-            paddingVertical: 10,
+            paddingVertical: 12,
           }}
         >
           <View>
@@ -1684,7 +1597,7 @@ export default function SalesScreen() {
             <View
               style={{
                 backgroundColor: C.primaryMuted,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 paddingHorizontal: 10,
                 paddingVertical: 5,
               }}
@@ -1700,6 +1613,35 @@ export default function SalesScreen() {
 
         {/* Checkout buttons */}
         <View style={{ flexDirection: "row-reverse", gap: 10 }}>
+          {/* Discount button → opens the discount modal */}
+          {cart.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setShowDiscountModal(true)}
+              activeOpacity={0.85}
+              style={{
+                flexDirection: "row-reverse",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 5,
+                paddingHorizontal: 14,
+                borderRadius: Radius.sm,
+                backgroundColor: manualDiscount > 0 ? C.warningBg : C.input,
+                borderWidth: 1.5,
+                borderColor: manualDiscount > 0 ? `${C.warning}50` : C.border,
+              }}
+            >
+              <Ionicons
+                name="pricetag-outline"
+                size={18}
+                color={manualDiscount > 0 ? C.warning : C.mutedForeground}
+              />
+              {manualDiscount > 0 && (
+                <Text style={{ color: C.warning, fontWeight: "800", fontSize: 12 }}>
+                  {manualDiscount.toLocaleString("en-US")}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => handleCheckout("CREDIT")}
             disabled={cart.length === 0 || loading}
@@ -1711,7 +1653,7 @@ export default function SalesScreen() {
               alignItems: "center",
               gap: 6,
               backgroundColor: cart.length === 0 ? C.border : C.warning,
-              borderRadius: 5,
+              borderRadius: Radius.sm,
               paddingVertical: 14,
               opacity: cart.length === 0 ? 0.5 : 1,
             }}
@@ -1742,7 +1684,7 @@ export default function SalesScreen() {
               alignItems: "center",
               gap: 6,
               backgroundColor: cart.length === 0 ? C.border : C.success,
-              borderRadius: 5,
+              borderRadius: Radius.sm,
               paddingVertical: 14,
               opacity: cart.length === 0 ? 0.5 : 1,
             }}
@@ -1824,7 +1766,7 @@ export default function SalesScreen() {
                 flexDirection: "row-reverse",
                 alignItems: "center",
                 backgroundColor: C.input,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 borderWidth: 1,
                 borderColor: C.border,
                 paddingHorizontal: 12,
@@ -1879,7 +1821,7 @@ export default function SalesScreen() {
                   style={{
                     width: 36,
                     height: 36,
-                    borderRadius: 5,
+                    borderRadius: Radius.sm,
                     backgroundColor: C.primaryMuted,
                     justifyContent: "center",
                     alignItems: "center",
@@ -1922,7 +1864,7 @@ export default function SalesScreen() {
                   <View
                     style={{
                       backgroundColor: C.dangerBg,
-                      borderRadius: 5,
+                      borderRadius: Radius.sm,
                       paddingHorizontal: 8,
                       paddingVertical: 3,
                     }}
@@ -1951,7 +1893,7 @@ export default function SalesScreen() {
                 alignItems: "center",
                 gap: 6,
                 backgroundColor: C.input,
-                borderRadius: 5,
+                borderRadius: Radius.sm,
                 paddingVertical: 12,
                 marginTop: 14,
                 borderWidth: 1,
@@ -1969,6 +1911,478 @@ export default function SalesScreen() {
                 إغلاق
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Discount Modal ──────────────────────────────────────────────── */}
+      <Modal
+        visible={showDiscountModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDiscountModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setShowDiscountModal(false)}
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "center",
+              padding: 24,
+            }}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={{
+                backgroundColor: C.card,
+                borderRadius: Radius.sm,
+                padding: 20,
+                gap: 14,
+              }}
+            >
+              {/* Header */}
+              <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: Radius.xs,
+                    backgroundColor: C.warningBg,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Ionicons name="pricetag" size={20} color={C.warning} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: C.foreground, fontSize: 16, fontWeight: "800", textAlign: "right" }}>
+                    خصم يدوي
+                  </Text>
+                  <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: "right", marginTop: 1 }}>
+                    أدخل مبلغ الخصم بالدينار
+                  </Text>
+                </View>
+              </View>
+
+              {/* Amount input */}
+              <View
+                style={{
+                  flexDirection: "row-reverse",
+                  alignItems: "center",
+                  backgroundColor: C.input,
+                  borderRadius: Radius.xs,
+                  borderWidth: 1.5,
+                  borderColor: C.warning,
+                  paddingHorizontal: 14,
+                  gap: 6,
+                }}
+              >
+                <TextInput
+                  style={{
+                    flex: 1,
+                    color: C.foreground,
+                    paddingVertical: 13,
+                    textAlign: "right",
+                    fontSize: 20,
+                    fontWeight: "800",
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={C.mutedForeground}
+                  keyboardType="numeric"
+                  value={manualDiscountInput}
+                  onChangeText={(v) => {
+                    setManualDiscountInput(v);
+                    const n = parseFloat(v) || 0;
+                    setManualDiscount(Math.min(n, subTotal));
+                  }}
+                  autoFocus
+                />
+                <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: "700" }}>
+                  د.ع
+                </Text>
+              </View>
+
+              {/* Subtotal hint */}
+              <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: "right" }}>
+                الإجمالي الفرعي: {subTotal.toLocaleString("en-US")} د.ع
+              </Text>
+
+              {/* Actions */}
+              <View style={{ flexDirection: "row-reverse", gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() => setShowDiscountModal(false)}
+                  activeOpacity={0.85}
+                  style={{
+                    flex: 2,
+                    flexDirection: "row-reverse",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: 6,
+                    backgroundColor: C.primary,
+                    borderRadius: Radius.sm,
+                    paddingVertical: 13,
+                  }}
+                >
+                  <Ionicons name="checkmark-outline" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "800", fontSize: 14 }}>تطبيق</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setManualDiscount(0);
+                    setManualDiscountInput("");
+                    setShowDiscountModal(false);
+                  }}
+                  activeOpacity={0.75}
+                  style={{
+                    flex: 1,
+                    flexDirection: "row-reverse",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: 6,
+                    backgroundColor: C.card,
+                    borderRadius: Radius.sm,
+                    paddingVertical: 13,
+                    borderWidth: 1,
+                    borderColor: C.border,
+                  }}
+                >
+                  <Ionicons name="close-outline" size={18} color={C.mutedForeground} />
+                  <Text style={{ color: C.foreground, fontWeight: "600", fontSize: 14 }}>مسح</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Sale success modal ──────────────────────────────────────────── */}
+      <Modal
+        visible={successInfo !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSuccessInfo(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            padding: 28,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: C.card,
+              borderRadius: Radius.sm,
+              padding: 24,
+              alignItems: "center",
+            }}
+          >
+            {/* Success icon */}
+            <View
+              style={{
+                width: 66,
+                height: 66,
+                borderRadius: 33,
+                backgroundColor: C.successBg,
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 14,
+              }}
+            >
+              <Ionicons name="checkmark-circle" size={42} color={C.success} />
+            </View>
+
+            <Text style={{ color: C.foreground, fontSize: 18, fontWeight: "900", marginBottom: 4 }}>
+              تمت العملية بنجاح
+            </Text>
+            <Text style={{ color: C.mutedForeground, fontSize: 13, marginBottom: 12 }}>
+              تم تسجيل عملية البيع
+            </Text>
+
+            {/* Total */}
+            <View style={{ flexDirection: "row-reverse", alignItems: "baseline", gap: 4, marginBottom: 20 }}>
+              <Text style={{ color: C.primary, fontSize: 24, fontWeight: "900" }}>
+                {(successInfo?.total ?? 0).toLocaleString("en-US")}
+              </Text>
+              <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: "700" }}>د.ع</Text>
+            </View>
+
+            {/* Buttons in one row */}
+            <View style={{ flexDirection: "row-reverse", gap: 10, width: "100%" }}>
+              <TouchableOpacity
+                onPress={() => {
+                  const info = successInfo;
+                  setSuccessInfo(null);
+                  if (info) printReceipt(info.cart, info.total);
+                }}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1,
+                  flexDirection: "row-reverse",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 7,
+                  backgroundColor: C.primary,
+                  borderRadius: Radius.sm,
+                  paddingVertical: 13,
+                }}
+              >
+                <Ionicons name="print-outline" size={18} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>طباعة</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSuccessInfo(null)}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1,
+                  flexDirection: "row-reverse",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 6,
+                  backgroundColor: C.card,
+                  borderRadius: Radius.sm,
+                  paddingVertical: 13,
+                  borderWidth: 1.5,
+                  borderColor: C.border,
+                }}
+              >
+                <Ionicons name="checkmark-outline" size={18} color={C.foreground} />
+                <Text style={{ color: C.foreground, fontWeight: "700", fontSize: 15 }}>موافق</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Checkout confirm modal ──────────────────────────────────────── */}
+      <Modal
+        visible={confirmMethod !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmMethod(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            padding: 28,
+          }}
+        >
+          <View style={{ backgroundColor: C.card, borderRadius: Radius.sm, padding: 22 }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: Radius.xs,
+                  backgroundColor: confirmMethod === "CASH" ? C.successBg : C.warningBg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons
+                  name={confirmMethod === "CASH" ? "cash-outline" : "time-outline"}
+                  size={22}
+                  color={confirmMethod === "CASH" ? C.success : C.warning}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: C.foreground, fontSize: 17, fontWeight: "800", textAlign: "right" }}>
+                  تأكيد البيع
+                </Text>
+                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: "right", marginTop: 1 }}>
+                  طريقة الدفع: {confirmMethod === "CASH" ? "نقدي" : "آجل"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Summary */}
+            <View
+              style={{
+                backgroundColor: C.background,
+                borderRadius: Radius.xs,
+                borderWidth: 1,
+                borderColor: C.border,
+                padding: 14,
+                gap: 9,
+                marginBottom: 18,
+              }}
+            >
+              {totalDiscount > 0 && (
+                <>
+                  <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
+                    <Text style={{ color: C.mutedForeground, fontSize: 13 }}>المجموع الفرعي</Text>
+                    <Text style={{ color: C.foreground, fontSize: 13, fontWeight: "600" }}>
+                      {subTotal.toLocaleString("en-US")} د.ع
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
+                    <Text style={{ color: C.mutedForeground, fontSize: 13 }}>الخصم</Text>
+                    <Text style={{ color: C.success, fontSize: 13, fontWeight: "700" }}>
+                      − {totalDiscount.toLocaleString("en-US")} د.ع
+                    </Text>
+                  </View>
+                  <View style={{ height: 1, backgroundColor: C.border }} />
+                </>
+              )}
+              <View style={{ flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ color: C.foreground, fontSize: 14, fontWeight: "800" }}>الإجمالي</Text>
+                <View style={{ flexDirection: "row-reverse", alignItems: "baseline", gap: 4 }}>
+                  <Text style={{ color: C.primary, fontSize: 20, fontWeight: "900" }}>
+                    {total.toLocaleString("en-US")}
+                  </Text>
+                  <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: "700" }}>د.ع</Text>
+                </View>
+              </View>
+              {selectedPatient && (
+                <>
+                  <View style={{ height: 1, backgroundColor: C.border }} />
+                  <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
+                    <Text style={{ color: C.mutedForeground, fontSize: 13 }}>العميل</Text>
+                    <Text style={{ color: C.foreground, fontSize: 13, fontWeight: "700" }} numberOfLines={1}>
+                      {selectedPatient.name}
+                    </Text>
+                  </View>
+                </>
+              )}
+            </View>
+
+            {/* Buttons in one row */}
+            <View style={{ flexDirection: "row-reverse", gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  const m = confirmMethod;
+                  setConfirmMethod(null);
+                  if (m) processSale(m);
+                }}
+                activeOpacity={0.85}
+                style={{
+                  flex: 2,
+                  flexDirection: "row-reverse",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 7,
+                  backgroundColor: confirmMethod === "CASH" ? C.success : C.warning,
+                  borderRadius: Radius.sm,
+                  paddingVertical: 14,
+                }}
+              >
+                <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>تأكيد البيع</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setConfirmMethod(null)}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1,
+                  flexDirection: "row-reverse",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 6,
+                  backgroundColor: C.card,
+                  borderRadius: Radius.sm,
+                  paddingVertical: 14,
+                  borderWidth: 1.5,
+                  borderColor: C.border,
+                }}
+              >
+                <Ionicons name="close-outline" size={18} color={C.mutedForeground} />
+                <Text style={{ color: C.foreground, fontWeight: "700", fontSize: 15 }}>إلغاء</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Needs-patient (credit) modal ────────────────────────────────── */}
+      <Modal
+        visible={showNeedPatient}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNeedPatient(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            padding: 28,
+          }}
+        >
+          <View style={{ backgroundColor: C.card, borderRadius: Radius.sm, padding: 22 }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 12, marginBottom: 10 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: Radius.xs,
+                  backgroundColor: C.warningBg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="person-add-outline" size={22} color={C.warning} />
+              </View>
+              <Text style={{ flex: 1, color: C.foreground, fontSize: 17, fontWeight: "800", textAlign: "right" }}>
+                يجب اختيار عميل
+              </Text>
+            </View>
+
+            <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: "right", lineHeight: 20, marginBottom: 18 }}>
+              البيع الآجل يتطلّب تحديد العميل المُسجَّل عليه الدين أولاً.
+            </Text>
+
+            {/* Buttons in one row */}
+            <View style={{ flexDirection: "row-reverse", gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowNeedPatient(false);
+                  setShowPatientModal(true);
+                }}
+                activeOpacity={0.85}
+                style={{
+                  flex: 2,
+                  flexDirection: "row-reverse",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 7,
+                  backgroundColor: C.primary,
+                  borderRadius: Radius.sm,
+                  paddingVertical: 14,
+                }}
+              >
+                <Ionicons name="person-add" size={18} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>اختيار عميل</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowNeedPatient(false)}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1,
+                  flexDirection: "row-reverse",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 6,
+                  backgroundColor: C.card,
+                  borderRadius: Radius.sm,
+                  paddingVertical: 14,
+                  borderWidth: 1.5,
+                  borderColor: C.border,
+                }}
+              >
+                <Ionicons name="close-outline" size={18} color={C.mutedForeground} />
+                <Text style={{ color: C.foreground, fontWeight: "700", fontSize: 15 }}>إلغاء</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

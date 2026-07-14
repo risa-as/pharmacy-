@@ -6,6 +6,7 @@ import path from 'node:path';
 import store from './store';
 import { buildApiUrl, getApiCandidates, setApiBaseUrl } from './api-config';
 import { storeOfflineToken } from './offline-token';
+import { buildIdempotencyKey, buildBatchIdempotencyKey } from './idempotency';
 
 // SQLite has a max of 999 bind variables per statement. When using `{ in: [...] }`
 // or `{ notIn: [...] }` with large arrays, Prisma generates one bind variable per
@@ -281,6 +282,9 @@ export async function syncSales() {
             userId: sale.userId,
             patientId: sale.patientId,
             paymentMethod: sale.payment?.method || "CASH",
+            // Number allocated at sale time (online). Sent so the cloud reuses it
+            // instead of assigning a different sequential number.
+            invoiceNumber: sale.invoiceNumber ?? null,
             items: sale.items.map((item: any) => ({
                 drugId: item.drugId,
                 quantity: item.quantity,
@@ -296,7 +300,7 @@ export async function syncSales() {
             } : null,
         }));
 
-        const salesIdempotencyKey = buildIdempotencyKey('sync-sales', `${branchId}-${Date.now()}`);
+        const salesIdempotencyKey = buildBatchIdempotencyKey('sync-sales', unsyncedSales.map((s: any) => s.id));
 
         const response = await fetchWithRetry(buildApiUrl('/sync/sales'), {
             method: 'POST',
@@ -310,7 +314,7 @@ export async function syncSales() {
             })
         });
 
-        const result = await response.json() as { syncedIds?: string[] };
+        const result = await response.json() as { syncedIds?: string[]; invoiceNumbers?: Record<string, number> };
         const syncedIds = result.syncedIds;
 
         // 3. Mark as synced
@@ -320,6 +324,19 @@ export async function syncSales() {
                 data: { synced: true }
             });
             console.log(`[Sync] Sales sync completed. Marked ${syncedIds.length} sale(s) as synced.`);
+        }
+
+        // 4. Reconcile invoice numbers: for offline sales the cloud allocated the
+        // sequential number — pull it back so the local record matches the web.
+        if (result.invoiceNumbers) {
+            for (const [saleId, num] of Object.entries(result.invoiceNumbers)) {
+                try {
+                    await prisma.sale.update({
+                        where: { id: saleId },
+                        data: { invoiceNumber: String(num) },
+                    });
+                } catch { /* sale may have been removed locally — ignore */ }
+            }
         }
 
     } catch (error: any) {
@@ -386,6 +403,7 @@ export async function syncDebtPayments() {
             const payload = unsyncedPayments.map((p: any) => ({
                 id: p.id,
                 saleId: p.saleId,
+                userId: p.userId ?? null,
                 amount: p.amount,
                 method: p.method,
                 note: p.note,
@@ -536,6 +554,7 @@ export async function syncSaleReturns() {
             id: ret.id,
             saleId: ret.saleId,
             safeId: ret.safeId,
+            userId: ret.userId ?? null,
             total: ret.total,
             createdAt: ret.createdAt,
             notes: ret.notes,
@@ -631,7 +650,17 @@ export async function refreshOfflineToken(): Promise<void> {
         const url = buildApiUrl(`/sync/offline-token?branchId=${encodeURIComponent(branchId)}&licenseKey=${encodeURIComponent(licenseKey)}`);
         const response = await fetch(url, { method: 'GET' });
         if (!response.ok) {
-            console.warn('[OfflineToken] Server returned', response.status, '— skipping token refresh.');
+            // 503 = the license IS valid (it passed the server's license check) but
+            // token signing isn't configured server-side. Treat the reachable, valid
+            // license as a successful check-in so the desktop isn't wrongly locked
+            // out later for "couldn't verify". Only a genuinely invalid/revoked
+            // license (403) leaves lastSeenAt stale and eventually locks.
+            if (response.status === 503) {
+                store.set('lastSeenAt', new Date().toISOString());
+                console.warn('[OfflineToken] Server cannot sign tokens (503) but license is valid — stamped check-in.');
+            } else {
+                console.warn('[OfflineToken] Server returned', response.status, '— skipping token refresh.');
+            }
             return;
         }
         const data = await response.json() as { token?: string };
@@ -758,6 +787,25 @@ export async function syncShifts() {
         const branchId = getBranchId();
         if (!branchId) return;
 
+        // Attach a user snapshot (email/name) to each shift so the cloud can
+        // resolve the correct cloud user ID when the local user ID diverges from
+        // the cloud one. This happens when the same email was created on both
+        // sides — desktop keeps its local ID, so shift.userId won't exist in the
+        // cloud and the FK on Shift.userId would otherwise fail the whole sync.
+        const shiftUserIds = [...new Set(unsyncedShifts.map((s: any) => s.userId))];
+        const shiftUsers = await prisma.user.findMany({
+            where: { id: { in: shiftUserIds } },
+            select: { id: true, email: true, name: true },
+        });
+        const shiftUserMap = new Map<string, { id: string; email: string | null; name: string | null }>(
+            shiftUsers.map((u: any) => [u.id, u])
+        );
+        const shiftsPayload = unsyncedShifts.map((s: any) => ({
+            ...s,
+            userEmail: shiftUserMap.get(s.userId)?.email ?? null,
+            userName: shiftUserMap.get(s.userId)?.name ?? null,
+        }));
+
         const shiftsIdempotencyKey = buildIdempotencyKey('sync-shifts', `${branchId}-${Date.now()}`);
 
         const response = await fetchWithRetry(buildApiUrl('/sync/shifts'), {
@@ -768,7 +816,7 @@ export async function syncShifts() {
             },
             body: JSON.stringify({
                 branchId: branchId,
-                shifts: unsyncedShifts
+                shifts: shiftsPayload
             })
         });
 
@@ -994,6 +1042,11 @@ export async function syncSuppliers() {
         const branchId = getBranchId();
         if (!branchId) return;
         console.log('[Sync] Syncing suppliers list...');
+        // Tag every synced supplier with the current organization. The cloud
+        // endpoint already scopes by branch, so all returned suppliers belong to
+        // this org. The tag lets get-local-suppliers filter out suppliers left
+        // over from a different organization that previously used this machine.
+        const orgId = (store.get('syncOrgId') as string) || null;
         const response = await fetchWithRetry(buildApiUrl(`/suppliers?branchId=${encodeURIComponent(branchId)}`));
         if (!response.ok) throw new Error('Suppliers fetch failed');
         const suppliers = await response.json() as Array<{ id: string; name: string; phone?: string }>;
@@ -1001,11 +1054,11 @@ export async function syncSuppliers() {
             for (const s of suppliers) {
                 await prisma.supplier.upsert({
                     where: { id: s.id },
-                    update: { name: s.name, phone: s.phone ?? null },
-                    create: { id: s.id, name: s.name, phone: s.phone ?? null },
+                    update: { name: s.name, phone: s.phone ?? null, organizationId: orgId },
+                    create: { id: s.id, name: s.name, phone: s.phone ?? null, organizationId: orgId },
                 });
             }
-            console.log(`[Sync] Suppliers synced: ${suppliers.length} records`);
+            console.log(`[Sync] Suppliers synced: ${suppliers.length} records (org ${orgId ?? 'n/a'})`);
         }
     } catch (err) {
         console.error('[Sync] Supplier sync failed:', err);
@@ -1462,7 +1515,9 @@ export async function syncUsers() {
                         email: user.email,
                         role: user.role,
                         password: user.password,
-                        branchId: user.branchId
+                        branchId: user.branchId,
+                        // Default true for older cloud payloads that omit the field.
+                        isActive: user.isActive ?? true
                     };
 
                     const existingById = await tx.user.findUnique({
@@ -1579,13 +1634,27 @@ export async function syncPatients() {
             // Use Set-based filtering to avoid SQLite's 999-variable limit (P2029)
             const cloudIdSet = new Set(cloudIds);
 
-            // Nullify patientId on sales that reference deleted patients
+            // Protect freshly-created local patients (e.g. a new credit customer)
+            // from being wiped before their push to the cloud has propagated.
+            // Without this, a brand-new debtor — and their sale's patient link —
+            // would vanish until the sale itself synced and the cloud returned them.
+            const PATIENT_SYNC_GRACE_MS = 10 * 60 * 1000;
+            const recentCutoff = Date.now() - PATIENT_SYNC_GRACE_MS;
+            const localPatients = await tx.patient.findMany({ select: { id: true, createdAt: true } });
+            const protectedIds = new Set<string>(
+                localPatients
+                    .filter((p: any) => new Date(p.createdAt).getTime() >= recentCutoff)
+                    .map((p: any) => p.id)
+            );
+
+            // Nullify patientId on sales whose patient is genuinely gone from cloud
+            // (never for protected, just-created patients).
             const orphanSales = await tx.sale.findMany({
                 where: { patientId: { not: null } },
                 select: { id: true, patientId: true }
             });
             const orphanSaleIds = orphanSales
-                .filter((s: any) => s.patientId && !cloudIdSet.has(s.patientId))
+                .filter((s: any) => s.patientId && !cloudIdSet.has(s.patientId) && !protectedIds.has(s.patientId))
                 .map((s: any) => s.id);
             if (orphanSaleIds.length > 0) {
                 await updateManyChunked(tx.sale, 'id', orphanSaleIds, { patientId: null });
@@ -1596,7 +1665,7 @@ export async function syncPatients() {
                 select: { id: true, patientId: true }
             });
             const accountsToDelete = allAccounts.filter(
-                (a: any) => cloudIds.length === 0 || !cloudIdSet.has(a.patientId)
+                (a: any) => !cloudIdSet.has(a.patientId) && !protectedIds.has(a.patientId)
             );
             const accountIds = accountsToDelete.map((a: any) => a.id);
             if (accountIds.length > 0) {
@@ -1604,10 +1673,9 @@ export async function syncPatients() {
                 await deleteManyChunked(tx.loyaltyAccount, 'id', accountIds);
             }
 
-            // Delete patients no longer in cloud
-            const allPatients = await tx.patient.findMany({ select: { id: true } });
-            const patientIdsToDelete = allPatients
-                .filter((p: any) => cloudIds.length === 0 || !cloudIdSet.has(p.id))
+            // Delete patients no longer in cloud (excluding protected new ones).
+            const patientIdsToDelete = localPatients
+                .filter((p: any) => !cloudIdSet.has(p.id) && !protectedIds.has(p.id))
                 .map((p: any) => p.id);
             let deletedCount = 0;
             if (patientIdsToDelete.length > 0) {
@@ -1708,15 +1776,6 @@ type SyncAckPayload = {
     message?: string;
 };
 
-function sanitizeIdempotencyPart(value: string): string {
-    return value.replace(/[^a-zA-Z0-9:_-]/g, '').slice(0, 96);
-}
-
-function buildIdempotencyKey(prefix: string, value: string): string {
-    const safePrefix = sanitizeIdempotencyPart(prefix);
-    const safeValue = sanitizeIdempotencyPart(value);
-    return `${safePrefix}:${safeValue}`.slice(0, 120);
-}
 
 async function parseResponseBody<T = any>(response: Response): Promise<T | null> {
     try {
@@ -2126,6 +2185,42 @@ export async function pushUpdateInventoryToCloud(data: {
             throw error;
         }
         return false;
+    }
+}
+
+/**
+ * Allocate the next per-organization sequential invoice number from the cloud,
+ * so the printed receipt matches the number shown on the web dashboard.
+ * Returns the number on success, or null when offline / on any failure — callers
+ * must fall back to a local number in that case.
+ */
+export async function allocateInvoiceNumber(): Promise<number | null> {
+    if (!isOnline) return null;
+    // Direct fetch with a short timeout and NO retries: allocating a number must
+    // never stall the checkout. If it can't return quickly we fall back to a
+    // local number and let /sync/sales assign the sequential one later.
+    // 1.5s cap — a slow/cold server must not hold the cashier hostage; the
+    // reconciliation path exists precisely for this case.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    try {
+        const response = await fetch(buildApiUrl('/sales/allocate-number'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getDeviceAuthHeaders() },
+            body: JSON.stringify({ branchId: getBranchId() }),
+            signal: controller.signal,
+        });
+        if (!response.ok) {
+            console.error(`[CloudSync] allocate-number failed: ${response.status}`);
+            return null;
+        }
+        const data = await response.json() as { invoiceNumber?: number };
+        return typeof data.invoiceNumber === 'number' ? data.invoiceNumber : null;
+    } catch (error) {
+        console.error('[CloudSync] allocateInvoiceNumber error:', error);
+        return null;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 

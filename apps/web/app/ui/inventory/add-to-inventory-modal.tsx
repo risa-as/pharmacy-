@@ -54,6 +54,18 @@ export default function AddToInventoryModal({
     ) {
       return;
     }
+    // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+    if (
+      (stripsPerPacket > 20 || (qty > 10 && stripsPerPacket >= qty)) &&
+      !window.confirm(
+        `تنبيه: عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
+        `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
+        `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع\n` +
+        `هل أنت متأكد من المتابعة؟`,
+      )
+    ) {
+      return;
+    }
 
     setLoading(true);
 
@@ -205,6 +217,12 @@ export default function AddToInventoryModal({
                     : "—"}
                 </span>
               </div>
+              {stripsPerPacket > 20 && (
+                <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
+                  <span>⚠</span>
+                  هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
+                </p>
+              )}
               {packetPrice > 0 && packetPrice < 125 && (
                 <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
                   <span>⚠</span>

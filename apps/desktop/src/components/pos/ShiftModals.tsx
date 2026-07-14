@@ -55,6 +55,7 @@ export default function ShiftModals({
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-1">الرصيد الافتتاحي (د.ع)</label>
                                 <input
+                                    id="shift-starting-cash-input"
                                     type="number"
                                     placeholder="أدخل المبلغ المتوفر في الصندوق الان"
                                     className="w-full bg-background text-foreground border border-border rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"

@@ -4,10 +4,11 @@ import {
     Alert, Platform, KeyboardAvoidingView, ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../../../services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../context/ThemeContext';
-import { Colors } from '../../../constants/colors';
+import { managerPalette, Radius } from '../../../constants/colors';
 
 interface ReceiveItem {
     id: string;
@@ -27,13 +28,27 @@ export default function ReceiveItemsScreen() {
     const [loading, setLoading]   = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const insets = useSafeAreaInsets();
+    const C = managerPalette(isDarkMode);
+
+    // Outlined card matching the manager identity — light surface, soft tinted border.
+    const card = (accent: string) => ({
+        backgroundColor: C.card,
+        borderRadius: Radius.sm,
+        borderWidth: 1.5,
+        borderColor: `${accent}33`,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 } as const,
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        elevation: 2,
+    });
 
     useEffect(() => { if (id) fetchDetails(); }, [id]);
 
     const fetchDetails = async () => {
         try {
-            const data = await apiService.getPurchaseDetails(id as string);
+            const data: any = await apiService.getPurchaseDetails(id as string);
             const baseTs = Date.now().toString(36).toUpperCase();
             setItems(data.items.map((item: any, idx: number) => ({
                 ...item,
@@ -102,10 +117,34 @@ export default function ReceiveItemsScreen() {
     const filledCount = items.filter(i => i.expiryMonth && i.expiryYear).length;
     const allFilled   = filledCount === items.length && items.length > 0;
 
+    // Custom header — replaces the native (brand-coloured) Stack header.
+    const Header = (
+        <>
+            <Stack.Screen options={{ headerShown: false }} />
+            <View style={{
+                paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 10,
+                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+                backgroundColor: C.background,
+            }}>
+                <TouchableOpacity
+                    onPress={() => router.back()}
+                    activeOpacity={0.8}
+                    style={{ width: 40, height: 40, borderRadius: Radius.xs, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <Ionicons name="arrow-forward" size={20} color={C.foreground} />
+                </TouchableOpacity>
+                <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800' }}>استلام المواد</Text>
+                <View style={{ width: 40 }} />
+            </View>
+        </>
+    );
+
     if (loading) return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: C.background }}>
-            <Stack.Screen options={{ title: 'استلام المواد', headerBackTitle: 'إلغاء' }} />
-            <ActivityIndicator size="large" color={C.primary} />
+        <View style={{ flex: 1, backgroundColor: C.background }}>
+            {Header}
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={C.primary} />
+            </View>
         </View>
     );
 
@@ -114,12 +153,7 @@ export default function ReceiveItemsScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1, backgroundColor: C.background }}
         >
-            <Stack.Screen options={{
-                title: 'استلام المواد',
-                headerBackTitle: 'إلغاء',
-                headerStyle: { backgroundColor: C.card },
-                headerTintColor: C.foreground,
-            }} />
+            {Header}
 
             <ScrollView
                 contentContainerStyle={{ padding: 16 }}
@@ -127,14 +161,13 @@ export default function ReceiveItemsScreen() {
             >
                 {/* Banner */}
                 <View style={{
+                    ...card(C.primary), padding: 13, marginBottom: 16,
                     flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
-                    backgroundColor: C.infoBg, borderRadius: 5, padding: 13,
-                    marginBottom: 16, borderWidth: 1, borderColor: `${C.info}35`,
                 }}>
-                    <View style={{ backgroundColor: C.info, borderRadius: 5, padding: 6 }}>
-                        <Ionicons name="information" size={14} color="#fff" />
+                    <View style={{ width: 32, height: 32, borderRadius: Radius.xs, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="information" size={16} color={C.primary} />
                     </View>
-                    <Text style={{ flex: 1, color: C.info, fontSize: 13, textAlign: 'right', lineHeight: 20 }}>
+                    <Text style={{ flex: 1, color: C.foreground, fontSize: 13, textAlign: 'right', lineHeight: 20 }}>
                         أدخل تاريخ انتهاء الصلاحية (الشهر / السنة) لكل مادة
                     </Text>
                 </View>
@@ -142,8 +175,7 @@ export default function ReceiveItemsScreen() {
                 {/* Progress bar — only when multiple items */}
                 {items.length > 1 && (
                     <View style={{
-                        backgroundColor: C.card, borderRadius: 5, padding: 12,
-                        borderWidth: 1, borderColor: C.border, marginBottom: 14,
+                        ...card(C.primary), padding: 12, marginBottom: 14,
                         flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
                     }}>
                         <Text style={{ color: C.mutedForeground, fontSize: 12, flexShrink: 0 }}>
@@ -167,22 +199,8 @@ export default function ReceiveItemsScreen() {
                     return (
                         <View
                             key={item.id}
-                            style={{
-                                flexDirection: 'row-reverse',
-                                backgroundColor: C.card, borderRadius: 5,
-                                borderWidth: 1,
-                                borderColor: filled ? `${C.success}50` : C.border,
-                                overflow: 'hidden', marginBottom: 12,
-                                elevation: 1,
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 1 },
-                                shadowOpacity: 0.04, shadowRadius: 4,
-                            }}
+                            style={{ ...card(filled ? C.success : C.primary), padding: 14, marginBottom: 12 }}
                         >
-                            {/* Accent bar */}
-                            <View style={{ width: 4, backgroundColor: filled ? C.success : C.primary }} />
-
-                            <View style={{ flex: 1, padding: 14 }}>
                                 {/* Header */}
                                 <View style={{
                                     flexDirection: 'row-reverse', justifyContent: 'space-between',
@@ -288,7 +306,6 @@ export default function ReceiveItemsScreen() {
                                         </Text>
                                     </View>
                                 )}
-                            </View>
                         </View>
                     );
                 })}
@@ -309,7 +326,7 @@ export default function ReceiveItemsScreen() {
                     activeOpacity={0.85}
                     style={{
                         backgroundColor: allFilled && !submitting ? C.primary : C.border,
-                        borderRadius: 5, paddingVertical: 15,
+                        borderRadius: Radius.sm, paddingVertical: 15,
                         flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 8,
                     }}
                 >

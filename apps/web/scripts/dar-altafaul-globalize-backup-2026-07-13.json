@@ -1,0 +1,3285 @@
+{
+  "organizationId": "930a071a-c933-413c-90dc-1356a8182a2f",
+  "drugs": [
+    {
+      "id": "b5891cbc-802f-47a2-a1ec-bcf8b65dd58a",
+      "barcode": "5012346987735",
+      "tradeName": "Naprox amp"
+    },
+    {
+      "id": "e4a245d9-427d-45bd-9b05-c0ea8aa22921",
+      "barcode": "5070002328711",
+      "tradeName": "Stop vomi supp"
+    },
+    {
+      "id": "9b5e7939-7a6f-4a76-8e73-3ed76ff2d37f",
+      "barcode": "5012345624921",
+      "tradeName": "Lover"
+    },
+    {
+      "id": "e7c44359-a74e-484f-a4f1-91119471702e",
+      "barcode": "7640153081377",
+      "tradeName": "Mesporin 500IM"
+    },
+    {
+      "id": "84fbf449-2fb6-44c7-a67b-9e59e108b876",
+      "barcode": "Otrivin child spray",
+      "tradeName": "Otrivin child spray"
+    },
+    {
+      "id": "1ddc26a9-fb81-43dd-9f0a-06a4dd0f525d",
+      "barcode": "Otrivin menthol spray",
+      "tradeName": "Otrivin menthol spray"
+    },
+    {
+      "id": "da081df8-e42b-491d-9c6f-6b49cefb5b84",
+      "barcode": "8699569090618",
+      "tradeName": "Ateroz 20mg"
+    },
+    {
+      "id": "a42f739f-5110-49be-9d0d-d3fd129a425e",
+      "barcode": "8906122281001",
+      "tradeName": "Deslorafit 5mg"
+    },
+    {
+      "id": "369c3a2d-d237-48a6-879c-eb5919d186a3",
+      "barcode": "6291103730275",
+      "tradeName": "glovit-h"
+    },
+    {
+      "id": "a5740e5f-f9c0-4c90-82f1-9dd4e43b8a0c",
+      "barcode": "Panadol cold&flu",
+      "tradeName": "Panadol cold&flu"
+    },
+    {
+      "id": "9997e691-ef67-40b3-8b7e-16f742b0ecb6",
+      "barcode": "Panadol sinus",
+      "tradeName": "Panadol sinus"
+    },
+    {
+      "id": "b11325e5-4b35-4a2d-906e-0cd29161a9d3",
+      "barcode": "9008732011807",
+      "tradeName": "Neurotop 200mg"
+    },
+    {
+      "id": "76efb0ef-aa1e-425c-823f-f96a45c3fcbf",
+      "barcode": "Eviening pill",
+      "tradeName": "Eviening pill"
+    },
+    {
+      "id": "6f67cbfc-db0d-4a3c-b13f-a576446b3018",
+      "barcode": "8057289180147",
+      "tradeName": "Rupedir sachet"
+    },
+    {
+      "id": "e74bede0-bcb2-4504-9fa6-6180bbff85cd",
+      "barcode": "5285007350135",
+      "tradeName": "Loadin syr"
+    },
+    {
+      "id": "759760ea-8fad-4899-b230-b3cf03b33a4e",
+      "barcode": "6251875000037",
+      "tradeName": "Ciproneer 500mg tab"
+    },
+    {
+      "id": "e3db1d69-88e0-409e-9727-af27b7860c2e",
+      "barcode": "3760095250441",
+      "tradeName": "Acm Depiwhite Advanced 40ml"
+    },
+    {
+      "id": "0ae7c37b-9bd2-47e1-9811-a39cfcd73e0c",
+      "barcode": "3282770207774",
+      "tradeName": "Avene cleanance gil 400ml"
+    },
+    {
+      "id": "3a6941af-b3f0-4581-be83-3cd59aad070c",
+      "barcode": "3574661287263",
+      "tradeName": "Neutrogena 50ml"
+    },
+    {
+      "id": "aada841d-4586-418f-9675-4f0dad02c8ce",
+      "barcode": "3760095250106",
+      "tradeName": "Acm Depiwhite Mask 40ml"
+    },
+    {
+      "id": "0d7b6cff-5f12-47b3-8474-3e6e328422b5",
+      "barcode": "Arcoxia90mg",
+      "tradeName": "Arcoxia90mg"
+    },
+    {
+      "id": "342a2aae-5f38-4912-9c58-5002bf391586",
+      "barcode": "3664898120812",
+      "tradeName": "Coversyl 5\\1.25"
+    },
+    {
+      "id": "b287b032-ffa9-4c19-bdd7-839792f54480",
+      "barcode": "8908003746142",
+      "tradeName": "Montelukast 10mg"
+    },
+    {
+      "id": "a789b49b-fd38-47da-b9a2-a0a56bd0de04",
+      "barcode": "5291171000691",
+      "tradeName": "Virucid 200mg tab"
+    },
+    {
+      "id": "34de95dd-5c54-48e5-9116-5b8764e99b82",
+      "barcode": "5012617004857",
+      "tradeName": "doxycycline 100mg"
+    },
+    {
+      "id": "15c28749-6798-4a2a-b476-fe716d0a548a",
+      "barcode": "Glucovance 500\\5",
+      "tradeName": "Glucovance 500\\5"
+    },
+    {
+      "id": "f6994708-e84d-4fb3-842c-85dd3f4abe8f",
+      "barcode": "Arcoxia120mg",
+      "tradeName": "Arcoxia120mg"
+    },
+    {
+      "id": "dd6571b5-57e7-45c2-9607-4b288a6967e5",
+      "barcode": "604776737964",
+      "tradeName": "Omega-3 AMS"
+    },
+    {
+      "id": "a69ec91b-92d4-470c-9959-ed8c63e08df4",
+      "barcode": "4048846020109",
+      "tradeName": "Synjardy 12.5\\1000mg"
+    },
+    {
+      "id": "01c476cf-93cf-4ec7-bb31-dbe091009dd3",
+      "barcode": "Azi-Once syr",
+      "tradeName": "Azi-Once syr"
+    },
+    {
+      "id": "a7c83374-8b3e-445b-9a8d-ed7ebc8358d3",
+      "barcode": "Ceftriaxone IM LDP",
+      "tradeName": "Ceftriaxone IM LDP"
+    },
+    {
+      "id": "754c8bee-97c0-4093-ac78-52cacff63b63",
+      "barcode": "6251875004417",
+      "tradeName": "Piolinta 90mg"
+    },
+    {
+      "id": "badb110b-d010-442c-8705-d47bb8d3a298",
+      "barcode": "Urispas 200mg",
+      "tradeName": "Urispas 200mg"
+    },
+    {
+      "id": "19ce368e-f903-4b02-9795-3e6c9b0accdc",
+      "barcode": "Ozempic",
+      "tradeName": "Ozempic"
+    },
+    {
+      "id": "bbd0b517-c8d5-40a5-a35f-01d361db1f27",
+      "barcode": "6987452310632",
+      "tradeName": "كورسيه حراري نسائي"
+    },
+    {
+      "id": "f67861f1-e664-4bde-a22f-2c76a85f59c8",
+      "barcode": "Zyloric 100mg",
+      "tradeName": "Zyloric 100mg"
+    },
+    {
+      "id": "e5cfbaa3-92ab-4480-bd31-c1ebaa1ac518",
+      "barcode": "Zyloric 300",
+      "tradeName": "Zyloric 300"
+    },
+    {
+      "id": "d042f9a6-e2d1-4492-b6cf-233522c99a5f",
+      "barcode": "3664798034103",
+      "tradeName": "Toujeo 300"
+    },
+    {
+      "id": "526f8474-eb2c-4a65-8b7f-8811fb581a4a",
+      "barcode": "7640153080851",
+      "tradeName": "Zamur 250mg"
+    },
+    {
+      "id": "b9c445ca-cdbe-472a-9247-ba93834cd7e1",
+      "barcode": "3401578653709",
+      "tradeName": "Bioderma 200ml blue"
+    },
+    {
+      "id": "99b072c2-8628-4680-b1da-dcaec78d8c61",
+      "barcode": "6936827000999",
+      "tradeName": "محرار الكتروني AZ"
+    },
+    {
+      "id": "649cbe3a-6a71-4c58-a2eb-ef3c9ed99832",
+      "barcode": "محرار الكتروني",
+      "tradeName": "محرار الكتروني"
+    },
+    {
+      "id": "5233921f-e896-456e-a4ae-d8ce53ed7b5f",
+      "barcode": "Dibase 10000  iu drop",
+      "tradeName": "Dibase 10000  iu drop"
+    },
+    {
+      "id": "9f67f899-9b05-4632-aaf5-edb628d4ff4f",
+      "barcode": "8901138500573",
+      "tradeName": "Bonnisan syr"
+    },
+    {
+      "id": "952473b7-3db5-431c-bd79-2cab252669a3",
+      "barcode": "3664798010466",
+      "tradeName": "Doliprane 1000mg"
+    },
+    {
+      "id": "3fe9d268-de34-43a6-9d26-11d2987a7653",
+      "barcode": "Euthrox 150ug",
+      "tradeName": "Euthrox 150ug tab"
+    },
+    {
+      "id": "4d765d20-16a0-4579-8753-9c021b19c6f7",
+      "barcode": "6223003975333",
+      "tradeName": "colona tab"
+    },
+    {
+      "id": "fa0ecd34-bedc-4571-94b1-0940c997c60d",
+      "barcode": "Ventolin Evohaler",
+      "tradeName": "Ventolin Evohaler "
+    },
+    {
+      "id": "09f722a3-1976-4669-9d49-d7753f894a05",
+      "barcode": "5012345789781",
+      "tradeName": "tadex"
+    },
+    {
+      "id": "71e3bf04-2e09-4f93-89a6-688b1090990e",
+      "barcode": "8901111002285",
+      "tradeName": "softdrop"
+    },
+    {
+      "id": "0bd73c06-76b0-4eed-8752-3a022e809d46",
+      "barcode": "8901111089118",
+      "tradeName": "Lacoma eye drops"
+    },
+    {
+      "id": "a44f4ffd-22a9-4c0d-bee2-a6a89bc8fa8e",
+      "barcode": "5900168352285",
+      "tradeName": "Bioflox tab"
+    },
+    {
+      "id": "44c90678-7690-41d2-8e53-ff088330ec43",
+      "barcode": "6251106610240",
+      "tradeName": "Sefarin 100ml syrp"
+    },
+    {
+      "id": "dff39dd1-f647-491b-9fd7-68c59581691d",
+      "barcode": "8906113370103",
+      "tradeName": "Amikacen-500"
+    },
+    {
+      "id": "b7f02627-c9ee-4b40-8403-e70dfcde3ef1",
+      "barcode": "8906113370318",
+      "tradeName": "Diclocen-75 amp"
+    },
+    {
+      "id": "0a655243-0b9b-48a9-94b4-1962f76e9e8a",
+      "barcode": "8906113371445",
+      "tradeName": "Dexacen amp"
+    },
+    {
+      "id": "8ef33dca-83cc-42fa-bcfc-ac7621cbb89a",
+      "barcode": "8906113371346",
+      "tradeName": "Allercen amp"
+    },
+    {
+      "id": "820b177e-104b-4e8f-a877-260fc7b60ffe",
+      "barcode": "8906113370189",
+      "tradeName": "Gentamycen-80"
+    },
+    {
+      "id": "63ce81be-97af-4bdb-b3ee-663c0a6eb31d",
+      "barcode": "8906113370172",
+      "tradeName": "Gentamycin-20"
+    },
+    {
+      "id": "ed64f484-637b-49cf-a20b-8b2492498407",
+      "barcode": "Esomeprazole vial",
+      "tradeName": "Esomeprazole vial"
+    },
+    {
+      "id": "fddf5ccf-03c2-46e3-b696-735bb494f586",
+      "barcode": "diclofenac sodium amp",
+      "tradeName": "diclofenac sodium amp"
+    },
+    {
+      "id": "0aea2458-0037-41be-b6cd-b473b6848c31",
+      "barcode": "Methycobal amp",
+      "tradeName": "Methycobal amp"
+    },
+    {
+      "id": "21af88c5-5792-4919-bd25-274e51f2833f",
+      "barcode": "Ketro amp",
+      "tradeName": "Ketro amp"
+    },
+    {
+      "id": "90b0dfb4-6758-4f97-8fb4-f7312c707bda",
+      "barcode": "8901252956553",
+      "tradeName": "Medafill 5mg"
+    },
+    {
+      "id": "3ba52a09-5c09-43fc-8caa-8f0d1f415c99",
+      "barcode": "5281018090619",
+      "tradeName": "مرطب شفه Beesline فراوله"
+    },
+    {
+      "id": "2e8e8a0a-3533-4253-80ec-0fe1de722d3e",
+      "barcode": "3582910080367",
+      "tradeName": "Clexan4000"
+    },
+    {
+      "id": "bfdfa61b-a676-4b8a-8e60-c6e84f4c1483",
+      "barcode": "2802850601042",
+      "tradeName": "Brimogan drop"
+    },
+    {
+      "id": "ce0451e7-5807-4dda-8672-60c5cce153d9",
+      "barcode": "5285007350777",
+      "tradeName": "Diclofenac Gel"
+    },
+    {
+      "id": "5b658dbf-3a4f-4ee3-8fa0-f71af2d35a83",
+      "barcode": "4016369546505",
+      "tradeName": "Lacalut  aktiv Mouth wash"
+    },
+    {
+      "id": "ec578415-44ad-442b-bd1c-c8343fa07120",
+      "barcode": "4820253873185",
+      "tradeName": "Biox passiflora 200ml"
+    },
+    {
+      "id": "925e549b-8eb1-4d68-b25b-33ff3bc02ff2",
+      "barcode": "aylide",
+      "tradeName": "aylide"
+    },
+    {
+      "id": "c9e650f3-0f9e-4c5e-a44a-076351b6bd35",
+      "barcode": "3664798012811",
+      "tradeName": "clexan 8000"
+    },
+    {
+      "id": "a31da128-cd6d-4f10-b343-a45100235f03",
+      "barcode": "8901111074961",
+      "tradeName": "sitapril 100"
+    },
+    {
+      "id": "71d912ab-44af-4b78-8fe9-01eef856667a",
+      "barcode": "4260393340619",
+      "tradeName": "med swabs"
+    },
+    {
+      "id": "4a7aba48-6d87-4e7a-abfc-0013de9675c4",
+      "barcode": "8901111349137",
+      "tradeName": "novaten 50"
+    },
+    {
+      "id": "96d2401e-1eb2-46a0-94f5-2ca0682af51f",
+      "barcode": "urastone",
+      "tradeName": "urastone eff"
+    },
+    {
+      "id": "06a1726e-37bd-49f3-9687-d0e6fb2f5fb4",
+      "barcode": "787907093105",
+      "tradeName": "bidkin powder"
+    },
+    {
+      "id": "4817ed00-a57b-4503-a01f-dd2399b400c8",
+      "barcode": "6214600067941",
+      "tradeName": "fucitulle"
+    },
+    {
+      "id": "912b8552-c4fb-4606-837d-419cef33af28",
+      "barcode": "normal saline 500ml",
+      "tradeName": "normal saline 500ml"
+    },
+    {
+      "id": "e9913682-c254-4e44-9135-14d58f8dd363",
+      "barcode": "7702018587230",
+      "tradeName": "venus شفره حلاقه"
+    },
+    {
+      "id": "e7218e20-61df-45cc-9f52-e6ca883fe62c",
+      "barcode": "4015630064007",
+      "tradeName": "accu-chek active"
+    },
+    {
+      "id": "60682299-ef5b-438b-bf38-17069fc97d92",
+      "barcode": "8699153019940",
+      "tradeName": "acne end cleanser "
+    },
+    {
+      "id": "b821515f-2d1a-4aca-9d7c-ee2d144eba27",
+      "barcode": "6260147706812",
+      "tradeName": "ardene "
+    },
+    {
+      "id": "0212b1dd-3989-4089-81a6-3a60f6432a8f",
+      "barcode": "6001159128632",
+      "tradeName": "bio oil"
+    },
+    {
+      "id": "d251464d-2ca2-49f4-adc1-66dac4274b01",
+      "barcode": "8720689016506",
+      "tradeName": "ultra air nighttime"
+    },
+    {
+      "id": "fc4d7482-5148-4ffb-bae6-a103e68d43b4",
+      "barcode": "3701129800850",
+      "tradeName": "bioderma"
+    },
+    {
+      "id": "ab5d3159-0d76-41b0-a666-a6295920b208",
+      "barcode": "6253346809309",
+      "tradeName": "acne cream"
+    },
+    {
+      "id": "0ae15254-eb03-448c-8ca7-d2cb4d61be0c",
+      "barcode": "4103040144324",
+      "tradeName": "Sebamed lip care"
+    },
+    {
+      "id": "187c2d3b-21fb-436a-80af-0ce9404abc3d",
+      "barcode": "8809576261301",
+      "tradeName": "centella spf"
+    },
+    {
+      "id": "370bd88e-1fab-4962-8985-b8077c137c34",
+      "barcode": "4260095688378",
+      "tradeName": "One-Alpha 1mcg"
+    },
+    {
+      "id": "b42cdc74-e2c4-49d2-bf9c-92c81ba4d16a",
+      "barcode": "5055565788936",
+      "tradeName": "Aciclovir 800"
+    },
+    {
+      "id": "a7f218e3-d91a-4360-8728-1c379416a397",
+      "barcode": "8719244901302",
+      "tradeName": "Exart pluus 80\\12.5"
+    },
+    {
+      "id": "497b4b37-abc3-4866-a976-2da82fa1d023",
+      "barcode": "5055565789124",
+      "tradeName": "Furosemide 40mg"
+    },
+    {
+      "id": "3633daf6-920c-4d59-ae75-55431843133c",
+      "barcode": "5055565789186",
+      "tradeName": "Pizotifen0.5mg"
+    },
+    {
+      "id": "b237f70e-1ad1-4bce-8de6-0d3e3267329d",
+      "barcode": "5055565789094",
+      "tradeName": "Propranolol 40mg"
+    },
+    {
+      "id": "ce72d86e-4459-4ccf-ac65-a8707e4373d1",
+      "barcode": "5055565789117",
+      "tradeName": "Propranolol 10mg"
+    },
+    {
+      "id": "0c71c7f3-e0c8-42dc-a0e3-2dd40f0b0f1c",
+      "barcode": "Azi-once",
+      "tradeName": "Azi-once 250mg tab"
+    },
+    {
+      "id": "ab32b85b-2b62-4faa-888c-58af52659f87",
+      "barcode": "Azi-once forte",
+      "tradeName": "Azi-once forte 500mg tab"
+    },
+    {
+      "id": "bf26ad55-0e37-4971-a868-69054169ff22",
+      "barcode": "5060589200043",
+      "tradeName": "Cyclogest 200mg supp"
+    },
+    {
+      "id": "fd1ee029-7021-4fec-8649-2aec03c7751b",
+      "barcode": "Estrofem",
+      "tradeName": "Estrofem 2mg"
+    },
+    {
+      "id": "4ebd9357-6f30-4ec2-9043-f7d4a5d70d6b",
+      "barcode": "6221151000891",
+      "tradeName": "Farcolin 20ml solution"
+    },
+    {
+      "id": "35ffd6f7-290e-4812-8f64-d988347e711f",
+      "barcode": "6986256478876",
+      "tradeName": "test"
+    },
+    {
+      "id": "6712d138-cde4-4ca5-89c7-8bcf9f8133ce",
+      "barcode": "6251107104014",
+      "tradeName": "Mycoheal viginal cream"
+    },
+    {
+      "id": "15ad7b2d-e3cb-427a-a45b-3c82058d3a8a",
+      "barcode": "8906056851875",
+      "tradeName": "Triumph amp"
+    },
+    {
+      "id": "c8518d86-6d2f-49b3-bdad-d8847e39b96e",
+      "barcode": "3701217200593",
+      "tradeName": "Utrogestan 100mmg"
+    },
+    {
+      "id": "280cd9d6-0885-46b9-9dc8-fe085882eeb7",
+      "barcode": "3701217200609",
+      "tradeName": "UTROGESTAN 200MG"
+    },
+    {
+      "id": "7332d485-7c00-47b6-b43a-5148a88b0608",
+      "barcode": "5285007350821",
+      "tradeName": "vENTODAD SOLUTION"
+    },
+    {
+      "id": "54711a9e-ee89-4336-ac08-e5b6894361bb",
+      "barcode": "6251106130304",
+      "tradeName": "cARVIDOL 25MG"
+    },
+    {
+      "id": "70944517-eadf-4c87-99e0-7fc3233f9c95",
+      "barcode": "5055565788875",
+      "tradeName": "lISINOPRIL 10MG"
+    },
+    {
+      "id": "1b76e400-1550-45a0-8731-f39d1a8ccd1b",
+      "barcode": "Olopat drop",
+      "tradeName": "Olopat drop"
+    },
+    {
+      "id": "c06c7425-095e-4fbe-b72d-f6b65f16e72c",
+      "barcode": "8901302120934",
+      "tradeName": "Rovas 10mg"
+    },
+    {
+      "id": "4a5a7e88-b1a6-4eba-a886-b8ace0be6dff",
+      "barcode": "8901302056981",
+      "tradeName": "Microflox 500mg"
+    },
+    {
+      "id": "44aa190d-d652-4bd3-ba27-c5a9611167d2",
+      "barcode": "5060604700053",
+      "tradeName": "Bone Fuel tab"
+    },
+    {
+      "id": "567c6a95-6bd7-46ad-b84e-073408e61799",
+      "barcode": "2023101022687",
+      "tradeName": "Azithromycin 500tab"
+    },
+    {
+      "id": "7f2e24ff-b189-4b2f-b570-82aa9c721002",
+      "barcode": "89023994984771",
+      "tradeName": "Vermx susp"
+    },
+    {
+      "id": "9493ee15-8e78-4971-85d9-9f3e98451fbf",
+      "barcode": "8901111071427",
+      "tradeName": "Vildaril M 50\\1000"
+    },
+    {
+      "id": "0ff82d47-1a94-4a6c-b9ba-e9f6109da982",
+      "barcode": "6251107136015",
+      "tradeName": "Mycoheal 400 viginal supp"
+    },
+    {
+      "id": "76993ee9-6e09-45d1-b812-460256ac23bd",
+      "barcode": "8901111079287",
+      "tradeName": "Empadil 25mg"
+    },
+    {
+      "id": "5fcc617a-a7e5-495a-a76e-3754a9575403",
+      "barcode": "9641996024215",
+      "tradeName": "folic acid 400"
+    },
+    {
+      "id": "43fdb629-998b-4399-9f9f-775496529eee",
+      "barcode": "8901302099605",
+      "tradeName": "mefril500"
+    },
+    {
+      "id": "56c8f8b5-30fa-4c20-b5b2-e08f870eec9e",
+      "barcode": "931774018",
+      "tradeName": "mucosal"
+    },
+    {
+      "id": "816f5d97-54b1-4ad0-96f1-8a0fd7f9babd",
+      "barcode": "otrivin spray",
+      "tradeName": "otrivin spray"
+    },
+    {
+      "id": "3b6e7b9a-ec53-41de-93c5-3a4a277a5fb9",
+      "barcode": "6285147002573",
+      "tradeName": "modexa"
+    },
+    {
+      "id": "7827be8d-6a43-4f72-996a-9f47849f56e3",
+      "barcode": "k-flam sachet",
+      "tradeName": "k-flam sachet"
+    },
+    {
+      "id": "cdb6b801-ba3e-4a2d-b5db-a7c660ba7991",
+      "barcode": "2801985202018",
+      "tradeName": "lithimole drop"
+    },
+    {
+      "id": "f24ccd9c-d452-4f7b-9e3e-1513c270368b",
+      "barcode": "calridol",
+      "tradeName": "calridol"
+    },
+    {
+      "id": "7c2d560f-a48c-48a3-9f78-5a0e354dc22b",
+      "barcode": "8680923336343",
+      "tradeName": "prtebiotic cream"
+    },
+    {
+      "id": "01621b78-c48d-4217-ac09-4945b84a5790",
+      "barcode": "3760269770010",
+      "tradeName": "isispharma neotone gel"
+    },
+    {
+      "id": "d73c8e4e-5d3a-4fcd-a731-6b135bd6f333",
+      "barcode": "3760269770492",
+      "tradeName": "neotone prevent 50+ mineral light"
+    },
+    {
+      "id": "14c11e59-05b6-4176-a59f-35102848342d",
+      "barcode": "3401396191032",
+      "tradeName": "unitone 4 white "
+    },
+    {
+      "id": "e83249d4-e55a-4e66-8402-18f6710b7e94",
+      "barcode": "3760269771062",
+      "tradeName": "isis uveblock +50 fluid teinte"
+    },
+    {
+      "id": "47ececb0-063c-48e7-bf0c-d992e0305eeb",
+      "barcode": "6285147000791",
+      "tradeName": "Co-Tabuvan 160\\12.5"
+    },
+    {
+      "id": "d3b4b7a6-7a2f-45ee-9b50-7a385c9ac81d",
+      "barcode": "6285147004683",
+      "tradeName": "Tabuvan 160mg"
+    },
+    {
+      "id": "bcd02f42-440a-4fc3-a22d-b4e24024a4c2",
+      "barcode": "ferplex",
+      "tradeName": "ferplex"
+    },
+    {
+      "id": "ae9e5d8b-5b3f-490b-8cb1-656fd8f98e44",
+      "barcode": "8699569280224",
+      "tradeName": "klamoks 457 syrpp"
+    },
+    {
+      "id": "5b351fd6-9932-4080-b7b7-d1b602257bf0",
+      "barcode": "8699569280057",
+      "tradeName": "klamoks syrp 312.5"
+    },
+    {
+      "id": "a7cdb464-e12a-4bd3-ba74-3326b745fd69",
+      "barcode": "8699569280064",
+      "tradeName": "klamoks syrp156.25"
+    },
+    {
+      "id": "31155861-a033-4f0d-8ec3-f1d9272478d0",
+      "barcode": "aerius syrp",
+      "tradeName": "aerius syrp"
+    },
+    {
+      "id": "c0e45270-cca8-49a7-b00b-b7f131caa98c",
+      "barcode": "685867962786",
+      "tradeName": "antusin syrp"
+    },
+    {
+      "id": "b4cf36fc-f464-4425-bbc3-1360108573d9",
+      "barcode": "sinemet 50\\250",
+      "tradeName": "sinemet 50\\250"
+    },
+    {
+      "id": "d3c9295a-762f-4417-99d3-03f3d3d6208f",
+      "barcode": "sumo oint",
+      "tradeName": "sumo oint"
+    },
+    {
+      "id": "555022cb-3aa5-45bb-b839-a4d276995d81",
+      "barcode": "ceftriaxone LDP 1g",
+      "tradeName": "Ceftazidime BP I.V 1g"
+    },
+    {
+      "id": "51418d0d-066a-466f-94ea-ad8006654426",
+      "barcode": "ceftriaxone LDP 1g im",
+      "tradeName": "Ceftriaxone BP I.M 1g"
+    },
+    {
+      "id": "41e7a242-0fef-44b5-a431-d5f53d3377c5",
+      "barcode": "cefotaxime 1g LDP iv",
+      "tradeName": "Cefotaxime BP I.V 1g vial"
+    },
+    {
+      "id": "22f0ea06-436c-4e5b-839f-6e0d5eb07224",
+      "barcode": "glucophage 500",
+      "tradeName": "glucophage 500"
+    },
+    {
+      "id": "819ef652-6420-4820-91d7-bb802543a8ca",
+      "barcode": "4103040006882",
+      "tradeName": "sebamed cream"
+    },
+    {
+      "id": "81b22247-ebd6-44fb-b30b-7a5242e2f65d",
+      "barcode": "3574660002515",
+      "tradeName": "clean clear "
+    },
+    {
+      "id": "5dc7094c-f44d-4516-a246-5d72d9dd8313",
+      "barcode": "cream johnson",
+      "tradeName": "cream johnson "
+    },
+    {
+      "id": "ff3eab9b-e6b3-49f4-8f84-a395019e2d6c",
+      "barcode": "8964000370780",
+      "tradeName": "berg white cream"
+    },
+    {
+      "id": "a74ea4bb-85b4-49d7-936c-0a0db0bb3f0b",
+      "barcode": "5260270011778",
+      "tradeName": "dema care soap"
+    },
+    {
+      "id": "11deda95-1851-45b9-b48b-28877ecdb5c0",
+      "barcode": "janumet 50\\1000",
+      "tradeName": "janumet 50\\1000"
+    },
+    {
+      "id": "3725d9c0-8c5a-49c8-86d4-46e9d76f7764",
+      "barcode": "Janumet50\\1000",
+      "tradeName": "Janumet50\\1000"
+    },
+    {
+      "id": "e3aea73b-06c6-4513-a631-cac562aaf8c7",
+      "barcode": "89023990058735",
+      "tradeName": "Vermx 200mg tab"
+    },
+    {
+      "id": "67c11297-ef38-41b4-8eac-d9d0d00395aa",
+      "barcode": "6192012110571",
+      "tradeName": "THIOMED amp"
+    },
+    {
+      "id": "dd6541be-2545-4342-a5c1-e5837b692f4a",
+      "barcode": "ENO EFFE",
+      "tradeName": "ENO EFFE"
+    },
+    {
+      "id": "7859950d-4d66-4f3c-8219-e48ca4e95a87",
+      "barcode": "Vermox 100mg tab",
+      "tradeName": "Vermox 100mg tab"
+    },
+    {
+      "id": "edfc5801-4728-42cc-82a1-a52d66331e14",
+      "barcode": "5600874962609",
+      "tradeName": "Alerbix 20mg tab"
+    },
+    {
+      "id": "dff927d5-0238-48d1-a019-d40e1ca5dcd8",
+      "barcode": "6251427876950",
+      "tradeName": "Neorica-M"
+    },
+    {
+      "id": "ab5c8814-4510-4622-a59f-a88ccedc1249",
+      "barcode": "3804655742950",
+      "tradeName": "Pregavit tab"
+    },
+    {
+      "id": "2e6e38ce-808c-4b90-a1a1-3b2670df8fe7",
+      "barcode": "676194200252",
+      "tradeName": "Bioflex cream"
+    },
+    {
+      "id": "bfc6e8ef-caa4-432a-9906-a57d61659c04",
+      "barcode": "5944728001329",
+      "tradeName": "Slezin drop"
+    },
+    {
+      "id": "388ae04b-9a2c-41b2-88a2-61f7da81f791",
+      "barcode": "4823002225181",
+      "tradeName": "Tear drop"
+    },
+    {
+      "id": "e1963541-2601-440b-b088-c685be0926da",
+      "barcode": "8699591900015",
+      "tradeName": "mikonid viginal ovule"
+    },
+    {
+      "id": "630138e0-1d68-4ada-b853-1f52586b0f7d",
+      "barcode": "Dr-spastalz drop",
+      "tradeName": "Dr-spastalz drop"
+    },
+    {
+      "id": "5cde7899-e15b-485a-a553-36d921678e6b",
+      "barcode": "Ceftazidime im",
+      "tradeName": "Ceftazidime IM"
+    },
+    {
+      "id": "fdaca311-56b0-4afc-9e30-ba26c0906300",
+      "barcode": "6221032118844",
+      "tradeName": "Doxydox tab"
+    },
+    {
+      "id": "a1bcf19b-8f16-4f3a-8437-7ae630caeb5e",
+      "barcode": "6251106401510",
+      "tradeName": "Lanacin 150mg"
+    },
+    {
+      "id": "30a6f594-895a-4bac-9987-1ef5d8ff31f2",
+      "barcode": "MPI-VENT",
+      "tradeName": "VentoWay syr"
+    },
+    {
+      "id": "def651b2-6257-4cde-acd0-d70eff704724",
+      "barcode": "Elicsal oint",
+      "tradeName": "Elicsal oint"
+    },
+    {
+      "id": "576c07ea-9de0-4684-b93b-6261f261e8ba",
+      "barcode": "Cefepime im",
+      "tradeName": "Cefepime im"
+    },
+    {
+      "id": "66105edf-36e7-4293-93f6-9b9aa2e1e267",
+      "barcode": "Ceftazidime iv",
+      "tradeName": "Ceftazidime iv"
+    },
+    {
+      "id": "1f8d6b22-c2f7-4e76-aad2-06bae57407a9",
+      "barcode": "682607535118",
+      "tradeName": "On call plus"
+    },
+    {
+      "id": "7e6bfabd-637a-4d8c-9578-475bef312b3d",
+      "barcode": "8699512002217",
+      "tradeName": "Otal Soap"
+    },
+    {
+      "id": "de10116d-5d05-430d-a921-cac852a2812e",
+      "barcode": "Cefepime iv",
+      "tradeName": "Cefepime iv"
+    },
+    {
+      "id": "92d3e00a-ddf0-4a31-bbc3-a67c8c271e28",
+      "barcode": "spasmomen tab",
+      "tradeName": "spasmomen 40mg tab"
+    },
+    {
+      "id": "e21a655f-da4b-4346-ab76-ca3cb75bec51",
+      "barcode": "3582910075455",
+      "tradeName": "enterogermnia"
+    },
+    {
+      "id": "bd9d9160-53d0-4432-b750-aee00405f825",
+      "barcode": "4046222100582",
+      "tradeName": "Contractubex gel"
+    },
+    {
+      "id": "fa3850e6-dc48-49a5-bb00-4fe08a44bfa8",
+      "barcode": "spasmomen",
+      "tradeName": "spasmomen tab"
+    },
+    {
+      "id": "8ce00a88-2868-4c65-ac49-fd8656d96ca1",
+      "barcode": "cefepime iv 1g",
+      "tradeName": "Cefepime iv"
+    },
+    {
+      "id": "1b44126a-7eea-41ab-9fef-870a06aa6d84",
+      "barcode": "3582910095286",
+      "tradeName": "Targocid 200\\3ml"
+    },
+    {
+      "id": "acb2b4ce-4651-44da-ba08-4b108336b842",
+      "barcode": "5000167019339",
+      "tradeName": "Setrepsils hony&lemon"
+    },
+    {
+      "id": "5d741939-e4c0-4e78-8c73-b46a1d4a74bd",
+      "barcode": "Bepanthen Ointment",
+      "tradeName": "Bepanthen Ointment"
+    },
+    {
+      "id": "f11cf24e-ee4b-4762-b233-bcc2d23c7780",
+      "barcode": "Bepanthen cream",
+      "tradeName": "Bepanthen cream"
+    },
+    {
+      "id": "d413aed4-834b-42d8-bb8c-a6f4425de336",
+      "barcode": "6251065018576",
+      "tradeName": "Vanco 500mg amp"
+    },
+    {
+      "id": "a934caf6-d8a5-413a-a1cc-a05455823e49",
+      "barcode": "6251151001079",
+      "tradeName": "Apisal  Dead sea"
+    },
+    {
+      "id": "ab944e5f-8fc6-4011-b792-80a5ba11b6a6",
+      "barcode": "6251151001345",
+      "tradeName": "Apisal jet baby"
+    },
+    {
+      "id": "5fa62cc6-362c-47c9-8e1a-b2d40a831185",
+      "barcode": "8683400273070",
+      "tradeName": "Appetite booster gummeies"
+    },
+    {
+      "id": "13f61c76-832e-453a-a742-6e79e6a6f620",
+      "barcode": "5070631007193",
+      "tradeName": "tadex sachet"
+    },
+    {
+      "id": "a6ccec80-7ca7-4f74-b6d1-615ee866e8d7",
+      "barcode": "5070631006967",
+      "tradeName": "paraceta-mr 1000"
+    },
+    {
+      "id": "a5d9ed56-1baf-4d1b-9e90-de0ab703abfb",
+      "barcode": "3700822602334",
+      "tradeName": "navitae plus pf drop "
+    },
+    {
+      "id": "7cdbfb04-5beb-4539-9142-449a7659f0f1",
+      "barcode": "011803366180624610L28940172706302189592559293180",
+      "tradeName": "trium free drop"
+    },
+    {
+      "id": "0d78b68f-2ad3-4119-abfb-60c8b7376d1a",
+      "barcode": "8058090005360",
+      "tradeName": "insuned 30G 0.5ml"
+    },
+    {
+      "id": "6bbf4bf1-c119-4ee6-be0c-15cc1531e28d",
+      "barcode": "8000700000005",
+      "tradeName": "dove soap"
+    },
+    {
+      "id": "4b74c08f-1dc5-4675-b95f-73a08e49931c",
+      "barcode": "4016369546154",
+      "tradeName": "lacalte white repaior"
+    },
+    {
+      "id": "cacf176d-132e-4636-a309-b49024cbc972",
+      "barcode": "ketesse tab",
+      "tradeName": "ketesse tab"
+    },
+    {
+      "id": "050637b5-c252-438e-9a0c-f9b6f4309c1e",
+      "barcode": "cefotaxime BP iv",
+      "tradeName": "Cefotaxime BP Iv1g vial"
+    },
+    {
+      "id": "1098a6cc-93fd-4e27-88d5-389545ef4d70",
+      "barcode": "Ceftriaxone BP I.V 1g",
+      "tradeName": "Ceftriaxone BP I.V 1g"
+    },
+    {
+      "id": "77477aec-fb27-4e2e-aaec-40155261a012",
+      "barcode": "ceftriaxone 1g im",
+      "tradeName": "Ceftriaxone BP I.M 1g"
+    },
+    {
+      "id": "7d860143-0bc1-4d11-a370-3f202337d503",
+      "barcode": "4051849632545",
+      "tradeName": "lincomycin600"
+    },
+    {
+      "id": "fd48a27c-6936-4fd8-b4d4-db1d86947e54",
+      "barcode": "SDI-04GOO017",
+      "tradeName": "antipyrol drop"
+    },
+    {
+      "id": "dbb5a599-fc0b-4c37-9109-1148923c46a8",
+      "barcode": "100852300027",
+      "tradeName": "hyporic 100"
+    },
+    {
+      "id": "edb8f2ca-2ccc-4899-a109-1fec47879ec6",
+      "barcode": "6953395501857",
+      "tradeName": "silk zincoxide "
+    },
+    {
+      "id": "bfab26b7-0b8f-465c-85b2-e80ff3cb235a",
+      "barcode": "6953395501833",
+      "tradeName": "silkzincoxide"
+    },
+    {
+      "id": "b14d0541-da9c-41c9-9733-c13f0b628c17",
+      "barcode": "8699508270217",
+      "tradeName": "lesef 1g im"
+    },
+    {
+      "id": "39d60086-a1d6-4a6a-b92b-2f79c1090a61",
+      "barcode": "ceftriaxone BPim 1g",
+      "tradeName": "Ceftriaxone BP I.M 1g"
+    },
+    {
+      "id": "d8fc9117-bab0-474a-ab2e-fea5c25b63dd",
+      "barcode": "3401381507565",
+      "tradeName": "bioderma sensibio بشرة حساسة "
+    },
+    {
+      "id": "eb1cab45-43f1-48b4-86ad-40a4350fd15a",
+      "barcode": "8901117321434",
+      "tradeName": "flazole vial"
+    },
+    {
+      "id": "e0a4ebe7-01ba-4679-b0b1-6936cb329b7e",
+      "barcode": "Azi-Once 250",
+      "tradeName": "Azi-once 250mg tab"
+    },
+    {
+      "id": "2eca3c58-f52a-49de-bf4a-029578796ac3",
+      "barcode": "Azi-once fort",
+      "tradeName": "Azi-once forte 500mg tab"
+    },
+    {
+      "id": "81b03e2e-b3df-4248-92f6-2daa8b07f09b",
+      "barcode": "8684051918440",
+      "tradeName": "Diclofenac sodium ALIDO amp"
+    },
+    {
+      "id": "6cb7badb-3165-4c44-b009-8f735f9986c0",
+      "barcode": "8680199009613",
+      "tradeName": "Bivoxa_D drop"
+    },
+    {
+      "id": "117d02f6-4044-4c20-b7a0-ab143e7cfda9",
+      "barcode": "8680199009620",
+      "tradeName": "Apfecto drop"
+    },
+    {
+      "id": "d209e919-821b-4690-b331-c4f4d7007d49",
+      "barcode": "3000702617220",
+      "tradeName": "Gortic 80mg"
+    },
+    {
+      "id": "c43df64e-4c17-4fe8-83c2-82abd0b770e1",
+      "barcode": "Mervelon",
+      "tradeName": "Mervelon."
+    },
+    {
+      "id": "4bca3b84-4a52-49e4-a2ec-0b36d8c4f964",
+      "barcode": "6223003975234",
+      "tradeName": "Megafen "
+    },
+    {
+      "id": "c4cea50b-0766-401d-889a-992fba29b15c",
+      "barcode": "6251651000015",
+      "tradeName": "Allerout syrup"
+    },
+    {
+      "id": "c59195bb-7823-4497-b73b-660049c741f7",
+      "barcode": "6221094031297",
+      "tradeName": "Fever  n flu syrup"
+    },
+    {
+      "id": "a440d413-3697-4791-b81b-4d80c2a00566",
+      "barcode": "6251651001647",
+      "tradeName": "Herbal cough syrup"
+    },
+    {
+      "id": "49abc357-ad6a-4a01-b04a-bc08fbe82f2c",
+      "barcode": "55200200300517",
+      "tradeName": "Meclokindin syrup "
+    },
+    {
+      "id": "e93324de-5589-4c92-8fbb-04760a6b83a8",
+      "barcode": "5902706291322",
+      "tradeName": "Purles 132 Smart cream 50ml"
+    },
+    {
+      "id": "f1cc3e81-897f-474f-a071-37d4a3cc4e79",
+      "barcode": "8699089066339",
+      "tradeName": "Newfer oral vial"
+    },
+    {
+      "id": "c836505b-ae10-4883-aa2a-18b3012e467f",
+      "barcode": "6251106210334",
+      "tradeName": "Fenamic syrup"
+    },
+    {
+      "id": "4ee79b10-cfac-4043-b23e-00dd64a886b0",
+      "barcode": "8719244901289",
+      "tradeName": "Exart 80mg"
+    },
+    {
+      "id": "20105bfe-f543-40f8-a5dc-3542fe68ec06",
+      "barcode": "8719244901319",
+      "tradeName": "Exart plus 160\\12.5"
+    },
+    {
+      "id": "30ca2817-312e-4c24-82db-838235ab4470",
+      "barcode": "7640144122454",
+      "tradeName": "Binosto 70mg"
+    },
+    {
+      "id": "4255034f-a7a8-4f64-be78-e71a3c57fa88",
+      "barcode": "6251161010153",
+      "tradeName": "Metroza gel"
+    },
+    {
+      "id": "dda18dda-5137-4120-9b30-5fa5f5ad3c20",
+      "barcode": "Skinoren cream",
+      "tradeName": "Skinoren cream"
+    },
+    {
+      "id": "0b97dde8-1575-4f2e-9169-55fc9674d3c6",
+      "barcode": "Ferplex 40mg oral vial",
+      "tradeName": "Ferplex 40mg oral vial"
+    },
+    {
+      "id": "ad3035b4-1488-426b-865c-95b13762c66c",
+      "barcode": "omega3 AG",
+      "tradeName": "omega3 AG"
+    },
+    {
+      "id": "1d60f0cf-aa51-4c84-a199-9d995cc68c3c",
+      "barcode": "8809416471112",
+      "tradeName": "Salicylic acid daily "
+    },
+    {
+      "id": "8eb116ab-d3af-41cb-9cbc-433262d4b2c5",
+      "barcode": "677683070363",
+      "tradeName": "Pms-risdronate"
+    },
+    {
+      "id": "4cab5325-2c8d-4b49-8091-00959afa051d",
+      "barcode": "Acretin0.05%",
+      "tradeName": "Acretin0.05%"
+    },
+    {
+      "id": "946dda1b-df15-41ae-a9a8-8e087e9bc9fd",
+      "barcode": "Xolamol drop",
+      "tradeName": "Xolamol drop"
+    },
+    {
+      "id": "3fadeda5-d395-4ae9-92ba-31abec7c7a71",
+      "barcode": "Dibase 100000IU\\ml",
+      "tradeName": "Dibase 100000IU\\ml"
+    },
+    {
+      "id": "bb32ee8a-2949-43a6-8683-ee969d651348",
+      "barcode": "Dibase300000IU\\ml",
+      "tradeName": "Dibase 100000IU\\ml"
+    },
+    {
+      "id": "204ab66f-8f10-4b7c-a4b3-9b5d7617f2b7",
+      "barcode": "8809576261592",
+      "tradeName": "centela spf 50"
+    },
+    {
+      "id": "675b450e-30ff-4be9-bbbb-1243f30273b4",
+      "barcode": "5067447722518",
+      "tradeName": "D- way D3 5000iu"
+    },
+    {
+      "id": "52f51f2d-7486-4c30-9894-a32d347c8108",
+      "barcode": "5010957838934",
+      "tradeName": "D-way D3 50.000iu "
+    },
+    {
+      "id": "41204ae2-4e22-4244-a89f-d21a791fffcf",
+      "barcode": "6291103860958",
+      "tradeName": "Toraject 30mg INJection"
+    },
+    {
+      "id": "4fe64864-8dc6-44ef-bf64-bfc06ae0fdec",
+      "barcode": "Dian 35tab",
+      "tradeName": "Dian 35tab"
+    },
+    {
+      "id": "c8845205-54d0-488c-b7ff-7803306074de",
+      "barcode": "Hyfresh drop",
+      "tradeName": "Hyfresh drop"
+    },
+    {
+      "id": "9b8b0a70-3cb4-44b8-a532-9149dc1d463f",
+      "barcode": "Lipitor 20mg tab",
+      "tradeName": "Lipitor 20mg tab"
+    },
+    {
+      "id": "aedf99e1-b09a-47cd-9a04-2360027f60fb",
+      "barcode": "8852961013252",
+      "tradeName": "playboy ultra thin"
+    },
+    {
+      "id": "97724861-51b5-4c7b-81e3-59fed3f4b326",
+      "barcode": "8852961013238",
+      "tradeName": "playboy studded pleasure"
+    },
+    {
+      "id": "23122495-6e56-4cdd-9693-86cf0e233ff3",
+      "barcode": "8699525610034",
+      "tradeName": " Fusix 1% eye drop"
+    },
+    {
+      "id": "56fb322e-1991-4568-bb78-7abe1f8fbd43",
+      "barcode": "5040273161041",
+      "tradeName": "Hayax"
+    },
+    {
+      "id": "506c274b-ea7f-4892-8d42-6b558f330ac1",
+      "barcode": "08964002070411",
+      "tradeName": "It-cap 100mg cap"
+    },
+    {
+      "id": "8b0fded0-6539-4ade-b1cb-120f60de0277",
+      "barcode": "89023991073249",
+      "tradeName": "Achee syr"
+    },
+    {
+      "id": "ad30400a-8f0e-4172-9c52-8b0bb96185bb",
+      "barcode": "OCCULAR DROP",
+      "tradeName": "Occular eye drop "
+    },
+    {
+      "id": "49ba07fe-91a8-4607-b4e6-17bee1a0cb5d",
+      "barcode": "8720689009669",
+      "tradeName": "AVENT ANTI COLIC"
+    },
+    {
+      "id": "7cef57b8-cdcd-4d4a-9358-557af7a0dbfb",
+      "barcode": "8720689009850",
+      "tradeName": "حلمة مميه افينت"
+    },
+    {
+      "id": "1008e7df-a579-40cf-b5c6-1d3a1d1514b9",
+      "barcode": "8684543715007",
+      "tradeName": "MAXX COLLAGEN SYRP"
+    },
+    {
+      "id": "8eca06f3-e161-46d1-808b-c96812ca9c7d",
+      "barcode": "6224000588465",
+      "tradeName": "VASOTRENT"
+    },
+    {
+      "id": "6be2276e-fca6-4e2b-9f07-a60670f976c6",
+      "barcode": "5026143994339",
+      "tradeName": "ZINC 10MG NUTRITION"
+    },
+    {
+      "id": "9a49f05e-122b-480f-a583-64a70823d6f4",
+      "barcode": "5026143989199",
+      "tradeName": "eVENING PRIMROSE 500MG"
+    },
+    {
+      "id": "97665c56-4092-4e1e-b489-94b77bf54d7c",
+      "barcode": "8904134917895",
+      "tradeName": "TRANFIL 500MG"
+    },
+    {
+      "id": "617d06f2-c456-447b-8e29-947883e8125f",
+      "barcode": "MPI-VOMI",
+      "tradeName": "Vomiron syr"
+    },
+    {
+      "id": "84343322-08ef-4d7e-9459-c27fa7663eca",
+      "barcode": "Evining pill",
+      "tradeName": "Evining pill"
+    },
+    {
+      "id": "5258fde0-8452-4b53-8601-b4f4dc0b1efb",
+      "barcode": "Xarelto 10MG",
+      "tradeName": "Xarelto 10MG"
+    },
+    {
+      "id": "08cb11cc-b930-4daa-8b7f-4b49a01804e8",
+      "barcode": "6211365027050",
+      "tradeName": "ProctO-Cinolone OINT"
+    },
+    {
+      "id": "0d2ca1e5-dfb5-443a-9362-76cd4f9813a4",
+      "barcode": "Berberine 500mg GOLD",
+      "tradeName": "Berberine 500mg GOLD"
+    },
+    {
+      "id": "2e2c16fb-4fcb-421b-b9b8-27228dcaa9a6",
+      "barcode": "4260297476025",
+      "tradeName": "ColicEZ drop"
+    },
+    {
+      "id": "147ec2ec-6e94-4f53-8e49-84b6e663d671",
+      "barcode": "4262422540144",
+      "tradeName": "Lipozal 20mg"
+    },
+    {
+      "id": "cc7c14bf-a85d-4830-84fd-d3a7fb2305ef",
+      "barcode": "8901111350133",
+      "tradeName": "Novaten 100"
+    },
+    {
+      "id": "b49a9358-a560-489e-ab23-06debf55b5e1",
+      "barcode": "9641996013318",
+      "tradeName": "Safadol Baby syr"
+    },
+    {
+      "id": "4310dc3b-e74d-4b67-82df-73490c24ea7d",
+      "barcode": "9641996013110",
+      "tradeName": "Safadol Child syr"
+    },
+    {
+      "id": "fdab82fa-1ace-4dbe-bc6a-9fc063c07761",
+      "barcode": "7804653720901",
+      "tradeName": "Dutasvitae 0.5mg"
+    },
+    {
+      "id": "76ef842d-7699-4964-83d3-1423d54cb05d",
+      "barcode": "DuAllerm syr",
+      "tradeName": "DuAllerm syr"
+    },
+    {
+      "id": "8c02b103-dbc5-43d5-93df-087579d72c7e",
+      "barcode": "5000456065306",
+      "tradeName": "Kombiglyze XR 5\\1000"
+    },
+    {
+      "id": "baf845ac-2a78-47ee-bee3-db0b0b559919",
+      "barcode": "8901302054246",
+      "tradeName": "CEFEX CAP"
+    },
+    {
+      "id": "4925259c-ead1-457b-84ec-aaa9081c1b42",
+      "barcode": "8904398601097",
+      "tradeName": "XYLOSANS"
+    },
+    {
+      "id": "d4e23e29-fba4-4f4a-a8e8-36e5ba88e3e8",
+      "barcode": "4031571063787",
+      "tradeName": "FLUCONA DENK 150"
+    },
+    {
+      "id": "eedf1e20-6503-469a-bd3e-df6668812071",
+      "barcode": "4262422540151",
+      "tradeName": "LIPOZAL 40"
+    },
+    {
+      "id": "67a1337a-35a6-451c-8036-b7c4914fea42",
+      "barcode": "680080318004020",
+      "tradeName": "RENEIH KINDI"
+    },
+    {
+      "id": "f2e4fb11-3325-4b83-9627-3ebac506aa03",
+      "barcode": "RENNEI الاصلي",
+      "tradeName": "RENNIE"
+    },
+    {
+      "id": "05e41bbe-dee7-4a55-9f9f-36514099deb2",
+      "barcode": "5901761967944",
+      "tradeName": "EVELINE REVITALIUM 25% 75ML"
+    },
+    {
+      "id": "39373125-1b17-4738-b0bf-2b845c20a752",
+      "barcode": "RENNIE الاصلي",
+      "tradeName": "RENNIE الاصلي"
+    },
+    {
+      "id": "54859509-c1e9-4f6d-8397-766c30cca8f3",
+      "barcode": "6215468498793",
+      "tradeName": "CLOTRIMAZOLE  POWDER "
+    },
+    {
+      "id": "334dd445-28af-45ac-86ae-bd7332658f94",
+      "barcode": "58181136",
+      "tradeName": "TONGUE SCRAPER"
+    },
+    {
+      "id": "ab4f746a-0198-4093-a433-2f6b07f3dd7a",
+      "barcode": "6253346801273",
+      "tradeName": "SULFER CREAM 10%"
+    },
+    {
+      "id": "0372531c-a943-4de6-9ff9-fe6880ef5f4c",
+      "barcode": "3337875543248",
+      "tradeName": "VICHY MINERAL 89"
+    },
+    {
+      "id": "cba2ec85-207b-4308-af58-38b5d76b84cb",
+      "barcode": "8906113372015",
+      "tradeName": "OCEAXIT CARE"
+    },
+    {
+      "id": "9b5978f3-188d-4906-bea3-3ad77f39d4db",
+      "barcode": "SELSUN LOTION",
+      "tradeName": "SULSUN LOTION "
+    },
+    {
+      "id": "561393ac-de49-4600-9467-37562eee45d2",
+      "barcode": "8683744497866",
+      "tradeName": "C-ZINC SYRUP"
+    },
+    {
+      "id": "e972a1b4-01b4-4ae8-8b87-dba2b77bb597",
+      "barcode": "XALATAN  0.005 DROP",
+      "tradeName": "Xalatan 0.005% eye drop"
+    },
+    {
+      "id": "ee27973c-a32e-44be-aed7-f88b7b034343",
+      "barcode": "6221508162715",
+      "tradeName": "XAROXAN 1G IM"
+    },
+    {
+      "id": "84b6343e-4883-4e81-9a3b-f7920fe01192",
+      "barcode": "3800023402266",
+      "tradeName": "AQUARELLE شامبو اطفال "
+    },
+    {
+      "id": "90ea3f82-1c05-4c5e-aec5-de5f5a70aae9",
+      "barcode": "6291103402202",
+      "tradeName": "TURE TRIP لاصق جروح"
+    },
+    {
+      "id": "b34e51f1-ebd5-4d10-ac62-0a3f132953a6",
+      "barcode": "6291103402233",
+      "tradeName": "TURE TRIP لاصق جروح ضد الماء "
+    },
+    {
+      "id": "a6854ae2-2095-4938-b1fe-8f98630030e3",
+      "barcode": "6291103402219",
+      "tradeName": "TURE TRIP لاصق جروح متنوعه"
+    },
+    {
+      "id": "20fcba2c-4a0c-4ee6-8b08-f41e7ecd28f1",
+      "barcode": "6987452163269",
+      "tradeName": "ture trip لاصق حراره "
+    },
+    {
+      "id": "10aaf5be-ab01-4b95-9ce1-c3041258ffe6",
+      "barcode": "6291103402257",
+      "tradeName": "ture trip لصقة جروح حساسه"
+    },
+    {
+      "id": "440193ba-7fbe-45c0-a91d-0bd99c2e3458",
+      "barcode": "6291103402226",
+      "tradeName": "لصقة جروح نسيج ture trip"
+    },
+    {
+      "id": "36c6a54e-e83e-44d2-8e8c-2e02497f9a7b",
+      "barcode": "6291103402240",
+      "tradeName": "TURE TRIP لاصق جروح اطفال "
+    },
+    {
+      "id": "74ebea5b-1eb2-40d1-bc4f-1337b85e76f4",
+      "barcode": "8904492707565",
+      "tradeName": "gynofoam intimate cleanser "
+    },
+    {
+      "id": "87a829dc-4473-4aef-8f35-490ccb7110af",
+      "barcode": "8904492707541",
+      "tradeName": "gynofoam with vitamin "
+    },
+    {
+      "id": "3e034c79-57df-4c64-b3b6-7ba5a22b66a0",
+      "barcode": "3664798012804",
+      "tradeName": "clexan 6000 "
+    },
+    {
+      "id": "8ce2fd9a-8bda-46d5-be26-7650e2770afe",
+      "barcode": "primolut n tab",
+      "tradeName": "primolut N"
+    },
+    {
+      "id": "a1475039-269e-49d4-aa56-3154fc7f6c6f",
+      "barcode": "yasmin tab",
+      "tradeName": "yasmin tab "
+    },
+    {
+      "id": "7530b35c-cdc2-47de-a72e-a4b10203a1af",
+      "barcode": "89023990049139",
+      "tradeName": "fucibran cream "
+    },
+    {
+      "id": "cc87a7f2-f704-4208-b918-9391d04af1dd",
+      "barcode": "087614115214",
+      "tradeName": "potassium aspartate "
+    },
+    {
+      "id": "b13c9207-0a97-4f08-abf6-2b13edd86a8d",
+      "barcode": "6858679626700",
+      "tradeName": "prednomel 5mg "
+    },
+    {
+      "id": "814cd388-c696-499d-a384-341455ed3fe8",
+      "barcode": "8680701242248",
+      "tradeName": "joint care plus"
+    },
+    {
+      "id": "69d49cbf-e6d9-42f3-b4cd-f6604be7d0f8",
+      "barcode": "D-life 300000IU\\ml",
+      "tradeName": "D-Life 300000IU\\ml"
+    },
+    {
+      "id": "2239511d-25d1-4a73-bd5f-4dd4c8aab86a",
+      "barcode": "8719244902347",
+      "tradeName": "Exsartazide 160\\12.5"
+    },
+    {
+      "id": "8c9f7f51-9596-4622-ba5f-a2e6601f6679",
+      "barcode": "6251107427076",
+      "tradeName": "Gizlan Duo 150\\5"
+    },
+    {
+      "id": "1d43f4e7-2bc9-491d-9a79-19f328a625de",
+      "barcode": "8719244902354",
+      "tradeName": "Exsartazide 160\\25"
+    },
+    {
+      "id": "86b1fe70-3460-4ea7-822f-9b0e46a81acb",
+      "barcode": "8720689012188",
+      "tradeName": "رضاعة زجاجAvent"
+    },
+    {
+      "id": "fabb2122-fc58-435f-b215-e13c9ae94145",
+      "barcode": "300651434910",
+      "tradeName": "Systane drop"
+    },
+    {
+      "id": "075cd965-8126-49e6-aa70-dce3509ded80",
+      "barcode": "6953395501864",
+      "tradeName": "Pipal tree 7.5"
+    },
+    {
+      "id": "492cc41c-0b54-44b9-885b-6b8bfbf4c28b",
+      "barcode": "6953395501840",
+      "tradeName": "pipal tree 5"
+    },
+    {
+      "id": "2603ad0a-4af3-42e3-843a-3174b0cd144d",
+      "barcode": "PAA169509",
+      "tradeName": "Detrusitol 2mg"
+    },
+    {
+      "id": "21b99b4c-b324-46b7-898b-25520c82db43",
+      "barcode": "Prostacare",
+      "tradeName": "Prostacare tab"
+    },
+    {
+      "id": "79a865cf-3dfd-4659-a562-f91530ac7879",
+      "barcode": "6251870043008",
+      "tradeName": "Exopex 5mg"
+    },
+    {
+      "id": "d0b462e9-457f-4ef4-b7b4-1aa3a00055fa",
+      "barcode": "Viagrtaba 100mg",
+      "tradeName": "Viagrtaba 100mg"
+    },
+    {
+      "id": "adc0c5f3-c8f9-4f27-bc84-bf7a3c5887e0",
+      "barcode": "azi-once syr",
+      "tradeName": "Azi-once syr"
+    },
+    {
+      "id": "dce5df41-dd32-4a77-ab20-22ae3a9e5e61",
+      "barcode": "308700701002008",
+      "tradeName": "Broncophylin syr."
+    },
+    {
+      "id": "3f495dd6-b740-4bef-b380-88fd6175c015",
+      "barcode": "diclofenac sodium amp gland",
+      "tradeName": "diclofenac sodium amp gland"
+    },
+    {
+      "id": "c63d1284-6d11-4345-a31b-5348a1ad4096",
+      "barcode": "6211245524006",
+      "tradeName": "NO LICE shampoo"
+    },
+    {
+      "id": "b022ed2e-c648-4011-bd8f-6621d728cf95",
+      "barcode": "5011417539873",
+      "tradeName": "Veet hair removal normal"
+    },
+    {
+      "id": "35e7441d-c34a-468f-870e-258e425cd408",
+      "barcode": "5000158062993",
+      "tradeName": "Veet hair removal senstive"
+    },
+    {
+      "id": "d4ec97ba-bfd0-4da9-b826-f0ee8349dafe",
+      "barcode": "5056227207659",
+      "tradeName": "Zestril 5mg tab"
+    },
+    {
+      "id": "7913aa09-9d15-432c-b83f-aacd868e4735",
+      "barcode": "5012346987704",
+      "tradeName": "Colonic tab"
+    },
+    {
+      "id": "2712db7d-25d1-4c94-86a3-a53bd0c9eb84",
+      "barcode": "8034140140052",
+      "tradeName": "SiderAL drop"
+    },
+    {
+      "id": "4d63b5d2-c96d-457f-a95f-d2f1de8dfc4f",
+      "barcode": "5055565788820",
+      "tradeName": "Spironolactone 25mg accord"
+    },
+    {
+      "id": "f94f3a33-e1fa-4739-bc8a-6dcb8814b254",
+      "barcode": "Ketofien Hof syr",
+      "tradeName": "Ketofien Hof syr"
+    },
+    {
+      "id": "3e84f184-8bb0-4f7c-a7a1-eaa53a4ef47b",
+      "barcode": "Panadol cold&flu all in one",
+      "tradeName": "Panadol cold&flu all in one"
+    },
+    {
+      "id": "c4d5f680-743b-4fb1-9777-9cc0a24ebdf2",
+      "barcode": "Butaphar syr",
+      "tradeName": "Butaphar syr"
+    },
+    {
+      "id": "9c366e8b-573c-4a52-9ef5-c1bc4df5d398",
+      "barcode": "6215731332014",
+      "tradeName": "Falez cream"
+    },
+    {
+      "id": "2cbfd0ea-0796-4a4f-8833-fe72fe1bb969",
+      "barcode": "4262422540243",
+      "tradeName": "Gluvecta M 50\\1000"
+    },
+    {
+      "id": "32cd346d-d4cc-4937-b2a2-ce35569873a4",
+      "barcode": "5285008937557",
+      "tradeName": "Mio skin acne cleanser"
+    },
+    {
+      "id": "3f5c18b8-c0a1-4c53-9218-09d05dfcecd2",
+      "barcode": "6223013531079",
+      "tradeName": "sensodyne complet 75 ml"
+    },
+    {
+      "id": "bde46f00-0ba2-4926-95b7-c1aad6711866",
+      "barcode": "3664798024142",
+      "tradeName": "Mucosolvan syr"
+    },
+    {
+      "id": "8fcb3fcd-b317-4f6c-b58c-ca146646c3b1",
+      "barcode": "Acretin 0.0255 cream",
+      "tradeName": "Acretin 0.0255 cream"
+    },
+    {
+      "id": "b1b252be-e1a1-4a4c-a0b1-e277df9b70b8",
+      "barcode": "MPI-METR",
+      "tradeName": "Metrocidal syr"
+    },
+    {
+      "id": "6a6beee7-2147-4914-82c4-f2f1a392e61b",
+      "barcode": "8901111080122",
+      "tradeName": "Aquasoft creem 50"
+    },
+    {
+      "id": "653b420c-4cbe-49b0-a947-1832f2bef53e",
+      "barcode": "8906120316286",
+      "tradeName": "tamoxifen wise 20mg "
+    },
+    {
+      "id": "8d8ad0bf-3362-4c15-9c9a-58ee5b69eab6",
+      "barcode": "8901571011032",
+      "tradeName": "eno eff "
+    },
+    {
+      "id": "88883ae1-f83c-424a-8573-6822e40352a3",
+      "barcode": "All in one",
+      "tradeName": "panadol all in one "
+    },
+    {
+      "id": "abd34da9-24f1-44b5-8d97-5cdc6448a72b",
+      "barcode": "panadol cold flu",
+      "tradeName": "panadol cold flu "
+    },
+    {
+      "id": "7d3711ca-2455-4ac6-91cf-b30b59641600",
+      "barcode": "5281018006061",
+      "tradeName": "Beesline lip care"
+    },
+    {
+      "id": "cdc0624b-6ed0-4415-bafd-7bf6c288a997",
+      "barcode": "5464344520535",
+      "tradeName": "فرشاة تنظيف مميات"
+    },
+    {
+      "id": "dc3c68dd-34bf-40f6-aa46-8af2a043ff04",
+      "barcode": "5281018001240",
+      "tradeName": " فراولة Beesline lip car"
+    },
+    {
+      "id": "2efbebb9-6626-4ed2-a20a-60e26dd4fc93",
+      "barcode": "Ceftriaxone BP I.M 1g",
+      "tradeName": "Ceftriaxone BP I.M 1g"
+    },
+    {
+      "id": "d194732c-476d-429f-95ae-0619b0a9471a",
+      "barcode": "8683880768165",
+      "tradeName": "vit b12"
+    },
+    {
+      "id": "3dcbbfba-a754-4ac7-a60b-47bc5478a1ef",
+      "barcode": "8437020075435",
+      "tradeName": "montelina "
+    },
+    {
+      "id": "ecfa0c20-25fb-41b1-9e06-569e72ae87fb",
+      "barcode": "8906176620467",
+      "tradeName": "novavir cream"
+    },
+    {
+      "id": "31740bb5-bce1-4204-8eda-5946c733fea2",
+      "barcode": "aspineas tab",
+      "tradeName": "aspineas tab"
+    },
+    {
+      "id": "2d9b247f-72af-4ef3-a9d0-e9c5364f7aa4",
+      "barcode": "6945449381133",
+      "tradeName": "Fish 240ml"
+    },
+    {
+      "id": "fce57d3e-9720-459e-8c6a-75055c2e68e2",
+      "barcode": "6953350930067",
+      "tradeName": "lipe palm"
+    },
+    {
+      "id": "84bcffbf-e770-4f91-bd28-e85d0f066291",
+      "barcode": "9554100191072",
+      "tradeName": "royal honey"
+    },
+    {
+      "id": "72c68972-fea3-4bcb-8911-c97d4a8db191",
+      "barcode": "Concor Cor2.5mg",
+      "tradeName": "Concor Cor2.5mg"
+    },
+    {
+      "id": "2fcd43d7-afa3-461a-8ecd-6b691a46a1fb",
+      "barcode": "ketro aqmp",
+      "tradeName": "ketro amp"
+    },
+    {
+      "id": "b0bb9be7-96bb-4039-804c-94f865712db6",
+      "barcode": "6221508171922",
+      "tradeName": "Dexamethasone-MUP amp"
+    },
+    {
+      "id": "44aead26-56e2-44a6-a37c-51f52b3d8395",
+      "barcode": "Yenikid syr",
+      "tradeName": "Yenikid syr"
+    },
+    {
+      "id": "81a9ef20-8e4a-4927-a4b1-ee1f682e8d3e",
+      "barcode": "Etumax",
+      "tradeName": "Etumax"
+    },
+    {
+      "id": "81ac6f42-d196-4cb0-88a6-c8a35c96d788",
+      "barcode": "6210872086420",
+      "tradeName": "Beta-Salic"
+    },
+    {
+      "id": "bba02ad1-8b52-4b3b-8da8-4333e1a71b4e",
+      "barcode": "Procto-Synalar N",
+      "tradeName": "Procto-Synalar N"
+    },
+    {
+      "id": "fd1e77ec-ce99-418a-9a93-e7b02a23b6c7",
+      "barcode": "7804653721151",
+      "tradeName": "Dutamsuvita 0.5\\0.4"
+    },
+    {
+      "id": "36a1a69f-c23a-486c-aede-4d6ddd6db4e5",
+      "barcode": "Cefotaxime IM",
+      "tradeName": "Cefotaxime IM"
+    },
+    {
+      "id": "4db3fa87-372d-4a7e-98ba-eb197c010350",
+      "barcode": "5012251011341",
+      "tradeName": "Interdental brushes 0.45"
+    },
+    {
+      "id": "a5a754e6-9797-4545-a0ce-9c8269335f72",
+      "barcode": "2025010609065",
+      "tradeName": "furalgin forte 500mg tab"
+    },
+    {
+      "id": "877a0218-c427-4646-bb24-c59b3632d43a",
+      "barcode": "8906161742884",
+      "tradeName": "Pacilav 1g tab"
+    },
+    {
+      "id": "793c33f6-a7d4-48fa-b366-b6c707fe2478",
+      "barcode": "furagesic",
+      "tradeName": "furagesic tab"
+    },
+    {
+      "id": "723aae25-0d39-4f6b-adc4-1bec12f9142b",
+      "barcode": "ciprox",
+      "tradeName": "ciprox  500 tab"
+    },
+    {
+      "id": "4bd2c230-ae26-40ff-8e96-9930122fb587",
+      "barcode": "5206938000197",
+      "tradeName": "Hemafer tab"
+    },
+    {
+      "id": "bc3b9939-dfc1-4a58-a671-837c0f59f7ae",
+      "barcode": "8904151826941",
+      "tradeName": " Etoricoxib 90tab"
+    },
+    {
+      "id": "7efc4400-f60a-442a-a70b-ee811cd7c761",
+      "barcode": "Dibase 300000Iu",
+      "tradeName": "Dibase 300000Iu"
+    },
+    {
+      "id": "688b18f3-e007-44ce-9d0a-38069617c0bc",
+      "barcode": "Dibase 100000IU",
+      "tradeName": "Dibase 100000IU\\ml"
+    },
+    {
+      "id": "336eb56b-dda1-49d2-b99a-1e61eccf8545",
+      "barcode": "Zyloroc 300mg tab",
+      "tradeName": "Zyloroc 300mg tab"
+    },
+    {
+      "id": "b8b8be6b-d85f-405b-b127-d60070306e46",
+      "barcode": "8433042020842",
+      "tradeName": "Dermofix cream"
+    },
+    {
+      "id": "9b20a07c-21cd-43cb-a50e-a93313ec47a0",
+      "barcode": "Glucophage 500",
+      "tradeName": "Glucophage 500"
+    },
+    {
+      "id": "3ec8b6b7-a853-4606-9001-e5b638f30e55",
+      "barcode": "8699569750215",
+      "tradeName": "Ferimax amp"
+    },
+    {
+      "id": "dd5a50d3-bf0b-4b6a-b7de-ed0dae1fe228",
+      "barcode": "Esomeprazole 40mg vial",
+      "tradeName": "esomeprazole 40mg vial"
+    },
+    {
+      "id": "64ddca1f-0032-4d20-b37c-e1220482360e",
+      "barcode": "Calridol vial",
+      "tradeName": "Calridol vial"
+    },
+    {
+      "id": "a4a84236-2bfc-4d71-b54b-ff4e78ccffd5",
+      "barcode": "6253809160435",
+      "tradeName": "Scarfix gel"
+    },
+    {
+      "id": "443d74d6-28d6-45ae-9c7e-429f5d369a41",
+      "barcode": "6291109121060",
+      "tradeName": "Centrum WOMEN"
+    },
+    {
+      "id": "1a24e6cd-e4e9-48b5-a306-e09c095e178b",
+      "barcode": "8906113371711",
+      "tradeName": "Ferocen plus amp"
+    },
+    {
+      "id": "f75ead1f-aca9-45c1-a323-f4f8bc0605e5",
+      "barcode": "301002101102017",
+      "tradeName": "Tussinam syr"
+    },
+    {
+      "id": "0d752686-cad1-4c24-89a4-c0aabbe040f2",
+      "barcode": "8809738316412",
+      "tradeName": "Beuty of joson Green tea serum"
+    },
+    {
+      "id": "4badaae8-4203-445c-92d6-51cde930b620",
+      "barcode": "4260393340145",
+      "tradeName": "plaster med "
+    },
+    {
+      "id": "85c36ae0-b76b-414d-8fb9-cd34d71744d5",
+      "barcode": "769915190311",
+      "tradeName": "Ordinary niacinamide 10%"
+    },
+    {
+      "id": "a3107a0a-a176-465a-8d4f-604487437c19",
+      "barcode": "Glucophage XR 1000mg",
+      "tradeName": "Glucophage XR 1000mg"
+    },
+    {
+      "id": "165dad44-74b5-4ee6-8c5d-b9325092639d",
+      "barcode": "Glucophage Xr 500mg",
+      "tradeName": "Glucophage Xr 500mg"
+    },
+    {
+      "id": "32a25ca2-a060-4f83-9c7e-95fd4dc4872b",
+      "barcode": "096419704080",
+      "tradeName": "Jamox 125mg syr"
+    },
+    {
+      "id": "45a66714-a769-46f3-a774-2a23ab48524d",
+      "barcode": "4902470171036",
+      "tradeName": "شفرات للوجه"
+    },
+    {
+      "id": "664fc3df-3c16-4390-84b8-0daa6c868374",
+      "barcode": "8436026213797",
+      "tradeName": "KIN B5"
+    },
+    {
+      "id": "921f7fe6-1718-4142-81aa-905942825669",
+      "barcode": "ONDA UR syr",
+      "tradeName": "ONDA UR syr"
+    },
+    {
+      "id": "b3f69362-64df-44ca-a0e2-077f0641eb39",
+      "barcode": "Omega AG",
+      "tradeName": "Omega AG"
+    },
+    {
+      "id": "cac9ff57-ac54-4d19-88d7-288c925b5948",
+      "barcode": "8684051918846",
+      "tradeName": "avocold cold flu"
+    },
+    {
+      "id": "a59cfcc9-8eaf-4689-bf80-11abf1ac989c",
+      "barcode": "501161350015",
+      "tradeName": "Urokal powder"
+    },
+    {
+      "id": "98370072-aa7e-4847-a182-e7f26a958d18",
+      "barcode": "5285006160940",
+      "tradeName": " suldex-A supp"
+    },
+    {
+      "id": "ad8afbfc-31e6-4394-98ea-0c09f0252cae",
+      "barcode": "5285006160957",
+      "tradeName": "suldex-B supp"
+    },
+    {
+      "id": "0298390c-b674-4104-b0d3-26dbfc04daed",
+      "barcode": "6251875003212",
+      "tradeName": "piopenem 1g"
+    },
+    {
+      "id": "072a31fd-6996-491a-b3ad-0dc02665d614",
+      "barcode": "6118001151455",
+      "tradeName": "Strepsils Orangeet vitamineC"
+    },
+    {
+      "id": "d4432f97-30ce-435f-b663-82488d189828",
+      "barcode": "6118001151493",
+      "tradeName": "strepsils sans sucre"
+    },
+    {
+      "id": "e5add681-485a-4c9d-b13e-7eb795dfa0a1",
+      "barcode": "Microgynon tab",
+      "tradeName": "Microgynon tab"
+    },
+    {
+      "id": "9de9b0f0-bfae-4111-a78f-c4563450675a",
+      "barcode": "Glucophage 750xr",
+      "tradeName": "Glucophage 750xr"
+    },
+    {
+      "id": "87d3ce18-58c5-486c-93c9-51e49e6392b6",
+      "barcode": "6214100000073",
+      "tradeName": "Lido spray"
+    },
+    {
+      "id": "84dec372-9047-49d3-b24e-8b078300377b",
+      "barcode": "Spasmomen",
+      "tradeName": "spasmomen 40mg tab"
+    },
+    {
+      "id": "0d6778ac-9eee-4558-bade-83441d5c2875",
+      "barcode": "Concor cor 2.5",
+      "tradeName": "Concor Cor 2.5mg"
+    },
+    {
+      "id": "6ac09073-a8d6-4e98-9a59-419a09402418",
+      "barcode": "Olmetec plus 40\\25",
+      "tradeName": "Olmetec plus 40\\25mg"
+    },
+    {
+      "id": "144ce8d0-9e94-421f-842f-88b5c7ca2a6e",
+      "barcode": "Aspirin 100mg tab",
+      "tradeName": "Aspirin 100mg tab"
+    },
+    {
+      "id": "1ec2c595-eb73-4ea0-a21c-7a527f8e3bd5",
+      "barcode": "Azi-Once 250mg",
+      "tradeName": "Azi-once 250mg tab"
+    },
+    {
+      "id": "fd677e57-9fcc-4cf3-a833-664ab2aa653f",
+      "barcode": "6211247022050",
+      "tradeName": "Hayanil tab"
+    },
+    {
+      "id": "07e9fdf4-53ed-43e4-99fb-325508fe5604",
+      "barcode": "8901302100608",
+      "tradeName": "Hipril-A"
+    },
+    {
+      "id": "67b3c423-990a-406b-b99c-7202e9e239e1",
+      "barcode": "8901111009536",
+      "tradeName": "Apmol 500 amp"
+    },
+    {
+      "id": "27d6e144-a02e-48d1-8753-ed3aa5233f22",
+      "barcode": "Betafos amp",
+      "tradeName": "Betafos amp"
+    },
+    {
+      "id": "728f6256-28d2-4c8c-894b-cd58a832d469",
+      "barcode": "8901302098226",
+      "tradeName": "Esofage 20mg"
+    },
+    {
+      "id": "b6885e61-92ed-4767-b969-2b1167bd4765",
+      "barcode": "8901302098233",
+      "tradeName": "Esofage 40mg"
+    },
+    {
+      "id": "1794056e-739d-4aa3-b8c9-7ba5df2506b9",
+      "barcode": "8684543712389",
+      "tradeName": "Melatonin 5mg"
+    },
+    {
+      "id": "8b175d81-369b-4ad7-9f61-e2ebe727ca33",
+      "barcode": "8682974982043",
+      "tradeName": "Powerland oral vial"
+    },
+    {
+      "id": "6461520d-5c39-42f5-8e3a-2b8a43637c77",
+      "barcode": "8906148421887",
+      "tradeName": "Phenagone syr"
+    },
+    {
+      "id": "27dbac9c-1610-440f-ba61-5f6d436fa40d",
+      "barcode": "3664798019735",
+      "tradeName": "depakine 200"
+    },
+    {
+      "id": "368d1a7f-343b-433c-aff0-50172a3753c1",
+      "barcode": "5060829021834",
+      "tradeName": "duvilan wise 10mg"
+    },
+    {
+      "id": "38fd6508-5fe8-4b57-b275-c3f28ad6871f",
+      "barcode": "ceftriaxone BP I.V 1g",
+      "tradeName": "ceftriaxone BP I.V 1g"
+    },
+    {
+      "id": "8499b7fe-6050-490d-8d4e-67d4eb0b6c7e",
+      "barcode": "6223013103764",
+      "tradeName": "milga advance"
+    },
+    {
+      "id": "8928a6bf-7b45-4e32-a010-fde6dc604c44",
+      "barcode": "5021265221608",
+      "tradeName": "cardioace"
+    },
+    {
+      "id": "dea9d17e-9790-47ee-a894-b8723b687d58",
+      "barcode": "4010439201387",
+      "tradeName": "Lacalut Wihite 75ml "
+    },
+    {
+      "id": "b94fbd0d-02b9-48b4-93da-6c6b876e0486",
+      "barcode": "100888220030",
+      "tradeName": "Butadin syrp"
+    },
+    {
+      "id": "4dd8afef-b292-425a-ba2b-8a568e1b09cd",
+      "barcode": "8852916015836",
+      "tradeName": "Playboy triple play"
+    },
+    {
+      "id": "ee76127b-1480-4568-84e9-deed85c0b5b8",
+      "barcode": "8672653096758",
+      "tradeName": "Playboy G-Vibrtions"
+    },
+    {
+      "id": "f7a169d4-9298-44cd-a787-5f39a651073e",
+      "barcode": "8789635145363",
+      "tradeName": "playboy Extra safe"
+    },
+    {
+      "id": "ee32b45d-734c-455d-bd9e-10b061b77b4b",
+      "barcode": "8654810243755",
+      "tradeName": "playboy Epiphany"
+    },
+    {
+      "id": "1eb5a015-822d-4be9-b5e8-2a2678b69143",
+      "barcode": "playboy",
+      "tradeName": "playboy Paradise"
+    },
+    {
+      "id": "3f6f290f-6476-4d72-a249-00feeece95bb",
+      "barcode": "771313232067",
+      "tradeName": "Apo-Rosuvaststin 20mg"
+    },
+    {
+      "id": "bf3524f3-3a2b-491b-ac2e-17fc4fa75388",
+      "barcode": "8906113370714",
+      "tradeName": "PROGECEN-50 AMP"
+    },
+    {
+      "id": "558e1bfa-c1d2-4b6f-86d7-9a36f3242c6d",
+      "barcode": "5055565789162",
+      "tradeName": "Digoxin 250mg tab"
+    },
+    {
+      "id": "77b2243b-04d5-4981-a2d2-31b3034e49e5",
+      "barcode": "8684543712716",
+      "tradeName": "mircalcium tab "
+    },
+    {
+      "id": "f656b991-65ca-4cec-ad32-5a692ea7405c",
+      "barcode": "6251065019856",
+      "tradeName": "suprax syrp"
+    },
+    {
+      "id": "42da228a-1fc2-417a-86ef-312ceda90396",
+      "barcode": "6251065019849",
+      "tradeName": "suprax syrp"
+    },
+    {
+      "id": "1145290b-5fa0-4029-b6a5-1251b3d94b73",
+      "barcode": "Estrofem 2mg",
+      "tradeName": "Estrofem 2mg"
+    },
+    {
+      "id": "9e3955b6-796c-4b35-b7b5-df83fc9011c0",
+      "barcode": "609788968092",
+      "tradeName": "Mfs plus cap"
+    },
+    {
+      "id": "3c5d9e73-79b0-4d24-8027-67ff1bd1da87",
+      "barcode": "lyktorol",
+      "tradeName": "lyketorol amp"
+    },
+    {
+      "id": "821e8931-4ce2-4f4a-aad2-bdfb90f488d4",
+      "barcode": "8901117086197",
+      "tradeName": "foracort inhaler"
+    },
+    {
+      "id": "6e559c3a-6dab-43e4-8170-5694f7bc00e4",
+      "barcode": "Novomix",
+      "tradeName": "NovoMix "
+    },
+    {
+      "id": "f4856922-688f-4bc3-84f7-f013367d6182",
+      "barcode": "6251651001807",
+      "tradeName": "salisone oint"
+    },
+    {
+      "id": "a989294b-1745-4db7-92e0-3268b08fd89e",
+      "barcode": "8699578340629",
+      "tradeName": "Dicol 1% gel"
+    },
+    {
+      "id": "7dd04f5b-58a4-4308-bed6-88a8e881d2e1",
+      "barcode": "Concor 2.5mg",
+      "tradeName": "Concor 2.5mg"
+    },
+    {
+      "id": "1e9a11c9-5353-4e68-ab71-276db07150b6",
+      "barcode": "6223007359351",
+      "tradeName": "Artofenac drop"
+    },
+    {
+      "id": "08889749-679e-4836-8f2b-d5da1305f10a",
+      "barcode": "6290202588107",
+      "tradeName": "alcohol spray"
+    },
+    {
+      "id": "b0ee7263-95d5-4bd9-953f-d6f4954f3725",
+      "barcode": "6211170017666",
+      "tradeName": "Retane 10mg"
+    },
+    {
+      "id": "6d7cad94-f327-4401-8fe0-db86eb806462",
+      "barcode": "Diovan 160mg",
+      "tradeName": "Diovan 160mg"
+    },
+    {
+      "id": "50bac5a3-8ddc-4364-9fab-ce509963badc",
+      "barcode": "6214283075363",
+      "tradeName": "Gynostrogen 0.625 cream"
+    },
+    {
+      "id": "c285d493-38c2-4555-bfc2-2b1af4b91d14",
+      "barcode": "5000456078757",
+      "tradeName": "Nolvadex-d"
+    },
+    {
+      "id": "1f0ef372-20b7-4bce-8b7d-69f198c8683d",
+      "barcode": "3665763355896",
+      "tradeName": "Doliprane 1000mg"
+    },
+    {
+      "id": "7da12f62-84e1-4b8c-ab64-027f923c8bfa",
+      "barcode": "8904472100478",
+      "tradeName": "gentamicin eye oint"
+    },
+    {
+      "id": "37be9ac2-4417-4cfd-83a8-73352326ac41",
+      "barcode": "8906045949613",
+      "tradeName": "Tetracycline eye oint"
+    },
+    {
+      "id": "7255dac0-8c56-4833-b9f2-84085312c0e4",
+      "barcode": "6291103730138",
+      "tradeName": "Glomox 500mg"
+    },
+    {
+      "id": "6af97a4a-9532-4c31-8db9-435b7d2d2dd0",
+      "barcode": "9780201379440",
+      "tradeName": "Omega3 sea"
+    },
+    {
+      "id": "19b55fc1-9d14-4ac9-b697-ba55357a9490",
+      "barcode": "6285147004881",
+      "tradeName": "Toprazole 40mg"
+    },
+    {
+      "id": "26d61545-b1ba-4943-a60f-aba0bc848c00",
+      "barcode": "Diane35",
+      "tradeName": "Diane35"
+    },
+    {
+      "id": "446bc99a-8215-4b2c-8405-0ca33de15051",
+      "barcode": "evening pill",
+      "tradeName": "eveninig pill"
+    },
+    {
+      "id": "0b5473b9-00d1-4453-9eec-b366c2901696",
+      "barcode": "8680525622905",
+      "tradeName": "povidone iodine solution"
+    },
+    {
+      "id": "5b73187d-7f19-4e1d-a85d-78263376d47a",
+      "barcode": "6251875002673",
+      "tradeName": "no-vomit 4mg amp"
+    },
+    {
+      "id": "ee810f69-0b2d-4ab3-80a0-708ca7e90b85",
+      "barcode": "8682005385584",
+      "tradeName": "eros rozanz"
+    },
+    {
+      "id": "90c1b76b-42d4-4d0b-be50-044f7499e9db",
+      "barcode": "3400937104524",
+      "tradeName": "sinergial tab"
+    },
+    {
+      "id": "ba05d524-cb65-4654-af1d-ab2b7c336eb6",
+      "barcode": "4031571052163",
+      "tradeName": "Doxy-denk 100mg"
+    },
+    {
+      "id": "a38d2827-9788-4411-a2b0-c550b6078928",
+      "barcode": "685867962830",
+      "tradeName": "Flagimel 500mg"
+    },
+    {
+      "id": "5d36c399-275d-463c-9b91-1afac91495ec",
+      "barcode": "6858679626946",
+      "tradeName": "Levofloxacin-Mel 500mg"
+    },
+    {
+      "id": "efa86be4-996b-4e72-b9e6-d825045ebc98",
+      "barcode": "5060806460359",
+      "tradeName": "Energized calcium tab"
+    },
+    {
+      "id": "9d81f8eb-6f96-447a-a2e7-d6d1d60e7cc1",
+      "barcode": "6251651002088",
+      "tradeName": "Fusicure oint"
+    },
+    {
+      "id": "5bb384d3-95ec-483f-a61d-3af746da5a1b",
+      "barcode": "Pulmocod syr",
+      "tradeName": "Pulmocod syr"
+    },
+    {
+      "id": "3e7c8c5e-ca2e-4cae-9d3c-472f59f72d10",
+      "barcode": "9641996010119",
+      "tradeName": "Safagyl syr"
+    },
+    {
+      "id": "7a5793a1-6964-4595-983c-f78ad7c9dbdf",
+      "barcode": "9504000087869",
+      "tradeName": "Albenzol-s awa syr"
+    },
+    {
+      "id": "73cea357-f45b-4220-a4ff-f677092b9c0c",
+      "barcode": "370002200801013",
+      "tradeName": "calcium-Kindi tab"
+    },
+    {
+      "id": "3dbe705b-725c-4cfe-ac96-75a94e2c3753",
+      "barcode": "Ceftriaxone iv",
+      "tradeName": "Ceftriaxone Iv LDP"
+    },
+    {
+      "id": "dff7b5a6-52bd-41a2-a936-ccde9121c3b3",
+      "barcode": "8699569090564",
+      "tradeName": "Diloxol tab"
+    },
+    {
+      "id": "2af534b7-839a-49ff-b7f9-323440c537d2",
+      "barcode": "hidrocil filac drop",
+      "tradeName": "hidrocil filac drop"
+    },
+    {
+      "id": "dd15cf65-a6dd-4e24-9eb8-fe95d44dec20",
+      "barcode": "8902399003964",
+      "tradeName": "Diclobrawn gel"
+    },
+    {
+      "id": "d2bcead7-a71a-44ac-b195-da0c0ab5a6a5",
+      "barcode": "8699566753103",
+      "tradeName": "Santaferron amp"
+    },
+    {
+      "id": "80a1837f-1cde-4322-b5d1-61d20d672273",
+      "barcode": "6295143000824",
+      "tradeName": "Sarfast 180mg"
+    },
+    {
+      "id": "f86bf16e-3a53-49f6-b8e4-c599cfd8c4cb",
+      "barcode": "6291100087976",
+      "tradeName": "dandasha 20mg"
+    },
+    {
+      "id": "19b3874d-fa33-47d8-a788-ca42582e6185",
+      "barcode": "6285147001392",
+      "tradeName": "Glados 30mg"
+    },
+    {
+      "id": "d3877235-c448-412c-b8dc-6f4c43b7ad4e",
+      "barcode": "4005900088413",
+      "tradeName": "Nivea men roll"
+    },
+    {
+      "id": "0313d5b1-0e4c-42ad-86d3-b1adeca6dc3a",
+      "barcode": "611851290139",
+      "tradeName": "Hero care silk "
+    },
+    {
+      "id": "9583ac2e-0194-42db-972b-c10b6d7c0e80",
+      "barcode": "Acretin0.025%cream",
+      "tradeName": "Acretin0.025%cream"
+    },
+    {
+      "id": "ebb0c499-59de-420a-ad84-16f6b5375e0d",
+      "barcode": "Controloc40mgtab",
+      "tradeName": "Controloc40mgtab"
+    },
+    {
+      "id": "dc638c82-ec25-45ab-8b04-d03070992341",
+      "barcode": "Primolut N",
+      "tradeName": "primolut N"
+    },
+    {
+      "id": "c8461e59-1a05-452c-8a95-04dcb6f53ff3",
+      "barcode": "6211164020375",
+      "tradeName": "Spasmocholonase tab"
+    },
+    {
+      "id": "429a141a-4b1c-4578-8b51-e9c283163d13",
+      "barcode": "6210338011812",
+      "tradeName": "Zomitan 2.5"
+    },
+    {
+      "id": "50ccf2b8-df8e-48e3-9c22-803815a984ba",
+      "barcode": "6251653190103",
+      "tradeName": "Atoxia 90mg"
+    },
+    {
+      "id": "6a0b3dde-3cd6-4bc1-99f5-dea2ba10ab32",
+      "barcode": "Dibase 300.000iu",
+      "tradeName": "Dibase 300.000iu"
+    },
+    {
+      "id": "14c403a7-d573-429f-a020-bc8925eda7c2",
+      "barcode": "Trium free drop",
+      "tradeName": "trium free drop"
+    },
+    {
+      "id": "1d692a3a-d31e-4c1a-86ff-e2f2bdbdaa11",
+      "barcode": "8681735790163",
+      "tradeName": "Omex 40mg iv"
+    },
+    {
+      "id": "c80419ec-baad-4121-83ec-820763e87299",
+      "barcode": "diovan",
+      "tradeName": "diovan"
+    },
+    {
+      "id": "bd1bd6da-2b0c-43af-86a2-b7c42bea3ad6",
+      "barcode": "Hydrocortisone amp",
+      "tradeName": "Hydrocortisone amp"
+    },
+    {
+      "id": "927be3dc-6f8f-4953-861d-41cf5626c596",
+      "barcode": "Ceftriaxone Im",
+      "tradeName": "Ceftriaxone IM LDP"
+    },
+    {
+      "id": "74212c56-049a-4662-adda-9b533c3bb71f",
+      "barcode": "Ceftriaxone Iv ldp",
+      "tradeName": "Ceftriaxone Iv LDP"
+    },
+    {
+      "id": "4d9b4813-b026-42af-bd7d-95527377d348",
+      "barcode": "3664798021899",
+      "tradeName": "Depakine 500mg"
+    },
+    {
+      "id": "9099b298-1cad-4c9d-afb7-9d8ccbb71f86",
+      "barcode": "100873360031",
+      "tradeName": "libroxide 5"
+    },
+    {
+      "id": "e295a016-2f30-4b3b-9166-5cb2a95aa382",
+      "barcode": "6294861638517",
+      "tradeName": "wound dreesing"
+    },
+    {
+      "id": "ad046111-ea99-41e3-b335-c277edd898ef",
+      "barcode": "6291103402370",
+      "tradeName": "wound dressing 10+30"
+    },
+    {
+      "id": "f72a7a4a-d792-4ed2-b01c-1ebf5b121383",
+      "barcode": "6629384637035",
+      "tradeName": "aveat مميه"
+    },
+    {
+      "id": "c1dfe155-187e-4879-926f-075fc10a821b",
+      "barcode": "8710103875680",
+      "tradeName": "avent natural "
+    },
+    {
+      "id": "b2421a35-4f93-47c6-ad35-ec1976b0b2ff",
+      "barcode": "5000309002755",
+      "tradeName": "veet  cream dry skin "
+    },
+    {
+      "id": "1c775e44-8aa3-43ce-a8dc-cbac8f2760d1",
+      "barcode": "5000309002601",
+      "tradeName": "veet cream normal skin "
+    },
+    {
+      "id": "56cdae52-e027-422c-ac83-c6d1a5dc6e1c",
+      "barcode": "6215466546281",
+      "tradeName": "fresh eye lens "
+    },
+    {
+      "id": "eb6b8cf8-e9e1-4c08-8c0e-c8fc3f081aeb",
+      "barcode": "8690712019784",
+      "tradeName": "Magnessium glycerophosphate"
+    },
+    {
+      "id": "dbde4867-c0a3-4bd4-81c6-1fa1e809aae3",
+      "barcode": "Colchicum-Dispert 0.5",
+      "tradeName": "Colchicum-Dispert 0.5"
+    },
+    {
+      "id": "fcda71ac-7853-490a-98c6-f0ac382b72dc",
+      "barcode": "8433042020194",
+      "tradeName": "Somazina 1000mg sachet"
+    },
+    {
+      "id": "c7fd81f7-7d74-4eb7-88b3-6c9c6ffb2559",
+      "barcode": "8699569750185",
+      "tradeName": "Zeloxim amp"
+    },
+    {
+      "id": "7b912201-9401-437c-a6ce-cddff934d5bf",
+      "barcode": "5021265254491",
+      "tradeName": "Ultra magnesium"
+    },
+    {
+      "id": "44f7073a-d06a-4af5-9653-c8fcabff5be5",
+      "barcode": "6221508019613",
+      "tradeName": "Alertam 180mg tab"
+    },
+    {
+      "id": "a7e28613-663b-4b06-b2c5-41404fc31e75",
+      "barcode": "6251159062072",
+      "tradeName": "Edarbyclor 40\\12.5"
+    },
+    {
+      "id": "5956e5a6-bc19-4ac6-900e-c35e0f3fef17",
+      "barcode": "100956200018",
+      "tradeName": "medazole 500"
+    },
+    {
+      "id": "a8518443-2c41-404e-ae7a-ee93f6545cf6",
+      "barcode": "6221079000218",
+      "tradeName": "zithroriv syrp"
+    },
+    {
+      "id": "ec0ad74e-3141-4e1a-b1ee-df9ba741975d",
+      "barcode": "6251065013632",
+      "tradeName": "zomzx syrp"
+    },
+    {
+      "id": "22b73011-5d28-469d-8924-18192f865d58",
+      "barcode": "ketesse 25mg sashet",
+      "tradeName": "ketesse sashet"
+    },
+    {
+      "id": "b25a3832-2f27-449d-a899-8f0a7fbd0f78",
+      "barcode": "6291100781560",
+      "tradeName": "medacin t "
+    },
+    {
+      "id": "fa5c69bc-9d9f-4e44-9f62-b2fd925bd7b7",
+      "barcode": "4019338607429",
+      "tradeName": "Reparril-Dragees tab"
+    },
+    {
+      "id": "f95c2c90-e452-4194-8ae2-3f52c8fbcfdf",
+      "barcode": "6251151002687",
+      "tradeName": "Linda soulutin"
+    },
+    {
+      "id": "488e9d8b-dfd5-4f28-b8f4-e5c0e0cb9194",
+      "barcode": "Coveram 10\\5",
+      "tradeName": "Coveram 10\\5"
+    },
+    {
+      "id": "342bbd3e-d83a-4ea3-86c7-30e1a53dd919",
+      "barcode": "6291103841551",
+      "tradeName": "Nixvom tab"
+    },
+    {
+      "id": "6eceb4ea-cc7f-4269-8f78-879ec67bb9d0",
+      "barcode": "D-life",
+      "tradeName": "D-Life 300000IU\\ml"
+    },
+    {
+      "id": "4bb45b7e-5826-4f27-9342-c28e36ae2c84",
+      "barcode": "810157850126",
+      "tradeName": "magnesium glycinate"
+    },
+    {
+      "id": "a42faefb-0b19-491b-9432-62f07d2fed9d",
+      "barcode": "6291109121916",
+      "tradeName": "panadol extra"
+    },
+    {
+      "id": "e7e4ad95-8f1f-4b9b-ae71-dd7152bed447",
+      "barcode": "8680923354262",
+      "tradeName": "dr clinic لاصق حب شباب"
+    },
+    {
+      "id": "053b7d7f-8dfb-48cc-9bee-b756d2f71fc4",
+      "barcode": "lotevan 160\\10",
+      "tradeName": "Lotevan 10\\160"
+    },
+    {
+      "id": "0770daaa-38be-4e6b-aa89-c25d1d8ebae8",
+      "barcode": "3337875797597",
+      "tradeName": "Laroche-posay 50+INVISIBLE Flouid 50ml"
+    },
+    {
+      "id": "392fd918-3519-407b-8713-e77cd575af7d",
+      "barcode": "5012345789743",
+      "tradeName": "febaz 40mg tab"
+    },
+    {
+      "id": "8b681aec-d500-46df-8873-266c70983e16",
+      "barcode": "8003670842392",
+      "tradeName": "Chicoa wips"
+    },
+    {
+      "id": "ff6027fc-9db9-4c6b-8001-2f3f8cf0f7a2",
+      "barcode": "8682005381869",
+      "tradeName": "povidone iodine 10%Spray"
+    },
+    {
+      "id": "268ba856-17ab-47fe-82f9-97686f1d9708",
+      "barcode": "84011975",
+      "tradeName": "Omega Crest"
+    },
+    {
+      "id": "f29273bd-bfb8-43e9-b558-2f27476c75b8",
+      "barcode": "5061003690686",
+      "tradeName": "Nurobtin tab"
+    },
+    {
+      "id": "2dd87ea9-5f0c-4e4c-8ac8-da44aae256f0",
+      "barcode": "810157850119",
+      "tradeName": "magnesium Malate "
+    },
+    {
+      "id": "7244edee-dc6b-4d26-9dba-b730aeb08182",
+      "barcode": "810157850102",
+      "tradeName": "Magnesium Citrate"
+    },
+    {
+      "id": "27052783-4d3e-4f05-9acd-0c36dfda8eea",
+      "barcode": "5280133701004",
+      "tradeName": "Geisha cream"
+    },
+    {
+      "id": "e54c1aec-d96e-4e40-887a-8842c015ed58",
+      "barcode": "Cooling patch",
+      "tradeName": "Cooling patch"
+    },
+    {
+      "id": "642e0711-092f-47a7-b1f4-9b0cbfca9ad6",
+      "barcode": "8901111080450",
+      "tradeName": "Humiderm cream 100g"
+    },
+    {
+      "id": "bfcfb22b-d7e7-4e9b-b8c6-fe8ba5a6afa0",
+      "barcode": "8683744497026",
+      "tradeName": "Mir-Hans tab"
+    },
+    {
+      "id": "4b8ca088-cd45-4064-a485-1a24d25a2392",
+      "barcode": "6291100081059",
+      "tradeName": "Alfacort cream"
+    },
+    {
+      "id": "acaaf72d-20be-4a72-8aa6-b89070c9e5d0",
+      "barcode": "500349030602013",
+      "tradeName": "Captopril 50-kindi"
+    },
+    {
+      "id": "95f85797-a3fc-4cc2-bab6-11447e9d60cf",
+      "barcode": "9504000088644",
+      "tradeName": "Fusidat cream"
+    },
+    {
+      "id": "829fb839-8adb-4588-b265-1bb9adcc8d1a",
+      "barcode": "6945449302152",
+      "tradeName": "fish حلمه"
+    },
+    {
+      "id": "d2df471f-0326-414c-bf2e-cda634f562e9",
+      "barcode": "8904472100270",
+      "tradeName": "paracetamol INJ "
+    },
+    {
+      "id": "7f4734f3-a026-4aaa-a582-6417fd9dfc53",
+      "barcode": "6118000013259",
+      "tradeName": "Diamox 250mg tab"
+    },
+    {
+      "id": "c2ab6234-18a3-4084-8572-f4ed64b27060",
+      "barcode": "6221025004833",
+      "tradeName": "Apidone syrp"
+    },
+    {
+      "id": "f39255d7-ff97-4170-b421-d9c0da88ec05",
+      "barcode": "5096091333825",
+      "tradeName": "Tempratol drops"
+    },
+    {
+      "id": "24bcd6c0-e9c4-40cb-87ce-44b3e26dca30",
+      "barcode": "6001087357067",
+      "tradeName": "vasaline lotion coca glow "
+    },
+    {
+      "id": "4b5f0aa6-37af-47aa-bd0a-f9154f77059e",
+      "barcode": "6001087357050",
+      "tradeName": "vasaline lotion aloe soothe "
+    },
+    {
+      "id": "a48b339f-b7f0-4763-8aef-89c2f26fe2a6",
+      "barcode": "Advil",
+      "tradeName": "Advil cold Tab"
+    },
+    {
+      "id": "b0171a39-48a0-4654-b461-1a29bfa793b8",
+      "barcode": "6001087357043",
+      "tradeName": "vasaline loion dry skin repair "
+    },
+    {
+      "id": "5126a491-7999-47bb-bc71-b906cade13a9",
+      "barcode": "presol 5mg",
+      "tradeName": "presol 5mg"
+    },
+    {
+      "id": "5b2f5c36-1ceb-4205-9800-b611540efe0d",
+      "barcode": "8682520190830",
+      "tradeName": "aquanza cream"
+    },
+    {
+      "id": "97029cfb-4195-4e9a-a6fe-aa21f9c94d36",
+      "barcode": "6291100785261",
+      "tradeName": "loflam tab"
+    },
+    {
+      "id": "ca2301db-22a6-4de7-94d7-941df859b347",
+      "barcode": "6221508163118",
+      "tradeName": "Xoraxon 1g I.V"
+    },
+    {
+      "id": "f6655da4-e5f5-477b-bfdb-5a6e727a2dfb",
+      "barcode": "4048846022103",
+      "tradeName": "Micardis 40mg tab"
+    },
+    {
+      "id": "90f25821-cb04-43c4-b7e7-7c0fd3528138",
+      "barcode": "Novrapid flexpen",
+      "tradeName": "Novrapid flexpen"
+    },
+    {
+      "id": "19a87f15-5cc5-4dd6-a86e-9965401fba7f",
+      "barcode": "Ryzodeg flexpen",
+      "tradeName": "Ryzodeg flexpen"
+    },
+    {
+      "id": "bb4e4117-ab84-465d-95ad-509e1d09af97",
+      "barcode": "3337875797719",
+      "tradeName": "Laroche-posay"
+    },
+    {
+      "id": "f73cae4b-a4a2-497e-b4e7-0b10ba6dbddb",
+      "barcode": "3337875546430",
+      "tradeName": "Laroche-posay gel"
+    },
+    {
+      "id": "9fca113f-7c18-417d-86e7-5610e23ec269",
+      "barcode": "Centrum tab",
+      "tradeName": "Centrum tab"
+    },
+    {
+      "id": "b5025aec-d340-4955-b9b3-187b52eba983",
+      "barcode": "6221035406085",
+      "tradeName": "Tussivan syr"
+    },
+    {
+      "id": "5bf7465b-de6e-4b74-a321-28d81879aaea",
+      "barcode": "6261670805836",
+      "tradeName": "Fish 240ml"
+    },
+    {
+      "id": "7f292f9b-1971-40d7-b2d5-3c76f80f10be",
+      "barcode": "6945449389740",
+      "tradeName": "fish 150ml glass"
+    },
+    {
+      "id": "1d558a68-170b-4451-9a99-8d1d1a408e07",
+      "barcode": "ceftriaxone 500 ldp",
+      "tradeName": "ceftriaxone 500 ldp"
+    },
+    {
+      "id": "6da5daab-8522-4148-9b4c-6e95cfad9ade",
+      "barcode": "Ceftazidime IM",
+      "tradeName": " Ceftazidime IM"
+    },
+    {
+      "id": "342d4c7f-2389-41a4-bb19-7b011543db3c",
+      "barcode": "RENNIE",
+      "tradeName": "RENNIE"
+    },
+    {
+      "id": "ba630a6f-1551-448b-9c59-1cde73bd9e7c",
+      "barcode": "08961102260995",
+      "tradeName": "TELMIS-A"
+    },
+    {
+      "id": "f5a15417-a19a-4358-b8c2-f97e8a9a54f2",
+      "barcode": "Amaryl 6mg",
+      "tradeName": "amaryl6mg"
+    },
+    {
+      "id": "6c83adf4-fd24-4dd8-9e75-bf36e691f778",
+      "barcode": "0100840164512632212010205809981728070810Z016423",
+      "tradeName": "Arcoxia 90mg tab"
+    },
+    {
+      "id": "849aa68f-33d9-4899-8fd3-d69063b6958d",
+      "barcode": "100171230067",
+      "tradeName": "Zinc 50mg"
+    },
+    {
+      "id": "7ef4f759-310b-4dbb-a040-b61c9558729b",
+      "barcode": "300841050043",
+      "tradeName": "tussiram syrp"
+    },
+    {
+      "id": "277b29f3-c04e-427b-aaec-e2f9bf23f9d3",
+      "barcode": "9504000430009",
+      "tradeName": "normal saline 500ml"
+    },
+    {
+      "id": "a3294835-d16d-496a-947a-61ae91d0b2c3",
+      "barcode": "6291103842237",
+      "tradeName": "empazin-L 25\\5"
+    },
+    {
+      "id": "9e1879e8-6e91-4330-add6-81998decb0e3",
+      "barcode": "Diamicron MR 60mg",
+      "tradeName": "Diamicron MR 60mg"
+    },
+    {
+      "id": "5c155f76-4e6d-430f-ba8e-4fee8ab007fe",
+      "barcode": "-03886814",
+      "tradeName": "Skinoren cream"
+    },
+    {
+      "id": "9c88c6c8-3c01-427a-9d96-61f1799fb92c",
+      "barcode": "8720689009997",
+      "tradeName": "Avent "
+    },
+    {
+      "id": "c6cbb219-18c9-41dc-8a5a-fc99db5ae174",
+      "barcode": "Dibase 10.000 drop",
+      "tradeName": "Dibase 10.000 drop"
+    },
+    {
+      "id": "0e63fdec-3fd5-479f-b553-3f70bc8b08fa",
+      "barcode": "Glucophage 500Xr",
+      "tradeName": "Glucophage 500Xr"
+    },
+    {
+      "id": "cc5c6ce2-7667-434b-b3e4-5ef6c4727c10",
+      "barcode": "5021265254330",
+      "tradeName": "Perfectil tab"
+    },
+    {
+      "id": "73a52105-9223-423d-bdd5-9dd2337d977b",
+      "barcode": "6295199811078",
+      "tradeName": "Cosmo Hawaiian dream "
+    },
+    {
+      "id": "d10f1c54-d154-46e2-9eaa-579cd3de9f4f",
+      "barcode": "6295199811146",
+      "tradeName": "Cosmo Berry delight"
+    },
+    {
+      "id": "9805a5fa-e123-466e-a09f-6d65d9e6c3f4",
+      "barcode": "5281001313398",
+      "tradeName": "FRSHDAYS GREN"
+    },
+    {
+      "id": "3be645e7-c5ed-477c-858d-38486fe9a18a",
+      "barcode": "5281001315644",
+      "tradeName": "FRESHDAYS BLUE"
+    },
+    {
+      "id": "a1a9088f-304b-4a1e-9fae-058b332d8e82",
+      "barcode": "5281001313428",
+      "tradeName": "FRESHDAYS PINK"
+    },
+    {
+      "id": "cc83ccdb-245c-45f0-8945-23c26b6857a6",
+      "barcode": "8720689012058",
+      "tradeName": "aVENT +6"
+    },
+    {
+      "id": "3c06e8c0-ab6a-4071-8ef4-cf69fa50ad05",
+      "barcode": "8720689012034",
+      "tradeName": "aVENT +1"
+    },
+    {
+      "id": "80cc18fa-984e-4ba2-88a2-fdd58f2ebdbe",
+      "barcode": "5060464502675",
+      "tradeName": "spironolactone 50MG"
+    },
+    {
+      "id": "da9ec606-bccf-4750-8416-7c43457e8fb4",
+      "barcode": "8680923360317",
+      "tradeName": "dr.clinic Intense roughness"
+    },
+    {
+      "id": "64851094-4504-4035-ac04-3f294e36ae12",
+      "barcode": "8680923353234",
+      "tradeName": "dr.clinic moisturizing lotion"
+    },
+    {
+      "id": "6bb758bc-68f1-48ec-b317-1b8e1643c77e",
+      "barcode": "8717644328040",
+      "tradeName": "Rexona spray"
+    },
+    {
+      "id": "bb86d893-7212-4aa6-8b07-168b6e3ba7d2",
+      "barcode": "No pain tab",
+      "tradeName": "No pain tab"
+    },
+    {
+      "id": "8e65ddbd-ce5a-4cd9-864e-33212aad193e",
+      "barcode": "3582910077909",
+      "tradeName": "Rodogyl tab"
+    },
+    {
+      "id": "62e3ba56-4d41-4c13-ba2a-9bffa793e4a7",
+      "barcode": "8720648887147",
+      "tradeName": "Top-Lincocin inj"
+    },
+    {
+      "id": "70c19cef-19c6-4f77-965d-2070a3193028",
+      "barcode": "6291103841698",
+      "tradeName": "Zuloxet 30mg tab"
+    },
+    {
+      "id": "4acd8bbf-b580-4db1-96bd-0450270522f4",
+      "barcode": "8902399003490",
+      "tradeName": "Quatrobrawn cream "
+    },
+    {
+      "id": "0b50eb6e-964a-4456-902b-cb6788575579",
+      "barcode": "8901302097175",
+      "tradeName": "Divon gel"
+    },
+    {
+      "id": "e0efdae3-7774-44cd-a321-383e00a8c99d",
+      "barcode": "5010622005012",
+      "tradeName": "oral-b"
+    },
+    {
+      "id": "b247d99b-deca-4393-8c5f-30d96eb21b98",
+      "barcode": "8699527093569",
+      "tradeName": "allermax tab"
+    },
+    {
+      "id": "cd346fd2-05a4-4272-b350-779e2dd5f7d1",
+      "barcode": "8699525095756",
+      "tradeName": "doxafin tab"
+    },
+    {
+      "id": "43ada8e4-f129-4705-a361-2c6d345a21a9",
+      "barcode": "Glucophage 850mg",
+      "tradeName": "Glucophage 850mg "
+    },
+    {
+      "id": "acf74000-e947-42a7-ad02-d28aacb04bb7",
+      "barcode": "neurobion tab",
+      "tradeName": "neurobion tab"
+    },
+    {
+      "id": "99153ce0-8f64-4b54-aee2-35ae004e1ecd",
+      "barcode": "9504000430023",
+      "tradeName": "ringer sol "
+    },
+    {
+      "id": "06361402-f7fa-412e-964c-abde77c8cd7a",
+      "barcode": "9645500000559",
+      "tradeName": "quadroderm cream"
+    },
+    {
+      "id": "8967806b-a340-4ba9-ad31-b7cedcbf4ac7",
+      "barcode": "8901111263129",
+      "tradeName": "apifen 200"
+    },
+    {
+      "id": "83525435-3c7c-46cf-a7c5-6fc9a20d7606",
+      "barcode": "89023990013871",
+      "tradeName": "pelicol eye drop"
+    },
+    {
+      "id": "32dd4a5b-eeb8-4609-873f-cba9458124a1",
+      "barcode": "8699569350026",
+      "tradeName": "Ketoral cream "
+    },
+    {
+      "id": "4beadaf8-b712-487a-986e-1c3f9dc024fa",
+      "barcode": "6251106150197",
+      "tradeName": "simvatin 20mg tab"
+    },
+    {
+      "id": "954f9ebf-343c-4947-9bb4-3b46ce78a90c",
+      "barcode": "8436026215555",
+      "tradeName": "sensi Kin"
+    },
+    {
+      "id": "8843a4cf-c365-425b-b175-14510e98d89e",
+      "barcode": "3337875597371",
+      "tradeName": "Cerave Moisturising creem 169 oz\\50ml"
+    },
+    {
+      "id": "b1ee3889-6b6e-4385-84de-f6d4d020475a",
+      "barcode": "8901526652907",
+      "tradeName": "cedrave moisturising lotion 236ml"
+    },
+    {
+      "id": "cdb25247-cb16-4ced-adbb-1b5d5ce7bc53",
+      "barcode": "8682005383429",
+      "tradeName": "rozatar shampoo"
+    },
+    {
+      "id": "59deb26e-0a03-4579-b475-7fdd310ae934",
+      "barcode": "6218967851014",
+      "tradeName": "sulsun shampoo"
+    },
+    {
+      "id": "6394adfc-5b1c-468c-accd-c682d1fc0fea",
+      "barcode": "89023994544661",
+      "tradeName": "warfbran 1mg"
+    },
+    {
+      "id": "31489d17-6142-4400-bdb5-fc2a61aaeaf7",
+      "barcode": "89023999889163",
+      "tradeName": "warfbran3mg "
+    },
+    {
+      "id": "9b935694-9d90-4691-b026-dd61cd765882",
+      "barcode": "010628512801072610DB01531126021517280215212076077006888",
+      "tradeName": "Elica-M Cream"
+    },
+    {
+      "id": "a956c10b-6666-4b24-a7cc-da7f1bd9f2d1",
+      "barcode": "6922704202631",
+      "tradeName": "Vasalaine lip therapy"
+    },
+    {
+      "id": "800d36cb-81a5-4a63-9f80-96d98fb41501",
+      "barcode": "89023998906915",
+      "tradeName": "Calamine lotion"
+    },
+    {
+      "id": "1114ab71-3060-46d4-b345-f837a223737f",
+      "barcode": "9644451552469",
+      "tradeName": "Amoxycillin 250-AS"
+    },
+    {
+      "id": "e40b9122-c304-43ab-99b1-7aebedf4fbc6",
+      "barcode": "6291105153294",
+      "tradeName": "Vaseline lip care"
+    },
+    {
+      "id": "0f251334-52aa-4d03-a9a0-74d913256b7b",
+      "barcode": "6285147001538",
+      "tradeName": "Herox 5mg"
+    },
+    {
+      "id": "af77980b-2910-40b4-8ed0-95d56a6b6f98",
+      "barcode": "5000456007832",
+      "tradeName": "xigduo tm XR 5/1000"
+    },
+    {
+      "id": "feba1fb9-3d1b-48ba-ad8a-ea066b7fb8ed",
+      "barcode": "9641996010416",
+      "tradeName": "Irosaf syrup 120ml SAFA"
+    },
+    {
+      "id": "eb860b17-98e1-4a13-afe3-e6c5a41a7995",
+      "barcode": "8901177101502",
+      "tradeName": "Moov Spray"
+    },
+    {
+      "id": "6c997fb8-b109-4a7c-a679-58324a81fbf4",
+      "barcode": "096419704103",
+      "tradeName": "Jamox 250mg syr"
+    },
+    {
+      "id": "e62c03b7-11df-44ec-b5fb-4b720adbda13",
+      "barcode": "01189042205042961727073110CKL44011210429A0178089",
+      "tradeName": "Onver8"
+    },
+    {
+      "id": "4f530c8b-5367-4d60-a419-4a80e2d9926d",
+      "barcode": "8400044891688",
+      "tradeName": "Telmico 40mg"
+    },
+    {
+      "id": "dc114472-658f-472e-ac8b-f69fdbecc5c3",
+      "barcode": "8684543711597",
+      "tradeName": "Melatonin sleep drops"
+    },
+    {
+      "id": "b92e4989-8644-4341-be38-ec9f98e2a56a",
+      "barcode": "4270003705905",
+      "tradeName": "Matrixa 160/5mg"
+    },
+    {
+      "id": "3c22662e-7cc8-47e5-accf-6b0b5af8a3b0",
+      "barcode": "7321839722103",
+      "tradeName": "betaloc ZOK 25mg"
+    },
+    {
+      "id": "3f456057-c912-4f98-8d68-a63f21172d0e",
+      "barcode": "6251068000417",
+      "tradeName": "peptoz susp 240ml"
+    },
+    {
+      "id": "381f62ff-994d-4c4d-9aea-05350a1b4acc",
+      "barcode": "peptoz tab",
+      "tradeName": "peptoz tab"
+    },
+    {
+      "id": "6cb7972b-3ee2-4b73-b9af-256cf350e343",
+      "barcode": "609788968214",
+      "tradeName": "Q-well 10 400mg"
+    },
+    {
+      "id": "dde4e638-0301-43a6-88e4-c9af96a5d889",
+      "barcode": "ASWAR FOLIC ACID 5MG",
+      "tradeName": "ASWAR FOLIC ACID "
+    },
+    {
+      "id": "803088de-7a08-433f-b9e5-984e3cb172b3",
+      "barcode": "6931930288012",
+      "tradeName": "SAKARIA LANCET"
+    },
+    {
+      "id": "dc721f18-0f45-4371-aeac-9590caad1821",
+      "barcode": "calridol vial",
+      "tradeName": "calridol vial"
+    },
+    {
+      "id": "869f7b67-9527-45ba-ab50-3955f0ddddc4",
+      "barcode": "6221077020218",
+      "tradeName": "senna lax"
+    },
+    {
+      "id": "177c22f7-d8f2-4060-ac6f-d10583c5240b",
+      "barcode": "http://www.shreevenkatesh.com",
+      "tradeName": "evening pill"
+    },
+    {
+      "id": "e771de30-555b-47b4-990d-839f3af6aa2c",
+      "barcode": "8809447256221",
+      "tradeName": "dr althea cream "
+    },
+    {
+      "id": "2658e8cb-c468-49c5-8650-d4b422e9a604",
+      "barcode": "6251161010221",
+      "tradeName": "Uciderm cream"
+    },
+    {
+      "id": "68b27fa6-06f2-4d09-92ff-a1ee4b0ae43a",
+      "barcode": "6291107470177",
+      "tradeName": "Vesitone 5mg"
+    },
+    {
+      "id": "c662e71f-a0e5-4816-a9fe-16fa26ea9b09",
+      "barcode": "5298003860119",
+      "tradeName": "Genyamicin amp opis"
+    },
+    {
+      "id": "e9fe9a1f-b73f-4b10-9ca0-fb45827cc2e5",
+      "barcode": "6984651325665",
+      "tradeName": "Smiling foot"
+    },
+    {
+      "id": "894b9bec-0b64-4d00-9848-b68a63900a33",
+      "barcode": "6251158880011",
+      "tradeName": "Suraxim "
+    },
+    {
+      "id": "1d70726d-20ae-4aac-96c2-c2e929c108af",
+      "barcode": "6251875000846",
+      "tradeName": "Ferofix cap"
+    },
+    {
+      "id": "bb6a648e-32e7-4c81-b166-6a21623606c3",
+      "barcode": "8684051918525",
+      "tradeName": "Amikacin sulfat amp"
+    },
+    {
+      "id": "d8d0e4fd-09a3-4adb-b2ea-f3d8e247cd1c",
+      "barcode": "8806498069749",
+      "tradeName": "Nefopam amp"
+    },
+    {
+      "id": "86381a28-6e97-480b-874b-b309d93243c8",
+      "barcode": "6251653320302",
+      "tradeName": "antagra syrp "
+    },
+    {
+      "id": "f5739afc-8389-44e6-9907-48b5bedea64f",
+      "barcode": "6212260072039",
+      "tradeName": "onfran tab"
+    },
+    {
+      "id": "9ee07d6f-e8d9-461e-aad4-60bab6e50c54",
+      "barcode": "6251065063774",
+      "tradeName": "ivinusmet"
+    },
+    {
+      "id": "cc7fed5e-b93b-454f-bdee-17db52b8d455",
+      "barcode": "6291100087167",
+      "tradeName": "Xemaderm0.1%"
+    },
+    {
+      "id": "541d4d43-7d67-4322-bfce-5c39a64d82ed",
+      "barcode": "8901111003305",
+      "tradeName": " Actinc plas tab"
+    },
+    {
+      "id": "d4319784-2b15-492c-8483-de7d0a2ea99d",
+      "barcode": "6251159031726",
+      "tradeName": "Indicardin 10mg"
+    },
+    {
+      "id": "3b8d7b68-7c7b-4972-910e-1911d7ea45bc",
+      "barcode": "6211366015711",
+      "tradeName": "xenistat 120mg cap"
+    },
+    {
+      "id": "130b522e-53a9-47a1-9935-8b014dab69cc",
+      "barcode": "8433042012106",
+      "tradeName": "omacor 1000mg cap"
+    },
+    {
+      "id": "404ae8c2-bc00-4722-b4e7-fd4520e2ccac",
+      "barcode": "6281056587866",
+      "tradeName": "J.casanova "
+    },
+    {
+      "id": "3fcdbef1-12b0-4195-ac7c-3aa78341f0ec",
+      "barcode": "4103040117298",
+      "tradeName": "Seba med Hair care"
+    },
+    {
+      "id": "1f62696e-d53a-4e2a-bb8f-499f8f101a6d",
+      "barcode": "8710447493885",
+      "tradeName": "Rexona spray for men"
+    },
+    {
+      "id": "08787279-9579-43d2-acb6-398fe4eb5a08",
+      "barcode": "3401353791220",
+      "tradeName": "Bioderma 100ml blue cleansing gel"
+    },
+    {
+      "id": "ab5eac70-8aa6-48b7-a0e1-18a8e14193c5",
+      "barcode": "8719992068104",
+      "tradeName": "NEO follics hair growth tab"
+    },
+    {
+      "id": "53d66496-6db8-45ba-b3b1-fdf8547855db",
+      "barcode": "5065014101742",
+      "tradeName": "Zinc 25mg tab BRISTOL"
+    },
+    {
+      "id": "01ce562f-313e-4191-81e1-5889523aa4da",
+      "barcode": "5065014101766",
+      "tradeName": "Zinc sulphate 220mg tab BRISTOL"
+    },
+    {
+      "id": "d80fabc7-2ad6-4f25-9cde-6125702acf45",
+      "barcode": "6253803721069",
+      "tradeName": "Biozinc 25mg Bio Energy"
+    },
+    {
+      "id": "0322eed0-ee9a-4ceb-8f04-78e436096026",
+      "barcode": "01062911091201241728083110FY2X2172852326892087",
+      "tradeName": "Otrivin 0.05% nasal drops GSK"
+    }
+  ]
+}
