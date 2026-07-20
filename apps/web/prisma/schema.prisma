@@ -988,6 +988,30 @@ model DeviceLicense {
 }
 
 // =======================
+// Offline (standalone) desktop licenses
+// Issued by the super-admin for the offline-only desktop product. The signed
+// RS256 code is verified locally on the customer's device (no server calls);
+// this table only tracks what was issued, to whom, and lets us re-copy a code.
+// =======================
+model OfflineLicense {
+  id           String    @id @default(uuid())
+  pharmacyName String
+  licensedTo   String?
+  hardwareId   String    // device fingerprint this license is locked to
+  plan         String    @default("PERPETUAL") // PERPETUAL or ANNUAL
+  expiresAt    DateTime? // null for perpetual
+  licenseCode  String    @db.Text // the signed JWT handed to the customer
+  notes        String?
+  revoked      Boolean   @default(false) // record-keeping only (offline can't enforce)
+  issuedById   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([hardwareId])
+  @@index([createdAt])
+}
+
+// =======================
 // Dynamic Subscriptions
 // =======================
 model SubscriptionPlan {

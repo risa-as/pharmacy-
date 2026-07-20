@@ -47,6 +47,7 @@ import {
   Lock,
   Loader2,
   Download,
+  HardDrive,
 } from "lucide-react";
 
 import { clearSession } from "@/app/lib/actions/auth-actions";
@@ -100,6 +101,12 @@ const controlTowerSections: NavSection[] = [
     label: "",
     links: [
       { name: "التراخيص", href: "/dashboard/admin/licenses", icon: Crown },
+    ],
+  },
+  {
+    label: "",
+    links: [
+      { name: "تراخيص الأوف لاين", href: "/dashboard/admin/offline-licenses", icon: HardDrive },
     ],
   },
   {
