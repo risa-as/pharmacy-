@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     HardDrive, Plus, Copy, Check, Loader2, AlertTriangle, Fingerprint,
     Store, Calendar, Infinity as InfinityIcon, X, KeyRound, Search,
@@ -394,7 +395,8 @@ function LicenseModal({
 
     const field = 'w-full h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40';
 
-    return (
+    if (typeof document === 'undefined') return null;
+    return createPortal(
         <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
             <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card z-10">
@@ -467,7 +469,8 @@ function LicenseModal({
                     </div>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
 
@@ -477,7 +480,8 @@ function ConfirmDialog({
     title: string; message: string; confirmLabel: string; danger?: boolean; busy: boolean;
     onCancel: () => void; onConfirm: () => void;
 }) {
-    return (
+    if (typeof document === 'undefined') return null;
+    return createPortal(
         <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
             <div className="w-full max-w-sm rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
                 <h2 className="font-bold text-foreground flex items-center gap-2">
@@ -492,6 +496,7 @@ function ConfirmDialog({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

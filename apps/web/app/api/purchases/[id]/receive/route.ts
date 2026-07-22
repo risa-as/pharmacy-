@@ -57,6 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
                         data: {
                             inventoryId: inventory.id,
                             quantity: receivedItem.quantity,
+                            initialQuantity: receivedItem.quantity,
                             batchNumber: receivedItem.batchNumber,
                             expiryDate: new Date(receivedItem.expiryDate),
                             supplierId: purchase.supplier?.id ?? null,

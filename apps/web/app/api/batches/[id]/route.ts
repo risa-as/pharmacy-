@@ -50,6 +50,9 @@ export async function PATCH(
                 return NextResponse.json({ error: 'الكمية غير صالحة' }, { status: 400 });
             }
             updateData.quantity = qty;
+            // Manual edit is a data correction, not consumption — shift initialQuantity
+            // by the same delta so consumed (initial - quantity) stays unchanged.
+            updateData.initialQuantity = Math.max(qty, batch.initialQuantity + (qty - batch.quantity));
         }
         if (body.expiryDate !== undefined) {
             const d = new Date(body.expiryDate);

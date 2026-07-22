@@ -186,6 +186,7 @@ export async function POST(req: Request) {
                     data: {
                         inventoryId: inventory.id,
                         quantity: parsedQuantity,
+                        initialQuantity: parsedQuantity,
                         expiryDate: expiryDate
                             ? new Date(expiryDate)
                             : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),

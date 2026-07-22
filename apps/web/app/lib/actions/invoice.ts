@@ -119,6 +119,7 @@ export async function createPurchase(prevState: any, formData: FormData) {
                         batchNumber: item.batchNumber,
                         expiryDate: new Date(item.expiryDate),
                         quantity: item.quantity,
+                        initialQuantity: item.quantity,
                         costPrice: item.cost
                     }
                 });

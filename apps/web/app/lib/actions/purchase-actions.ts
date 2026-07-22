@@ -315,6 +315,7 @@ export async function receivePurchase(purchaseId: string, items: { itemId: strin
                 data: {
                     inventoryId: inventory.id,
                     quantity: receivedItem.quantity,
+                    initialQuantity: receivedItem.quantity,
                     expiryDate: receivedItem.expiryDate,
                     batchNumber: receivedItem.batchNumber,
                     costPrice: purchaseItem.cost

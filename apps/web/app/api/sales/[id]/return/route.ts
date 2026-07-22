@@ -163,6 +163,7 @@ export async function POST(
                             data: {
                                 inventoryId: inventory.id,
                                 quantity: item.quantity,
+                                initialQuantity: item.quantity,
                                 expiryDate: distantExpiry,
                                 batchNumber: `RET-${Date.now()}`,
                             }

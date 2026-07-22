@@ -153,6 +153,7 @@ export default async function BatchesPage({
               batchNumber: b.batchNumber,
               costPrice: b.costPrice,
               quantity: b.quantity,
+              initialQuantity: b.initialQuantity,
               expiryDate: b.expiryDate.toISOString(),
               createdAt: b.createdAt.toISOString(),
               supplierId: b.supplierId,

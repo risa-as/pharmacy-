@@ -197,18 +197,21 @@ model Inventory {
 }
 
 model Batch {
-  id             String          @id @default(uuid())
-  inventoryId    String
-  expiryDate     DateTime
-  quantity       Int
-  batchNumber    String
-  costPrice      Float           @default(0)
-  supplierId     String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  inventory      Inventory       @relation(fields: [inventoryId], references: [id])
-  supplier       Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  stocktakeItems StocktakeItem[]
+  id              String          @id @default(uuid())
+  inventoryId     String
+  expiryDate      DateTime
+  quantity        Int
+  // Original quantity received; `quantity` is decremented on sale/transfer/write-off,
+  // so consumed = initialQuantity - quantity. Backfilled as = quantity for pre-existing rows.
+  initialQuantity Int             @default(0)
+  batchNumber     String
+  costPrice       Float           @default(0)
+  supplierId      String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  inventory       Inventory       @relation(fields: [inventoryId], references: [id])
+  supplier        Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  stocktakeItems  StocktakeItem[]
 
   @@index([inventoryId])
   @@index([inventoryId, expiryDate])

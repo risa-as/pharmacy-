@@ -71,9 +71,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                 });
 
                 if (existingBatch) {
+                    // Transfer-in is new stock arriving, not a return of consumed stock —
+                    // bump initialQuantity too so consumed (initial - quantity) stays correct.
                     await tx.batch.update({
                         where: { id: existingBatch.id },
-                        data: { quantity: { increment: item.quantity } }
+                        data: {
+                            quantity: { increment: item.quantity },
+                            initialQuantity: { increment: item.quantity }
+                        }
                     });
                 } else {
                     await tx.batch.create({
@@ -82,6 +87,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                             batchNumber: item.batchNumber,
                             expiryDate: item.expiryDate,
                             quantity: item.quantity,
+                            initialQuantity: item.quantity,
                             costPrice: item.costPrice
                         }
                     });

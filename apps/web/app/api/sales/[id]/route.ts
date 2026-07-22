@@ -185,6 +185,7 @@ export async function PUT(
                             data: {
                                 inventoryId: inventory.id,
                                 quantity: back,
+                                initialQuantity: back,
                                 expiryDate: distantExpiry,
                                 batchNumber: `EDIT-${Date.now()}`,
                             },

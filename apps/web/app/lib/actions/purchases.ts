@@ -179,6 +179,7 @@ export async function createPurchase(data: {
                     data: {
                         inventoryId: inventory.id,
                         quantity: item.quantity,
+                        initialQuantity: item.quantity,
                         costPrice: item.cost,
                         batchNumber:
                             item.batchNumber ||

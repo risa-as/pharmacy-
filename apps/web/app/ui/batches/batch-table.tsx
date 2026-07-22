@@ -11,6 +11,7 @@ interface BatchRow {
     batchNumber: string;
     costPrice: number;
     quantity: number;
+    initialQuantity: number;
     expiryDate: string;
     createdAt: string;
     supplierId: string | null;
@@ -132,8 +133,35 @@ export default function BatchTable({ batches, currentPage, pageSize }: BatchTabl
                                     <td className="px-6 py-4 font-bold text-foreground" dir="ltr">
                                         {formatCurrency(batch.costPrice)}
                                     </td>
-                                    <td className="px-6 py-4 font-bold text-foreground">
-                                        {batch.quantity}
+                                    <td className="px-6 py-4">
+                                        {(() => {
+                                            // Rows created before initialQuantity existed (or found in stocktake)
+                                            // can have initial < quantity — treat remaining as the floor.
+                                            const totalQty = Math.max(batch.initialQuantity, batch.quantity);
+                                            const consumed = totalQty - batch.quantity;
+                                            const consumedPct = totalQty > 0
+                                                ? Math.min(100, Math.round((consumed / totalQty) * 100))
+                                                : 0;
+                                            return (
+                                                <div className="min-w-[130px] space-y-1">
+                                                    <div className="flex items-baseline gap-1">
+                                                        <span className="font-bold text-foreground">{batch.quantity}</span>
+                                                        <span className="text-[10px] text-muted-foreground">متبقي</span>
+                                                    </div>
+                                                    <div className="h-1 w-full max-w-[110px] rounded-sm bg-muted overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-sm ${consumedPct >= 100 ? 'bg-destructive' : 'bg-primary'}`}
+                                                            style={{ width: `${consumedPct}%` }}
+                                                        />
+                                                    </div>
+                                                    <p className="text-[11px] text-muted-foreground leading-tight">
+                                                        الكلية: <span className="font-semibold text-foreground">{totalQty}</span>
+                                                        {' · '}
+                                                        المستهلك: <span className="font-semibold text-foreground">{consumed}</span>
+                                                    </p>
+                                                </div>
+                                            );
+                                        })()}
                                     </td>
                                     <td className="px-6 py-4 text-muted-foreground" dir="ltr">
                                         {expiryDate.toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}

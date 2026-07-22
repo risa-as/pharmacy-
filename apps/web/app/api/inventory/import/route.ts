@@ -150,6 +150,7 @@ export async function POST(req: NextRequest) {
                         data: {
                             inventoryId: inventory.id,
                             quantity,
+                            initialQuantity: quantity,
                             // Batch cost drives FEFO sale costing — 0 here corrupts profit reports.
                             costPrice: cost,
                             batchNumber: String(row.batchNumber || `IMP-${new Date().toISOString().slice(0, 10)}`),

@@ -192,6 +192,7 @@ export async function addBatch(prevState: any, formData: FormData) {
                 inventoryId,
                 batchNumber,
                 quantity,
+                initialQuantity: quantity,
                 costPrice,
                 expiryDate,
                 supplierId,
@@ -221,9 +222,20 @@ export async function updateBatchQuantity(batchId: string, newQuantity: number) 
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
 
     try {
+        const batch = await prisma.batch.findUnique({
+            where: { id: batchId },
+            select: { quantity: true, initialQuantity: true },
+        });
+        if (!batch) return { message: "الدفعة غير موجودة." };
+
         await prisma.batch.update({
             where: { id: batchId },
-            data: { quantity: newQuantity },
+            data: {
+                quantity: newQuantity,
+                // Manual edit is a data correction, not consumption — shift initialQuantity
+                // by the same delta so consumed (initial - quantity) stays unchanged.
+                initialQuantity: Math.max(newQuantity, batch.initialQuantity + (newQuantity - batch.quantity)),
+            },
         });
         await logAudit({
             userId: tenantCtx.user.id,

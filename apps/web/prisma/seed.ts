@@ -171,13 +171,13 @@ async function main() {
     const inv1 = await prisma.inventory.findFirst({ where: { branchId: branch1.id, drugId: 'd3' } });
     if (inv1) {
         await prisma.batch.create({
-            data: { inventoryId: inv1.id, batchNumber: 'EXPIRING-SOON', expiryDate: new Date('2026-03-01'), quantity: 15 },
+            data: { inventoryId: inv1.id, batchNumber: 'EXPIRING-SOON', expiryDate: new Date('2026-03-01'), quantity: 15, initialQuantity: 15 },
         });
     }
     const inv2 = await prisma.inventory.findFirst({ where: { branchId: branch1.id, drugId: 'd6' } });
     if (inv2) {
         await prisma.batch.create({
-            data: { inventoryId: inv2.id, batchNumber: 'EXPIRED-BATCH', expiryDate: new Date('2026-01-15'), quantity: 8 },
+            data: { inventoryId: inv2.id, batchNumber: 'EXPIRED-BATCH', expiryDate: new Date('2026-01-15'), quantity: 8, initialQuantity: 8 },
         });
     }
 
