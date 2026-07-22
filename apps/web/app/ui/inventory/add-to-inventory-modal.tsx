@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import ExpiryDateField, { checkExpiry } from "./expiry-date-field";
+import { useConfirm } from "../confirm-dialog";
 
 interface GlobalDrug {
   id: string;
@@ -26,8 +28,10 @@ export default function AddToInventoryModal({
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [packetPrice, setPacketPrice] = useState<number>(0);
+  const [stripSellPrice, setStripSellPrice] = useState<number>(0);
   const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
   const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const router = useRouter();
 
   useEffect(() => {
@@ -46,25 +50,63 @@ export default function AddToInventoryModal({
       return;
     }
     // سعر الباكيت أقل من 125 دينار = تحذير وتأكيد قبل الحفظ
-    if (
-      packetPrice < 125 &&
-      !window.confirm(
-        `سعر الباكيت (${packetPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nهل تريد المتابعة؟`,
-      )
-    ) {
-      return;
+    if (packetPrice < 125) {
+      const ok = await confirm({
+        title: "سعر الباكيت منخفض",
+        message: `سعر الباكيت المدخل (${packetPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nتأكد أنه سعر الباكيت الصحيح.`,
+        variant: "warning",
+      });
+      if (!ok) return;
     }
     // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
-    if (
-      (stripsPerPacket > 20 || (qty > 10 && stripsPerPacket >= qty)) &&
-      !window.confirm(
-        `تنبيه: عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
-        `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
-        `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع\n` +
-        `هل أنت متأكد من المتابعة؟`,
-      )
-    ) {
+    if (stripsPerPacket > 20 || (qty > 10 && stripsPerPacket >= qty)) {
+      const ok = await confirm({
+        title: "عدد الأشرطة يبدو غير صحيح",
+        message:
+          `عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
+          `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
+          `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
+        variant: "warning",
+      });
+      if (!ok) return;
+    }
+    // سعر بيع الشريط مطلوب
+    if (stripSellPrice <= 0) {
+      toast.error("يرجى إدخال سعر بيع الشريط");
       return;
+    }
+    // البيع أقل من أو يساوي الشراء = غالباً خطأ إدخال
+    if (computedCost > 0 && stripSellPrice <= computedCost) {
+      const ok = await confirm({
+        title: "سعر البيع أقل من التكلفة",
+        message:
+          `سعر بيع الشريط (${stripSellPrice.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
+          `أقل من أو يساوي تكلفته (${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع).`,
+        variant: "danger",
+      });
+      if (!ok) return;
+    }
+    // البيع أكثر من ضعف الشراء = ربما أُدخل سعر الباكيت بدلاً من الشريط
+    if (computedCost > 0 && stripSellPrice > 2 * computedCost) {
+      const ok = await confirm({
+        title: "سعر البيع مرتفع جداً",
+        message:
+          `سعر بيع الشريط (${stripSellPrice.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
+          `أكثر من ضعف تكلفته (${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع).\n` +
+          `تأكد أنك أدخلت سعر الشريط وليس سعر الباكيت.`,
+        variant: "warning",
+      });
+      if (!ok) return;
+    }
+    // تصحيح سنة الصلاحية (27 → 2027) والتحذير من التواريخ المنتهية/البعيدة
+    const expiry = checkExpiry(formData.get("expiryDate") as string);
+    if (expiry.warning) {
+      const ok = await confirm({
+        title: "تحقق من تاريخ الانتهاء",
+        message: expiry.warning,
+        variant: expiry.severity ?? "warning",
+      });
+      if (!ok) return;
     }
 
     setLoading(true);
@@ -75,12 +117,12 @@ export default function AddToInventoryModal({
         body: JSON.stringify({
           drugId: drug.id,
           branchId: formData.get("branchId"),
-          price: parseFloat(formData.get("price") as string),
+          price: stripSellPrice,
           cost: computedCost,
           minStock: parseInt(formData.get("minStock") as string, 10),
           maxStock: parseInt(formData.get("maxStock") as string, 10),
           quantity: parseInt(formData.get("quantity") as string, 10),
-          expiryDate: formData.get("expiryDate"),
+          expiryDate: expiry.value || null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -104,7 +146,10 @@ export default function AddToInventoryModal({
 
   if (!mounted) return null;
 
-  return createPortal(
+  return (
+    <>
+      {confirmDialog}
+      {createPortal(
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4"
       onClick={onClose}
@@ -152,29 +197,36 @@ export default function AddToInventoryModal({
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-foreground mb-1">
-                سعر البيع
-              </label>
-              <input
-                type="number"
-                name="price"
-                required
-                min="0"
-                step="any"
-                className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
-              />
-            </div>
-
-            {/* حاسبة سعر التكلفة من الباكيت */}
+            {/* الأسعار — تُدخل بالباكيت وتُحسب للشريط تلقائياً */}
             <div className="col-span-2">
-              <label className="block text-sm font-bold text-foreground mb-2">
-                سعر التكلفة (من الباكيت)
+              <label className="block text-sm font-bold text-foreground mb-1">
+                الأسعار
               </label>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                التكلفة تُدخل بسعر <span className="font-bold text-foreground">الباكيت</span> وتُقسم تلقائياً، أما سعر البيع فأدخله <span className="font-bold text-foreground">للشريط الواحد</span> مباشرة.
+              </p>
+              <div className="mb-2">
+                <label className="block text-xs text-muted-foreground mb-1">
+                  عدد الأشرطة في الباكيت
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={stripsPerPacket || ""}
+                  onChange={(e) =>
+                    setStripsPerPacket(
+                      Math.max(1, parseInt(e.target.value) || 1),
+                    )
+                  }
+                  placeholder="1"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <div>
                   <label className="block text-xs text-muted-foreground mb-1">
-                    سعر الباكيت
+                    سعر شراء الباكيت (التكلفة)
                   </label>
                   <input
                     type="number"
@@ -190,32 +242,42 @@ export default function AddToInventoryModal({
                 </div>
                 <div>
                   <label className="block text-xs text-muted-foreground mb-1">
-                    عدد الأشرطة في الباكيت
+                    سعر بيع الشريط (الجمهور)
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    step="1"
-                    value={stripsPerPacket || ""}
+                    required
+                    min="0"
+                    step="any"
+                    value={stripSellPrice || ""}
                     onChange={(e) =>
-                      setStripsPerPacket(
-                        Math.max(1, parseInt(e.target.value) || 1),
-                      )
+                      setStripSellPrice(parseFloat(e.target.value) || 0)
                     }
-                    placeholder="1"
+                    placeholder="0"
                     className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
                   />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    سعر الشريط الواحد — وليس الباكيت
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
-                <span className="text-xs text-muted-foreground">
-                  سعر التكلفة للشريط:
-                </span>
-                <span className="text-sm font-bold text-primary mr-auto tabular-nums">
-                  {packetPrice > 0
-                    ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })}`
-                    : "—"}
-                </span>
+              <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
+                  <span className="text-sm font-bold text-primary tabular-nums">
+                    {packetPrice > 0
+                      ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })}`
+                      : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">سعر البيع للشريط:</span>
+                  <span className="text-sm font-bold text-success tabular-nums">
+                    {stripSellPrice > 0
+                      ? stripSellPrice.toLocaleString("en", { maximumFractionDigits: 2 })
+                      : "—"}
+                  </span>
+                </div>
               </div>
               {stripsPerPacket > 20 && (
                 <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
@@ -227,6 +289,18 @@ export default function AddToInventoryModal({
                 <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
                   <span>⚠</span>
                   سعر الباكيت أقل من 125 دينار — سيظهر تأكيد عند الحفظ
+                </p>
+              )}
+              {stripSellPrice > 0 && computedCost > 0 && stripSellPrice <= computedCost && (
+                <p className="text-xs font-bold text-destructive mt-1.5 flex items-center gap-1">
+                  <span>⚠</span>
+                  سعر بيع الشريط أقل من أو يساوي تكلفته — سيظهر تأكيد عند الحفظ
+                </p>
+              )}
+              {computedCost > 0 && stripSellPrice > 2 * computedCost && (
+                <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
+                  <span>⚠</span>
+                  سعر بيع الشريط أكثر من ضعف تكلفته — هل أدخلت سعر الباكيت بالخطأ؟ سيظهر تأكيد عند الحفظ
                 </p>
               )}
             </div>
@@ -281,11 +355,7 @@ export default function AddToInventoryModal({
                   <label className="block text-sm font-bold text-foreground mb-1">
                     تاريخ الانتهاء
                   </label>
-                  <input
-                    type="date"
-                    name="expiryDate"
-                    className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
-                  />
+                  <ExpiryDateField name="expiryDate" />
                 </div>
               </div>
             </div>
@@ -312,5 +382,7 @@ export default function AddToInventoryModal({
       </div>
     </div>,
     document.body,
+      )}
+    </>
   );
 }

@@ -5,12 +5,16 @@ import { createPortal } from "react-dom";
 import { ChevronDown, Plus, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { addBatch } from "@/app/lib/actions/inventory";
+import ExpiryDateField, { checkExpiry } from "./expiry-date-field";
+import { useConfirm } from "../confirm-dialog";
 
 interface Supplier { id: string; name: string; }
 
 interface AddBatchModalProps {
     inventoryId: string;
     drugName: string;
+    /** Current per-strip selling price, used to catch packet-cost entry mistakes */
+    currentPrice?: number | null;
     onClose: () => void;
 }
 
@@ -94,7 +98,7 @@ function SupplierCombobox({ suppliers, value, onChange }: {
     );
 }
 
-export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBatchModalProps) {
+export default function AddBatchModal({ inventoryId, drugName, currentPrice, onClose }: AddBatchModalProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -103,6 +107,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
     const [packetPrice, setPacketPrice] = useState(0);
     const [stripsPerPacket, setStripsPerPacket] = useState(1);
     const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+    const { confirm, dialog: confirmDialog } = useConfirm();
 
     const router = useRouter();
 
@@ -127,26 +132,49 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
             return;
         }
         // سعر الباكيت أقل من 125 دينار = تحذير وتأكيد قبل الحفظ
-        if (
-            packetPrice < 125 &&
-            !window.confirm(
-                `سعر الباكيت (${packetPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nهل تريد المتابعة؟`,
-            )
-        ) {
-            return;
+        if (packetPrice < 125) {
+            const ok = await confirm({
+                title: "سعر الباكيت منخفض",
+                message: `سعر الباكيت المدخل (${packetPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nتأكد أنه سعر الباكيت الصحيح.`,
+                variant: "warning",
+            });
+            if (!ok) return;
         }
         // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
-        if (
-            (stripsPerPacket > 20 || (qty > 10 && stripsPerPacket >= qty)) &&
-            !window.confirm(
-                `تنبيه: عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
-                `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
-                `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع\n` +
-                `هل أنت متأكد من المتابعة؟`,
-            )
-        ) {
-            return;
+        if (stripsPerPacket > 20 || (qty > 10 && stripsPerPacket >= qty)) {
+            const ok = await confirm({
+                title: "عدد الأشرطة يبدو غير صحيح",
+                message:
+                    `عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
+                    `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
+                    `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
+                variant: "warning",
+            });
+            if (!ok) return;
         }
+        // التكلفة للشريط أعلى من سعر البيع الحالي = غالباً أُدخل سعر الباكيت بدون قسمة
+        if (currentPrice != null && currentPrice > 0 && computedCost >= currentPrice) {
+            const ok = await confirm({
+                title: "التكلفة أعلى من سعر البيع",
+                message:
+                    `سعر التكلفة للشريط (${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
+                    `أعلى من أو يساوي سعر البيع الحالي للشريط (${currentPrice.toLocaleString("en")} د.ع).\n` +
+                    `غالباً أُدخل سعر الباكيت دون تحديد عدد الأشرطة الصحيح.`,
+                variant: "danger",
+            });
+            if (!ok) return;
+        }
+        // تصحيح سنة الصلاحية (27 → 2027) والتحذير من التواريخ المنتهية/البعيدة
+        const expiry = checkExpiry(formData.get("expiryDate") as string);
+        if (expiry.warning) {
+            const ok = await confirm({
+                title: "تحقق من تاريخ الانتهاء",
+                message: expiry.warning,
+                variant: expiry.severity ?? "warning",
+            });
+            if (!ok) return;
+        }
+        formData.set("expiryDate", expiry.value);
 
         setLoading(true);
         setError("");
@@ -175,7 +203,10 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
 
     if (!mounted) return null;
 
-    return createPortal(
+    return (
+        <>
+            {confirmDialog}
+            {createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
             <div
                 className="bg-card rounded-xl p-6 w-full max-w-md shadow-xl"
@@ -265,12 +296,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
 
                     <div>
                         <label className="block text-sm font-bold text-foreground mb-1">تاريخ انتهاء الصلاحية</label>
-                        <input
-                            type="date"
-                            name="expiryDate"
-                            required
-                            className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
-                        />
+                        <ExpiryDateField name="expiryDate" required />
                     </div>
 
                     {error && <p className="text-sm text-destructive bg-destructive/10 p-2 rounded-lg">{error}</p>}
@@ -296,5 +322,7 @@ export default function AddBatchModal({ inventoryId, drugName, onClose }: AddBat
             </div>
         </div>,
         document.body
+            )}
+        </>
     );
 }

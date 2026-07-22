@@ -23,6 +23,7 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
     // Data for Modals
     const [foundDrug, setFoundDrug] = useState<any>(null);
     const [foundInventoryId, setFoundInventoryId] = useState<string | null>(null);
+    const [foundInventoryPrice, setFoundInventoryPrice] = useState<number | null>(null);
     const [lastScannedBarcode, setLastScannedBarcode] = useState("");
 
     const inputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +54,7 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
         resetModals();
         setFoundDrug(null);
         setFoundInventoryId(null);
+        setFoundInventoryPrice(null);
 
         try {
             const res = await fetch("/api/inventory/check-barcode", {
@@ -73,6 +75,7 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
 
                 if (data.inventory?.id) {
                     setFoundInventoryId(data.inventory.id);
+                    setFoundInventoryPrice(typeof data.inventory.price === "number" ? data.inventory.price : null);
                     setShowAddBatch(true);
                     toast.success("تم العثور على الدواء. يمكنك إضافة دفعة جديدة.");
                 } else {
@@ -123,6 +126,7 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
                 <AddBatchModal
                     inventoryId={foundInventoryId}
                     drugName={foundDrug.tradeName}
+                    currentPrice={foundInventoryPrice}
                     onClose={() => {
                         setShowAddBatch(false);
                         focusInput();
