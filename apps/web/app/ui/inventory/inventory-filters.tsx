@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { useDebouncedCallback } from "use-debounce";
 import { Loader2, Search } from "lucide-react";
@@ -59,6 +59,19 @@ export default function InventoryFilters({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { replace } = useRouter();
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * On phones the tab strip scrolls, and a re-render puts it back at the
+   * start — which can leave the tab you just picked off-screen. Pull the
+   * active one back into view. `block: "nearest"` keeps this from scrolling
+   * the page vertically.
+   */
+  useEffect(() => {
+    stripRef.current
+      ?.querySelector<HTMLElement>('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [currentStatus]);
 
   const showLow = counts.low !== undefined;
   const tabs = showLow
@@ -94,9 +107,18 @@ export default function InventoryFilters({
   const displayCount = getCount(currentStatus);
 
   return (
-    <div className="flex items-center gap-3 flex-wrap" dir="rtl">
+    /**
+     * Mobile (<sm): stacks into two rows — search on top, then the tab strip
+     * beside the result count. The five status tabs are ~520px wide, far more
+     * than a phone viewport, so the strip scrolls horizontally instead of
+     * pushing the whole page sideways.
+     */
+    <div
+      className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center"
+      dir="rtl"
+    >
       {/* Search */}
-      <div className="relative flex-1 min-w-[200px]">
+      <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         <input
           type="text"
@@ -107,47 +129,62 @@ export default function InventoryFilters({
         />
       </div>
 
-      {/* Status Tabs */}
-      <div
-        className={`flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-1 shrink-0 transition-opacity duration-200 ${
-          isPending ? "opacity-60 pointer-events-none" : ""
-        }`}
-      >
-        {tabs.map((tab) => {
-          const isActive = currentStatus === tab.key;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => handleStatus(tab.key)}
-              disabled={isPending}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-all ${
-                isActive ? tab.activeColor : `${tab.color} hover:bg-background`
-              }`}
-            >
-              {tab.label}
-              <span
-                className={`text-xs rounded-full px-1.5 py-0.5 font-mono ${
-                  isActive ? "bg-white/20" : "bg-muted"
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Status Tabs */}
+        <div
+          ref={stripRef}
+          className={`flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-1 min-w-0 overflow-x-auto transition-opacity duration-200 ${
+            isPending ? "opacity-60 pointer-events-none" : ""
+          }`}
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+          {tabs.map((tab) => {
+            const isActive = currentStatus === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => handleStatus(tab.key)}
+                disabled={isPending}
+                data-active={isActive}
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-bold transition-all ${
+                  isActive ? tab.activeColor : `${tab.color} hover:bg-background`
                 }`}
               >
-                {getCount(tab.key)}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+                {tab.label}
+                <span
+                  className={`text-xs rounded-full px-1.5 py-0.5 font-mono ${
+                    isActive ? "bg-white/20" : "bg-muted"
+                  }`}
+                >
+                  {getCount(tab.key)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Result Count / Loading */}
-      <span className="text-sm text-muted-foreground font-medium shrink-0 whitespace-nowrap flex items-center gap-1.5">
-        {isPending ? (
-          <>
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            جاري التحميل...
-          </>
-        ) : (
-          `${displayCount} نتيجة`
-        )}
-      </span>
+        {/**
+         * Result Count / Loading.
+         * The count always equals the active tab's own badge, so on phones it
+         * is hidden rather than stealing ~110px from the tab strip. The
+         * loading state still shows at every width.
+         */}
+        <span
+          className={`text-sm text-muted-foreground font-medium shrink-0 whitespace-nowrap items-center gap-1.5 ${
+            isPending ? "flex" : "hidden sm:flex"
+          }`}
+        >
+          {isPending ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              {/* Text would shove the tab strip ~90px narrower mid-tap on phones */}
+              <span className="hidden sm:inline">جاري التحميل...</span>
+            </>
+          ) : (
+            `${displayCount} نتيجة`
+          )}
+        </span>
+      </div>
     </div>
   );
 }

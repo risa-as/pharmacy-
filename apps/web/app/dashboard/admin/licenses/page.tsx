@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import {
     KeyRound, Plus, Shield, ShieldOff, Monitor, MonitorOff,
     Copy, Check, Loader2, AlertTriangle, Trash2, RotateCcw,
-    Building2, Eye, EyeOff
+    Building2, Eye, EyeOff, CalendarClock
 } from 'lucide-react';
 
 interface License {
@@ -22,7 +22,7 @@ interface License {
     branch: {
         id: string;
         name: string;
-        organization?: { name: string } | null;
+        organization?: { name: string; subscriptionEndsAt?: string | null } | null;
     };
 }
 
@@ -57,6 +57,14 @@ export default function AdminLicensesPage() {
         organizationName: string;
         ownerEmail: string;
     } | null>(null);
+
+    // Expiry editor state (kept separate from the generate-modal state so the
+    // two dialogs never clobber each other)
+    const [editingLicense, setEditingLicense] = useState<License | null>(null);
+    const [editExpiry, setEditExpiry] = useState('');       // YYYY-MM-DD (Baghdad)
+    const [editPermanent, setEditPermanent] = useState(false);
+    const [savingExpiry, setSavingExpiry] = useState(false);
+    const [editError, setEditError] = useState('');
 
     // Fetch licenses
     const fetchLicenses = async () => {
@@ -203,6 +211,76 @@ export default function AdminLicensesPage() {
             console.error('Failed to delete license:', e);
         } finally {
             setActionLoading(null);
+        }
+    };
+
+    // ── Expiry editing ────────────────────────────────────────────────────
+    // Baghdad is UTC+3 all year (no DST), so a fixed offset is safe here.
+    // Formatting with en-CA yields YYYY-MM-DD, which is what <input type="date">
+    // expects — toISOString() would render the UTC day and can be off by one.
+    const BAGHDAD_OFFSET = '+03:00';
+    const toDateInput = (d: Date) =>
+        new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Baghdad',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(d);
+
+    const openExpiryEditor = (license: License) => {
+        setEditingLicense(license);
+        setEditError('');
+        setEditPermanent(!license.expiresAt);
+        setEditExpiry(toDateInput(license.expiresAt ? new Date(license.expiresAt) : new Date()));
+    };
+
+    const closeExpiryEditor = () => {
+        setEditingLicense(null);
+        setEditExpiry('');
+        setEditPermanent(false);
+        setEditError('');
+    };
+
+    // Quick presets add months on top of the remaining subscription when it is
+    // still valid, otherwise from today — same rule as recordManualPayment().
+    const applyPreset = (months: number) => {
+        if (!editingLicense) return;
+        const current = editingLicense.expiresAt ? new Date(editingLicense.expiresAt) : null;
+        const base = current && current > new Date() ? new Date(current) : new Date();
+        base.setMonth(base.getMonth() + months);
+        setEditPermanent(false);
+        setEditExpiry(toDateInput(base));
+    };
+
+    const handleSaveExpiry = async () => {
+        if (!editingLicense) return;
+        if (!editPermanent && !editExpiry) {
+            setEditError('اختر تاريخ الانتهاء أو فعّل خيار "بدون انتهاء"');
+            return;
+        }
+        setSavingExpiry(true);
+        setEditError('');
+        try {
+            const res = await fetch(`/api/admin/licenses/${editingLicense.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    // End of the chosen day in Baghdad time, so the client keeps
+                    // working through the whole last day of the subscription.
+                    expiresAt: editPermanent ? null : `${editExpiry}T23:59:59${BAGHDAD_OFFSET}`,
+                }),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setLicenses(licenses.map((l: any) => l.id === updated.id ? updated : l));
+                closeExpiryEditor();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                setEditError(data.error || 'تعذر حفظ التاريخ');
+            }
+        } catch (e) {
+            console.error('Failed to update expiry:', e);
+            setEditError('تعذر الاتصال بالسيرفر');
+        } finally {
+            setSavingExpiry(false);
         }
     };
 
@@ -414,6 +492,146 @@ export default function AdminLicensesPage() {
                 document.body
             )}
 
+            {/* ============ Expiry editor modal (same portal rationale) ============ */}
+            {editingLicense && createPortal(
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" dir="rtl">
+                    <div className="bg-card border border-border rounded-lg shadow-2xl p-6 w-full max-w-lg mx-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
+                                <CalendarClock className="w-4 h-4 text-primary" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-foreground">تعديل تاريخ انتهاء الترخيص</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    نفس المفتاح يبقى فعّالاً — لا حاجة لتوليد مفتاح جديد للعميل
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* License identity + current state */}
+                        <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 mb-4">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-muted-foreground">المفتاح</span>
+                                <code className="font-mono text-xs text-foreground tracking-wider">
+                                    {editingLicense.licenseKey}
+                                </code>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-muted-foreground">الفرع / المؤسسة</span>
+                                <span className="text-xs text-foreground">
+                                    {editingLicense.branch?.name}
+                                    {editingLicense.branch?.organization?.name
+                                        ? ` — ${editingLicense.branch.organization.name}`
+                                        : ''}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-muted-foreground">الانتهاء الحالي</span>
+                                <span className={`text-xs ${isExpired(editingLicense.expiresAt) ? 'text-destructive' : 'text-foreground'}`}>
+                                    {editingLicense.expiresAt ? formatDate(editingLicense.expiresAt) : 'بدون انتهاء (دائم)'}
+                                </span>
+                            </div>
+                            {editingLicense.branch?.organization?.subscriptionEndsAt !== undefined && (
+                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
+                                    <span className="text-xs text-muted-foreground">انتهاء اشتراك المؤسسة</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {editingLicense.branch?.organization?.subscriptionEndsAt
+                                            ? formatDate(editingLicense.branch.organization.subscriptionEndsAt)
+                                            : 'غير محدد'}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Suspended licences stay blocked no matter what the date says */}
+                        {!editingLicense.isActive && (
+                            <div className="mb-4 p-3 rounded-lg text-xs flex items-start gap-2 bg-warning/10 border border-warning/20 text-warning">
+                                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                                <span>
+                                    هذا الترخيص <b>موقوف</b> حالياً. تمديد التاريخ وحده لن يُعيد تشغيله —
+                                    استخدم زر التفعيل في الجدول بعد الحفظ.
+                                </span>
+                            </div>
+                        )}
+
+                        {editError && (
+                            <div className="mb-4 p-3 rounded-lg text-sm flex items-start gap-2 bg-destructive/10 border border-destructive/20 text-destructive/70">
+                                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                                <span>{editError}</span>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            {/* Quick extend */}
+                            <div>
+                                <label className="block text-sm font-medium text-muted-foreground mb-1.5">
+                                    تمديد سريع
+                                </label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {[1, 3, 6, 12].map((m: number) => (
+                                        <button
+                                            key={m}
+                                            type="button"
+                                            onClick={() => applyPreset(m)}
+                                            className="px-2 py-2 rounded-lg border border-border bg-background text-xs text-foreground hover:bg-muted hover:border-primary/40 transition-colors"
+                                        >
+                                            + {m === 12 ? 'سنة' : `${m} أشهر`}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-[11px] text-muted-foreground mt-1.5">
+                                    يُحسب من تاريخ الانتهاء المحفوظ إن كان سارياً، وإلا فمن اليوم.
+                                </p>
+                            </div>
+
+                            {/* Exact date */}
+                            <div>
+                                <label className="block text-sm font-medium text-muted-foreground mb-1.5">
+                                    تاريخ الانتهاء
+                                </label>
+                                <input
+                                    type="date"
+                                    value={editExpiry}
+                                    onChange={e => { setEditExpiry(e.target.value); setEditPermanent(false); }}
+                                    disabled={editPermanent}
+                                    className={`${inputClass} disabled:opacity-50`}
+                                    dir="ltr"
+                                />
+                            </div>
+
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={editPermanent}
+                                    onChange={e => setEditPermanent(e.target.checked)}
+                                    className="w-4 h-4 rounded accent-primary"
+                                />
+                                <span className="text-sm text-foreground">بدون انتهاء (ترخيص دائم)</span>
+                            </label>
+                        </div>
+
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={handleSaveExpiry}
+                                disabled={savingExpiry}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-bold disabled:opacity-50 transition-colors"
+                            >
+                                {savingExpiry ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                {savingExpiry ? 'جاري الحفظ...' : 'حفظ التاريخ'}
+                            </button>
+                            <button
+                                onClick={closeExpiryEditor}
+                                disabled={savingExpiry}
+                                className="px-4 py-2.5 bg-muted text-muted-foreground rounded-lg text-sm hover:bg-muted/80 transition-colors"
+                            >
+                                إلغاء
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
             {/* ==================== Table ==================== */}
             {loading ? (
                 <div className="flex items-center justify-center h-40">
@@ -503,6 +721,13 @@ export default function AdminLicensesPage() {
                                                     <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                                 ) : (
                                                     <>
+                                                        <button
+                                                            onClick={() => openExpiryEditor(license)}
+                                                            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary/70 hover:text-primary transition-colors"
+                                                            title="تعديل تاريخ الانتهاء"
+                                                        >
+                                                            <CalendarClock className="w-4 h-4" />
+                                                        </button>
                                                         <button
                                                             onClick={() => handleToggle(license)}
                                                             className={`p-1.5 rounded-lg transition-colors text-xs ${license.isActive

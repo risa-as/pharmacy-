@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Building2, Users, CreditCard, Crown, Loader2, ShieldOff, ShieldAlert, ShieldCheck, Check, Copy, Eye, EyeOff, Edit2, Trash2, Calendar, Banknote, Hourglass, Info, Package, Receipt, Activity } from 'lucide-react';
+import { toast } from 'sonner';
 import { suspendOrganization, reactivateOrganization, startTrial } from '@/app/lib/actions/organization-suspension';
 import { recordManualPayment } from '@/app/lib/actions/billing';
 import PlanOverridesPanel from '@/app/ui/admin/PlanOverridesPanel';
+import { useConfirm } from '@/app/ui/confirm-dialog';
 
 export default function TenantsPage() {
     const [tenants, setTenants] = useState<any[]>([]);
@@ -30,6 +32,7 @@ export default function TenantsPage() {
     const [trialSaving, setTrialSaving] = useState(false);
     const [detailsId, setDetailsId] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
+    const { confirm, dialog: confirmDialog } = useConfirm();
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -128,16 +131,23 @@ export default function TenantsPage() {
     };
 
     const handleToggleStatus = async (tenant: any) => {
-        setActionLoading(tenant.id);
         let res;
 
         if (tenant.isActive) {
-            if (!confirm(`هل أنت متأكد من تعطيل مؤسسة ${tenant.name}؟ سيتم إيقاف جميع الأجهزة المرتبطة.`)) {
-                setActionLoading(null);
-                return;
-            }
+            // Confirm first — the dialog is async, so setting the row spinner
+            // before it would leave the row spinning behind the dialog.
+            const ok = await confirm({
+                variant: 'warning',
+                title: 'تعطيل مؤسسة',
+                message: `سيتم تعطيل مؤسسة "${tenant.name}" وإيقاف جميع الأجهزة المرتبطة بها.`,
+                confirmText: 'تعطيل',
+                cancelText: 'إلغاء',
+            });
+            if (!ok) return;
+            setActionLoading(tenant.id);
             res = await suspendOrganization(tenant.id);
         } else {
+            setActionLoading(tenant.id);
             res = await reactivateOrganization(tenant.id);
         }
 
@@ -146,7 +156,7 @@ export default function TenantsPage() {
             const tenantsData = await fetch('/api/admin/tenants').then(r => r.json());
             setTenants(tenantsData.tenants || []);
         } else {
-            alert(res.error || 'حدث خطأ أثناء تغيير الحالة');
+            toast.error(res.error || 'حدث خطأ أثناء تغيير الحالة');
         }
         setActionLoading(null);
     };
@@ -174,20 +184,28 @@ export default function TenantsPage() {
     };
 
     const handleDeleteTenant = async (tenant: any) => {
-        if (!confirm(`هل أنت متأكد من حذف مؤسسة ${tenant.name} نهائياً؟ سيتم حذف جميع الفروع والتراخيص والمستخدمين المرتبطين بها!`)) return;
+        const ok = await confirm({
+            variant: 'danger',
+            title: 'حذف مؤسسة نهائياً',
+            message: `سيتم حذف مؤسسة "${tenant.name}" نهائياً، مع جميع الفروع والتراخيص والمستخدمين المرتبطين بها.\nلا يمكن التراجع عن هذا الإجراء.`,
+            confirmText: 'حذف نهائياً',
+            cancelText: 'إلغاء',
+        });
+        if (!ok) return;
 
         setActionLoading(`delete-${tenant.id}`);
         try {
             const res = await fetch(`/api/admin/tenants/${tenant.id}`, { method: 'DELETE' });
             if (res.ok) {
                 setTenants(tenants.filter((t: any) => t.id !== tenant.id));
+                toast.success(`تم حذف مؤسسة "${tenant.name}"`);
             } else {
                 const data = await res.json();
-                alert(data.error || 'حدث خطأ أثناء الحذف');
+                toast.error(data.error || 'حدث خطأ أثناء الحذف');
             }
         } catch (e) {
             console.error(e);
-            alert('تعذر الاتصال بالسيرفر');
+            toast.error('تعذر الاتصال بالسيرفر');
         } finally {
             setActionLoading(null);
         }
@@ -493,6 +511,7 @@ export default function TenantsPage() {
 
     return (
         <>
+        {confirmDialog}
         {manualPayModal}
         {trialModal}
         {detailsModal}

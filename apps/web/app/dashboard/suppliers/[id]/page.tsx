@@ -52,16 +52,16 @@ export default async function SupplierLedgerPage({
   return (
     <div className="w-full" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/dashboard/suppliers"
-            className="p-2 rounded-lg hover:bg-muted transition-colors"
+            className="p-2 rounded-lg hover:bg-muted transition-colors shrink-0"
           >
             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold font-cairo text-foreground">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold font-cairo text-foreground">
               كشف حساب: {supplier.name}
             </h1>
             {supplier.phone && (
@@ -71,7 +71,12 @@ export default async function SupplierLedgerPage({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        {/**
+         * These three all move money, and their icons (Landmark / Cart /
+         * Card) aren't distinct enough to tap safely without labels — so the
+         * group wraps on narrow screens instead of collapsing to icons.
+         */}
+        <div className="flex items-center flex-wrap gap-3">
           <OpeningBalanceButton
             supplierId={params.id}
             supplierName={supplier.name}
@@ -162,27 +167,33 @@ export default async function SupplierLedgerPage({
             سجل الحركات
           </h2>
         </div>
+        {/**
+         * The card keeps `overflow-hidden` for its rounded corners, so the
+         * table needs its own scroll container — without it the last columns
+         * (including الرصيد) are clipped away with no way to reach them.
+         */}
+        <div className="overflow-x-auto">
         <table className="min-w-full text-foreground">
           <thead className="bg-muted text-right text-sm font-semibold text-muted-foreground border-b border-border">
             <tr>
-              <th className="px-6 py-3 font-cairo">التاريخ</th>
-              <th className="px-6 py-3 font-cairo">النوع</th>
-              <th className="px-6 py-3 font-cairo">الوصف</th>
-              <th className="px-6 py-3 font-cairo">الفرع</th>
-              <th className="px-6 py-3 font-cairo">دائن (مشتريات)</th>
-              <th className="px-6 py-3 font-cairo">مدين (دفعات)</th>
-              <th className="px-6 py-3 font-cairo">الرصيد</th>
+              <th className="px-3 sm:px-6 py-3 font-cairo">التاريخ</th>
+              <th className="px-3 sm:px-6 py-3 font-cairo">النوع</th>
+              <th className="px-3 sm:px-6 py-3 font-cairo">الوصف</th>
+              <th className="px-3 sm:px-6 py-3 font-cairo">الفرع</th>
+              <th className="px-3 sm:px-6 py-3 font-cairo">دائن (مشتريات)</th>
+              <th className="px-3 sm:px-6 py-3 font-cairo">مدين (دفعات)</th>
+              <th className="px-3 sm:px-6 py-3 font-cairo">الرصيد</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {ledger.map((entry: any) => (
               <tr key={entry.id} className="hover:bg-muted transition-colors">
-                <td className="px-6 py-3 text-sm text-muted-foreground whitespace-nowrap">
+                <td className="px-3 sm:px-6 py-3 text-sm text-muted-foreground whitespace-nowrap">
                   {new Date(entry.date).toLocaleDateString("ar-IQ", {
                     timeZone: "Asia/Baghdad",
                   })}
                 </td>
-                <td className="px-6 py-3 whitespace-nowrap">
+                <td className="px-3 sm:px-6 py-3 whitespace-nowrap">
                   {entry.type === "purchase" ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-destructive/10 text-destructive">
                       <TrendingUp className="w-3 h-3" /> شراء
@@ -193,24 +204,24 @@ export default async function SupplierLedgerPage({
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-3 text-sm text-foreground">
+                <td className="px-3 sm:px-6 py-3 text-sm text-foreground">
                   {entry.description}
                 </td>
-                <td className="px-6 py-3 text-sm text-muted-foreground">
+                <td className="px-3 sm:px-6 py-3 text-sm text-muted-foreground">
                   {entry.branch}
                 </td>
-                <td className="px-6 py-3 text-sm font-bold text-destructive whitespace-nowrap text-center">
+                <td className="px-3 sm:px-6 py-3 text-sm font-bold text-destructive whitespace-nowrap text-center">
                   {entry.type === "purchase"
                     ? entry.amount.toLocaleString("en-US")
                     : "—"}
                 </td>
-                <td className="px-6 py-3 text-sm font-bold text-success whitespace-nowrap text-center">
+                <td className="px-3 sm:px-6 py-3 text-sm font-bold text-success whitespace-nowrap text-center">
                   {entry.type === "payment"
                     ? entry.amount.toLocaleString("en-US")
                     : "—"}
                 </td>
                 <td
-                  className="px-6 py-3 text-sm font-bold text-foreground whitespace-nowrap text-center"
+                  className="px-3 sm:px-6 py-3 text-sm font-bold text-foreground whitespace-nowrap text-center"
                   dir="ltr"
                 >
                   {(entry.runningBalance ?? 0).toLocaleString("en-US")}
@@ -230,6 +241,7 @@ export default async function SupplierLedgerPage({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

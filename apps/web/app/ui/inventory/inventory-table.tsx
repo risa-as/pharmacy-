@@ -26,7 +26,17 @@ interface InventoryItem {
   }[];
 }
 
-export default function InventoryTable({ items, canEditDrug = true, canDeleteDrug = true, canAddDrug = true }: { items: InventoryItem[]; canEditDrug?: boolean; canDeleteDrug?: boolean; canAddDrug?: boolean }) {
+export default function InventoryTable({
+  items,
+  canEditDrug = true,
+  canDeleteDrug = true,
+  canAddDrug = true,
+}: {
+  items: InventoryItem[];
+  canEditDrug?: boolean;
+  canDeleteDrug?: boolean;
+  canAddDrug?: boolean;
+}) {
   const [selectedInventory, setSelectedInventory] = useState<{
     id: string;
     drugName: string;
@@ -80,7 +90,7 @@ export default function InventoryTable({ items, canEditDrug = true, canDeleteDru
                 الحالة
               </th>
               <th scope="col" className="px-3 py-3 font-cairo">
-                سعر الجمهور
+                سعر البيع
               </th>
               <th scope="col" className="px-3 py-3 font-cairo text-center">
                 <span className="flex items-center justify-center gap-1">

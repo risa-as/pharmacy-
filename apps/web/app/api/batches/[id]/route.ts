@@ -84,6 +84,33 @@ export async function PATCH(
             },
         });
 
+        /**
+         * Batch.costPrice and Inventory.cost are two different fields:
+         * the batch cost drives FEFO sale costing, while Inventory.cost is what
+         * the margins report reads (reports/margins/page.tsx). Editing a batch
+         * used to leave Inventory.cost stale, so a corrected purchase price
+         * never reached the report.
+         *
+         * Inventory.cost tracks the NEWEST batch — the most recent price paid —
+         * regardless of which batch was edited. A zero cost is ignored rather
+         * than written, because it would show up as a 100% margin; same guard
+         * the Excel import uses.
+         */
+        if (body.costPrice !== undefined) {
+            const newest = await prisma.batch.findFirst({
+                where: { inventoryId: updated.inventoryId },
+                orderBy: { createdAt: 'desc' },
+                select: { costPrice: true },
+            });
+            if (newest && newest.costPrice > 0 && newest.costPrice !== updated.inventory.cost) {
+                await prisma.inventory.update({
+                    where: { id: updated.inventoryId },
+                    data: { cost: newest.costPrice },
+                });
+                updated.inventory.cost = newest.costPrice;
+            }
+        }
+
         return NextResponse.json({ success: true, data: updated });
     } catch (error: any) {
         console.error('[PATCH /api/batches/[id]]', error);

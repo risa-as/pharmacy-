@@ -28,7 +28,19 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
 
     const inputRef = useRef<HTMLInputElement>(null);
 
+    /**
+     * Barcode scanners are keyboard-emulating devices, so autofocus is only
+     * useful where there's a real pointer. On touch devices the same focus
+     * call pops the on-screen keyboard and scrolls the page every time the
+     * inventory list mounts, so it's skipped there.
+     */
+    const hasFinePointer = () =>
+        typeof window === "undefined" ||
+        !window.matchMedia ||
+        window.matchMedia("(pointer: fine)").matches;
+
     const focusInput = () => {
+        if (!hasFinePointer()) return;
         inputRef.current?.focus();
     };
 

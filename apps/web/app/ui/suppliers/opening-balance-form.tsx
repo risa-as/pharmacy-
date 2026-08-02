@@ -88,7 +88,7 @@ function OpeningBalanceModal({
     return createPortal(
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
             <div
-                className="bg-card rounded-2xl w-full max-w-md shadow-2xl"
+                className="bg-card rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto"
                 dir="rtl"
                 onClick={e => e.stopPropagation()}
             >

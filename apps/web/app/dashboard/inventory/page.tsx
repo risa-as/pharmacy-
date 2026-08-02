@@ -136,9 +136,9 @@ export default async function Page({
         <div className="space-y-6" dir="rtl">
             {/* الرأس */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
-                        <Package className="w-6 h-6 text-primary" />
+                <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+                        <Package className="w-6 h-6 text-primary shrink-0" />
                         جرد المخزون
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -146,20 +146,22 @@ export default async function Page({
                     </p>
                 </div>
                 {canAddDrug && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <Link
                             href="/dashboard/inventory/import"
-                            className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted shadow-sm"
+                            title="استيراد Excel"
+                            className="flex items-center gap-2 rounded-lg bg-card border border-border px-3 sm:px-4 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted shadow-sm"
                         >
-                            <FileSpreadsheet className="h-4 w-4 text-success" />
-                            استيراد Excel
+                            <FileSpreadsheet className="h-4 w-4 text-success shrink-0" />
+                            <span className="hidden sm:block">استيراد Excel</span>
                         </Link>
                         <Link
                             href="/dashboard/inventory/create"
-                            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
+                            title="إضافة للمخزون"
+                            className="flex items-center gap-2 rounded-lg bg-primary px-3 sm:px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
                         >
-                            <Plus className="h-4 w-4" />
-                            إضافة للمخزون
+                            <Plus className="h-4 w-4 shrink-0" />
+                            <span className="hidden sm:block">إضافة للمخزون</span>
                         </Link>
                     </div>
                 )}

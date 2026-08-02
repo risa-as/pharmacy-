@@ -10,6 +10,8 @@ import {
   ArrowRight,
   Percent,
   ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
@@ -76,6 +78,20 @@ export default async function MarginsReportPage({
   else if (sortBy === "stock_desc")
     items.sort((a: any, b: any) => b.stock - a.stock);
 
+  // Pagination. Sorting and the stats below intentionally run over the FULL set
+  // first — margin/stock are computed in JS (not DB columns), so paging at the
+  // query level would sort only within a page and skew every stat card.
+  const PAGE_SIZE = 1000;
+  const requestedPage =
+    typeof searchParams.page === "string" ? parseInt(searchParams.page, 10) : 1;
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const currentPage = Math.min(
+    Math.max(1, Number.isFinite(requestedPage) ? requestedPage : 1),
+    totalPages,
+  );
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = items.slice(pageStart, pageStart + PAGE_SIZE);
+
   // Stats
   const avgMargin =
     items.length > 0
@@ -103,10 +119,19 @@ export default async function MarginsReportPage({
     { label: "أكبر مخزون", value: "stock_desc" },
   ];
 
+  // Changing the sort drops `page`, so a re-sort always lands on page 1.
   const buildSortUrl = (sort: string) => {
     const params = new URLSearchParams();
     params.set("sort", sort);
     if (branchId) params.set("branch", branchId);
+    return `/dashboard/reports/margins?${params.toString()}`;
+  };
+
+  const buildPageUrl = (page: number) => {
+    const params = new URLSearchParams();
+    params.set("sort", sortBy);
+    if (branchId) params.set("branch", branchId);
+    params.set("page", String(page));
     return `/dashboard/reports/margins?${params.toString()}`;
   };
 
@@ -289,54 +314,81 @@ export default async function MarginsReportPage({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            {/*
+              table-fixed is load-bearing: with the default auto layout the drug
+              name's `truncate` (white-space: nowrap) makes the column's intrinsic
+              width the full name, so one long name stretched the table far past
+              the viewport. Fixed layout caps each column at the width below and
+              lets the name wrap/clamp instead. min-w keeps numbers readable on
+              narrow screens, where the wrapper scrolls as before.
+
+              Numeric cells wrap rather than nowrap: a few rows carry corrupt
+              11-digit values that would overflow a fixed cell, and truncating
+              money with an ellipsis would hide the figure instead of showing it.
+            */}
+            <table className="w-full table-fixed min-w-[1080px] text-sm">
               <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                 <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[6%] px-3 py-3.5 text-right font-medium font-cairo">
+                    #
+                  </th>
+                  <th className="w-[22%] px-4 py-3.5 text-right font-medium font-cairo">
                     الدواء
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[10%] px-4 py-3.5 text-right font-medium font-cairo">
                     الفرع
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[10%] px-4 py-3.5 text-right font-medium font-cairo">
                     سعر البيع
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[10%] px-4 py-3.5 text-right font-medium font-cairo">
                     سعر التكلفة
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[10%] px-4 py-3.5 text-right font-medium font-cairo">
                     الربح/عبوة
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[9%] px-4 py-3.5 text-right font-medium font-cairo">
                     الهامش
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[7%] px-4 py-3.5 text-right font-medium font-cairo">
                     المخزون
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="w-[16%] px-4 py-3.5 text-right font-medium font-cairo">
                     الربح المحتمل
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {items.map((item: any) => (
+                {pageItems.map((item: any, index: number) => (
                   <tr
                     key={item.id}
                     className="hover:bg-muted/40 transition-colors"
                   >
-                    <td className="px-6 py-4">
+                    {/* Continues across pages rather than restarting at 1.
+                        Unformatted: an ordinal takes no thousands separator, and
+                        the comma would overflow this column at min width. */}
+                    <td className="px-3 py-4 font-mono text-muted-foreground">
+                      {pageStart + index + 1}
+                    </td>
+                    <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 bg-success/10 rounded-lg flex items-center justify-center shrink-0">
                           <Package className="w-4 h-4 text-success" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-foreground truncate">
+                          {/* Wraps to a second line rather than widening the
+                              column; full name stays available on hover. */}
+                          <p
+                            className="font-semibold text-foreground break-words line-clamp-2"
+                            title={item.name}
+                          >
                             {item.name}
                           </p>
                           {item.barcode && (
                             <p
-                              className="text-xs text-muted-foreground"
+                              className="text-xs text-muted-foreground truncate"
                               dir="ltr"
+                              title={item.barcode}
                             >
                               {item.barcode}
                             </p>
@@ -344,28 +396,35 @@ export default async function MarginsReportPage({
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {item.branch}
+                    <td className="px-4 py-4 text-muted-foreground">
+                      {/* Clamp on an inner element: line-clamp sets
+                          display:-webkit-box, which would break table-cell. */}
+                      <div
+                        className="break-words line-clamp-2"
+                        title={item.branch}
+                      >
+                        {item.branch}
+                      </div>
                     </td>
                     <td
-                      className="px-6 py-4 text-muted-foreground whitespace-nowrap"
+                      className="px-4 py-4 text-muted-foreground break-words"
                       dir="rtl"
                     >
                       {fmt(item.price)} د.ع
                     </td>
                     <td
-                      className="px-6 py-4 text-muted-foreground whitespace-nowrap"
+                      className="px-4 py-4 text-muted-foreground break-words"
                       dir="rtl"
                     >
                       {fmt(item.cost)} د.ع
                     </td>
                     <td
-                      className={`px-6 py-4 font-bold whitespace-nowrap ${item.profitPerUnit >= 0 ? "text-success" : "text-destructive"}`}
+                      className={`px-4 py-4 font-bold break-words ${item.profitPerUnit >= 0 ? "text-success" : "text-destructive"}`}
                       dir="rtl"
                     >
                       {fmt(item.profitPerUnit)} د.ع
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                       <span
                         className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-bold ${
                           item.marginPercent < 10
@@ -379,13 +438,13 @@ export default async function MarginsReportPage({
                       </span>
                     </td>
                     <td
-                      className="px-6 py-4 text-foreground font-medium"
+                      className="px-4 py-4 text-foreground font-medium"
                       dir="rtl"
                     >
                       {item.stock}
                     </td>
                     <td
-                      className="px-6 py-4 font-bold text-success whitespace-nowrap"
+                      className="px-4 py-4 font-bold text-success break-words"
                       dir="rtl"
                     >
                       {fmt(item.totalPotentialProfit)} د.ع
@@ -394,6 +453,55 @@ export default async function MarginsReportPage({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 flex-wrap">
+            <p className="text-sm text-muted-foreground">
+              إظهار{" "}
+              <span className="font-medium font-mono text-foreground">
+                {(pageStart + 1).toLocaleString("en-US")}
+              </span>{" "}
+              –{" "}
+              <span className="font-medium font-mono text-foreground">
+                {Math.min(pageStart + PAGE_SIZE, items.length).toLocaleString(
+                  "en-US",
+                )}
+              </span>{" "}
+              من{" "}
+              <span className="font-medium font-mono text-foreground">
+                {items.length.toLocaleString("en-US")}
+              </span>{" "}
+              صنف
+            </p>
+            <div className="flex items-center gap-2">
+              <a
+                href={buildPageUrl(currentPage - 1)}
+                aria-disabled={currentPage <= 1}
+                className={`inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border bg-card transition-colors ${
+                  currentPage <= 1
+                    ? "pointer-events-none opacity-40"
+                    : "hover:bg-muted text-foreground"
+                }`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </a>
+              <span className="text-sm font-medium text-foreground px-2">
+                صفحة {currentPage} من {totalPages}
+              </span>
+              <a
+                href={buildPageUrl(currentPage + 1)}
+                aria-disabled={currentPage >= totalPages}
+                className={`inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border bg-card transition-colors ${
+                  currentPage >= totalPages
+                    ? "pointer-events-none opacity-40"
+                    : "hover:bg-muted text-foreground"
+                }`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </a>
+            </div>
           </div>
         )}
       </div>

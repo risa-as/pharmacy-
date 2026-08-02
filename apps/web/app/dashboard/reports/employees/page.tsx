@@ -99,13 +99,19 @@ export default async function EmployeesReportPage({
                 {statCards.map((card) => {
                     const Icon = card.icon;
                     return (
-                        <div key={card.label} className="glass-card p-5 flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}>
-                                <Icon className={`w-6 h-6 ${card.tone}`} />
+                        /**
+                         * Below sm the icon sits above the text instead of
+                         * beside it — side by side it ate 64px of a 139px
+                         * card and long figures (65,953,128) spilled past the
+                         * edge. Same stacked shape the expiry report uses.
+                         */
+                        <div key={card.label} className="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${card.bg} flex items-center justify-center shrink-0`}>
+                                <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${card.tone}`} />
                             </div>
                             <div className="min-w-0">
-                                <p className="text-sm text-muted-foreground truncate">{card.label}</p>
-                                <p className={`text-2xl font-bold ${card.tone}`} dir="ltr">{card.value}</p>
+                                <p className="text-sm text-muted-foreground whitespace-normal sm:truncate">{card.label}</p>
+                                <p className={`text-xl sm:text-2xl font-bold ${card.tone}`} dir="ltr">{card.value}</p>
                             </div>
                         </div>
                     );

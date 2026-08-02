@@ -31,8 +31,22 @@ export async function PATCH(
             updateData.isActive = isActive;
         }
 
+        // expiresAt: null / "" → perpetual licence, otherwise an ISO date string.
+        // Reject unparseable input here, or Prisma throws on an Invalid Date and
+        // the admin gets an opaque 500.
         if (expiresAt !== undefined) {
-            updateData.expiresAt = expiresAt ? new Date(expiresAt) : null;
+            if (expiresAt === null || expiresAt === "") {
+                updateData.expiresAt = null;
+            } else {
+                const parsed = new Date(expiresAt);
+                if (Number.isNaN(parsed.getTime())) {
+                    return NextResponse.json(
+                        { error: "تاريخ الانتهاء غير صالح" },
+                        { status: 400 }
+                    );
+                }
+                updateData.expiresAt = parsed;
+            }
         }
 
         // Allow admin to unbind hardware (e.g., when client gets a new PC)

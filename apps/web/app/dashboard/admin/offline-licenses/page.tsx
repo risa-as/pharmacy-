@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import {
     HardDrive, Plus, Copy, Check, Loader2, AlertTriangle, Fingerprint,
     Store, Calendar, Infinity as InfinityIcon, X, KeyRound, Search,
-    RefreshCw, Ban, RotateCcw, Trash2, Clock, FileText, ListChecks,
+    RefreshCw, Ban, RotateCcw, Trash2, Clock, FileText, ListChecks, CalendarClock,
 } from 'lucide-react';
 
 interface OfflineLicense {
@@ -45,6 +45,16 @@ function computeStatus(lic: OfflineLicense): { key: StatusKey; label: string; cl
 
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('ar-IQ') : '—');
 
+// Baghdad is UTC+3 all year (no DST). en-CA formats as YYYY-MM-DD, which is what
+// <input type="date"> expects — toISOString() would render the UTC day and can
+// land a day early for evening timestamps.
+const BAGHDAD_OFFSET = '+03:00';
+const toDateInput = (d: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Baghdad',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(d);
+
 export default function OfflineLicensesPage() {
     const [licenses, setLicenses] = useState<OfflineLicense[]>([]);
     const [loading, setLoading] = useState(true);
@@ -53,6 +63,7 @@ export default function OfflineLicensesPage() {
     const [statusFilter, setStatusFilter] = useState<'all' | StatusKey>('all');
     const [planFilter, setPlanFilter] = useState<'all' | 'PERPETUAL' | 'ANNUAL'>('all');
     const [modal, setModal] = useState<{ mode: 'new' | 'reissue'; prefill?: Partial<OfflineLicense> } | null>(null);
+    const [renewTarget, setRenewTarget] = useState<OfflineLicense | null>(null);
     const [confirm, setConfirm] = useState<null | {
         title: string; message: string; confirmLabel: string; danger?: boolean; run: () => Promise<void>;
     }>(null);
@@ -288,6 +299,10 @@ export default function OfflineLicensesPage() {
                                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-bold hover:bg-primary/10 hover:text-primary transition-colors">
                                                         {copiedId === lic.id ? <><Check className="w-3.5 h-3.5 text-success" /> نُسخ</> : <><Copy className="w-3.5 h-3.5" /> الكود</>}
                                                     </button>
+                                                    <button onClick={() => setRenewTarget(lic)} title="تمديد الصلاحية (كود جديد لنفس الجهاز)"
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" disabled={busy}>
+                                                        <CalendarClock className="w-4 h-4" />
+                                                    </button>
                                                     <button onClick={() => setModal({ mode: 'reissue', prefill: lic })} title="إعادة إصدار لجهاز جديد"
                                                         className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" disabled={busy}>
                                                         <RefreshCw className="w-4 h-4" />
@@ -338,6 +353,14 @@ export default function OfflineLicensesPage() {
                     prefill={modal.prefill}
                     onClose={() => setModal(null)}
                     onCreated={() => { setModal(null); void load(); }}
+                />
+            )}
+
+            {renewTarget && (
+                <RenewModal
+                    license={renewTarget}
+                    onClose={() => setRenewTarget(null)}
+                    onRenewed={() => { setRenewTarget(null); void load(); }}
                 />
             )}
 
@@ -464,6 +487,196 @@ function LicenseModal({
                             <button onClick={onClose} className="px-5 h-10 rounded-lg border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">إلغاء</button>
                             <button onClick={generate} disabled={busy} className="inline-flex items-center gap-2 px-5 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50">
                                 {busy && <Loader2 className="w-4 h-4 animate-spin" />} توليد الكود
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>,
+        document.body,
+    );
+}
+
+/**
+ * Renew = re-sign a new code for the SAME device with a later expiry.
+ *
+ * There is no "just change the date" for offline licenses: the expiry is inside
+ * the signed JWT, which the customer's app verifies locally with no server call.
+ * Updating our row alone would leave their app locking on the old date, so the
+ * result screen has to make the new code impossible to miss.
+ */
+function RenewModal({
+    license, onClose, onRenewed,
+}: { license: OfflineLicense; onClose: () => void; onRenewed: () => void }) {
+    const [permanent, setPermanent] = useState(license.plan === 'PERPETUAL' || !license.expiresAt);
+    const [expiry, setExpiry] = useState(
+        toDateInput(license.expiresAt ? new Date(license.expiresAt) : new Date()),
+    );
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [result, setResult] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
+
+    const todayInput = toDateInput(new Date());
+
+    // Un-checking «دائم» on a perpetual license leaves the field on today's date,
+    // which would sign a code that dies tonight. Default a year out instead.
+    const togglePermanent = (checked: boolean) => {
+        setPermanent(checked);
+        if (!checked && expiry <= todayInput) {
+            const d = new Date();
+            d.setFullYear(d.getFullYear() + 1);
+            setExpiry(toDateInput(d));
+        }
+    };
+
+    // Months are added on top of the stored expiry when it is still valid,
+    // otherwise from today — so renewing early doesn't lose remaining time.
+    const applyPreset = (months: number) => {
+        const current = license.expiresAt ? new Date(license.expiresAt) : null;
+        const base = current && current > new Date() ? new Date(current) : new Date();
+        base.setMonth(base.getMonth() + months);
+        setPermanent(false);
+        setExpiry(toDateInput(base));
+    };
+
+    const submit = async () => {
+        setError('');
+        if (!permanent && !expiry) { setError('اختر تاريخ الانتهاء أو فعّل خيار «دائم».'); return; }
+        if (!permanent && expiry <= todayInput) {
+            setError('اختر تاريخاً بعد اليوم — وإلا سينتهي الكود الجديد في نفس اليوم.');
+            return;
+        }
+        setBusy(true);
+        try {
+            const res = await fetch(`/api/admin/offline-licenses/${license.id}/renew`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // End of the chosen day in Baghdad time, so the pharmacy keeps
+                // working through the whole last day.
+                body: JSON.stringify({
+                    expiresAt: permanent ? null : `${expiry}T23:59:59${BAGHDAD_OFFSET}`,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) setResult(data.license.licenseCode);
+            else setError(data.error || 'تعذر تجديد الترخيص.');
+        } catch { setError('حدث خطأ غير متوقع.'); }
+        finally { setBusy(false); }
+    };
+
+    const copyResult = async () => {
+        if (!result) return;
+        try { await navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+        catch { /* clipboard unavailable */ }
+    };
+
+    const field = 'w-full h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40';
+
+    if (typeof document === 'undefined') return null;
+    return createPortal(
+        <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-card border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card z-10">
+                    <h2 className="font-bold text-foreground flex items-center gap-2">
+                        <CalendarClock className="w-5 h-5 text-primary" />
+                        تمديد صلاحية الترخيص
+                    </h2>
+                    <button onClick={onClose} className="p-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
+                </div>
+
+                {result ? (
+                    <div className="p-5 space-y-4">
+                        <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 text-warning text-sm flex items-start gap-2">
+                            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                            <span className="leading-relaxed">
+                                <b>تم توليد كود جديد — يجب إرساله للصيدلية.</b>
+                                <span className="block mt-1 opacity-90">
+                                    التمديد لا يسري حتى يلصق الزبون هذا الكود في شاشة التفعيل.
+                                    الكود القديم سيتوقف في موعده الأصلي.
+                                </span>
+                            </span>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-foreground mb-2">كود التفعيل الجديد</label>
+                            <textarea readOnly value={result} rows={5} dir="ltr" className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs font-mono resize-none" />
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <button onClick={copyResult} className="inline-flex items-center gap-2 px-5 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity">
+                                {copied ? <><Check className="w-4 h-4" /> نُسخ</> : <><Copy className="w-4 h-4" /> نسخ الكود</>}
+                            </button>
+                            <button onClick={onRenewed} className="px-5 h-10 rounded-lg border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">تم</button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-5 space-y-4">
+                        <div className="bg-info/10 border border-info/30 rounded-lg p-3 text-xs text-info flex items-start gap-2">
+                            <Fingerprint className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span className="leading-relaxed">
+                                التحقق يتم أوف‑لاين، فتاريخ الانتهاء مخزَّن داخل الكود نفسه. التمديد يعني
+                                توليد <b>كود جديد لنفس الجهاز</b> ترسله للزبون — لا يمكن تمديد جهاز عن بُعد.
+                            </span>
+                        </div>
+
+                        <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">الصيدلية</span>
+                                <span className="text-foreground font-medium">{license.pharmacyName}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">بصمة الجهاز</span>
+                                <span className="font-mono text-muted-foreground max-w-[200px] truncate" dir="ltr" title={license.hardwareId}>
+                                    {license.hardwareId}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">الانتهاء الحالي</span>
+                                <span className="text-foreground">
+                                    {license.expiresAt ? fmtDate(license.expiresAt) : 'بدون انتهاء (دائم)'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <span className="block text-sm font-bold text-foreground mb-1.5">تمديد سريع</span>
+                            <div className="grid grid-cols-4 gap-2">
+                                {[1, 3, 6, 12].map((m) => (
+                                    <button key={m} type="button" onClick={() => applyPreset(m)}
+                                        className="px-2 h-10 rounded-lg border border-border bg-background text-xs text-foreground hover:bg-muted hover:border-primary/40 transition-colors">
+                                        + {m === 12 ? 'سنة' : `${m} أشهر`}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-1.5">
+                                يُحسب من تاريخ الانتهاء المحفوظ إن كان سارياً، وإلا فمن اليوم.
+                            </p>
+                        </div>
+
+                        <label className="text-sm space-y-1.5 block">
+                            <span className="font-bold text-foreground">تاريخ الانتهاء الجديد</span>
+                            <input type="date" value={expiry} disabled={permanent} dir="ltr"
+                                onChange={(e) => { setExpiry(e.target.value); setPermanent(false); }}
+                                className={`${field} disabled:opacity-50`} />
+                        </label>
+
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" checked={permanent} onChange={(e) => togglePermanent(e.target.checked)}
+                                className="w-4 h-4 rounded accent-primary" />
+                            <span className="text-sm text-foreground flex items-center gap-1.5">
+                                <InfinityIcon className="w-3.5 h-3.5" /> تحويله إلى ترخيص دائم
+                            </span>
+                        </label>
+
+                        {error && (
+                            <div className="p-3 rounded-xl text-sm flex items-start gap-2 bg-destructive/10 border border-destructive/20 text-destructive">
+                                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /><span>{error}</span>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 pt-1">
+                            <button onClick={onClose} className="px-5 h-10 rounded-lg border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">إلغاء</button>
+                            <button onClick={submit} disabled={busy} className="inline-flex items-center gap-2 px-5 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50">
+                                {busy && <Loader2 className="w-4 h-4 animate-spin" />} توليد الكود الجديد
                             </button>
                         </div>
                     </div>

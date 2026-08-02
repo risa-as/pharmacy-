@@ -17,6 +17,11 @@ export interface OfflineLicenseInput {
     licensedTo?: string;
     /** Number of days until expiry. Omit / 0 → perpetual. */
     expiryDays?: number;
+    /**
+     * Exact expiry instant. Takes precedence over expiryDays — used by renewals,
+     * which target an absolute date rather than "N days from now".
+     */
+    expiresAt?: Date | null;
 }
 
 export interface SignedOfflineLicense {
@@ -42,7 +47,16 @@ export async function signOfflineLicense(input: OfflineLicenseInput): Promise<Si
     if (!pharmacyName) throw new Error("اسم الصيدلية مطلوب.");
 
     const key = await importPKCS8(loadPrivateKeyPem(), "RS256");
-    const hasExpiry = !!input.expiryDays && input.expiryDays > 0;
+
+    // An explicit date wins over a relative day count. `hasExpiry` must account
+    // for both, or the signed `plan` claim says PERPETUAL on a token that
+    // actually carries an `exp`.
+    const explicitExpiry =
+        input.expiresAt instanceof Date && !Number.isNaN(input.expiresAt.getTime())
+            ? input.expiresAt
+            : null;
+    const hasDays = !!input.expiryDays && input.expiryDays > 0;
+    const hasExpiry = !!explicitExpiry || hasDays;
 
     let jwt = new SignJWT({
         hw: hardwareId,
@@ -54,7 +68,10 @@ export async function signOfflineLicense(input: OfflineLicenseInput): Promise<Si
         .setIssuedAt();
 
     let expiresAt: Date | null = null;
-    if (hasExpiry) {
+    if (explicitExpiry) {
+        jwt = jwt.setExpirationTime(explicitExpiry);
+        expiresAt = explicitExpiry;
+    } else if (hasDays) {
         jwt = jwt.setExpirationTime(`${input.expiryDays}d`);
         expiresAt = new Date(Date.now() + input.expiryDays! * 24 * 60 * 60 * 1000);
     }

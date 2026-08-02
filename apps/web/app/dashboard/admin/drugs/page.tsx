@@ -1,10 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import Link from "next/link";
-import { PlusIcon, Pencil, Globe, CheckCircle2, XCircle, ChevronLeft, ChevronRight, PackageSearch, Activity, FileSpreadsheet } from "lucide-react";
+import { PlusIcon, Pencil, Globe, CheckCircle2, XCircle, ChevronLeft, ChevronRight, PackageSearch, Activity, FileSpreadsheet, Building2 } from "lucide-react";
 import { prisma } from "@/app/lib/prisma";
 import { DeleteDrug } from "@/app/ui/drugs/buttons";
 import GlobalDrugSearch from "@/app/ui/drugs/global-search";
+import GlobalizePanel, { type CustomDrugOrg } from "@/app/ui/drugs/globalize-panel";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -35,7 +36,12 @@ function StatChip({ icon, label, value, tone }: { icon: React.ReactNode; label: 
     );
 }
 
-async function getGlobalDrugs(query: string, currentPage: number) {
+/**
+ * Lists the catalogue. With no orgId this is the shared global catalogue
+ * (organizationId = null); with one it is that organisation's private drugs,
+ * rendered through the exact same table so both read identically.
+ */
+async function getGlobalDrugs(query: string, currentPage: number, orgId: string | null) {
     const searchFilter = query ? {
         OR: [
             { tradeName: { contains: query, mode: 'insensitive' as const } },
@@ -44,8 +50,8 @@ async function getGlobalDrugs(query: string, currentPage: number) {
         ],
     } : {};
 
-    const where = { AND: [{ organizationId: null }, searchFilter] };
-    const baseGlobal = { organizationId: null };
+    const scope = { organizationId: orgId };
+    const where = { AND: [scope, searchFilter] };
 
     const [drugs, total, totalCatalog, activeCount] = await Promise.all([
         prisma.globalDrug.findMany({
@@ -56,40 +62,93 @@ async function getGlobalDrugs(query: string, currentPage: number) {
             include: { _count: { select: { saleItems: true, inventories: true } } },
         }),
         prisma.globalDrug.count({ where }),
-        prisma.globalDrug.count({ where: baseGlobal }),
-        prisma.globalDrug.count({ where: { organizationId: null, isActive: true } }),
+        prisma.globalDrug.count({ where: scope }),
+        prisma.globalDrug.count({ where: { ...scope, isActive: true } }),
     ]);
 
     return { drugs, total, totalCatalog, activeCount };
 }
 
+/** Organisations that still hold private drugs, for the promote-to-global panel. */
+async function getOrgsWithCustomDrugs(): Promise<CustomDrugOrg[]> {
+    const grouped = await prisma.globalDrug.groupBy({
+        by: ['organizationId'],
+        where: { NOT: { organizationId: null } },
+        _count: { _all: true },
+    });
+    if (grouped.length === 0) return [];
+
+    const ids = grouped.map((g: any) => g.organizationId).filter(Boolean) as string[];
+    const orgs = await prisma.organization.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true },
+    });
+    const nameOf = new Map(orgs.map((o: any) => [o.id, o.name]));
+
+    return grouped
+        .map((g: any) => ({
+            id: g.organizationId as string,
+            name: nameOf.get(g.organizationId) ?? 'مؤسسة محذوفة',
+            count: g._count._all,
+        }))
+        .sort((a: CustomDrugOrg, b: CustomDrugOrg) => b.count - a.count);
+}
+
 export default async function AdminDrugsPage({
     searchParams,
 }: {
-    searchParams?: { query?: string; page?: string };
+    searchParams?: { query?: string; page?: string; org?: string };
 }) {
     const query = searchParams?.query || "";
     const currentPage = Number(searchParams?.page) || 1;
-    const { drugs, total, totalCatalog, activeCount } = await getGlobalDrugs(query, currentPage);
+    const orgId = searchParams?.org || "";
+
+    const [{ drugs, total, totalCatalog, activeCount }, customOrgs, viewingOrg] = await Promise.all([
+        getGlobalDrugs(query, currentPage, orgId || null),
+        getOrgsWithCustomDrugs(),
+        orgId
+            ? prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true } })
+            : Promise.resolve(null),
+    ]);
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
     const inactiveCount = Math.max(0, totalCatalog - activeCount);
 
-    const pageHref = (p: number) => `/dashboard/admin/drugs?page=${p}${query ? `&query=${encodeURIComponent(query)}` : ''}`;
+    const pageHref = (p: number) =>
+        `/dashboard/admin/drugs?page=${p}`
+        + (query ? `&query=${encodeURIComponent(query)}` : '')
+        + (orgId ? `&org=${encodeURIComponent(orgId)}` : '');
 
     return (
         <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>
             {/* Header */}
             <div className="flex w-full flex-wrap items-start justify-between gap-4 mb-5">
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-blue-500/10 shrink-0">
-                        <Globe className="w-6 h-6 text-blue-500" />
+                    <div className={`flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ${viewingOrg ? 'bg-amber-500/10' : 'bg-blue-500/10'}`}>
+                        {viewingOrg
+                            ? <Building2 className="w-6 h-6 text-amber-600" />
+                            : <Globe className="w-6 h-6 text-blue-500" />}
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold font-cairo text-foreground">قاعدة الأدوية العالمية</h1>
-                        <p className="text-sm text-muted-foreground mt-1">الكتالوج المشترك بين جميع المؤسسات — للقراءة فقط لدى العملاء.</p>
+                        <h1 className="text-2xl font-bold font-cairo text-foreground">
+                            {viewingOrg ? `أدوية ${viewingOrg.name} الخاصة` : 'قاعدة الأدوية العالمية'}
+                        </h1>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            {viewingOrg
+                                ? 'أدوية أضافتها هذه المؤسسة لنفسها — مرئية لها فقط حتى يتم تحويلها إلى الكتالوج العام.'
+                                : 'الكتالوج المشترك بين جميع المؤسسات — للقراءة فقط لدى العملاء.'}
+                        </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {viewingOrg && (
+                        <Link
+                            href="/dashboard/admin/drugs"
+                            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border bg-card hover:bg-muted text-foreground transition-colors"
+                        >
+                            <Globe className="h-4 w-4" />
+                            <span className="hidden md:block">العودة للكتالوج العام</span>
+                        </Link>
+                    )}
                     <Link
                         href="/dashboard/admin/drugs/import"
                         className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border bg-card hover:bg-muted text-foreground transition-colors"
@@ -109,10 +168,18 @@ export default async function AdminDrugsPage({
 
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-                <StatChip icon={<Globe className="h-5 w-5" />} label="إجمالي الأدوية العالمية" value={totalCatalog} tone="bg-blue-500/10 text-blue-500" />
+                <StatChip
+                    icon={viewingOrg ? <Building2 className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
+                    label={viewingOrg ? 'إجمالي أدوية المؤسسة الخاصة' : 'إجمالي الأدوية العالمية'}
+                    value={totalCatalog}
+                    tone={viewingOrg ? 'bg-amber-500/10 text-amber-600' : 'bg-blue-500/10 text-blue-500'}
+                />
                 <StatChip icon={<CheckCircle2 className="h-5 w-5" />} label="أدوية نشطة" value={activeCount} tone="bg-success/10 text-success" />
                 <StatChip icon={<XCircle className="h-5 w-5" />} label="غير نشطة" value={inactiveCount} tone="bg-destructive/10 text-destructive" />
             </div>
+
+            {/* Promote a tenant's private drugs into the shared catalogue */}
+            <GlobalizePanel orgs={customOrgs} activeOrgId={orgId || null} />
 
             {/* Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -211,9 +278,17 @@ export default async function AdminDrugsPage({
                                     <td colSpan={7} className="px-6 py-16 text-center">
                                         <div className="flex flex-col items-center gap-3 text-muted-foreground">
                                             <PackageSearch className="h-10 w-10 opacity-40" />
-                                            <p className="text-sm">{query ? 'لا توجد أدوية مطابقة للبحث.' : 'لا توجد أدوية عالمية بعد.'}</p>
+                                            <p className="text-sm">
+                                                {query
+                                                    ? 'لا توجد أدوية مطابقة للبحث.'
+                                                    : viewingOrg
+                                                        ? 'لم تعد لدى هذه المؤسسة أدوية خاصة — تم تحويلها جميعاً إلى الكتالوج العام.'
+                                                        : 'لا توجد أدوية عالمية بعد.'}
+                                            </p>
                                             {query ? (
-                                                <Link href="/dashboard/admin/drugs" className="text-xs text-primary hover:underline">مسح البحث وإظهار الكل</Link>
+                                                <Link href={orgId ? `/dashboard/admin/drugs?org=${encodeURIComponent(orgId)}` : '/dashboard/admin/drugs'} className="text-xs text-primary hover:underline">مسح البحث وإظهار الكل</Link>
+                                            ) : viewingOrg ? (
+                                                <Link href="/dashboard/admin/drugs" className="text-xs text-primary hover:underline">العودة للكتالوج العام</Link>
                                             ) : (
                                                 <Link href="/dashboard/admin/drugs/create" className="text-xs text-primary hover:underline">إضافة أول دواء عالمي</Link>
                                             )}

@@ -225,38 +225,55 @@ export default async function ExpiryReportPage({
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              {/*
+                table-fixed is load-bearing: under the default auto layout the
+                drug name's `truncate` (white-space: nowrap) makes the column's
+                intrinsic width the full name, so one long name stretched the
+                table far past the viewport. Fixed layout caps each column at the
+                width below and lets the content wrap/clamp instead.
+
+                The name is not the only offender here — barcodes reach 90 chars
+                and sync-generated batch numbers 45, so both are clamped too.
+              */}
+              <table className="w-full table-fixed min-w-[960px] text-sm">
                 <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                   <tr>
-                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[6%] px-3 py-3.5 text-right font-medium font-cairo">
+                      #
+                    </th>
+                    <th className="w-[26%] px-4 py-3.5 text-right font-medium font-cairo">
                       الدواء
                     </th>
-                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[11%] px-4 py-3.5 text-right font-medium font-cairo">
                       الفرع
                     </th>
-                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[15%] px-4 py-3.5 text-right font-medium font-cairo">
                       رقم الدفعة
                     </th>
-                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[7%] px-4 py-3.5 text-right font-medium font-cairo">
                       الكمية
                     </th>
-                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[14%] px-4 py-3.5 text-right font-medium font-cairo">
                       تاريخ الانتهاء
                     </th>
-                    <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[21%] px-4 py-3.5 text-right font-medium font-cairo">
                       المتبقي
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border bg-card">
-                  {cat.items.map((batch: any) => {
+                  {cat.items.map((batch: any, index: number) => {
                     const days = getDaysRemaining(batch.expiryDate);
                     return (
                       <tr
                         key={batch.id}
                         className="hover:bg-muted/40 transition-colors"
                       >
-                        <td className="px-6 py-4">
+                        {/* Numbered per category table, so each restarts at 1. */}
+                        <td className="px-3 py-4 font-mono text-muted-foreground">
+                          {index + 1}
+                        </td>
+                        <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
                             <div
                               className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${cat.bg}`}
@@ -264,13 +281,19 @@ export default async function ExpiryReportPage({
                               <Package className={`w-4 h-4 ${cat.tone}`} />
                             </div>
                             <div className="min-w-0">
-                              <p className="font-semibold text-foreground truncate">
+                              {/* Wraps to a second line rather than widening the
+                                  column; full name stays available on hover. */}
+                              <p
+                                className="font-semibold text-foreground break-words line-clamp-2"
+                                title={batch.inventory.drug.tradeName}
+                              >
                                 {batch.inventory.drug.tradeName}
                               </p>
                               {batch.inventory.drug.barcode && (
                                 <p
-                                  className="text-xs text-muted-foreground"
+                                  className="text-xs text-muted-foreground truncate"
                                   dir="ltr"
+                                  title={batch.inventory.drug.barcode}
                                 >
                                   {batch.inventory.drug.barcode}
                                 </p>
@@ -278,20 +301,34 @@ export default async function ExpiryReportPage({
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-muted-foreground">
-                          {batch.inventory.branch.name}
+                        <td className="px-4 py-4 text-muted-foreground">
+                          {/* Clamp on an inner element: line-clamp sets
+                              display:-webkit-box, which would break table-cell. */}
+                          <div
+                            className="break-words line-clamp-2"
+                            title={batch.inventory.branch.name}
+                          >
+                            {batch.inventory.branch.name}
+                          </div>
                         </td>
                         <td
-                          className="px-6 py-4 font-mono text-xs text-muted-foreground"
+                          className="px-4 py-4 font-mono text-xs text-muted-foreground"
                           dir="rtl"
                         >
-                          {batch.batchNumber}
+                          {/* break-all: sync-generated numbers have no spaces
+                              to break at, so they'd overflow a fixed cell. */}
+                          <div
+                            className="break-all line-clamp-2"
+                            title={batch.batchNumber}
+                          >
+                            {batch.batchNumber}
+                          </div>
                         </td>
-                        <td className="px-6 py-4 font-bold text-foreground">
+                        <td className="px-4 py-4 font-bold text-foreground">
                           {batch.quantity}
                         </td>
                         <td
-                          className="px-6 py-4 text-muted-foreground whitespace-nowrap"
+                          className="px-4 py-4 text-muted-foreground"
                           dir="rtl"
                         >
                           {new Date(batch.expiryDate).toLocaleDateString(
@@ -299,7 +336,7 @@ export default async function ExpiryReportPage({
                             { timeZone: "Asia/Baghdad" },
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <span
                             className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-bold whitespace-nowrap ${
                               days < 0
