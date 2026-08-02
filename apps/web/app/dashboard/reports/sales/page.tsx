@@ -20,6 +20,7 @@ import {
   ExportPDFButton,
   ExportExcelButton,
 } from "@/app/ui/reports/export-buttons";
+import SalesPrintSheet from "@/app/ui/reports/sales-print-sheet";
 
 function parseDateParam(val: string | string[] | undefined) {
   return typeof val === "string" ? val : undefined;
@@ -110,7 +111,8 @@ export default async function SalesReportPage({
       ...branchWhere,
     },
     include: {
-      items: true,
+      // drug names are needed for the itemised Excel/PDF export
+      items: { include: { drug: { select: { tradeName: true } } } },
       branch: true,
     },
     orderBy: { createdAt: "asc" },
@@ -149,6 +151,46 @@ export default async function SalesReportPage({
 
   const fmt = (v: number) => Math.round(v).toLocaleString("en-US");
 
+  /**
+   * One row per sold item, for the Excel and PDF exports. A sale with three
+   * drugs becomes three rows sharing an invoice number — the exports are meant
+   * to be reconciled line by line, unlike the on-screen summary.
+   */
+  const iraqTime = (d: Date | string) =>
+    new Date(d).toLocaleTimeString("en-GB", {
+      timeZone: "Asia/Baghdad",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  const iraqDate = (d: Date | string) =>
+    new Date(d).toLocaleDateString("en-GB", { timeZone: "Asia/Baghdad" });
+
+  const lineItems = sales.flatMap((s: any) =>
+    s.items.map((it: any) => ({
+      invoice: s.invoiceNumber != null ? `#${s.invoiceNumber}` : s.id.slice(0, 8),
+      drug: it.drug?.tradeName || "—",
+      price: it.price,
+      quantity: it.quantity,
+      total: it.price * it.quantity,
+      branch: s.branch?.name || "غير محدد",
+      date: iraqDate(s.createdAt),
+      time: iraqTime(s.createdAt),
+    })),
+  );
+
+  // Displayed range always comes from the resolved dates, so it reads the same
+  // whether or not from/to were in the URL — and matches the per-row date format.
+  const rangeFrom = iraqDate(start);
+  const rangeTo = iraqDate(end);
+  // Filenames need the ISO form; dd/mm/yyyy would put slashes in the path.
+  const isoDay = (d: Date) =>
+    new Date(d.getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const fileFrom = fromParam ?? isoDay(start);
+  const fileTo = toParam ?? isoDay(end);
+  const printBranchName = branchId
+    ? sales[0]?.branch?.name || "غير محدد"
+    : "كل الفروع";
+
   const statCards = [
     {
       label: "عدد المبيعات",
@@ -181,7 +223,9 @@ export default async function SalesReportPage({
   ];
 
   return (
-    <div className="space-y-6" dir="rtl" suppressHydrationWarning>
+    <>
+    {/* On paper the interactive report is replaced by the itemised sheet below */}
+    <div className="space-y-6 print:hidden" dir="rtl" suppressHydrationWarning>
       {/* الرأس */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
@@ -203,15 +247,26 @@ export default async function SalesReportPage({
         </div>
         <div className="flex gap-2">
           <ExportExcelButton
-            filename="sales-report"
-            headers={["الفرع", "عدد الأصناف", "المبلغ", "التاريخ"]}
-            data={sales.map((s: any) => [
-              s.branch?.name || "غير محدد",
-              s.items.length,
-              s.total.toFixed(2),
-              new Date(s.createdAt).toLocaleString("ar-IQ", {
-                timeZone: "Asia/Baghdad",
-              }),
+            filename={`sales-report-${fileFrom}${fileTo !== fileFrom ? `_${fileTo}` : ""}`}
+            headers={[
+              "رقم الفاتورة",
+              "اسم الدواء",
+              "سعر الدواء",
+              "كمية البيع",
+              "السعر الكلي",
+              "الفرع",
+              "التاريخ",
+              "الوقت",
+            ]}
+            data={lineItems.map((r: any) => [
+              r.invoice,
+              r.drug,
+              r.price,
+              r.quantity,
+              r.total,
+              r.branch,
+              r.date,
+              r.time,
             ])}
           />
           <ExportPDFButton />
@@ -401,5 +456,15 @@ export default async function SalesReportPage({
         )}
       </div>
     </div>
+
+    <SalesPrintSheet
+      rows={lineItems}
+      from={rangeFrom}
+      to={rangeTo}
+      branchName={printBranchName}
+      invoiceCount={sales.length}
+      netTotal={totalSales}
+    />
+    </>
   );
 }

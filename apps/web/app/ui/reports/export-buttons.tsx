@@ -16,11 +16,19 @@ export function ExportExcelButton({
 }) {
     const handleExport = () => {
         const BOM = "\uFEFF"; // UTF-8 BOM so Arabic shows correctly in Excel
+        /**
+         * Real numbers are written unquoted so Excel keeps them numeric and the
+         * user can sum a price column. Everything else stays quoted \u2014 barcodes
+         * and invoice numbers arrive as strings precisely so Excel doesn't
+         * "helpfully" drop their leading zeros.
+         */
+        const cellToCsv = (cell: string | number) =>
+            typeof cell === "number" && Number.isFinite(cell)
+                ? String(cell)
+                : `"${String(cell ?? "").replace(/"/g, '""')}"`;
         const csvRows = [
-            headers.join(","),
-            ...data.map((row) =>
-                row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")
-            ),
+            headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","),
+            ...data.map((row) => row.map(cellToCsv).join(",")),
         ];
         const blob = new Blob([BOM + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
