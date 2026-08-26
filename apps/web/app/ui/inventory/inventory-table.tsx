@@ -40,6 +40,7 @@ export default function InventoryTable({
   const [selectedInventory, setSelectedInventory] = useState<{
     id: string;
     drugName: string;
+    price: number;
   } | null>(null);
   const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>(
     () => Object.fromEntries(items.map((i) => [i.drug.id, i.drug.isQuickSale])),
@@ -194,6 +195,7 @@ export default function InventoryTable({
                             setSelectedInventory({
                               id: item.id,
                               drugName: item.drug.tradeName,
+                              price: Number(item.price) || 0,
                             })
                           }
                           title="إضافة دفعة"
@@ -229,6 +231,7 @@ export default function InventoryTable({
         <AddBatchModal
           inventoryId={selectedInventory.id}
           drugName={selectedInventory.drugName}
+          currentPrice={selectedInventory.price}
           onClose={() => setSelectedInventory(null)}
         />
       )}

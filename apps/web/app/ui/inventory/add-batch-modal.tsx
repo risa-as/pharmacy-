@@ -8,6 +8,12 @@ import { addBatch } from "@/app/lib/actions/inventory";
 import ExpiryDateField, { checkExpiry } from "./expiry-date-field";
 import { useConfirm } from "../confirm-dialog";
 
+/**
+ * فارق التكلفة فوق سعر البيع الذي يُعتبر خطأ إدخال شبه مؤكد (دينار).
+ * تجاوزه يعني غالباً أن سعر الباكيت أُدخل دون قسمته على عدد الأشرطة.
+ */
+const COST_OVER_PRICE_GAP = 500;
+
 interface Supplier { id: string; name: string; }
 
 interface AddBatchModalProps {
@@ -154,11 +160,19 @@ export default function AddBatchModal({ inventoryId, drugName, currentPrice, onC
         }
         // التكلفة للشريط أعلى من سعر البيع الحالي = غالباً أُدخل سعر الباكيت بدون قسمة
         if (currentPrice != null && currentPrice > 0 && computedCost >= currentPrice) {
+            const gap = computedCost - currentPrice;
+            const fmtCost = computedCost.toLocaleString("en", { maximumFractionDigits: 2 });
+            const fmtPrice = currentPrice.toLocaleString("en");
+            const fmtGap = gap.toLocaleString("en", { maximumFractionDigits: 2 });
+            const bigGap = gap >= COST_OVER_PRICE_GAP;
             const ok = await confirm({
-                title: "التكلفة أعلى من سعر البيع",
+                title: bigGap
+                    ? `التكلفة أعلى من سعر البيع بأكثر من ${COST_OVER_PRICE_GAP} دينار`
+                    : "التكلفة أعلى من سعر البيع",
                 message:
-                    `سعر التكلفة للشريط (${computedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
-                    `أعلى من أو يساوي سعر البيع الحالي للشريط (${currentPrice.toLocaleString("en")} د.ع).\n` +
+                    (bigGap
+                        ? `سعر التكلفة للشريط (${fmtCost} د.ع) أعلى من سعر البيع الحالي للشريط (${fmtPrice} د.ع) بفارق ${fmtGap} د.ع.\n`
+                        : `سعر التكلفة للشريط (${fmtCost} د.ع) أعلى من أو يساوي سعر البيع الحالي للشريط (${fmtPrice} د.ع).\n`) +
                     `غالباً أُدخل سعر الباكيت دون تحديد عدد الأشرطة الصحيح.`,
                 variant: "danger",
             });
@@ -290,6 +304,14 @@ export default function AddBatchModal({ inventoryId, drugName, currentPrice, onC
                             <p className="text-xs font-bold text-warning flex items-center gap-1">
                                 <span>⚠</span>
                                 هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
+                            </p>
+                        )}
+                        {currentPrice != null && currentPrice > 0 && packetPrice > 0 && computedCost >= currentPrice && (
+                            <p className="text-xs font-bold text-destructive flex items-center gap-1">
+                                <span>⚠</span>
+                                {computedCost - currentPrice >= COST_OVER_PRICE_GAP
+                                    ? `التكلفة أعلى من سعر البيع (${currentPrice.toLocaleString("en")} د.ع) بفارق ${(computedCost - currentPrice).toLocaleString("en", { maximumFractionDigits: 2 })} د.ع — سيظهر تأكيد عند الحفظ`
+                                    : `التكلفة أعلى من أو تساوي سعر البيع (${currentPrice.toLocaleString("en")} د.ع) — سيظهر تأكيد عند الحفظ`}
                             </p>
                         )}
                     </div>
