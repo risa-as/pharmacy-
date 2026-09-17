@@ -30,7 +30,7 @@ export default async function Page() {
             where: {
                 isActive: true,
                 OR: [
-                    { organizationId: null },
+                    { organizationId: null, warehouseId: null },
                     { organizationId: tenantCtx.organizationId }
                 ]
             },

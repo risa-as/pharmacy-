@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { createPrescription } from "@/app/lib/actions/prescription";
 import { FileText, Plus, ArrowRight } from "lucide-react";
 import { DeleteButton } from "../delete-button";
@@ -14,7 +13,7 @@ interface FormProps {
 
 export default function CreatePrescriptionForm({ patients, drugs }: FormProps) {
     const initialState: any = { message: "", errors: {} };
-    const [state, dispatch] = useFormState(createPrescription, initialState);
+    const [state, dispatch] = useActionState(createPrescription, initialState);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

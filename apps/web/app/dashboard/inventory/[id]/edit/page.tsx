@@ -7,9 +7,11 @@ import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { ArrowRight, Package } from "lucide-react";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { pharmacyDrugScope } from "@/app/lib/drug-scope";
 import { NextResponse } from "next/server";
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect("/login");
     if (!tenantCtx.userPermissions.canEditDrug) redirect("/dashboard/inventory");
@@ -40,6 +42,8 @@ export default async function Page({ params }: { params: { id: string } }) {
         orderBy: { name: "asc" },
     });
     const drugs = await prisma.globalDrug.findMany({
+        // النطاق: عالمي + أدوية هذه المؤسسة — انظر app/lib/drug-scope.ts.
+        where: pharmacyDrugScope(tenantCtx.organizationId),
         select: { id: true, tradeName: true },
         orderBy: { tradeName: "asc" },
     });

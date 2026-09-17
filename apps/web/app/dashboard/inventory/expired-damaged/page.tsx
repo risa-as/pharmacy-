@@ -8,11 +8,12 @@ import { redirect } from 'next/navigation';
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import ExpiryBatchesTable, { ExpiryRow } from "@/app/ui/inventory/expiry-batches-table";
 
-export default async function ExpiredDamagedPage({
-    searchParams,
-}: {
-    searchParams?: { branch?: string };
-}) {
+export default async function ExpiredDamagedPage(
+    props: {
+        searchParams?: Promise<{ branch?: string }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere } = tenantCtx;

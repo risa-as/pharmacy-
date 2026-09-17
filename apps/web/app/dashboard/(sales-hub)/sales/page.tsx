@@ -53,13 +53,16 @@ function filterByTimeOfDay<T extends { createdAt: Date | string }>(
   });
 }
 
-export default async function SalesPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function SalesPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const tenantCtx = await getTenantContext();
-  if (tenantCtx instanceof NextResponse) return tenantCtx;
+  if (tenantCtx instanceof NextResponse) {
+    return <div className="p-6 text-center text-destructive">تعذر التحقق من صلاحية الوصول.</div>;
+  }
   const { tenantBranchWhere } = tenantCtx;
   // تعديل الفاتورة متاح للمدير فقط
   const canEditSale =

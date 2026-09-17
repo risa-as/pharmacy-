@@ -1,164 +1,128 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { printerService } from '../services/printer';
-import { useTheme } from '../context/ThemeContext';
-import { Colors } from '../constants/colors';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { usePalette, Surface, SectionTitle, AppButton, InfoNote } from '../components/ui/Kit';
 
-interface PrinterDevice {
-    deviceName: string;
-    macAddress: string;
-}
+interface PrinterDevice { deviceName: string; macAddress: string }
 
+type Phase = 'idle' | 'searching' | 'connecting' | 'failed';
+
+/**
+ * Printer setup (design printer.png): explicit searching / connected / failed
+ * states and no fake connection. When the build has printing disabled the
+ * screen says so and every action stays disabled.
+ */
 export default function PrinterSettingsScreen() {
+    const C = usePalette();
+    const insets = useSafeAreaInsets();
+    const supported = printerService.isSupported();
     const [devices, setDevices] = useState<PrinterDevice[]>([]);
-    const [scanning, setScanning] = useState(false);
-    const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
-    const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+    const [phase, setPhase] = useState<Phase>('idle');
+    const [connected, setConnected] = useState<string | null>(null);
+    const [message, setMessage] = useState<string | null>(null);
 
-    useEffect(() => { setup(); }, []);
-
-    const setup = async () => {
-        await printerService.init();
-        const saved = await printerService.getSavedPrinter();
-        setConnectedAddress(saved);
-        scanDevices();
-    };
-
-    const scanDevices = async () => {
-        setScanning(true);
+    const search = useCallback(async () => {
+        if (!supported) return;
+        setPhase('searching');
+        setMessage(null);
         try {
-            const list = await printerService.getDeviceList();
-            setDevices(list);
+            setDevices(await printerService.getDeviceList());
+            setPhase('idle');
         } catch {
-            Alert.alert('خطأ', 'فشل البحث عن الطابعات');
-        } finally {
-            setScanning(false);
+            setPhase('failed');
+            setMessage('فشل البحث عن الطابعات. تأكد من تشغيل البلوتوث والطابعة.');
         }
-    };
+    }, [supported]);
+
+    useEffect(() => {
+        (async () => {
+            await printerService.init();
+            setConnected(await printerService.getSavedPrinter());
+            if (supported) search();
+        })();
+    }, [search, supported]);
 
     const connect = async (device: PrinterDevice) => {
-        setScanning(true);
-        try {
-            const success = await printerService.connectPrinter(device.macAddress);
-            if (success) {
-                setConnectedAddress(device.macAddress);
-                Alert.alert('نجاح', `تم الاتصال بالطابعة ${device.deviceName}`);
-            } else {
-                Alert.alert('خطأ', 'فشل الاتصال بالطابعة');
-            }
-        } catch {
-            Alert.alert('خطأ', 'حدث خطأ أثناء الاتصال');
-        } finally {
-            setScanning(false);
-        }
+        setPhase('connecting');
+        setMessage(null);
+        const ok = await printerService.connectPrinter(device.macAddress).catch(() => false);
+        if (ok) { setConnected(device.macAddress); setPhase('idle'); }
+        else { setPhase('failed'); setMessage(`تعذّر الاتصال بـ ${device.deviceName || 'الطابعة'}.`); }
     };
 
-    const testPrint = async () => {
-        if (!connectedAddress) {
-            Alert.alert('تنبيه', 'يرجى الاتصال بطابعة أولاً');
-            return;
-        }
-        await printerService.printReceipt('Faramace Test', [
-            { name: 'Item 1', quantity: 1, price: 1000 },
-            { name: 'Item 2', quantity: 2, price: 500 },
-        ], 2000);
-    };
-
-    const renderItem = ({ item }: { item: PrinterDevice }) => {
-        const isConnected = item.macAddress === connectedAddress;
-        return (
-            <TouchableOpacity
-                style={{
-                    flexDirection: 'row-reverse',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    backgroundColor: isConnected ? C.primary : C.card,
-                    padding: 16,
-                    borderRadius: 12,
-                    marginBottom: 12,
-                    borderWidth: 1,
-                    borderColor: isConnected ? C.primary : C.border,
-                }}
-                onPress={() => connect(item)}
-                activeOpacity={0.7}
-            >
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                    <Ionicons name="print-outline" size={24} color={isConnected ? '#fff' : C.foreground} />
-                    <View>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: isConnected ? '#fff' : C.foreground, textAlign: 'right' }}>
-                            {item.deviceName || 'Unknown Device'}
-                        </Text>
-                        <Text style={{ fontSize: 12, color: isConnected ? 'rgba(255,255,255,0.8)' : C.mutedForeground, textAlign: 'right' }}>
-                            {item.macAddress}
-                        </Text>
-                    </View>
-                </View>
-                {isConnected && <Ionicons name="checkmark-circle" size={24} color="#fff" />}
-            </TouchableOpacity>
-        );
-    };
+    const connectedDevice = devices.find(d => d.macAddress === connected);
 
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
-            {/* Header */}
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 20, paddingTop: 60 }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
-                    <Ionicons name="arrow-back" size={24} color={C.foreground} />
-                </TouchableOpacity>
-                <Text style={{ fontSize: 24, fontWeight: 'bold', color: C.foreground, marginLeft: 16 }}>
-                    إعدادات الطابعة
-                </Text>
-            </View>
+            <ScreenHeader title="إعداد الطابعة" fallbackHref="/(tabs)/settings" />
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24, gap: 14 }}>
+                {!supported && (
+                    <InfoNote tone="warning" title="الطباعة غير متاحة في هذا الإصدار" text="طباعة الفواتير الحرارية معطّلة مؤقتاً في هذه النسخة من التطبيق. البيع يعمل بشكل طبيعي دون طباعة." />
+                )}
 
-            {/* Action Buttons */}
-            <View style={{ flexDirection: 'row-reverse', paddingHorizontal: 20, paddingBottom: 16, gap: 12 }}>
-                <TouchableOpacity
-                    style={{
-                        flex: 1, backgroundColor: C.primary,
-                        flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
-                        padding: 12, borderRadius: 12, gap: 8,
-                        opacity: scanning ? 0.7 : 1,
-                    }}
-                    onPress={scanDevices}
-                    disabled={scanning}
-                    activeOpacity={0.8}
-                >
-                    {scanning
-                        ? <ActivityIndicator color="#fff" />
-                        : <><Ionicons name="refresh" size={20} color="#fff" /><Text style={{ color: '#fff', fontWeight: 'bold' }}>بحث عن أجهزة</Text></>
-                    }
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={{
-                        flex: 1, backgroundColor: connectedAddress ? C.success : C.border,
-                        flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
-                        padding: 12, borderRadius: 12, gap: 8,
-                        opacity: connectedAddress ? 1 : 0.6,
-                    }}
-                    onPress={testPrint}
-                    disabled={!connectedAddress}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons name="receipt-outline" size={20} color="#fff" />
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>طباعة تجريبية</Text>
-                </TouchableOpacity>
-            </View>
-
-            <FlatList
-                data={devices}
-                renderItem={renderItem}
-                keyExtractor={item => item.macAddress}
-                contentContainerStyle={{ padding: 20, paddingTop: 0 }}
-                ListEmptyComponent={
-                    <Text style={{ textAlign: 'center', marginTop: 40, color: C.mutedForeground, fontSize: 15 }}>
-                        {scanning ? 'جاري البحث...' : 'لم يتم العثور على طابعات'}
+                <Surface style={{ alignItems: 'center', gap: 10, paddingVertical: 22 }}>
+                    <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: connected ? C.successBg : C.dangerBg, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="print-outline" size={38} color={connected ? C.success : C.danger} />
+                    </View>
+                    <Text style={{ color: connected ? C.success : C.danger, fontSize: 18, fontWeight: '900' }}>
+                        {connected ? 'الطابعة متصلة' : 'الطابعة غير متصلة'}
                     </Text>
-                }
-            />
+                    <Text style={{ color: C.mutedForeground, fontSize: 13.5, textAlign: 'center' }}>
+                        {connected ? (connectedDevice?.deviceName ?? connected) : 'شغّل الطابعة وتحقق من اتصال البلوتوث.'}
+                    </Text>
+                    <AppButton
+                        label={phase === 'searching' ? 'جارِ البحث…' : 'البحث عن طابعات'}
+                        icon="search-outline"
+                        loading={phase === 'searching'}
+                        disabled={!supported || phase === 'connecting'}
+                        onPress={search}
+                        style={{ alignSelf: 'stretch' }}
+                    />
+                    {message ? <Text style={{ color: C.danger, fontSize: 13, textAlign: 'center' }}>{message}</Text> : null}
+                </Surface>
+
+                <View>
+                    <SectionTitle title="الأجهزة المتاحة" />
+                    <Surface style={{ gap: 10 }}>
+                        {phase === 'searching' ? (
+                            <ActivityIndicator color={C.primary} style={{ marginVertical: 20 }} />
+                        ) : devices.length === 0 ? (
+                            <View style={{ alignItems: 'center', gap: 8, paddingVertical: 16 }}>
+                                <Ionicons name="print-outline" size={36} color={C.mutedForeground} />
+                                <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '800' }}>لم يتم العثور على أجهزة</Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 13 }}>{supported ? 'تأكد أن الطابعة قريبة وقابلة للاكتشاف.' : 'البحث غير متاح في هذا الإصدار.'}</Text>
+                            </View>
+                        ) : devices.map(d => {
+                            const isConnected = d.macAddress === connected;
+                            return (
+                                <TouchableOpacity
+                                    key={d.macAddress}
+                                    onPress={() => connect(d)}
+                                    disabled={phase === 'connecting'}
+                                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingVertical: 10 }}
+                                >
+                                    <Ionicons name="print-outline" size={22} color={isConnected ? C.success : C.foreground} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '700', textAlign: 'right' }}>{d.deviceName || 'جهاز غير معروف'}</Text>
+                                        <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right' }}>{d.macAddress}</Text>
+                                    </View>
+                                    {isConnected ? <Ionicons name="checkmark-circle" size={22} color={C.success} /> : <Text style={{ color: C.primary, fontWeight: '700' }}>اتصال</Text>}
+                                </TouchableOpacity>
+                            );
+                        })}
+                        <AppButton
+                            label="طباعة تجريبية"
+                            icon="receipt-outline"
+                            variant="outline"
+                            disabled={!supported || !connected}
+                            onPress={() => printerService.printReceipt('Faramace', [{ name: 'اختبار', quantity: 1, price: 0 }], 0)}
+                        />
+                    </Surface>
+                </View>
+            </ScrollView>
         </View>
     );
 }

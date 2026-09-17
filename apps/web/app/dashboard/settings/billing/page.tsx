@@ -11,10 +11,11 @@ import type { PaymentTransactionRow } from "@/app/ui/billing/payment-history-tab
 export const dynamic = "force-dynamic";
 
 interface BillingPageProps {
-    searchParams: { txn_id?: string };
+    searchParams: Promise<{ txn_id?: string }>;
 }
 
-export default async function BillingPage({ searchParams }: BillingPageProps) {
+export default async function BillingPage(props: BillingPageProps) {
+    const searchParams = await props.searchParams;
     const session = await auth();
     const user = session?.user as
         | { role: string; branchId?: string }

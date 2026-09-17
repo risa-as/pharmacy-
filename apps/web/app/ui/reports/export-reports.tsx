@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import * as XLSX from "xlsx";
+import { downloadWorkbook } from "@/app/lib/exceljs-browser";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { Button } from "@faramace/ui";
@@ -213,13 +213,13 @@ export default function ExportReports() {
             });
 
             if (formatType === "excel") {
-                const ws = XLSX.utils.json_to_sheet(processedData);
-                // Add Summary Row to Excel
-                XLSX.utils.sheet_add_json(ws, [{ "": "الاجماااالي", "عدد الطلبات": processedData.length, "المجموع الكلي": totalAmount }], { origin: -1, skipHeader: true });
-
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Report");
-                XLSX.writeFile(wb, `report_${typeToFetch}_${new Date().toISOString().split("T")[0]}.xlsx`);
+                const headers = Array.from(new Set(processedData.flatMap((row: Record<string, unknown>) => Object.keys(row))));
+                const rows = [
+                    headers,
+                    ...processedData.map((row: Record<string, unknown>) => headers.map((header) => String(row[header] ?? ""))),
+                    ["الاجمالي", String(processedData.length), String(totalAmount)],
+                ];
+                await downloadWorkbook(`report_${typeToFetch}_${new Date().toISOString().split("T")[0]}.xlsx`, [{ name: "Report", rows }]);
                 toast.success("تم تصدير ملف Excel بنجاح");
             } else if (formatType === "pdf") {
                 setPdfData(processedData);

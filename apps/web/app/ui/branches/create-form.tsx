@@ -1,7 +1,7 @@
 "use client";
+import { useActionState } from "react";
 
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { createBranch } from "@/app/lib/actions/branch";
 import { SubmitButton } from "@/app/ui/submit-button";
 import UpgradePrompt from "@/app/ui/upgrade-prompt";
@@ -14,7 +14,7 @@ interface Organization {
 
 export default function Form({ organizations }: { organizations: Organization[] }) {
   const initialState: any = { message: "", errors: {} };
-  const [state, dispatch] = useFormState(createBranch, initialState);
+  const [state, dispatch] = useActionState(createBranch, initialState);
 
   const multiOrg = organizations.length > 1;
 

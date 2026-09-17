@@ -30,11 +30,12 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   ZAIN_CASH: "زين كاش",
 };
 
-export default async function DebtsPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function DebtsPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const branchId =
     typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 

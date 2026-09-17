@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Loader2, Store, AlertTriangle, ListChecks, Wallet, TrendingUp, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+// المرحلة 4 من ميزة المذاخر: تحويل اقتراحات الطلب الذكي إلى طلب مذخر على المنصة.
+import WarehouseOrderFromSmart from './WarehouseOrderFromSmart';
 
 interface Props {
     branchId: string;
@@ -28,6 +30,7 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
     const [selectedSupplier, setSelectedSupplier] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
     const [currentBranchId, setCurrentBranchId] = useState<string>(initialBranchId);
+    const [warehouseDialogOpen, setWarehouseDialogOpen] = useState(false);
 
     const isAllBranches = currentBranchId === 'ALL';
 
@@ -109,6 +112,16 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
             setSubmitting(false);
         }
     };
+
+    // المرحلة 4: البنود المختارة بصيغة طلب مذخر (باركود + كمية) للمربع الجانبي.
+    const warehouseItems = items
+        .filter((item: any) => selectedItems.has(item.inventoryId))
+        .map((item: any) => ({
+            barcode: item.barcode as string | undefined,
+            tradeName: item.tradeName as string,
+            quantity: getQty(item.inventoryId),
+        }))
+        .filter((i) => i.quantity > 0 && !!i.barcode);
 
     const colCount = isAllBranches ? 8 : 7;
 
@@ -319,9 +332,25 @@ export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, b
                                 `إنشاء طلب شراء (${selectedCount})`
                             )}
                         </Button>
+                        {warehouseItems.length > 0 && (
+                            <Button
+                                onClick={() => setWarehouseDialogOpen(true)}
+                                disabled={isAllBranches}
+                                variant="outline"
+                                className="h-10 px-6"
+                            >
+                                إرسال لمذخر ({warehouseItems.length})
+                            </Button>
+                        )}
                     </div>
                 )}
             </div>
+            {warehouseDialogOpen && (
+                <WarehouseOrderFromSmart
+                    items={warehouseItems}
+                    onClose={() => setWarehouseDialogOpen(false)}
+                />
+            )}
         </div>
     );
 }

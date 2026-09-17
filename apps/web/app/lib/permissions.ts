@@ -95,12 +95,46 @@ const CASHIER_DEFAULTS: UserPermissions = {
     canViewDebts: true, canPayDebt: true,
 };
 
+// Fail-closed default for any role this switch does not recognise. An
+// unrecognised role (a typo, corrupted data, or — the concrete bug this
+// fixed — the WAREHOUSE role, which previously fell through to `default`
+// and silently inherited CASHIER's fairly permissive set: canSell,
+// canViewSales, canViewInventory, canViewPatients, canViewDebts,
+// canPayDebt) must never inherit ANY role's permissions just because it fell
+// through the switch. See app/lib/__tests__/permissions.test.ts.
+const ALL_FALSE_DEFAULTS: UserPermissions = {
+    canSell: false, canApplyDiscount: false, canViewSales: false, canDeleteSale: false,
+    canProcessReturn: false, canViewReturns: false,
+    canViewInventory: false, canAddDrug: false, canEditDrug: false, canDeleteDrug: false,
+    canEditPrice: false, canBulkEditPrice: false, canTransferStock: false, canDoStocktake: false,
+    canViewExpenses: false, canCreateExpense: false,
+    canViewReports: false, canViewProfitReport: false, canViewEmployeeReport: false, canExportExcel: false,
+    canViewPatients: false, canEditPatient: false,
+    canViewSuppliers: false, canCreatePurchase: false,
+    canManageUsers: false, canManageBranches: false, canViewAuditLog: false, canChangeSettings: false, canBackup: false,
+    canViewDebts: false, canPayDebt: false,
+};
+
 export function getDefaultPermissions(role: string): UserPermissions {
     switch (role) {
         case 'ADMIN': return { ...ADMIN_DEFAULTS };
+        // SUPER_ADMIN is documented elsewhere (auth.config.ts's /dashboard
+        // authorized() branch: "Admin and Super Admin have full access") as
+        // having full access — mirrored here explicitly instead of letting
+        // it fall through to the fail-closed `default` below. Two live call
+        // sites run this with NO earlier role short-circuit and would break
+        // if SUPER_ADMIN suddenly got an all-false object: api/sales
+        // route.ts's POST checks `tenantCtx.userPermissions.canSell` and a
+        // few lines later explicitly carves SUPER_ADMIN out of the
+        // branchId requirement (`!user.branchId && user.role !==
+        // 'SUPER_ADMIN'`) — i.e. a SUPER_ADMIN posting a sale with no
+        // branchId is a supported path today, not an oversight — and
+        // api/debts/pay route.ts's POST checks
+        // `tenantCtx.userPermissions.canPayDebt` the same way.
+        case 'SUPER_ADMIN': return { ...ADMIN_DEFAULTS };
         case 'PHARMACIST': return { ...PHARMACIST_DEFAULTS };
         case 'CASHIER': return { ...CASHIER_DEFAULTS };
-        default: return { ...CASHIER_DEFAULTS };
+        default: return { ...ALL_FALSE_DEFAULTS };
     }
 }
 
@@ -110,7 +144,15 @@ export function getUserPermissions(user: { role: string; permissions?: string | 
 
     try {
         const overrides = JSON.parse(user.permissions);
-        return { ...defaults, ...overrides };
+        // Permissions are persisted as JSON but remain untrusted input. Only
+        // known keys with literal booleans may override role defaults; a value
+        // such as {"canSell":"false"} must never become truthy authorization.
+        if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return defaults;
+        const safeOverrides: Partial<UserPermissions> = {};
+        for (const key of Object.keys(defaults) as Array<keyof UserPermissions>) {
+            if (typeof overrides[key] === 'boolean') safeOverrides[key] = overrides[key];
+        }
+        return { ...defaults, ...safeOverrides };
     } catch {
         return defaults;
     }

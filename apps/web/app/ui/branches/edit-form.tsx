@@ -1,8 +1,8 @@
 "use client";
+import { useActionState } from "react";
 
 import Link from "next/link";
 import { SubmitButton } from "@/app/ui/submit-button";
-import { useFormState } from "react-dom";
 import { updateBranch } from "@/app/lib/actions/branch";
 
 interface Organization {
@@ -25,7 +25,7 @@ export default function EditForm({
 }) {
     const initialState: any = { message: "", errors: {} };
     const updateBranchWithId = updateBranch.bind(null, branch.id);
-    const [state, dispatch] = useFormState(updateBranchWithId, initialState);
+    const [state, dispatch] = useActionState(updateBranchWithId, initialState);
 
     return (
         <form action={dispatch}>

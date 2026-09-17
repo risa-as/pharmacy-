@@ -10,6 +10,11 @@ interface PrinterDevice {
 }
 
 export const printerService = {
+    /** False while BLE printing is disabled in this build — UIs must say so instead of pretending. */
+    isSupported(): boolean {
+        return false;
+    },
+
     async init() {
         // no-op
     },

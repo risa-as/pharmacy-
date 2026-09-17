@@ -8,6 +8,8 @@ import { redirect } from "next/navigation";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { logAudit } from "@/app/lib/audit";
+// المرحلة 2 من ميزة المذاخر: حارس منع تعديل باركود دواء مدرج في كتالوج مذخر (التقرير §4.1-أ).
+import { barcodeChangeDecision } from "@/app/lib/warehouse-catalog";
 
 
 const DrugSchema = z.object({
@@ -174,11 +176,38 @@ export async function updateDrug(
 
         if (!existingDrug) {
             // Check if it's a global drug to give a clearer error
-            const isGlobal = await prisma.globalDrug.findFirst({ where: { id, organizationId: null } });
+            const isGlobal = await prisma.globalDrug.findFirst({ where: { id, organizationId: null, warehouseId: null } });
             if (isGlobal) {
                 return { message: "هذا الدواء عالمي ويُدار من قبل المشرف العام فقط. يمكنك استخدامه في المخزون لكن لا يمكنك تعديله." };
             }
             return { message: "لا يمكنك تعديل هذا الدواء لأنه لا يخص مؤسستك." };
+        }
+
+
+        // المرحلة 2 من ميزة المذاخر: منع تعديل باركود دواء مدرج في كتالوج مذخر —
+        // تعديل الباركود يجعل صفوف الكتالوج الحاملة للقيمة القديمة يتيمة بصمت (فشل صامت).
+        if (barcode !== existingDrug.barcode) {
+            const catalogItemCount = await prisma.warehouseCatalogItem.count({
+                where: { drugId: existingDrug.id },
+            });
+            const decision = barcodeChangeDecision({ catalogItemCount, changed: true });
+            if (!decision.allowed) {
+                return { message: decision.reason ?? "لا يمكن تعديل باركود هذا الدواء." };
+            }
+
+            // نفس سبب الفحص في createGlobalDrug: لا قيد قاعدة بيانات يحرس تفرّد
+            // الباركود بين الصفوف العالمية، فالتعديل قادر على إنشاء تكرار أيضاً.
+            // يُفعَّل على الصفوف العالمية وحدها — صفوف المؤسسات والمذاخر يحرسها
+            // قيدها الخاص لأن عمود نطاقها غير NULL.
+            if (existingDrug.organizationId === null && existingDrug.warehouseId === null) {
+                const clash = await prisma.globalDrug.findFirst({
+                    where: { barcode, organizationId: null, warehouseId: null, NOT: { id } },
+                    select: { id: true, tradeName: true },
+                });
+                if (clash) {
+                    return { message: `الباركود موجود مسبقاً في الكتالوج العالمي («${clash.tradeName}»).` };
+                }
+            }
         }
 
         await prisma.globalDrug.update({
@@ -239,6 +268,19 @@ export async function createGlobalDrug(prevState: any, formData: FormData) {
     const { barcode, tradeName, scientificName, origin, isActive } = validatedFields.data;
 
     try {
+        // فحص صريح لتفرّد الباركود في الكتالوج العالمي. القيد @@unique([barcode,
+        // organizationId]) **لا يحرس هذا المسار إطلاقاً**: كلا عمودي النطاق NULL في
+        // الصف العالمي، وPostgres يعتبر NULL مميزاً — فلا يقع P2002 أبداً، ورسالة
+        // "الباركود موجود مسبقاً" في catch أدناه كانت كوداً ميتاً هنا. هذه الثغرة
+        // بعينها هي التي أدخلت صفوفاً عالمية مكرّرة إلى القاعدة.
+        const clash = await prisma.globalDrug.findFirst({
+            where: { barcode, organizationId: null, warehouseId: null },
+            select: { id: true, tradeName: true },
+        });
+        if (clash) {
+            return { message: `الباركود موجود مسبقاً في الكتالوج العالمي («${clash.tradeName}»).` };
+        }
+
         const newDrug = await prisma.globalDrug.create({
             data: { barcode, tradeName, scientificName, origin: origin || null, isActive: isActive ?? true, organizationId: null },
         });
@@ -278,6 +320,36 @@ export async function updateGlobalDrug(id: string, prevState: any, formData: For
     const { barcode, tradeName, scientificName, origin, isActive } = validatedFields.data;
 
     try {
+        const existingDrug = await prisma.globalDrug.findUnique({ where: { id } });
+        if (!existingDrug) {
+            return { message: "الدواء غير موجود." };
+        }
+        // المرحلة 2 من ميزة المذاخر: منع تعديل باركود دواء مدرج في كتالوج مذخر —
+        // تعديل الباركود يجعل صفوف الكتالوج الحاملة للقيمة القديمة يتيمة بصمت (فشل صامت).
+        if (barcode !== existingDrug.barcode) {
+            const catalogItemCount = await prisma.warehouseCatalogItem.count({
+                where: { drugId: existingDrug.id },
+            });
+            const decision = barcodeChangeDecision({ catalogItemCount, changed: true });
+            if (!decision.allowed) {
+                return { message: decision.reason ?? "لا يمكن تعديل باركود هذا الدواء." };
+            }
+
+            // نفس سبب الفحص في createGlobalDrug: لا قيد قاعدة بيانات يحرس تفرّد
+            // الباركود بين الصفوف العالمية، فالتعديل قادر على إنشاء تكرار أيضاً.
+            // يُفعَّل على الصفوف العالمية وحدها — صفوف المؤسسات والمذاخر يحرسها
+            // قيدها الخاص لأن عمود نطاقها غير NULL.
+            if (existingDrug.organizationId === null && existingDrug.warehouseId === null) {
+                const clash = await prisma.globalDrug.findFirst({
+                    where: { barcode, organizationId: null, warehouseId: null, NOT: { id } },
+                    select: { id: true, tradeName: true },
+                });
+                if (clash) {
+                    return { message: `الباركود موجود مسبقاً في الكتالوج العالمي («${clash.tradeName}»).` };
+                }
+            }
+        }
+
         await prisma.globalDrug.update({
             where: { id },
             data: { barcode, tradeName, scientificName, origin: origin || null, isActive: isActive ?? true },

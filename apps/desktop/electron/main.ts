@@ -26,7 +26,10 @@ import {
   pushAddBatchToCloud,
   pushUpdateInventoryToCloud,
   pushQuickSaleToggle,
+  pushSaleReturnToCloud,
   allocateInvoiceNumber,
+  takeCachedInvoiceNumber,
+  prefetchInvoiceNumber,
   refreshOfflineToken,
 } from "./sync";
 import {
@@ -821,9 +824,16 @@ async function _doSyncActions() {
 }
 
 // ── RS256 public key bundled at build time ────────────────────────────────────
-// Replace the placeholder below with the real public key from the server's
-// OFFLINE_TOKEN_PRIVATE_KEY env var pair before production builds.
+// The literal below is the REAL production key, not a placeholder — it pairs with
+// the server's OFFLINE_TOKEN_PRIVATE_KEY (verified 2026-08-02). Do not swap it out
+// on its own: it changes only when the server key is rotated, and both sides must
+// change together or every connected desktop fails subscription verification.
+//
+// Resolution order matches the other build-time constants above: the value baked in
+// by vite.config.ts `define`, then a runtime env var, then this literal — which is
+// the path packaged builds actually take, since process.env is unset there.
 const BUNDLED_PUBLIC_KEY =
+  (typeof __OFFLINE_TOKEN_PUBLIC_KEY__ !== "undefined" && __OFFLINE_TOKEN_PUBLIC_KEY__) ||
   process.env.OFFLINE_TOKEN_PUBLIC_KEY ||
   `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtklHweWPqIA+Itu55Y/q
@@ -938,7 +948,14 @@ function setupAutoUpdater(): void {
 
   autoUpdater.on("update-available", (info) => {
     console.log("[AutoUpdate] Update available:", info.version);
-    broadcastToRenderers("update:available", { version: info.version });
+    broadcastToRenderers("update:available", {
+      version: info.version,
+      notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "",
+    });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    broadcastToRenderers("update:not-available", { version: app.getVersion() });
   });
 
   autoUpdater.on("download-progress", (p) => {
@@ -948,7 +965,10 @@ function setupAutoUpdater(): void {
   autoUpdater.on("update-downloaded", (info) => {
     console.log("[AutoUpdate] Update downloaded:", info.version);
     // The banner with a restart button is shown by the renderer in response.
-    broadcastToRenderers("update:downloaded", { version: info.version });
+    broadcastToRenderers("update:downloaded", {
+      version: info.version,
+      notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "",
+    });
   });
 
   autoUpdater.on("error", (err) => {
@@ -1042,6 +1062,9 @@ app.whenReady().then(async () => {
   startSyncService();
   setTimeout(() => {
     void processPendingSyncActions();
+    // Bank an invoice number for the first sale of the session (needs the
+    // connectivity check above to have marked the device online first).
+    void prefetchInvoiceNumber();
   }, 7000);
   setInterval(() => {
     void processPendingSyncActions();
@@ -1086,6 +1109,20 @@ app.whenReady().then(async () => {
     }
   });
 
+  ipcMain.handle("app:version", () => app.getVersion());
+
+  // Manual "check for updates" from Settings → حول التطبيق. The check result
+  // arrives via the update:* broadcasts (available / not-available / error).
+  ipcMain.handle("update:check", async () => {
+    if (!app.isPackaged) return { success: false, reason: "dev" };
+    try {
+      await autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, reason: e?.message ?? String(e) };
+    }
+  });
+
   // --- Theme preference (persisted in electron-store) ---
   ipcMain.handle("theme:get", () => store.get("theme", "system"));
   ipcMain.handle("theme:set", (_: unknown, val: string) => {
@@ -1123,6 +1160,11 @@ app.whenReady().then(async () => {
         store.set("syncUserRole", "");
         store.set("syncOrgId", "");
         store.set("loggedInUserId", "");
+      }
+      // A banked invoice number belongs to the previous org's sequence.
+      const prevOrgId = String(store.get("organizationId") || "");
+      if (prevOrgId && prevOrgId !== context.organizationId) {
+        store.set("nextInvoiceNumber", "");
       }
       store.set("organizationId", context.organizationId);
       store.set("organizationName", context.organizationName);
@@ -1501,6 +1543,8 @@ app.whenReady().then(async () => {
               void syncSuppliers().catch((err: unknown) => {
                 console.error("Background supplier sync failed:", err);
               });
+              // Bank an invoice number so the first sale after login is instant.
+              void prefetchInvoiceNumber();
             }
 
             store.set("loggedInUserId", safeUser.id);
@@ -2722,14 +2766,19 @@ ipcMain.handle(
     },
   ) => {
     try {
-      // Allocate the per-org sequential invoice number from the cloud BEFORE the
-      // DB transaction (network I/O must not run inside a Prisma transaction).
-      // When online this is the SAME number the web dashboard shows. When offline
-      // we store null so /sync/sales allocates the real sequential number later and
-      // we reconcile it back — the receipt shows a temporary display number only.
-      const allocatedNumber = await allocateInvoiceNumber();
-      const invoiceNumber: string | null =
-        allocatedNumber != null ? String(allocatedNumber) : null;
+      const tStart = Date.now();
+      // Invoice number resolution, fastest first:
+      // 1. A prefetched number banked by the previous sale — instant, no network.
+      // 2. Inline cloud allocation racing the local transaction below (waits
+      //    max(network, tx) instead of their sum, capped at 1.5s).
+      // 3. Null — /sync/sales allocates the real sequential number later and
+      //    reconciles it back; the receipt shows a temporary display number.
+      const cachedNumber = takeCachedInvoiceNumber();
+      const allocationPromise: Promise<string | null> = cachedNumber
+        ? Promise.resolve(cachedNumber)
+        : allocateInvoiceNumber()
+            .then((n) => (n != null ? String(n) : null))
+            .catch(() => null);
 
       const result = await prisma.$transaction(async (tx: any) => {
         const validUser = userId
@@ -2854,7 +2903,7 @@ ipcMain.handle(
         const sale = await tx.sale.create({
           data: {
             total,
-            invoiceNumber,
+            invoiceNumber: null,
             discount: discount || 0,
             hasPriceOverride: hasPriceOverride === true,
             userId: validUser?.id ?? null,
@@ -2991,12 +3040,46 @@ ipcMain.handle(
 
         return { success: true, saleId: sale.id, invoiceNumber: sale.invoiceNumber, isCredit };
       });
+      const tTx = Date.now();
 
-      // Trigger sync immediately after success
       if (result.success) {
+        // Stamp the cloud-allocated number BEFORE syncSales pushes the sale —
+        // pushing a null number would make the server allocate a second,
+        // different number for the same sale.
+        const allocatedNumber = await allocationPromise;
+        if (allocatedNumber != null) {
+          try {
+            // Conditional stamp: if the background sync already pushed this sale
+            // (server assigned a number) in the meantime, keep the server's.
+            const stamped = await prisma.sale.updateMany({
+              where: { id: result.saleId, invoiceNumber: null },
+              data: { invoiceNumber: String(allocatedNumber) },
+            });
+            if (stamped.count > 0) {
+              result.invoiceNumber = String(allocatedNumber);
+            } else {
+              const current = await prisma.sale.findUnique({
+                where: { id: result.saleId },
+                select: { invoiceNumber: true },
+              });
+              if (current?.invoiceNumber) result.invoiceNumber = current.invoiceNumber;
+            }
+          } catch (e) {
+            // Sale already committed — a failed stamp just means the sync
+            // reconciliation assigns the number instead.
+            console.error("[Sale] Failed to stamp invoice number:", e);
+          }
+        }
+        console.log(
+          `[Sale] tx=${tTx - tStart}ms alloc-wait=${Date.now() - tTx}ms total=${Date.now() - tStart}ms number=${result.invoiceNumber ?? "local"}`,
+        );
+
+        // Trigger sync immediately after success
         syncSales().catch((err) =>
           console.error("Immediate sync failed:", err),
         );
+        // Bank the next invoice number so the NEXT checkout skips the network.
+        void prefetchInvoiceNumber();
       }
 
       return result;
@@ -3451,13 +3534,20 @@ ipcMain.handle("retry-sync-failure", async (_event, failureData) => {
         });
       }
     } else if (entityType === "DEBT_PAYMENT") {
-      await prisma.debtPayment.update({
+        await prisma.debtPayment.update({
+            where: { id: parsedPayload.id },
+            data: {
+                synced: false,
+                amount: parsedPayload.amount,
+                note: parsedPayload.note,
+            },
+        });
+    } else if (entityType === "SALE_RETURN") {
+      // A return conflict is retried only after an explicit review. The
+      // server will re-check the available quantity atomically.
+      await prisma.saleReturn.update({
         where: { id: parsedPayload.id },
-        data: {
-          synced: false,
-          amount: parsedPayload.amount,
-          note: parsedPayload.note,
-        },
+        data: { synced: false },
       });
     } else if (
       entityType === "ADD-INVENTORY" ||
@@ -3565,31 +3655,73 @@ ipcMain.handle("search-sales-by-drug", async (_event, { query, branchId }) => {
 
 ipcMain.handle(
   "return-sale",
-  async (_event, { saleId, items, notes, safeId, branchId }) => {
+  async (_event, { returnId, saleId, items, notes, safeId, branchId }) => {
+    // `returnId` is minted once per return attempt in the dialog and becomes the
+    // SaleReturn primary key, so a repeated submit (double confirm, retry) is a
+    // no-op here and in the cloud sync (/sync/returns dedupes by id).
+    const clientReturnId = typeof returnId === "string" && returnId.trim() ? returnId.trim() : null;
+    const effectiveReturnId = clientReturnId || randomUUID();
     try {
+      // A return refunds money and changes stock. It must be accepted by the
+      // server before being committed locally, otherwise another device could
+      // refund the same invoice while this offline return is still pending.
+      if (!getConnectionStatus()) {
+        return {
+          success: false,
+          error: "لا يمكن تنفيذ الإرجاع أثناء عدم الاتصال بالخادم. أعد الاتصال ثم حاول مرة أخرى.",
+        };
+      }
+
+      if (clientReturnId && (await prisma.saleReturn.findUnique({ where: { id: clientReturnId } }))) {
+        return { success: true, duplicate: true, returnId: clientReturnId };
+      }
+
       const sale = await prisma.sale.findUnique({
         where: { id: saleId },
         include: { items: true, payment: true, patient: true },
       });
       if (!sale) throw new Error("Sale not found");
 
+      const cloudItems = (Array.isArray(items) ? items : []).map((item: any) => ({
+        drugId: String(item.drugId),
+        quantity: Number(item.quantity),
+        // The server ignores this client value and re-reads the sale price;
+        // using the local sale price keeps the request self-describing.
+        price: Number(sale.items.find((line: any) => line.drugId === item.drugId)?.price ?? 0),
+      }));
+      const cloudResult = await pushSaleReturnToCloud({
+        id: effectiveReturnId,
+        saleId,
+        branchId: branchId || sale.branchId,
+        safeId: safeId || sale.safeId || null,
+        userId: (store.get("loggedInUserId") as string) || null,
+        total: cloudItems.reduce((sum, item) => sum + item.quantity * item.price, 0),
+        createdAt: new Date().toISOString(),
+        notes: notes || null,
+        items: cloudItems,
+      });
+      if (!cloudResult.success) return { success: false, error: cloudResult.error };
+
       const result = await prisma.$transaction(async (tx: any) => {
-        const returnAmount = items.reduce(
-          (sum: number, item: any) => sum + item.quantity * item.price,
-          0,
-        );
+        // The cloud has already accepted and validated this exact return under
+        // the invoice lock. Mirror that authoritative result locally.
+        const validItems = cloudItems;
+        const returnAmount = validItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
+        const returnSafeId = safeId || sale.safeId || null;
 
         // Create Return record
         const saleReturn = await tx.saleReturn.create({
           data: {
+            id: effectiveReturnId,
             saleId,
             branchId: branchId || "default",
-            safeId: safeId || null,
+            safeId: returnSafeId,
             userId: (store.get("loggedInUserId") as string) || null,
             total: returnAmount,
             notes: notes || null,
+            synced: true,
             items: {
-              create: items.map((item: any) => ({
+              create: validItems.map((item: any) => ({
                 drugId: item.drugId,
                 quantity: item.quantity,
                 price: item.price,
@@ -3604,14 +3736,14 @@ ipcMain.handle(
             where: { id: sale.patientId },
             data: { balance: { decrement: returnAmount } },
           });
-        } else if (safeId) {
+        } else if (returnSafeId) {
           await tx.safe.update({
-            where: { id: safeId },
+            where: { id: returnSafeId },
             data: { balance: { decrement: returnAmount } },
           });
           await tx.transaction.create({
             data: {
-              safeId,
+              safeId: returnSafeId,
               type: "OUT",
               amount: returnAmount,
               referenceType: "SALE_RETURN",
@@ -3622,7 +3754,7 @@ ipcMain.handle(
         }
 
         // Restore Inventory
-        for (const item of items) {
+        for (const item of validItems) {
           const inventory = await tx.inventory.findFirst({
             where: { drugId: item.drugId },
             include: { batches: { orderBy: { expiryDate: "desc" }, take: 1 } },
@@ -3645,6 +3777,10 @@ ipcMain.handle(
 
       return { success: true, returnId: result.id };
     } catch (error: any) {
+      // Concurrent submit with the same id: the other one already recorded it.
+      if (effectiveReturnId && error?.code === "P2002") {
+        return { success: true, duplicate: true, returnId: effectiveReturnId };
+      }
       console.error("Sale return error:", error);
       return { success: false, error: error.message };
     }

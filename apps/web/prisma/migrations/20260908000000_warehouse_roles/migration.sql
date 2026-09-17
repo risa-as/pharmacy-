@@ -1,0 +1,70 @@
+-- ============================================================================
+-- STATUS: NOT YET APPLIED. Verified 2026-09-05 via `npx prisma migrate
+-- status`: 22 migrations found, 19 applied, and exactly THREE pending —
+-- 20260905000000_drop_warehouse_order_item_total_price,
+-- 20260906000000_warehouse_stock, and 20260907000000_warehouse_accounts.
+-- This migration (20260908000000) is a FOURTH, NEW pending migration on top
+-- of those three, making four pending in total once this file lands. There
+-- is no other backlog: the "6 pending migrations" warning that appears in
+-- some older migration headers in this repo is stale and does not describe
+-- the current database.
+--
+-- ORDER OF APPLICATION — a human must run, in this exact order:
+--   1. 20260905000000_drop_warehouse_order_item_total_price (already pending, unrelated to this change)
+--   2. 20260906000000_warehouse_stock                       (already pending, unrelated to this change)
+--   3. 20260907000000_warehouse_accounts                    (already pending, unrelated to this change)
+--   4. This migration (20260908000000_warehouse_roles)
+-- via:
+--     npx prisma migrate deploy
+--
+-- Hand-written rather than generated via `prisma migrate dev`, because that
+-- command must never be run against this repo's .env DATABASE_URL — it
+-- points at the LIVE production database (6 customer organizations, 11
+-- users, 10,217 sales). A single four-value ALTER TYPE change is simple
+-- enough to write by hand with confidence; it was still cross-checked
+-- offline (no DB connection, no writes) against the exact enum shape in
+-- prisma/schema.prisma.
+--
+-- SCOPE (Phase 3 of the Muthakhar/Warehouse B2B feature — الأدوار
+-- والصلاحيات): WarehouseUserType had only OWNER/STAFF, so a مذخر's
+-- salesperson, storekeeper and accountant were all equally able to touch
+-- pricing, stock, and money — made worse by Phase 1 (stock adjustments/
+-- write-offs) and Phase 2 (credit limits/payment recording), which were
+-- reachable by anyone in the مذخر. This migration adds four new enum
+-- values — MANAGER, SALES, INVENTORY, ACCOUNTANT — so an owner can assign a
+-- role that actually matches what an employee is trusted to do. STAFF is
+-- kept (Postgres cannot drop an enum value that existing rows may reference
+-- without rewriting the table, out of scope for this additive migration)
+-- but is now DEPRECATED: app/lib/warehouse-permissions.ts treats any
+-- existing STAFF row as an exact synonym for SALES at runtime, and
+-- app/warehouse/users/UsersClient.tsx no longer offers STAFF as an
+-- assignable role when creating or editing a user — it is shown read-only
+-- only if an existing row already has it.
+--
+-- No new column: permissions live in the existing User.permissions JSON
+-- column (String?, already used by the pharmacy side of the app for the
+-- identical per-user-override pattern) — see
+-- app/lib/warehouse-permissions.ts. This migration touches no column, no
+-- table, no index, no foreign key — only the WarehouseUserType enum's value
+-- list.
+--
+-- SAFETY NOTE — ADD VALUE and the surrounding transaction: on PostgreSQL
+-- < 12, ALTER TYPE ... ADD VALUE could not run inside a transaction block at
+-- all. PostgreSQL 12+ (this project's Neon/Postgres is well past that)
+-- allows it inside a transaction, but with one restriction: the newly-added
+-- value must not be *read* (compared, cast, or referenced by another DDL
+-- statement) within that SAME transaction, or Postgres raises "unsafe use of
+-- new value of enum type". Prisma's migrate deploy wraps each migration file
+-- in one transaction, but this file contains ONLY the four ADD VALUE
+-- statements below and nothing that reads MANAGER/SALES/INVENTORY/
+-- ACCOUNTANT back — every actual read of one of these values happens later,
+-- from application code, in a separate connection and transaction opened
+-- after this migration has already committed. So this migration is safe to
+-- apply as a single transaction here.
+-- ============================================================================
+
+-- AlterEnum
+ALTER TYPE "WarehouseUserType" ADD VALUE IF NOT EXISTS 'MANAGER';
+ALTER TYPE "WarehouseUserType" ADD VALUE IF NOT EXISTS 'SALES';
+ALTER TYPE "WarehouseUserType" ADD VALUE IF NOT EXISTS 'INVENTORY';
+ALTER TYPE "WarehouseUserType" ADD VALUE IF NOT EXISTS 'ACCOUNTANT';

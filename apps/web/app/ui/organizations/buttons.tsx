@@ -19,7 +19,7 @@ export function DeleteOrganization({ id }: { id: string }) {
     const deleteOrganizationWithId = deleteOrganization.bind(null, id);
 
     return (
-        <form action={deleteOrganizationWithId}>
+        <form>
             <DeleteButton
                 action={deleteOrganizationWithId}
                 description="المنظمة"

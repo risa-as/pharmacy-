@@ -18,7 +18,7 @@ import { jwtVerify } from 'jose';
  * Callers return empty data (not 401) on null so the mobile polling loop
  * never triggers a spurious auto-logout.
  */
-async function resolveUserId(req: NextRequest): Promise<string | null> {
+async function resolveIdentity(req: NextRequest): Promise<string | null> {
     // 1. NextAuth session (web dashboard)
     const session = await auth();
     if (session?.user?.id) return session.user.id as string;
@@ -35,6 +35,13 @@ async function resolveUserId(req: NextRequest): Promise<string | null> {
     } catch {
         return null;
     }
+}
+
+async function resolveUserId(req: NextRequest): Promise<string | null> {
+    const id = await resolveIdentity(req);
+    if (typeof id !== 'string' || !id) return null;
+    const user = await prisma.user.findUnique({ where: { id }, select: { isActive: true, role: true, warehouse: { select: { isActive: true } } } });
+    return user?.isActive && (user.role !== 'WAREHOUSE' || user.warehouse?.isActive) ? id : null;
 }
 
 /**
@@ -54,10 +61,13 @@ export async function GET(req: NextRequest) {
 
         const { searchParams } = new URL(req.url);
         const unreadOnly = searchParams.get('unread') === '1';
+        const kindFilter = searchParams.get('kind') === 'WAREHOUSE_ORDER'
+            ? { data: { path: ['kind'], equals: 'WAREHOUSE_ORDER' } } : {};
 
         const notifications = await prisma.notification.findMany({
             where: {
                 userId,
+                ...kindFilter,
                 ...(unreadOnly ? { isRead: false } : {}),
             },
             orderBy: [
@@ -68,7 +78,7 @@ export async function GET(req: NextRequest) {
         });
 
         const unreadCount = await prisma.notification.count({
-            where: { userId, isRead: false },
+            where: { userId, isRead: false, ...kindFilter },
         });
 
         return NextResponse.json({ notifications, unreadCount });

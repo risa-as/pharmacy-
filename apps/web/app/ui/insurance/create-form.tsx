@@ -1,13 +1,13 @@
 "use client";
+import { useActionState } from "react";
 
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { createInsuranceCompany } from "@/app/lib/actions/insurance";
 import { Building2, ArrowRight } from "lucide-react";
 
 export default function CreateInsuranceForm() {
     const initialState: any = { message: "", errors: {} };
-    const [state, dispatch] = useFormState(createInsuranceCompany, initialState);
+    const [state, dispatch] = useActionState(createInsuranceCompany, initialState);
 
     return (
         <form action={dispatch} className="space-y-6">

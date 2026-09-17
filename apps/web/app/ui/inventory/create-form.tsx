@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useFormState } from "react-dom";
+import { useState, useActionState} from "react";
 import { createInventory } from "@/app/lib/actions/inventory";
 import Link from "next/link";
 import { Package, ArrowRight } from "lucide-react";
@@ -20,7 +19,7 @@ interface Drug {
 
 export default function CreateInventoryForm({ branches, drugs }: { branches: Branch[]; drugs: Drug[] }) {
     const initialState: any = { message: "", errors: {} };
-    const [state, dispatch] = useFormState(createInventory, initialState);
+    const [state, dispatch] = useActionState(createInventory, initialState);
     const [packetPrice, setPacketPrice] = useState<number>(0);
     const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
     const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;

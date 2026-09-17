@@ -22,7 +22,7 @@ const FEATURE_NAMES: Record<keyof PlanFeatureFlags, string> = {
   granularPermissions: "الصلاحيات التفصيلية",
   branchManagement: "إدارة الفروع",
   branchComparison: "مقارنة الفروع",
-  warehouseManagement: "إدارة المستودعات",
+  warehouseManagement: "إدارة المذاخر",
   interBranchTransfers: "التحويلات بين الفروع",
   marketplace: "سوق الأدوية B2B",
 };

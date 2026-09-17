@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { PackageOpen, ArrowUpRight, ArrowDownLeft, CheckCircle2, Clock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
+// sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
+// sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
+import { toast } from 'sonner';
 
 export function StartTransferButton() {
     return (

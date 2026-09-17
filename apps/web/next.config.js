@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    // Keep CI/readiness builds isolated from a concurrently running dev server.
+    distDir: process.env.NEXT_BUILD_DIR || '.next',
     transpilePackages: ["@faramace/ui"],
 
     // ── Standalone build (portable, no node_modules needed on target machine)

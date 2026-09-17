@@ -110,7 +110,7 @@ export async function POST(req: Request) {
                 : (organizationId
                       ? await tx.globalDrug.findFirst({ where: { barcode, organizationId } })
                       : null) ??
-                  (await tx.globalDrug.findFirst({ where: { barcode, organizationId: null } }));
+                  (await tx.globalDrug.findFirst({ where: { barcode, organizationId: null, warehouseId: null } }));
 
             if (drug) {
                 // Global drugs (organizationId: null) are read-only — use as-is without modifying.

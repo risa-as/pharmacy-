@@ -44,7 +44,13 @@
         --input:               40 12% 88%;
         --ring:                177 90% 30%;
 
-        --radius:              0.5rem;
+        /* ┌─────────────────────────────────────────────────────────────┐
+           │ Single source of truth for ALL corner radii (cards, buttons, │
+           │ inputs, modals…). Change this one value to restyle the whole  │
+           │ desktop app. Every rounded-sm/md/lg/xl/2xl/3xl maps here via  │
+           │ tailwind.config.ts. (rounded-full stays circular.)            │
+           └─────────────────────────────────────────────────────────────┘ */
+        --radius:              5px;
 
         /* Auth gradient — desktop login screen */
         --gradient-auth-from:  #0f0c29;

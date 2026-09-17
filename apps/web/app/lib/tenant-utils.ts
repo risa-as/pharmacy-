@@ -4,6 +4,8 @@ import { jwtVerify } from 'jose';
 import { headers } from 'next/headers';
 import { cache } from 'react';
 import { getUserPermissions, UserPermissions } from '@/app/lib/permissions';
+import { isWarehouseRole } from '@/app/lib/warehouse-context';
+import { prisma } from '@/app/lib/prisma';
 
 export interface TenantContext {
     user: {
@@ -74,6 +76,34 @@ export const getTenantContext = cache(
             } catch {
                 return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
             }
+        }
+
+        // Claims prove identity; current database values determine access. Disabling
+        // or moving an employee must take effect before their JWT expires.
+        if (typeof userId !== 'string' || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const currentUser = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true, isActive: true, branchId: true, permissions: true, branch: { select: { organizationId: true } } },
+        });
+        if (!currentUser?.isActive) return NextResponse.json({ error: 'Account disabled or unavailable' }, { status: 403 });
+        role = currentUser.role;
+        branchId = currentUser.branchId ?? undefined;
+        organizationId = currentUser.branch?.organizationId;
+        permissionsOverride = currentUser.permissions;
+
+        // Stage 1 (المذاخر/B2B): a WAREHOUSE account belongs to no Organization
+        // and no Branch — it must never resolve a pharmacy tenant context.
+        // Today this is *also* true implicitly, because such an account has no
+        // branchId and would fall through to the "Branch not assigned" 403
+        // below. That is emergent, not enforced: the moment anyone sets a
+        // branchId on a WAREHOUSE-role user (an admin UI, a seed script, a bad
+        // migration), tenant isolation would silently evaporate. Reject on the
+        // role itself so the property holds regardless of the other fields.
+        if (isWarehouseRole(role)) {
+            return NextResponse.json(
+                { error: "Warehouse accounts cannot access pharmacy data" },
+                { status: 403 }
+            );
         }
 
         const isSuperAdmin = role === 'SUPER_ADMIN';

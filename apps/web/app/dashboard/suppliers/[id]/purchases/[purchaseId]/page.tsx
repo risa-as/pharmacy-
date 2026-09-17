@@ -16,11 +16,12 @@ import { NextResponse } from "next/server";
 import { getPurchaseById } from "@/app/lib/actions/purchases";
 import PrintInvoiceButton from "./print-button";
 
-export default async function PurchaseDetailPage({
-  params,
-}: {
-  params: { id: string; purchaseId: string };
-}) {
+export default async function PurchaseDetailPage(
+  props: {
+    params: Promise<{ id: string; purchaseId: string }>;
+  }
+) {
+  const params = await props.params;
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) redirect("/login");
 

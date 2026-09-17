@@ -1,320 +1,90 @@
-import React from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Linking,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../../context/ThemeContext";
-import { managerPalette } from "../../constants/colors";
+import React from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router, Href } from 'expo-router';
+import { Radius } from '../../constants/colors';
+import { usePalette, Surface, IconTile, SectionTitle, AppButton, InfoNote, Tone } from '../../components/ui/Kit';
 
-const PHONE = "+9647857581997";
-const WHATSAPP_URL = `https://wa.me/9647857581997`;
-const CALL_URL = `tel:${PHONE}`;
+const PHONE = '+9647857581997';
+const WHATSAPP_URL = 'https://wa.me/9647857581997';
+const WHATSAPP_GREEN = '#25D366';
 
+/** Each question opens the screen where the task is actually done. */
+const FAQS: {
+    q: string;
+    where: string;
+    icon: React.ComponentProps<typeof IconTile>['icon'];
+    tone: Tone;
+    href: string;
+}[] = [
+    { q: 'كيف أضيف صنفاً؟', where: 'من المخزون ثم إضافة', icon: 'cube-outline', tone: 'primary', href: '/(tabs)/inventory' },
+    { q: 'كيف أسجل بيعاً؟', where: 'من نقطة البيع', icon: 'cart-outline', tone: 'success', href: '/(tabs)/sales' },
+    { q: 'كيف أطلب من المورد؟', where: 'من الطلبات الذكية', icon: 'document-text-outline', tone: 'warning', href: '/(tabs)/smart-orders' },
+];
+
+/** Support (design support.png): call, WhatsApp, and questions that open the right screen. */
 export default function SupportScreen() {
-  const { isDarkMode } = useTheme();
-  const C = managerPalette(isDarkMode);
+    const C = usePalette();
 
-  const channels = [
-    {
-      label: "اتصل بنا",
-      subtitle: PHONE,
-      icon: "call" as const,
-      iconBg: C.primaryMuted,
-      iconColor: C.primary,
-      bg: C.primary,
-      textColor: "#fff",
-      onPress: () => Linking.openURL(CALL_URL),
-    },
-    {
-      label: "واتساب",
-      subtitle: "راسلنا مباشرة",
-      icon: "logo-whatsapp" as const,
-      iconBg: "#E7F9EE",
-      iconColor: "#25D366",
-      bg: "#25D366",
-      textColor: "#fff",
-      onPress: () => Linking.openURL(WHATSAPP_URL),
-    },
-  ];
-
-  const faqs = [
-    {
-      q: "كيف أضيف منتجاً جديداً؟",
-      a: 'من صفحة المخزون اضغط على زر "+" في أعلى الصفحة.',
-    },
-    {
-      q: "كيف أسجل بيعاً؟",
-      a: 'من الصفحة الرئيسية اضغط على "نقطة البيع" واختر المنتجات.',
-    },
-    {
-      q: "كيف أطلب من المورد؟",
-      a: "من صفحة الطلبات الذكية أو إنشاء طلب شراء يدوي.",
-    },
-  ];
-
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: C.background }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header */}
-      <View
-        style={{
-          backgroundColor: C.card,
-          borderRadius: 5,
-          padding: 20,
-          alignItems: "center",
-          borderWidth: 1.5,
-          borderColor: `${C.primary}33`,
-          marginBottom: 20,
-        }}
-      >
-        <View
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: 5,
-            backgroundColor: C.primaryMuted,
-            justifyContent: "center",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <Ionicons name="headset" size={32} color={C.primary} />
-        </View>
-        <Text
-          style={{
-            color: C.foreground,
-            fontSize: 18,
-            fontWeight: "900",
-            marginBottom: 6,
-          }}
-        >
-          هل تحتاج مساعدة؟
-        </Text>
-        <Text
-          style={{
-            color: C.mutedForeground,
-            fontSize: 13,
-            textAlign: "center",
-            lineHeight: 20,
-          }}
-        >
-          فريق الدعم متاح لمساعدتك خلال أوقات العمل
-        </Text>
-
-        {/* Hours badge */}
-        <View
-          style={{
-            flexDirection: "row-reverse",
-            alignItems: "center",
-            gap: 5,
-            backgroundColor: C.successBg,
-            borderRadius: 5,
-            paddingHorizontal: 12,
-            paddingVertical: 5,
-            marginTop: 12,
-          }}
-        >
-          <Ionicons name="time-outline" size={13} color={C.success} />
-          <Text style={{ color: C.success, fontSize: 12, fontWeight: "700" }}>
-            ٩ ص — ٦ م · السبت إلى الخميس
-          </Text>
-        </View>
-      </View>
-
-      {/* Contact channels */}
-      <Text
-        style={{
-          color: C.mutedForeground,
-          fontSize: 11,
-          fontWeight: "700",
-          textAlign: "right",
-          marginBottom: 10,
-          paddingHorizontal: 4,
-          letterSpacing: 0.5,
-        }}
-      >
-        وسائل التواصل
-      </Text>
-
-      <View style={{ gap: 10, marginBottom: 24 }}>
-        {channels.map((ch) => (
-          <TouchableOpacity
-            key={ch.label}
-            onPress={ch.onPress}
-            activeOpacity={0.85}
-            style={{
-              flexDirection: "row-reverse",
-              alignItems: "center",
-              gap: 12,
-              backgroundColor: C.card,
-              borderRadius: 5,
-              borderWidth: 1.5,
-              borderColor: `${C.primary}33`,
-              paddingVertical: 14,
-              paddingHorizontal: 14,
-              elevation: 1,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.04,
-              shadowRadius: 4,
-            }}
-          >
-            <View
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 5,
-                backgroundColor: ch.iconBg,
-                justifyContent: "center",
-                alignItems: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Ionicons name={ch.icon} size={21} color={ch.iconColor} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  color: C.foreground,
-                  fontSize: 15,
-                  fontWeight: "700",
-                  textAlign: "right",
-                }}
-              >
-                {ch.label}
-              </Text>
-              <Text
-                style={{
-                  color: C.mutedForeground,
-                  fontSize: 12,
-                  textAlign: "right",
-                  marginTop: 2,
-                }}
-              >
-                {ch.subtitle}
-              </Text>
-            </View>
-            <Ionicons name="chevron-back" size={16} color={C.mutedForeground} />
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* FAQ */}
-      <Text
-        style={{
-          color: C.mutedForeground,
-          fontSize: 11,
-          fontWeight: "700",
-          textAlign: "right",
-          marginBottom: 10,
-          paddingHorizontal: 4,
-          letterSpacing: 0.5,
-        }}
-      >
-        أسئلة شائعة
-      </Text>
-
-      <View
-        style={{
-          backgroundColor: C.card,
-          borderRadius: 5,
-          borderWidth: 1.5,
-          borderColor: `${C.primary}33`,
-          overflow: "hidden",
-        }}
-      >
-        {faqs.map((faq, i) => (
-          <View key={i}>
-            <View style={{ padding: 14 }}>
-              <View
-                style={{
-                  flexDirection: "row-reverse",
-                  alignItems: "flex-start",
-                  gap: 8,
-                  marginBottom: 6,
-                }}
-              >
-                <View
-                  style={{
-                    backgroundColor: C.primaryMuted,
-                    borderRadius: 5,
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: C.primary,
-                      fontSize: 10,
-                      fontWeight: "800",
-                    }}
-                  >
-                    س
-                  </Text>
+    return (
+        <ScrollView style={{ flex: 1, backgroundColor: C.background }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32, gap: 16 }}>
+            <Surface style={{ alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: C.foreground, fontSize: 20, fontWeight: '900' }}>كيف نساعدك؟</Text>
+                <Text style={{ color: C.mutedForeground, fontSize: 14 }}>اختر وسيلة التواصل المناسبة</Text>
+                <View style={{ flexDirection: 'row-reverse', gap: 10, alignSelf: 'stretch', marginTop: 6 }}>
+                    <AppButton label="اتصال" icon="call-outline" style={{ flex: 1, paddingVertical: 11 }} onPress={() => Linking.openURL(`tel:${PHONE}`)} />
+                    {/* WhatsApp keeps its own green, as in the design */}
+                    <TouchableOpacity
+                        onPress={() => Linking.openURL(WHATSAPP_URL)}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel="واتساب"
+                        style={{
+                            flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8,
+                            backgroundColor: C.card, borderWidth: 1, borderColor: WHATSAPP_GREEN,
+                            borderRadius: Radius.control, paddingVertical: 11, paddingHorizontal: 14,
+                        }}
+                    >
+                        <Text style={{ color: WHATSAPP_GREEN, fontSize: 15, fontWeight: '800' }}>واتساب</Text>
+                        <Ionicons name="logo-whatsapp" size={18} color={WHATSAPP_GREEN} />
+                    </TouchableOpacity>
                 </View>
-                <Text
-                  style={{
-                    color: C.foreground,
-                    fontSize: 14,
-                    fontWeight: "700",
-                    textAlign: "right",
-                    flex: 1,
-                  }}
-                >
-                  {faq.q}
-                </Text>
-              </View>
-              <View
-                style={{
-                  flexDirection: "row-reverse",
-                  alignItems: "flex-start",
-                  gap: 8,
-                }}
-              >
-                <View
-                  style={{
-                    backgroundColor: C.successBg,
-                    borderRadius: 5,
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: C.success,
-                      fontSize: 10,
-                      fontWeight: "800",
-                    }}
-                  >
-                    ج
-                  </Text>
+            </Surface>
+
+            <View>
+                <SectionTitle title="أسئلة شائعة" />
+                <View style={{ gap: 10 }}>
+                    {FAQS.map(f => (
+                        <TouchableOpacity
+                            key={f.q}
+                            onPress={() => router.push(f.href as Href)}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${f.q} — ${f.where}`}
+                        >
+                            <Surface padded={false} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 12 }}>
+                                <IconTile icon={f.icon} tone={f.tone} size={44} />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: C.foreground, fontSize: 15.5, fontWeight: '900', textAlign: 'right' }} numberOfLines={1}>{f.q}</Text>
+                                    <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>{f.where}</Text>
+                                </View>
+                                <View style={{ width: 1, height: 34, backgroundColor: C.border }} />
+                                <View style={{
+                                    flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
+                                    backgroundColor: C.primaryMuted, borderRadius: Radius.control,
+                                    paddingHorizontal: 12, paddingVertical: 8,
+                                }}>
+                                    <Text style={{ color: C.primary, fontSize: 13.5, fontWeight: '800' }}>فتح</Text>
+                                    <Ionicons name="chevron-back" size={15} color={C.primary} />
+                                </View>
+                            </Surface>
+                        </TouchableOpacity>
+                    ))}
                 </View>
-                <Text
-                  style={{
-                    color: C.mutedForeground,
-                    fontSize: 13,
-                    textAlign: "right",
-                    flex: 1,
-                    lineHeight: 19,
-                  }}
-                >
-                  {faq.a}
-                </Text>
-              </View>
             </View>
-            {i < faqs.length - 1 && (
-              <View style={{ height: 1, backgroundColor: C.border }} />
-            )}
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
+
+            <InfoNote text="عند انقطاع الإنترنت يُحفظ البيع النقدي والبطاقة على الجهاز ويُرسل عند عودة الاتصال. البيع الآجل يحتاج اتصالاً." />
+            <View style={{ height: Radius.card }} />
+        </ScrollView>
+    );
 }

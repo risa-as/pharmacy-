@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 import { isSuperAdminRoute, isPharmacyOnlyRoute } from "@/app/lib/super-admin-guard";
 import { isBlockedInGracePeriod } from "@/app/lib/grace-period-guard";
+import { isWarehouseRole } from "@/app/lib/warehouse-role";
 import { NextResponse } from "next/server";
 
 const { auth } = NextAuth(authConfig);
@@ -17,11 +18,27 @@ export default auth((req) => {
         return Response.redirect(new URL("/login", nextUrl));
     }
 
+    // ── Stage 1 (warehouses/B2B): identity-layer isolation ─────────────────────
+    // This is the check that actually enforces "not logged in => redirect to
+    // login" for /warehouse — NOT auth.config.ts's authorized() callback.
+    // next-auth's handleAuth() (node_modules/next-auth/lib/index.js) only
+    // short-circuits the wrapped middleware function when authorized()
+    // returns a Response; a plain `false` return falls through to
+    // `else if (userMiddlewareOrRoute)` and the wrapped function (this one)
+    // still runs regardless. authorized() returns `false` for /warehouse for
+    // symmetry/documentation only — this line, like the identical /dashboard
+    // check above (same pre-existing gap), is the real gate.
+    if (!req.auth && nextUrl.pathname.startsWith("/warehouse")) {
+        return Response.redirect(new URL("/login", nextUrl));
+    }
+
     // Skip root page SSR entirely for authenticated users — redirect straight to
-    // dashboard via fast middleware (avoids the 15+ second auth() cold-start call
-    // in app/page.tsx that caused a blank white screen on first load).
+    // the user's home (dashboard, or /warehouse for a WAREHOUSE account) via fast
+    // middleware (avoids the 15+ second auth() cold-start call in app/page.tsx
+    // that caused a blank white screen on first load).
     if (req.auth && nextUrl.pathname === "/") {
-        return Response.redirect(new URL("/dashboard", nextUrl));
+        const home = isWarehouseRole(role || "") ? "/warehouse" : "/dashboard";
+        return Response.redirect(new URL(home, nextUrl));
     }
 
     // SUPER_ADMIN must not access pharmacy operations routes

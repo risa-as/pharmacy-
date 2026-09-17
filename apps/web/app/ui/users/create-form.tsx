@@ -1,6 +1,6 @@
 "use client";
+import { useActionState } from "react";
 
-import { useFormState } from "react-dom";
 import Link from "next/link";
 import { Button } from "@faramace/ui";
 import { createUser } from "@/app/lib/actions/create-user-safe";
@@ -14,7 +14,7 @@ interface Branch {
 
 export default function CreateUserForm({ branches }: { branches: Branch[] }) {
     const initialState: any = { message: "", errors: {} };
-    const [state, dispatch] = useFormState(createUser, initialState);
+    const [state, dispatch] = useActionState(createUser, initialState);
 
     return (
         <form action={dispatch} className="space-y-6">

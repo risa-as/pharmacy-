@@ -22,8 +22,7 @@ const fs = require("fs");
 const dir = path.join(__dirname, "..");
 const { PrismaClient } = require(path.join(dir, "node_modules", ".prisma", "desktop-client"));
 process.env.DATABASE_URL = process.env.DATABASE_URL || ("file:" + path.join(dir, "prisma", "local.db"));
-// xlsx متوفرة في node_modules بجذر المشروع
-const XLSX = require(path.join(dir, "..", "..", "node_modules", "xlsx"));
+const ExcelJS = require("exceljs");
 
 const prisma = new PrismaClient();
 
@@ -235,12 +234,14 @@ function detect(tradeName) {
     });
   }
 
-  const ws = XLSX.utils.json_to_sheet(out);
-  ws["!cols"] = [{ wch: 38 }, { wch: 16 }, { wch: 26 }, { wch: 16 }, { wch: 20 }, { wch: 18 }, { wch: 20 }, { wch: 12 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Drugs");
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Drugs", { views: [{ rightToLeft: true }] });
+  const headers = Object.keys(out[0] ?? {});
+  ws.addRow(headers);
+  ws.addRows(out.map((row) => headers.map((header) => row[header])));
+  [38, 16, 26, 16, 20, 18, 20, 12].forEach((width, index) => { ws.getColumn(index + 1).width = width; });
   const outPath = path.join(dir, "drugs-enrichment-review.xlsx");
-  XLSX.writeFile(wb, outPath);
+  await wb.xlsx.writeFile(outPath);
 
   console.log("\n✅ تم إنشاء الملف:", outPath);
   console.log("إجمالي الأدوية:", rows.length);

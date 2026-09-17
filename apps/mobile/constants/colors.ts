@@ -1,27 +1,25 @@
 /**
  * Faramace Mobile — Design Token Color Constants
  *
- * These values mirror `packages/shared/tailwind.config.ts → staticTokens`.
- * ⚠ Keep in sync when updating the shared config.
+ * One medical-blue identity for every screen (mobile redesign 012, see
+ * specs/012-mobile-redesign). Flat colours only — no gradients.
+ *
+ * Status semantics (navigation-map §12):
+ *   warning (orange) → low stock / near expiry / pending
+ *   danger  (red)    → expired / critical
+ *   success (green)  → healthy / completed
  *
  * Usage:
- *   - For Ionicons / image tint props: `<Ionicons color={Colors.light.primary} />`
- *   - For future NativeWind className migration, prefer `className="text-primary"` instead.
- *   - For StyleSheet.create inline styles, use these named constants instead of raw hex
- *     literals so changes propagate from one place.
- *
- * Migration note:
- *   Existing screens use StyleSheet.create with inline hex values (pre-existing debt).
- *   New screens MUST use NativeWind className props. When refactoring existing screens,
- *   replace StyleSheet hex values with these constants first, then migrate to className.
+ *   const { isDarkMode } = useTheme();
+ *   const C = Colors(isDarkMode);
  */
 
-/** Light-mode palette — matches staticTokens light values */
+/** Light-mode palette */
 export const LightColors = {
     // Brand
-    primary:    '#0F7575',
-    primarySoft:'#1CABAC',
-    primaryMuted:'#E6F4F4',
+    primary:     '#1E6FBF',
+    primarySoft: '#3B8FD6',
+    primaryMuted:'#E8F1FA',
 
     // Semantic
     success:    '#2D8A52',
@@ -30,27 +28,27 @@ export const LightColors = {
     warningBg:  '#FDF3E3',
     danger:     '#B03030',
     dangerBg:   '#FAEAEA',
-    info:       '#2B6F8F',
-    infoBg:     '#E5F1F7',
+    info:       '#1E6FBF',
+    infoBg:     '#EAF2FB',
 
     // Surfaces
-    background: '#FAFAF8',
+    background: '#F4F7FB',
     card:       '#FFFFFF',
-    border:     '#E8E3DC',
-    input:      '#E8E3DC',
+    border:     '#DCE5EF',
+    input:      '#F1F5F9',
 
     // Text
-    foreground:       '#18120F',
-    mutedForeground:  '#7A7068',
-    cardForeground:   '#18120F',
+    foreground:       '#172B43',
+    mutedForeground:  '#62748A',
+    cardForeground:   '#172B43',
 } as const;
 
-/** Dark-mode palette — matches staticTokens dark values */
+/** Dark-mode palette */
 export const DarkColors = {
     // Brand
-    primary:    '#1CABAC',
-    primarySoft:'#0F7575',
-    primaryMuted:'#0F2B2B',
+    primary:     '#3B8FD6',
+    primarySoft: '#1E6FBF',
+    primaryMuted:'#0E2740',
 
     // Semantic
     success:    '#44C47A',
@@ -59,71 +57,56 @@ export const DarkColors = {
     warningBg:  '#2B1C08',
     danger:     '#D86B6B',
     dangerBg:   '#2B0E0E',
-    info:       '#5B9FBE',
-    infoBg:     '#0C1E29',
+    info:       '#3B8FD6',
+    infoBg:     '#0E2740',
 
     // Surfaces
-    background: '#181614',
-    card:       '#211E1B',
-    border:     '#2E2924',
-    input:      '#2E2924',
+    background: '#0E1620',
+    card:       '#16202C',
+    border:     '#243140',
+    input:      '#1B2733',
 
     // Text
-    foreground:       '#F5EFE8',
-    mutedForeground:  '#A09488',
-    cardForeground:   '#F5EFE8',
+    foreground:       '#EAF0F7',
+    mutedForeground:  '#94A3B8',
+    cardForeground:   '#EAF0F7',
 } as const;
 
+export type Palette = { [K in keyof typeof LightColors]: string };
+
 /**
- * Shared corner-radius scale.
- * Kept deliberately small for a crisp, modern look — change here to retune globally.
- *   xs → icon tiles, pills, chips, dividers
- *   sm → cards, hero, buttons (default surface radius)
- *   md → large surfaces / sheets
+ * Shared corner-radius scale (design rule: cards 8, controls 6, badges 5).
+ *   badge / xs → pills, chips, status badges, icon tiles
+ *   control / sm → buttons, inputs, segmented controls
+ *   card / md → cards, sheets, large surfaces
  */
 export const Radius = {
-    xs: 4,
+    xs: 5,
     sm: 6,
     md: 8,
+    badge: 5,
+    control: 6,
+    card: 8,
 } as const;
 
 /**
- * Convenience helper — returns the correct palette based on the OS color scheme.
+ * Returns the palette for the current theme.
  *
  * @example
  * const { isDarkMode } = useTheme();
  * const C = Colors(isDarkMode);
  * <Ionicons color={C.primary} />
  */
-export function Colors(isDark: boolean) {
+export function Colors(isDark: boolean): Palette {
     return isDark ? DarkColors : LightColors;
 }
 
 /**
- * Medical-blue palette — scoped to the manager-only screens (home, reports).
- * Mirrors the shape of `Colors` but swaps the teal brand for a clinical blue
- * with cooler slate neutrals. Other (shared) screens keep the global theme.
+ * Kept for existing call sites — the manager and shared screens now use the
+ * same blue palette, so this is an alias of `Colors`.
  */
-export function managerPalette(isDark: boolean) {
-    return isDark
-        ? {
-            primary: '#3B8FD6', primarySoft: '#1E6FBF', primaryMuted: '#0E2740',
-            success: '#44C47A', successBg: '#0D2B1A',
-            warning: '#D4934A', warningBg: '#2B1C08',
-            danger:  '#D86B6B', dangerBg:  '#2B0E0E',
-            info:    '#2DB3B3', infoBg:    '#0C2424',
-            background: '#0E1620', card: '#16202C', border: '#243140', input: '#243140',
-            foreground: '#EAF0F7', mutedForeground: '#94A3B8',
-        }
-        : {
-            primary: '#1E6FBF', primarySoft: '#3B8FD6', primaryMuted: '#E6F0FA',
-            success: '#2D8A52', successBg: '#E8F5EE',
-            warning: '#C47820', warningBg: '#FDF3E3',
-            danger:  '#B03030', dangerBg:  '#FAEAEA',
-            info:    '#0E8C8C', infoBg:    '#E3F4F4',
-            background: '#F4F7FB', card: '#FFFFFF', border: '#E2E8F0', input: '#E2E8F0',
-            foreground: '#16202C', mutedForeground: '#64748B',
-        };
+export function managerPalette(isDark: boolean): Palette {
+    return Colors(isDark);
 }
 
 export default Colors;

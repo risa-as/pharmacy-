@@ -325,5 +325,38 @@
     thead {
         display: table-header-group;
     }
+
+    /* المرحلة 4 من ميزة المذاخر (طباعة الباركود والملصقات): بوابة المذاخر
+     * (app/warehouse/layout.tsx) تستخدم عمداً md:h-screen + md:overflow-hidden
+     * على الحاوية الخارجية وmd:overflow-y-auto على <main> (تثبيت الشريط الجانبي
+     * بينما يتمرَّر المحتوى وحده على الشاشة) — قاعدتا `nav,aside{display:none}`
+     * أعلاه تُخفيان الشريط الجانبي نفسه فعلاً عند الطباعة، لكن لا تُصلحان الأثر
+     * الثاني: هذا الارتفاع/القص (height/overflow) يبقى مطبَّقاً على الحاوية وعلى
+     * <main> وقت الطباعة أيضاً (ليسا خاصَّين بالشاشة)، فتُقصّ ورقة الملصقات على
+     * ارتفاع نافذة واحدة بدل أن تتدفَّق عبر كل صفحات الطباعة. علامتا الفئة
+     * الصريحتان أدناه (مضافتان في layout.tsx/WarehouseSideNav.tsx) بديل حتمي
+     * لمطابقة سلسلة نصية على أسماء فئات Tailwind الحرفية (`[class*="..."]`)، إذ
+     * لا تُخفي تلك التركيبة بترتيب تخصيص الطبقات (specificity) المضمون كما تفعل
+     * !important الصريحة هنا. هذا تحديداً هو الانحراف الوحيد عن توجيه "استخدم
+     * متغيرات print: من Tailwind" في مواصفة هذه المرحلة — طبقة الحاوية الخارجية
+     * (الصدفة/shell) تُصلَح هنا حتمياً في globals.css، بينما ورقة الملصقات نفسها
+     * (الشبكة، فواصل الصفحات) تستخدم متغيرات print: مباشرة في LabelsClient.tsx. */
+    .warehouse-shell,
+    .warehouse-shell-main {
+        display: block !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: 0 !important;
+    }
+
+    /* الشريط العلوي للجوال ودرج التنقّل — <div> عاديان لا <nav>/<aside>، فلا
+     * تُطابقهما القواعد أعلاه بالوسم؛ فئات صريحة بدل الاعتماد على md:hidden
+     * (الذي قد يُقيَّم بعرض نافذة مختلف وقت المعاينة/الطباعة). */
+    .warehouse-mobile-topbar,
+    #warehouse-mobile-nav {
+        display: none !important;
+    }
 }
 

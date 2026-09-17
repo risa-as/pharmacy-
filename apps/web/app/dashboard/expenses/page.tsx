@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { getExpenses, deleteExpense } from "@/app/lib/actions/expense-actions";
+import { expenseCategoryLabel } from "@/app/lib/expense-categories";
 import { DeleteButton } from "@/app/ui/delete-button";
 import { EditExpenseButton } from "@/app/ui/expenses/edit-expense-button";
 import { format } from "date-fns";
@@ -17,11 +18,12 @@ import {
 import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 
-export default async function ExpensesPage({
-  searchParams,
-}: {
-  searchParams?: { branch?: string; category?: string; search?: string };
-}) {
+export default async function ExpensesPage(
+  props: {
+    searchParams?: Promise<{ branch?: string; category?: string; search?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const branchId = searchParams?.branch;
   const category = searchParams?.category || "";
   const search = (searchParams?.search || "").trim().toLowerCase();
@@ -53,7 +55,9 @@ export default async function ExpensesPage({
     if (
       search &&
       !(e.description || "").toLowerCase().includes(search) &&
-      !e.category.toLowerCase().includes(search)
+      !e.category.toLowerCase().includes(search) &&
+      // Searching "إيجار" must also find rows stored as "RENT"
+      !expenseCategoryLabel(e.category).toLowerCase().includes(search)
     )
       return false;
     return true;
@@ -195,7 +199,7 @@ export default async function ExpensesPage({
               href={buildCatUrl(cat)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${category === cat ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
             >
-              {cat}
+              {expenseCategoryLabel(cat)}
             </Link>
           ))}
         </div>
@@ -260,7 +264,7 @@ export default async function ExpensesPage({
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-bold text-foreground">
                         <Tag className="w-3 h-3 text-muted-foreground" />
-                        {expense.category}
+                        {expenseCategoryLabel(expense.category)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">

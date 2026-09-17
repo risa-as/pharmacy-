@@ -4,6 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import CreatePrescriptionForm from "@/app/ui/prescriptions/create-form";
 import { FileText } from "lucide-react";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { pharmacyDrugScope } from "@/app/lib/drug-scope";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
@@ -20,7 +21,7 @@ export default async function CreatePrescriptionPage() {
         }),
         prisma.globalDrug.findMany({
             select: { id: true, tradeName: true, barcode: true },
-            where: { isActive: true },
+            where: { isActive: true, ...pharmacyDrugScope(tenantCtx.organizationId) },
             orderBy: { tradeName: "asc" },
             take: 100,
         }),

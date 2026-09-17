@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { createDiscount } from "@/app/lib/actions/discount";
 import { Tag, ArrowRight, Percent, Calendar } from "lucide-react";
 
 export default function CreateDiscountForm() {
     const initialState: any = { message: "", errors: {} };
-    const [state, dispatch] = useFormState(createDiscount, initialState);
+    const [state, dispatch] = useActionState(createDiscount, initialState);
     const [mounted, setMounted] = useState(false);
     const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FIXED">("PERCENTAGE");
 

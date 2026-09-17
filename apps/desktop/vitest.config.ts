@@ -1,9 +1,11 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 
-// Unit tests for the desktop main-process pure logic (offline-subscription
-// evaluation + idempotency keys). The offline-token module imports `electron`
-// at the top, which doesn't exist in a node test runner — alias it to a stub.
+// Unit tests for the desktop's pure logic:
+//  - main process (offline-subscription evaluation + idempotency keys)
+//  - renderer helpers under src/lib (inventory draft persistence)
+// The offline-token module imports `electron` at the top, which doesn't exist
+// in a node test runner — alias it to a stub.
 // Run with:  pnpm --filter desktop test
 export default defineConfig({
     resolve: {
@@ -13,6 +15,6 @@ export default defineConfig({
     },
     test: {
         environment: 'node',
-        include: ['electron/**/*.test.ts'],
+        include: ['electron/**/*.test.ts', 'src/**/*.test.ts'],
     },
 });

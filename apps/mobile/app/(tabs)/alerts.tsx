@@ -1,18 +1,17 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import {
-    View, Text, SectionList, TouchableOpacity,
-    RefreshControl, Alert,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { router, Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { request, apiService } from '../../services/api';
-import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { managerPalette, Radius } from '../../constants/colors';
-import { EmptyState } from '../../components/ui/EmptyState';
+import { Radius } from '../../constants/colors';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { usePalette, toneColors, Surface, IconTile, SegmentedTabs, AppButton, InfoNote, StateBlock, Tone } from '../../components/ui/Kit';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
+import { formatDate, formatTime, iraqDateString, todayIraq } from '../../utils/date';
 
 interface Notification {
     id: string;
@@ -21,6 +20,15 @@ interface Notification {
     type: 'LOW_STOCK' | 'EXPIRY' | 'EXPIRED' | 'OUT_OF_STOCK' | 'NEW_PURCHASE' | 'SYSTEM';
     isRead: boolean;
     createdAt: string;
+    /** Drug this alert is about, so tapping opens it in the inventory. */
+    drugName?: string | null;
+}
+
+/** Server notifications keep the drug in the title: "مخزون منخفض: Panadol". */
+function drugFromTitle(title: string): string | null {
+    const i = title.indexOf(':');
+    const name = i > -1 ? title.slice(i + 1).trim() : '';
+    return name || null;
 }
 
 type FilterKey = 'all' | 'critical' | 'warning' | 'info';
@@ -38,35 +46,15 @@ const TYPE_CONFIG: Record<string, {
     SYSTEM:       { icon: 'information-circle', variant: 'success', label: 'النظام' },
 };
 
+/** Lower = more severe (navigation-map §12: red critical, orange warning). */
+const SEVERITY: Record<string, number> = { OUT_OF_STOCK: 0, EXPIRED: 0, LOW_STOCK: 1, EXPIRY: 1, NEW_PURCHASE: 2, SYSTEM: 3 };
+
 const FILTER_TABS: { key: FilterKey; label: string; types: Notification['type'][] }[] = [
     { key: 'all',      label: 'الكل',   types: [] },
     { key: 'critical', label: 'حرج',    types: ['OUT_OF_STOCK', 'EXPIRED'] },
     { key: 'warning',  label: 'تحذير',  types: ['LOW_STOCK', 'EXPIRY'] },
     { key: 'info',     label: 'أخرى',   types: ['NEW_PURCHASE', 'SYSTEM'] },
 ];
-
-// ── Group flat list by relative date ─────────────────────────────────────────
-function groupByDate(items: Notification[]): { title: string; data: Notification[] }[] {
-    const todayMs    = new Date().setHours(0, 0, 0, 0);
-    const yesterMs   = todayMs - 86_400_000;
-    const weekMs     = todayMs - 7 * 86_400_000;
-
-    const buckets: Record<string, Notification[]> = {
-        'اليوم': [], 'أمس': [], 'هذا الأسبوع': [], 'أقدم': [],
-    };
-
-    for (const n of items) {
-        const ts = new Date(n.createdAt).getTime();
-        if (ts >= todayMs)       buckets['اليوم'].push(n);
-        else if (ts >= yesterMs) buckets['أمس'].push(n);
-        else if (ts >= weekMs)   buckets['هذا الأسبوع'].push(n);
-        else                     buckets['أقدم'].push(n);
-    }
-
-    return Object.entries(buckets)
-        .filter(([, data]) => data.length > 0)
-        .map(([title, data]) => ({ title, data }));
-}
 
 // ── Read-state persistence for virtual inventory alerts ─────────────────────────
 // Inventory/expiry/stock alerts (ids prefixed `inv-`) are derived live from the
@@ -99,101 +87,28 @@ async function addReadInvIds(ids: string[]): Promise<void> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function timeAgo(iso: string): string {
-    const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-    if (mins < 1)  return 'الآن';
-    if (mins < 60) return `منذ ${mins} دقيقة`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24)  return `منذ ${hrs} ساعة`;
-    return `منذ ${Math.floor(hrs / 24)} يوم`;
-}
-
-// ── Color helpers ─────────────────────────────────────────────────────────────
-type Variant = 'danger' | 'warning' | 'info' | 'success';
-function variantColor(C: ReturnType<typeof managerPalette>, v: Variant) {
-    return { color: C[v], bg: C[`${v}Bg` as keyof typeof C] as string };
-}
-
-// ── Alert meta renderer ─────────────────────────────────────────────────────
-// Turns a run-on description like "المتبقي: 1 · الحد الأدنى: 5 · الفرع الرئيسي"
-// into tidy chips (key muted, value highlighted; a plain segment gets a branch
-// icon). Free-text bodies with no separators fall back to plain text.
-function AlertMeta({ body, color, isRead, C }: {
-    body: string;
-    color: string;
-    isRead: boolean;
-    C: ReturnType<typeof managerPalette>;
-}) {
-    const lines = body.split('\n').map(s => s.trim()).filter(Boolean);
-    if (lines.length === 0) return null;
-
-    const [desc, ...rest] = lines;
-    const parts = desc.split(/\s*[·•|،]\s*|\s+\.\s+/).map(s => s.trim()).filter(Boolean);
-    const structured = parts.length > 1 || desc.includes(':');
-
-    if (!structured) {
-        return (
-            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', lineHeight: 18 }} numberOfLines={3}>
-                {body}
-            </Text>
-        );
-    }
-
-    const chipBg = isRead ? C.input : `${color}14`;
-    const valueColor = isRead ? C.mutedForeground : color;
-
-    return (
-        <View style={{ gap: 6 }}>
-            <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6 }}>
-                {parts.map((p, i) => {
-                    const ci = p.indexOf(':');
-                    const hasKV = ci > -1;
-                    const label = hasKV ? p.slice(0, ci).trim() : '';
-                    const value = hasKV ? p.slice(ci + 1).trim() : p;
-                    return (
-                        <View
-                            key={i}
-                            style={{
-                                flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
-                                backgroundColor: chipBg, borderRadius: Radius.xs,
-                                paddingHorizontal: 8, paddingVertical: 4,
-                            }}
-                        >
-                            {!hasKV && <Ionicons name="business-outline" size={11} color={C.mutedForeground} />}
-                            {hasKV && (
-                                <Text style={{ color: C.mutedForeground, fontSize: 11, fontWeight: '600' }}>
-                                    {label}
-                                </Text>
-                            )}
-                            <Text style={{ color: hasKV ? valueColor : C.mutedForeground, fontSize: 11, fontWeight: hasKV ? '800' : '600' }}>
-                                {value}
-                            </Text>
-                        </View>
-                    );
-                })}
-            </View>
-            {rest.map((r, i) => (
-                <Text key={i} style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right' }}>
-                    {r}
-                </Text>
-            ))}
-        </View>
-    );
+/** "اليوم، 10:24 ص" — day word plus clock time, like the design. */
+function alertTime(iso: string): string {
+    const time = formatTime(iso, { hour: '2-digit', minute: '2-digit' });
+    const day = iraqDateString(iso);
+    const today = todayIraq();
+    if (day === today) return `اليوم، ${time}`;
+    const yesterday = iraqDateString(new Date(Date.now() - 86_400_000).toISOString());
+    if (day === yesterday) return `أمس، ${time}`;
+    return `${formatDate(iso, { day: 'numeric', month: 'long' })}، ${time}`;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 export default function AlertsScreen() {
-    const { isDarkMode } = useTheme();
-    const { isAdmin, branchId: authBranchId } = useAuth();
+    const { isAdmin, isPharmacistShell, branchId: authBranchId } = useAuth();
     const { triggerSync } = useSyncStatus();
-    const C = managerPalette(isDarkMode);
+    const C = usePalette();
 
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount]     = useState(0);
     const [loading, setLoading]             = useState(true);
     const [refreshing, setRefreshing]       = useState(false);
     const [filterKey, setFilterKey]         = useState<FilterKey>('all');
-    const [unreadOnly, setUnreadOnly]       = useState(false);
     const [selectedBranch, setSelectedBranch] = useState<string | null>(
         isAdmin ? null : (authBranchId ?? null)
     );
@@ -221,6 +136,7 @@ export default function AlertsScreen() {
                     type: (a.type as Notification['type']) ?? 'SYSTEM',
                     isRead: readInvIds.has(id),
                     createdAt: new Date().toISOString(),
+                    drugName: a.drugName ?? drugFromTitle(a.title ?? ''),
                 };
             });
 
@@ -286,299 +202,139 @@ export default function AlertsScreen() {
     }, [unreadCount, notifications, fetchNotifications]);
 
     // ── Derived data ──────────────────────────────────────────────────────────
-    const filterCounts = useMemo(() => ({
-        all:      notifications.length,
-        critical: notifications.filter(n => ['OUT_OF_STOCK', 'EXPIRED'].includes(n.type)).length,
-        warning:  notifications.filter(n => ['LOW_STOCK', 'EXPIRY'].includes(n.type)).length,
-        info:     notifications.filter(n => ['NEW_PURCHASE', 'SYSTEM'].includes(n.type)).length,
-    }), [notifications]);
+    // Pharmacists cannot open manager purchase orders — those notifications are not listed for them.
+    const visibleNotifications = useMemo(
+        () => (isPharmacistShell ? notifications.filter(n => n.type !== 'NEW_PURCHASE') : notifications),
+        [notifications, isPharmacistShell],
+    );
 
-    const sections = useMemo(() => {
-        let list = notifications;
+    const filterCounts = useMemo(() => {
+        const by = (keys: string[]) => visibleNotifications.filter(n => keys.includes(n.type)).length;
+        const critical = by(['OUT_OF_STOCK', 'EXPIRED']);
+        const warning = by(['LOW_STOCK', 'EXPIRY']);
+        return { all: visibleNotifications.length, critical, warning, info: visibleNotifications.length - critical - warning };
+    }, [visibleNotifications]);
+
+    // Severity first, then newest.
+    const list = useMemo(() => {
         const tab = FILTER_TABS.find(t => t.key === filterKey)!;
-        if (filterKey !== 'all') list = list.filter(n => (tab.types as string[]).includes(n.type));
-        if (unreadOnly) list = list.filter(n => !n.isRead);
-        return groupByDate(list);
-    }, [notifications, filterKey, unreadOnly]);
+        let rows = visibleNotifications;
+        if (filterKey === 'info') rows = rows.filter(n => !['OUT_OF_STOCK', 'EXPIRED', 'LOW_STOCK', 'EXPIRY'].includes(n.type));
+        else if (filterKey !== 'all') rows = rows.filter(n => (tab.types as string[]).includes(n.type));
+        return [...rows].sort((a, b) =>
+            (SEVERITY[a.type] ?? 3) - (SEVERITY[b.type] ?? 3) ||
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }, [visibleNotifications, filterKey]);
 
-    // ── Card ──────────────────────────────────────────────────────────────────
+    const openTarget = (item: Notification) => {
+        if (!item.isRead) handleMarkRead(item.id);
+        if (['LOW_STOCK', 'EXPIRY', 'EXPIRED', 'OUT_OF_STOCK'].includes(item.type)) {
+            // Open the drug itself, not just the inventory page.
+            const drug = item.drugName ?? drugFromTitle(item.title ?? '');
+            router.push((drug
+                ? { pathname: '/(tabs)/inventory', params: { search: drug, tab: 'all' } }
+                : '/(tabs)/inventory') as unknown as Href);
+        } else if (item.type === 'NEW_PURCHASE' && !isPharmacistShell) {
+            router.push('/(tabs)/purchases' as Href);
+        }
+    };
+
+    const actionLabel = (item: Notification): string | null => {
+        if (['LOW_STOCK', 'EXPIRY', 'EXPIRED', 'OUT_OF_STOCK'].includes(item.type)) return 'عرض في المخزون';
+        if (item.type === 'NEW_PURCHASE' && !isPharmacistShell) return 'فتح المشتريات';
+        return null;
+    };
+
     const renderItem = ({ item }: { item: Notification }) => {
-        const config  = TYPE_CONFIG[item.type] ?? TYPE_CONFIG.SYSTEM;
-        const { color, bg } = variantColor(C, config.variant);
-
+        const config = TYPE_CONFIG[item.type] ?? TYPE_CONFIG.SYSTEM;
+        const tone: Tone = config.variant === 'danger' ? 'danger' : config.variant === 'warning' ? 'warning' : 'primary';
+        const { fg } = toneColors(C, tone);
+        const opens = !!actionLabel(item);
+        // The description arrives as "text\ndate"; the date line is shown as the time below.
+        const description = (item.body ?? '').split('\n')[0]?.trim();
         return (
             <TouchableOpacity
-                activeOpacity={item.isRead ? 1 : 0.75}
-                onPress={() => !item.isRead && handleMarkRead(item.id)}
-                style={{
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    marginBottom: 10,
-                    borderWidth: 1.5,
-                    borderColor: item.isRead ? C.border : `${color}40`,
-                    padding: 13,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: item.isRead ? 0 : 0.05,
-                    shadowRadius: 8,
-                    elevation: item.isRead ? 0 : 2,
-                }}
+                onPress={() => (opens ? openTarget(item) : handleMarkRead(item.id))}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title}${description ? `، ${description}` : ''}`}
             >
-                {/* Top row: icon bubble + title + unread dot */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }}>
-                    {/* Icon bubble */}
-                    <View style={{
-                        backgroundColor: item.isRead ? C.border : bg,
-                        borderRadius: Radius.xs, padding: 8, flexShrink: 0,
-                    }}>
-                        <Ionicons
-                            name={config.icon}
-                            size={18}
-                            color={item.isRead ? C.mutedForeground : color}
-                        />
-                    </View>
-
-                    {/* Title + body */}
-                    <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                            <Text
-                                style={{
-                                    color: item.isRead ? C.mutedForeground : C.foreground,
-                                    fontWeight: item.isRead ? '500' : '800',
-                                    fontSize: 14, textAlign: 'right', flex: 1,
-                                }}
-                                numberOfLines={2}
-                            >
-                                {item.title}
+                <Surface padded={false} style={{ marginBottom: 10, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                    <IconTile icon={config.icon} tone={item.isRead ? 'neutral' : tone} size={46} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={{ color: item.isRead ? C.mutedForeground : C.foreground, fontSize: 16, fontWeight: item.isRead ? '700' : '900', textAlign: 'right' }} numberOfLines={1}>
+                            {item.title}
+                        </Text>
+                        {!!description && (
+                            <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right' }} numberOfLines={2}>
+                                {description}
                             </Text>
-                            {/* Unread dot */}
-                            {!item.isRead && (
-                                <View style={{
-                                    width: 9, height: 9, borderRadius: 5,
-                                    backgroundColor: color, marginLeft: 8, flexShrink: 0,
-                                }} />
-                            )}
-                        </View>
-
-                        {!!item.body && (
-                            <AlertMeta body={item.body} color={color} isRead={item.isRead} C={C} />
                         )}
+                        <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>{alertTime(item.createdAt)}</Text>
                     </View>
-                </View>
-
-                {/* Bottom row: type chip + time + mark-read action */}
-                <View style={{
-                    flexDirection: 'row-reverse', justifyContent: 'space-between',
-                    alignItems: 'center', marginTop: 10,
-                    paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border,
-                }}>
-                    {/* Type chip */}
-                    <View style={{
-                        backgroundColor: item.isRead ? C.border : bg,
-                        borderRadius: Radius.xs, paddingHorizontal: 8, paddingVertical: 3,
-                        flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
-                    }}>
-                        <Text style={{
-                            color: item.isRead ? C.mutedForeground : color,
-                            fontSize: 11, fontWeight: '700',
-                        }}>
-                            {config.label}
-                        </Text>
+                    <View style={{ alignItems: 'center', gap: 10 }}>
+                        <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: item.isRead ? 'transparent' : fg }} />
+                        {item.type === 'NEW_PURCHASE' && !isPharmacistShell ? (
+                            <AppButton label="فتح" variant="outline" compact onPress={() => openTarget(item)} />
+                        ) : opens ? (
+                            <Ionicons name="chevron-back" size={18} color={C.mutedForeground} />
+                        ) : null}
                     </View>
-
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
-                        {/* Time */}
-                        <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-                            {timeAgo(item.createdAt)}
-                        </Text>
-                        {/* Mark read button */}
-                        {!item.isRead && (
-                            <TouchableOpacity
-                                onPress={() => handleMarkRead(item.id)}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                style={{
-                                    backgroundColor: C.primaryMuted, borderRadius: Radius.xs,
-                                    paddingHorizontal: 8, paddingVertical: 4,
-                                    flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
-                                }}
-                            >
-                                <Ionicons name="checkmark" size={12} color={C.primary} />
-                                <Text style={{ color: C.primary, fontSize: 11, fontWeight: '700' }}>
-                                    تم القراءة
-                                </Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </View>
+                </Surface>
             </TouchableOpacity>
         );
     };
 
-    // ── Section header ────────────────────────────────────────────────────────
-    const renderSectionHeader = ({ section }: { section: { title: string } }) => (
-        <View style={{
-            flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
-            paddingVertical: 8, marginBottom: 4,
-        }}>
-            <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: '700' }}>
-                {section.title}
-            </Text>
-            <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
-        </View>
-    );
-
-    // ─────────────────────────────────────────────────────────────────────────
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
-
-            {/* ── Header ─────────────────────────────────────────────────── */}
-            <View style={{ backgroundColor: C.background, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}>
-
-                {/* Title row */}
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ color: C.foreground, fontSize: 22, fontWeight: '900' }}>
-                            التنبيهات
-                        </Text>
-                        {unreadCount > 0 && (
-                            <View style={{
-                                backgroundColor: C.danger, borderRadius: 10,
-                                paddingHorizontal: 8, paddingVertical: 2, minWidth: 22, alignItems: 'center',
-                            }}>
-                                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
-                                    {unreadCount}
-                                </Text>
-                            </View>
-                        )}
+            <ScreenHeader
+                title="التنبيهات"
+                subtitle={isPharmacistShell ? 'فرعك الحالي' : undefined}
+                hideBack={!isPharmacistShell}
+                fallbackHref="/(tabs)/more"
+                action={isAdmin ? (
+                    <View style={{ width: 170 }}>
+                        <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle label="الفرع" />
                     </View>
+                ) : undefined}
+            />
 
-                    {/* Mark all read */}
-                    {unreadCount > 0 && (
-                        <TouchableOpacity
-                            onPress={handleMarkAllRead}
-                            style={{
-                                flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-                                backgroundColor: C.primaryMuted, borderRadius: 5,
-                                paddingHorizontal: 10, paddingVertical: 7,
-                            }}
-                            activeOpacity={0.75}
-                        >
-                            <Ionicons name="checkmark-done" size={14} color={C.primary} />
-                            <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>
-                                تحديد الكل كمقروء
-                            </Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 8, gap: 10 }}>
+                <SegmentedTabs<FilterKey>
+                    items={FILTER_TABS.map(t => ({ key: t.key, label: t.label, count: filterCounts[t.key] }))}
+                    value={filterKey}
+                    onChange={setFilterKey}
+                />
 
-                {/* Branch selector */}
-                {isAdmin && (
-                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle />
-                )}
-
-                {/* ── Filter tabs ─────────────────────────────────────────── */}
-                <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: 10 }}>
-                    {FILTER_TABS.map(tab => {
-                        const active = filterKey === tab.key;
-                        const count  = filterCounts[tab.key];
-                        const tabVariant: Variant | null =
-                            tab.key === 'critical' ? 'danger' :
-                            tab.key === 'warning'  ? 'warning' :
-                            tab.key === 'info'     ? 'info' : null;
-                        const tabColor = tabVariant ? variantColor(C, tabVariant).color : C.primary;
-                        const tabBg    = tabVariant ? variantColor(C, tabVariant).bg : C.primaryMuted;
-
-                        return (
-                            <TouchableOpacity
-                                key={tab.key}
-                                onPress={() => setFilterKey(tab.key)}
-                                activeOpacity={0.8}
-                                style={{
-                                    flex: 1, alignItems: 'center', gap: 2,
-                                    paddingVertical: 8,
-                                    borderRadius: 5,
-                                    backgroundColor: active
-                                        ? (tabVariant ? tabBg : C.primaryMuted)
-                                        : C.card,
-                                    borderWidth: 1.5,
-                                    borderColor: active
-                                        ? (tabVariant ? tabColor : C.primary)
-                                        : C.border,
-                                }}
-                            >
-                                <Text style={{
-                                    fontSize: 12, fontWeight: '700',
-                                    color: active ? (tabVariant ? tabColor : C.primary) : C.mutedForeground,
-                                }}>
-                                    {tab.label}
-                                </Text>
-                                {count > 0 && (
-                                    <Text style={{
-                                        fontSize: 11, fontWeight: '800',
-                                        color: active ? (tabVariant ? tabColor : C.primary) : C.mutedForeground,
-                                    }}>
-                                        {count}
-                                    </Text>
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-
-                {/* ── Unread only toggle + result count ───────────────────── */}
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <TouchableOpacity
-                        onPress={() => setUnreadOnly(v => !v)}
-                        activeOpacity={0.75}
-                        style={{
-                            flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
-                            backgroundColor: unreadOnly ? C.primaryMuted : 'transparent',
-                            borderRadius: 5, paddingHorizontal: 10, paddingVertical: 5,
-                            borderWidth: 1,
-                            borderColor: unreadOnly ? C.primary : C.border,
-                        }}
-                    >
-                        <View style={{
-                            width: 8, height: 8, borderRadius: 4,
-                            backgroundColor: unreadOnly ? C.primary : C.mutedForeground,
-                        }} />
-                        <Text style={{
-                            color: unreadOnly ? C.primary : C.mutedForeground,
-                            fontSize: 12, fontWeight: unreadOnly ? '700' : '500',
-                        }}>
-                            غير مقروءة فقط
-                        </Text>
+                {unreadCount > 0 && (
+                    <TouchableOpacity onPress={handleMarkAllRead} activeOpacity={0.8} accessibilityRole="button">
+                        <Surface padded={false} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 }}>
+                            <Text style={{ flex: 1, color: C.primary, fontSize: 15.5, fontWeight: '800', textAlign: 'right' }}>تحديد الكل كمقروء</Text>
+                            <View style={{ width: 38, height: 38, borderRadius: Radius.control, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name="checkmark" size={20} color={C.primary} />
+                            </View>
+                        </Surface>
                     </TouchableOpacity>
-
-                    <Text style={{ color: C.mutedForeground, fontSize: 12 }}>
-                        {sections.reduce((s, sec) => s + sec.data.length, 0)} إشعار
-                    </Text>
-                </View>
+                )}
             </View>
 
-            {/* ── List ───────────────────────────────────────────────────── */}
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 10 }}>
-                    {[1, 2, 3, 4].map(i => <Skeleton key={i} height={110} radius={5} />)}
+                    {[1, 2, 3, 4].map(i => <Skeleton key={i} height={120} radius={Radius.card} />)}
                 </View>
             ) : (
-                <SectionList
-                    sections={sections}
+                <FlatList
+                    data={list}
                     keyExtractor={item => item.id}
                     renderItem={renderItem}
-                    renderSectionHeader={renderSectionHeader}
-                    contentContainerStyle={{ padding: 16, paddingTop: 6, paddingBottom: 110 }}
+                    contentContainerStyle={{ flexGrow: list.length === 0 ? 1 : 0, padding: 16, paddingTop: 6, paddingBottom: 32 }}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
-                    stickySectionHeadersEnabled={false}
+                    ListFooterComponent={list.length > 0 ? <InfoNote style={{ marginTop: 4 }} text="قراءة التنبيه تغيّر حالة القراءة فقط، ولا تعني أن المشكلة حُلّت." /> : null}
                     ListEmptyComponent={
-                        <EmptyState
+                        <StateBlock
                             icon="notifications-outline"
-                            title="لا توجد إشعارات"
-                            subtitle={
-                                unreadOnly ? 'لا توجد إشعارات غير مقروءة' :
-                                filterKey !== 'all' ? 'لا توجد إشعارات في هذه الفئة' :
-                                'ستظهر هنا إشعارات المخزون والصلاحيات والمشتريات'
-                            }
+                            title="لا توجد تنبيهات"
+                            message={filterKey !== 'all' ? 'لا توجد تنبيهات في هذه الفئة' : 'ستظهر هنا تنبيهات المخزون والصلاحية'}
                         />
                     }
                 />

@@ -4,6 +4,9 @@ import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { Plus, Users, Mail, Phone, MapPin, FileText, ShoppingCart, TrendingDown, CheckCircle2, Building2 } from "lucide-react";
 import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
+import SupplierWarehouseLinkCell from "@/app/ui/suppliers/SupplierWarehouseLinkCell";
+import { canRequestSupplierLink } from "@/app/lib/supplier-link-request";
+import { checkFeatureAccess } from "@/app/lib/saas-guards";
 
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
@@ -15,6 +18,7 @@ async function getSuppliers(organizationId?: string) {
         orderBy: { createdAt: 'desc' },
         include: {
             _count: { select: { purchases: true } },
+            warehouse: { select: { name: true } },
         }
     });
     return suppliers.map((s: any) => ({
@@ -33,6 +37,32 @@ export default async function Page() {
         suppliers = await getSuppliers(user.role === 'SUPER_ADMIN' ? undefined : tenantCtx.organizationId);
     } catch (e) {
         console.error('[Suppliers Page] Failed to load suppliers:', e);
+    }
+
+    // عمود المذخر يظهر فقط لمؤسسة باقتها تشمل المذاخر؛ طلب الربط لمدير المؤسسة.
+    const showWarehouseColumn = organizationId
+        ? (await checkFeatureAccess(organizationId, 'warehouseManagement').catch(() => ({ allowed: false }))).allowed
+        : false;
+    const canRequestLink = !!organizationId && canRequestSupplierLink(user.role);
+
+    // آخر طلب ربط لكل مورد — استعلام مستقل عمداً: فشله (مثلاً قبل تطبيق ترحيل
+    // SupplierLinkRequest) يُخفي حالة الطلبات فقط ولا يُفرغ جدول الموردين.
+    const latestRequestBySupplier = new Map<string, { id: string; status: string; decisionNote: string | null; warehouseName: string }>();
+    if (showWarehouseColumn && suppliers.length > 0) {
+        try {
+            const reqs = await prisma.supplierLinkRequest.findMany({
+                where: { supplierId: { in: suppliers.map((s: any) => s.id) } },
+                orderBy: { createdAt: 'desc' },
+                select: { id: true, supplierId: true, status: true, decisionNote: true, warehouse: { select: { name: true } } },
+            });
+            for (const r of reqs) {
+                if (!latestRequestBySupplier.has(r.supplierId)) {
+                    latestRequestBySupplier.set(r.supplierId, { id: r.id, status: r.status, decisionNote: r.decisionNote, warehouseName: r.warehouse.name });
+                }
+            }
+        } catch (e) {
+            console.error('[Suppliers Page] Failed to load link requests:', e);
+        }
     }
 
     const debtSuppliers = suppliers.filter((s: any) => s.computedBalance > 0);
@@ -132,6 +162,9 @@ export default async function Page() {
                                     <th scope="col" className="px-6 py-3.5 font-cairo">معلومات الاتصال</th>
                                     <th scope="col" className="px-6 py-3.5 font-cairo">الرصيد المستحق</th>
                                     <th scope="col" className="px-6 py-3.5 font-cairo">الفواتير</th>
+                                    {showWarehouseColumn && (
+                                        <th scope="col" className="px-6 py-3.5 font-cairo">المذخر على المنصة</th>
+                                    )}
                                     <th scope="col" className="px-6 py-3.5 font-cairo text-center">الإجراءات</th>
                                 </tr>
                             </thead>
@@ -202,6 +235,20 @@ export default async function Page() {
                                                 {supplier._count.purchases}
                                             </span>
                                         </td>
+
+                                        {showWarehouseColumn && (
+                                            <td className="px-6 py-4">
+                                                <SupplierWarehouseLinkCell
+                                                    canRequest={canRequestLink}
+                                                    supplier={{
+                                                        id: supplier.id,
+                                                        name: supplier.name,
+                                                        warehouseName: supplier.warehouse?.name ?? null,
+                                                        latestRequest: latestRequestBySupplier.get(supplier.id) ?? null,
+                                                    }}
+                                                />
+                                            </td>
+                                        )}
 
                                         {/* الإجراءات */}
                                         <td className="whitespace-nowrap px-6 py-4">

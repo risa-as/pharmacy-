@@ -10,11 +10,12 @@ function formatIQD(amount: number) {
     return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " د.ع";
 }
 
-export default async function DebtDetailPage({
-    params,
-}: {
-    params: { id: string };
-}) {
+export default async function DebtDetailPage(
+    props: {
+        params: Promise<{ id: string }>;
+    }
+) {
+    const params = await props.params;
     const tenantCtx = await getTenantContext();
 
     const safesPromise = tenantCtx instanceof NextResponse

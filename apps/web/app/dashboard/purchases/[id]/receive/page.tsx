@@ -6,15 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { Toaster, toast } from 'sonner';
 
-export default function ReceivePurchasePage({ params }: { params: { id: string } }) {
+export default function ReceivePurchasePage(props: { params: Promise<{ id: string }> }) {
+    const params = use(props.params);
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [purchase, setPurchase] = useState<any>(null);
     const [receivedItems, setReceivedItems] = useState<any>({});
     const [isPaid, setIsPaid] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         getPurchaseDetails(params.id).then((data) => {
@@ -38,6 +40,8 @@ export default function ReceivePurchasePage({ params }: { params: { id: string }
     }, [params.id]);
 
     const handleConfirm = async () => {
+        if (submitting) return;
+        setSubmitting(true);
         try {
             const itemsToSubmit = Object.entries(receivedItems).map(([itemId, data]: [string, any]) => ({
                 itemId,
@@ -47,13 +51,17 @@ export default function ReceivePurchasePage({ params }: { params: { id: string }
             }));
 
             await receivePurchase(params.id, itemsToSubmit, isPaid);
-            toast.success('تم استلام الطلب وتحديث المخزون بنجاح');
-            router.push('/dashboard/purchases');
+            toast.success('تم استلام الطلب وإضافة الأدوية إلى الدفعات والمخزون');
+            // القادم من «طلبات المذاخر» يعود إليها ليرى حالة «استُلمت» — قيمة ثابتة لا مسار حر.
+            const fromWarehouseOrders = new URLSearchParams(window.location.search).get('return') === 'warehouse-orders';
+            router.push(fromWarehouseOrders ? '/dashboard/purchases/warehouse-orders' : '/dashboard/purchases');
             router.refresh();
         } catch (error) {
-            toast.error('حدث خطأ أثناء الاستلام');
+            toast.error(error instanceof Error ? error.message : 'حدث خطأ أثناء الاستلام');
             console.error(error);
             setLoading(false);
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -138,8 +146,8 @@ export default function ReceivePurchasePage({ params }: { params: { id: string }
                 </label>
             </div>
 
-            <Button onClick={handleConfirm} className="w-full h-12 text-lg">
-                تأكيد واستلام المواد
+            <Button onClick={handleConfirm} disabled={submitting} className="w-full h-12 text-lg">
+                {submitting ? 'جارٍ الاستلام…' : 'تأكيد واستلام المواد'}
             </Button>
         </div>
     );

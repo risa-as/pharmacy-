@@ -56,6 +56,16 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                         }
                     }
 
+                    // `...user` is the full Prisma User row, so warehouseId /
+                    // warehouseUserType (Stage 1 of the warehouses/B2B
+                    // feature) ride along automatically once those columns
+                    // exist — no explicit field needed here. A WAREHOUSE
+                    // account has branchId = null, which `getUser()`'s
+                    // `include: { branch: true }` above resolves to
+                    // `branch: null` (Branch is an optional relation) rather
+                    // than throwing, and `orgId` below is then `undefined`,
+                    // so subscriptionState correctly stays "active" (a
+                    // warehouse account has no subscription to gate on).
                     return { ...user, subscriptionState };
                 }
                 return null;

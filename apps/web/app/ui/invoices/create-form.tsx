@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
 import { createPurchase } from "@/app/lib/actions/invoice";
-import { useFormState } from "react-dom";
 import { Plus, FileText, ArrowRight } from "lucide-react";
 import { DeleteButton } from "../delete-button";
 
@@ -17,7 +16,7 @@ interface FormProps {
 export default function Form({ suppliers, branches, drugs, defaultInvoiceNumber }: FormProps) {
     const initialState: any = { message: "", errors: {} };
     // @ts-ignore
-    const [state, dispatch] = useFormState(createPurchase, initialState);
+    const [state, dispatch] = useActionState(createPurchase, initialState);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

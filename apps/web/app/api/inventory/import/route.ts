@@ -100,12 +100,12 @@ export async function POST(req: NextRequest) {
                         ? (orgId
                               ? await prisma.globalDrug.findFirst({ where: { barcode, organizationId: orgId } })
                               : null) ??
-                          (await prisma.globalDrug.findFirst({ where: { barcode, organizationId: null } }))
+                          (await prisma.globalDrug.findFirst({ where: { barcode, organizationId: null, warehouseId: null } }))
                         : null) ??
                     (orgId
                         ? await prisma.globalDrug.findFirst({ where: { tradeName: row.name, organizationId: orgId } })
                         : null) ??
-                    (await prisma.globalDrug.findFirst({ where: { tradeName: row.name, organizationId: null } }));
+                    (await prisma.globalDrug.findFirst({ where: { tradeName: row.name, organizationId: null, warehouseId: null } }));
 
                 if (!drug) {
                     drug = await prisma.globalDrug.create({

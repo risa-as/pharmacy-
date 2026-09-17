@@ -15,7 +15,7 @@ export function Card({ children, className, style, ...props }: CardProps) {
         <View
             className={`p-4 ${className ?? ''}`}
             style={[
-                { borderRadius: 5, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+                { borderRadius: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
                 style,
             ]}
             {...props}

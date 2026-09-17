@@ -3,11 +3,10 @@ import { AdminDashboard } from '../../components/dashboards/AdminDashboard';
 import { PharmacistDashboard } from '../../components/dashboards/PharmacistDashboard';
 
 /**
- * Home tab — delegates to the role-appropriate dashboard.
- * Admin/Manager → AdminDashboard (US-B1)
- * Pharmacist     → PharmacistDashboard (stub; fully redesigned in Phase 2 T2.1)
+ * Home tab — delegates to the dashboard of the user's shell (utils/roles):
+ * manager shell → AdminDashboard, pharmacist shell → PharmacistDashboard.
  */
 export default function HomeScreen() {
-    const { isAdmin } = useAuth();
-    return isAdmin ? <AdminDashboard /> : <PharmacistDashboard />;
+    const { shell } = useAuth();
+    return shell === 'manager' ? <AdminDashboard /> : <PharmacistDashboard />;
 }

@@ -1,8 +1,70 @@
 export const dynamic = 'force-dynamic';
 
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from '@/app/lib/tenant-utils';
+
+/** Dead-stock rows carry the totals of the full result in every row (window functions). */
+interface DeadStockRow {
+    drugId: string; tradeName: string; barcode: string; branch: string;
+    currentStock: number; estimatedValue: number;
+    totalCount: number; totalValue: number;
+}
+
+/** Most valuable dead items returned; the totals still cover all of them. */
+const DEAD_STOCK_LIMIT = 100;
+
+/**
+ * Items still in stock that this branch has not sold in the dead-stock window.
+ * Done in SQL: loading the whole inventory with its batches and every sold drug
+ * id took ~150 s on a 3,000-item branch and timed out the mobile app.
+ */
+async function queryDeadStock(
+    tenantBranchWhere: Record<string, any>,
+    branchId: string | null,
+    since: Date,
+): Promise<DeadStockRow[]> {
+    const conditions: Prisma.Sql[] = [Prisma.sql`TRUE`];
+    if (typeof tenantBranchWhere.branchId === 'string') {
+        conditions.push(Prisma.sql`i."branchId" = ${tenantBranchWhere.branchId}`);
+    }
+    const orgId = tenantBranchWhere.branch?.organizationId;
+    if (typeof orgId === 'string') {
+        conditions.push(Prisma.sql`br."organizationId" = ${orgId}`);
+    }
+    if (branchId) conditions.push(Prisma.sql`i."branchId" = ${branchId}`);
+
+    return prisma.$queryRaw<DeadStockRow[]>`
+        WITH dead AS (
+            SELECT
+                i."drugId"                                                                   AS "drugId",
+                d."tradeName"                                                                AS "tradeName",
+                d."barcode"                                                                  AS "barcode",
+                br."name"                                                                    AS "branch",
+                COALESCE(SUM(b.quantity), 0)::int                                            AS "currentStock",
+                COALESCE(SUM(b.quantity * COALESCE(NULLIF(b."costPrice", 0), i.cost, 0)), 0)  AS "estimatedValue"
+            FROM "Inventory" i
+            JOIN "GlobalDrug" d ON d.id = i."drugId"
+            JOIN "Branch" br ON br.id = i."branchId"
+            LEFT JOIN "Batch" b ON b."inventoryId" = i.id AND b.quantity > 0
+            WHERE ${Prisma.join(conditions, ' AND ')}
+              AND NOT EXISTS (
+                  SELECT 1 FROM "SaleItem" si
+                  JOIN "Sale" s ON s.id = si."saleId"
+                  WHERE si."drugId" = i."drugId" AND s."branchId" = i."branchId" AND s."createdAt" >= ${since}
+              )
+            GROUP BY i.id, i."drugId", d."tradeName", d."barcode", br."name"
+            HAVING COALESCE(SUM(b.quantity), 0) > 0
+        )
+        SELECT dead.*,
+               COUNT(*) OVER ()                       AS "totalCount",
+               COALESCE(SUM("estimatedValue") OVER (), 0) AS "totalValue"
+        FROM dead
+        ORDER BY "estimatedValue" DESC
+        LIMIT ${DEAD_STOCK_LIMIT}
+    `;
+}
 
 export async function GET(req: Request) {
     try {
@@ -24,7 +86,7 @@ export async function GET(req: Request) {
         const nearExpiryWindow = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
 
         // ── Run all queries in parallel ────────────────────────────────────────
-        const [saleItems, allInventory, soldIn90Days, expiringBatches] = await Promise.all([
+        const [saleItems, deadStockRows, expiringBatches] = await Promise.all([
             // Sale items for the requested period — include sale.branchId for cost map lookup
             prisma.saleItem.findMany({
                 where: {
@@ -39,23 +101,8 @@ export async function GET(req: Request) {
                     drug: { select: { id: true, tradeName: true, barcode: true } },
                 },
             }),
-            // Inventory — provides cost per drug (used as primary cost source, matching web profits page)
-            prisma.inventory.findMany({
-                where: branchFilter,
-                include: {
-                    drug:    { select: { id: true, tradeName: true, barcode: true } },
-                    batches: { select: { quantity: true, costPrice: true } },
-                    branch:  { select: { name: true } },
-                },
-            }),
-            // Drugs sold in the last 90 days (for dead-stock detection)
-            prisma.saleItem.findMany({
-                where: {
-                    sale: { createdAt: { gte: deadStockWindow }, ...branchFilter },
-                },
-                select: { drugId: true },
-                distinct: ['drugId'],
-            }),
+            // Dead stock, computed in the database (see queryDeadStock)
+            queryDeadStock(tenantBranchWhere, branchId, deadStockWindow),
             // Batches expiring within 90 days
             prisma.batch.findMany({
                 where: {
@@ -77,9 +124,18 @@ export async function GET(req: Request) {
 
         // ── Cost map: branchId_drugId → inventory.cost ─────────────────────────
         // Same approach as the web profits page — uses current inventory cost price
-        // instead of saleItem.cost (which defaults to 0 and is often unpopulated)
+        // instead of saleItem.cost (which defaults to 0 and is often unpopulated).
+        // Only the drugs actually sold in the period are fetched; loading the whole
+        // inventory with its batches took ~80 s on a 3,000-item branch.
+        const soldDrugIds = Array.from(new Set(saleItems.map((i) => i.drugId)));
+        const costRows = soldDrugIds.length > 0
+            ? await prisma.inventory.findMany({
+                where: { ...branchFilter, drugId: { in: soldDrugIds } },
+                select: { branchId: true, drugId: true, cost: true },
+            })
+            : [];
         const costMap = new Map<string, number>();
-        for (const inv of allInventory) {
+        for (const inv of costRows) {
             costMap.set(`${inv.branchId}_${inv.drugId}`, inv.cost);
         }
 
@@ -129,21 +185,17 @@ export async function GET(req: Request) {
         const overallMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 10000) / 100 : 0;
 
         // ── 2. Dead Stock ──────────────────────────────────────────────────────
-        const soldDrugIds = new Set(soldIn90Days.map((i: any) => i.drugId));
-        const deadStock = allInventory
-            .filter((inv: any) => {
-                const stock = inv.batches.reduce((s: number, b: any) => s + b.quantity, 0);
-                return stock > 0 && !soldDrugIds.has(inv.drugId);
-            })
-            .map((inv: any) => ({
-                drugId:         inv.drugId,
-                tradeName:      inv.drug?.tradeName || 'Unknown',
-                barcode:        inv.drug?.barcode   || '',
-                branch:         inv.branch?.name    || '',
-                currentStock:   inv.batches.reduce((s: number, b: any) => s + b.quantity, 0),
-                estimatedValue: inv.batches.reduce((s: number, b: any) => s + b.quantity * (b.costPrice || inv.cost || 0), 0),
-            }));
-        const totalDeadStockValue = deadStock.reduce((s: number, d: any) => s + d.estimatedValue, 0);
+        const deadStock = deadStockRows.map((row) => ({
+            drugId:         row.drugId,
+            tradeName:      row.tradeName || 'Unknown',
+            barcode:        row.barcode   || '',
+            branch:         row.branch    || '',
+            currentStock:   Number(row.currentStock),
+            estimatedValue: Number(row.estimatedValue),
+        }));
+        // Totals cover every dead item, not only the rows listed above.
+        const deadStockCount      = Number(deadStockRows[0]?.totalCount ?? 0);
+        const totalDeadStockValue = Number(deadStockRows[0]?.totalValue ?? 0);
 
         // ── 3. Near-Expiry Loss ────────────────────────────────────────────────
         const now = Date.now();
@@ -168,7 +220,7 @@ export async function GET(req: Request) {
                 totalCost:           Math.round(totalCost           * 100) / 100,
                 netProfit:           Math.round(netProfit           * 100) / 100,
                 overallMargin,
-                deadStockCount:      deadStock.length,
+                deadStockCount,
                 totalDeadStockValue: Math.round(totalDeadStockValue * 100) / 100,
                 nearExpiryCount:     nearExpiryLoss.length,
                 totalNearExpiryLoss: Math.round(totalNearExpiryLoss * 100) / 100,

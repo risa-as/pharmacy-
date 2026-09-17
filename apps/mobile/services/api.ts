@@ -5,61 +5,24 @@ import { router } from 'expo-router';
 import { pollingService } from './polling';
 
 // متغير لتخزين الرابط في الذاكرة لتجنب القراءة من الستورج في كل طلب
-let cachedBaseUrl: string | null = null;
+/**
+ * The server is fixed by the build, never by the user: EAS profiles set
+ * EXPO_PUBLIC_API_URL (eas.json), and local development sets it in `.env`
+ * (restart Metro with `--clear` after changing it).
+ */
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://app.faramace.com/api';
 
-// Default URL driven by .env — update EXPO_PUBLIC_API_URL when your LAN IP changes.
-const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.106:3000/api';
+// Older versions let users save a server address that overrode the build's.
+// Drop it once so it can never take effect again.
+let legacyServerUrlCleared = false;
 
-// الحصول على الرابط الأساسي
 export const getBaseUrl = async (): Promise<string> => {
-    if (cachedBaseUrl) return cachedBaseUrl;
-
-    try {
-        const stored = await AsyncStorage.getItem('server_url');
-        if (stored) {
-            // Migration guard: wipe stale IPs so the env default takes over
-            // after a network/IP change. Only applies to obviously stale entries.
-            const staleIps = ['192.168.0.172', '10.0.2.2'];
-            const isStale = staleIps.some(ip => stored.includes(ip));
-            if (!isStale) {
-                cachedBaseUrl = stored;
-                return stored;
-            }
-            // Clear the stale entry so next app launch uses the env default
-            await AsyncStorage.removeItem('server_url');
-        }
-    } catch (e) {
-        console.error("Failed to read server url", e);
+    if (!legacyServerUrlCleared) {
+        legacyServerUrlCleared = true;
+        AsyncStorage.removeItem('server_url').catch(() => {});
     }
-
-    // Default Fallback — env var is the source of truth for dev environments
-    cachedBaseUrl = ENV_API_URL;
-    return ENV_API_URL;
+    return API_URL;
 };
-
-// حفظ الرابط الجديد
-export const setServerUrl = async (url: string) => {
-    // Ensure no trailing slash
-    const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-    const fullUrl = cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
-
-    await AsyncStorage.setItem('server_url', fullUrl);
-    cachedBaseUrl = fullUrl;
-};
-
-// التحقق هل تم إعداد السيرفر أم لا
-export const isServerConfigured = async (): Promise<boolean> => {
-    // Always "configured" when an env URL is set — dev workflow uses env var,
-    // field deployments use ServerConfigScreen + AsyncStorage.
-    if (process.env.EXPO_PUBLIC_API_URL) return true;
-    const stored = await AsyncStorage.getItem('server_url');
-    return !!stored;
-};
-
-// تصدير متغير ولكن يجب استخدامه عبر دالة في الطلبات
-// Note: API_BASE_URL export is kept for backward compatibility but might be stale.
-// We should update the request function to call getBaseUrl() dynamically.
-export let API_BASE_URL = 'http://localhost:3000/api'; // Initial default
 
 
 // In-memory token cache — avoids slow SecureStore reads on every API call
@@ -180,8 +143,13 @@ export function resetSessionExpired() {
     sessionExpired = false;
 }
 
+/** A fresh idempotency key for one mutation attempt. */
+export function newIdempotencyKey(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+}
+
 // Determines if an error is a network/timeout failure (safe to retry)
-function isNetworkError(error: unknown): boolean {
+export function isNetworkError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
     const msg = error.message.toLowerCase();
     return (
@@ -359,16 +327,18 @@ export const apiService = {
     // Pharmacovigilance Alerts
     async checkPharmacovigilance(scientificNames: string[], patientId?: string) {
         try {
-            return await request<{
+            const res = await request<{
                 interactions: Array<{ drug1: string; drug2: string; severity: string; description: string }>;
                 allergyWarnings: string[];
             }>('/pos/alerts', {
                 method: 'POST',
                 body: JSON.stringify({ scientificNames, patientId })
             });
+            return { interactions: res?.interactions ?? [], allergyWarnings: res?.allergyWarnings ?? [], failed: false };
         } catch (error) {
             console.error('API Error checkPharmacovigilance:', error);
-            return { interactions: [], allergyWarnings: [] };
+            // A failed check is NOT "no interactions" — callers must surface it.
+            return { interactions: [], allergyWarnings: [], failed: true };
         }
     },
 
@@ -552,12 +522,23 @@ export const apiService = {
         }
     },
 
-    // Create sale
-    async createSale(saleData: { items: any[]; totalAmount: number; patientId?: string | null; paymentMethod?: string; discount?: number }) {
+    // Create sale. `idempotencyKey` must be minted once per checkout attempt by
+    // the caller and reused on every retry / offline replay of that same sale.
+    async createSale(
+        saleData: {
+            items: any[];
+            totalAmount: number;
+            patientId?: string | null;
+            paymentMethod?: 'CASH' | 'CARD' | 'CREDIT';
+            discount?: number;
+            branchId?: string | null;
+        },
+        idempotencyKey: string = newIdempotencyKey(),
+    ) {
         try {
-            return await request('/sales', {
+            return await request<{ success: boolean; sale?: { id: string; invoiceNumber?: number | null }; ack?: { status: string } }>('/sales', {
                 method: 'POST',
-                headers: { 'x-idempotency-key': Date.now().toString(36) + Math.random().toString(36).substring(2) },
+                headers: { 'x-idempotency-key': idempotencyKey },
                 body: JSON.stringify(saleData),
             });
         } catch (error) {

@@ -46,7 +46,44 @@ export default function SettingsPage() {
     const [showConfirmRestore, setShowConfirmRestore] = useState<Backup | null>(null);
     const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [showAll, setShowAll] = useState(false);
-    const [activeTab, setActiveTab] = useState<'backups' | 'failures' | 'pos'>('backups');
+    const [activeTab, setActiveTab] = useState<'backups' | 'failures' | 'pos' | 'about'>('backups');
+
+    // ── About / updates tab state ─────────────────────────────────────────────
+    const [appVersion, setAppVersion] = useState('');
+    const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'downloading' | 'downloaded' | 'latest' | 'error' | 'dev'>('idle');
+    const [updatePercent, setUpdatePercent] = useState(0);
+    const [updateVersion, setUpdateVersion] = useState('');
+    const [updateError, setUpdateError] = useState('');
+
+    useEffect(() => {
+        window.ipcRenderer?.invoke('app:version').then((v: string) => setAppVersion(v || '')).catch(() => {});
+        const onAvailable = (_: any, d: any) => { setUpdateVersion(d?.version || ''); setUpdateState('downloading'); };
+        const onProgress = (_: any, d: any) => { setUpdatePercent(d?.percent ?? 0); setUpdateState('downloading'); };
+        const onDownloaded = (_: any, d: any) => { setUpdateVersion(d?.version || ''); setUpdateState('downloaded'); };
+        const onNotAvailable = () => setUpdateState('latest');
+        const onUpdateError = (_: any, d: any) => { setUpdateError(d?.message || ''); setUpdateState('error'); };
+        window.ipcRenderer?.on('update:available', onAvailable);
+        window.ipcRenderer?.on('update:download-progress', onProgress);
+        window.ipcRenderer?.on('update:downloaded', onDownloaded);
+        window.ipcRenderer?.on('update:not-available', onNotAvailable);
+        window.ipcRenderer?.on('update:error', onUpdateError);
+        return () => {
+            window.ipcRenderer?.off('update:available', onAvailable);
+            window.ipcRenderer?.off('update:download-progress', onProgress);
+            window.ipcRenderer?.off('update:downloaded', onDownloaded);
+            window.ipcRenderer?.off('update:not-available', onNotAvailable);
+            window.ipcRenderer?.off('update:error', onUpdateError);
+        };
+    }, []);
+
+    const handleCheckUpdates = async () => {
+        setUpdateState('checking');
+        setUpdateError('');
+        const res = await window.ipcRenderer?.invoke('update:check');
+        if (res?.reason === 'dev') setUpdateState('dev');
+        else if (res?.success === false) { setUpdateError(res?.reason || ''); setUpdateState('error'); }
+        // On success the update:* events drive the state from here.
+    };
     const [failureCount, setFailureCount] = useState(0);
     const [showReceiptAfterSale, setShowReceiptAfterSale] = useState(true);
     const [savingPOS, setSavingPOS] = useState(false);
@@ -197,6 +234,13 @@ export default function SettingsPage() {
                             {failureCount > 0 && (
                                 <span className="bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded-full">{failureCount}</span>
                             )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('about')}
+                            className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-1.5 transition-all ${activeTab === 'about' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <Info className="w-3.5 h-3.5" />
+                            حول التطبيق
                         </button>
                     </div>
                     <button
@@ -406,8 +450,96 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 </div>
-            ) : (
+            ) : activeTab === 'failures' ? (
                 <SyncFailuresTab />
+            ) : (
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                    <div className="max-w-xl mx-auto space-y-4">
+                        {/* App identity */}
+                        <div className="bg-card rounded-xl border border-border p-6 flex items-center gap-4">
+                            <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                                <Shield className="w-7 h-7 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                                <h2 className="text-lg font-black text-foreground">فاراماس — نقطة البيع</h2>
+                                <p className="text-xs text-muted-foreground mt-0.5">نظام إدارة الصيدليات المتكامل</p>
+                            </div>
+                            <span className="px-3 py-1.5 rounded-lg bg-muted text-foreground text-sm font-bold tabular-nums" dir="ltr">
+                                v{appVersion || '—'}
+                            </span>
+                        </div>
+
+                        {/* Updates */}
+                        <div className="bg-card rounded-xl border border-border p-5">
+                            <div className="flex items-start justify-between gap-4 mb-4">
+                                <div>
+                                    <p className="text-sm font-bold text-foreground">التحديثات</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                                        يتحقق التطبيق تلقائياً كل 4 ساعات، ويُنزّل التحديث في الخلفية ثم يثبّته عند إغلاق التطبيق أو بإعادة التشغيل.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleCheckUpdates}
+                                    disabled={updateState === 'checking' || updateState === 'downloading'}
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-bold transition-colors disabled:opacity-50 shrink-0"
+                                >
+                                    <RefreshCcw className={`w-4 h-4 ${updateState === 'checking' ? 'animate-spin' : ''}`} />
+                                    التحقق من التحديثات
+                                </button>
+                            </div>
+
+                            {updateState === 'checking' && (
+                                <div className="rounded-lg px-4 py-3 text-sm font-medium bg-muted text-muted-foreground flex items-center gap-2">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    جارٍ التحقق من وجود تحديث...
+                                </div>
+                            )}
+                            {updateState === 'latest' && (
+                                <div className="rounded-lg px-4 py-3 text-sm font-medium bg-success/10 text-success flex items-center gap-2">
+                                    <Check className="w-4 h-4" />
+                                    أنت على أحدث إصدار (v{appVersion})
+                                </div>
+                            )}
+                            {updateState === 'downloading' && (
+                                <div className="rounded-lg px-4 py-3 text-sm font-medium bg-primary/10 text-primary">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        يجري تنزيل الإصدار {updateVersion}{updatePercent > 0 ? ` — ${updatePercent}%` : ''}...
+                                    </div>
+                                    <div className="h-1.5 bg-primary/20 rounded-full overflow-hidden">
+                                        <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${updatePercent}%` }} />
+                                    </div>
+                                </div>
+                            )}
+                            {updateState === 'downloaded' && (
+                                <div className="rounded-lg px-4 py-3 text-sm font-medium bg-success/10 text-success flex items-center justify-between gap-3">
+                                    <span className="flex items-center gap-2">
+                                        <Check className="w-4 h-4" />
+                                        الإصدار {updateVersion} جاهز للتثبيت
+                                    </span>
+                                    <button
+                                        onClick={() => window.ipcRenderer?.invoke('update:install-now')}
+                                        className="px-3 py-1.5 bg-success text-white rounded-lg text-xs font-bold hover:bg-success/90 transition-colors shrink-0"
+                                    >
+                                        إعادة التشغيل الآن
+                                    </button>
+                                </div>
+                            )}
+                            {updateState === 'error' && (
+                                <div className="rounded-lg px-4 py-3 text-sm font-medium bg-destructive/10 text-destructive flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4 shrink-0" />
+                                    تعذر التحقق من التحديثات{updateError ? `: ${updateError}` : ''} — تأكد من اتصال الإنترنت.
+                                </div>
+                            )}
+                            {updateState === 'dev' && (
+                                <div className="rounded-lg px-4 py-3 text-sm font-medium bg-muted text-muted-foreground flex items-center gap-2">
+                                    <Info className="w-4 h-4" />
+                                    التحديث التلقائي متاح فقط في النسخة المثبّتة (وضع التطوير حالياً).
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* ======= TOAST ======= */}

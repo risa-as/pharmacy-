@@ -49,11 +49,12 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   REFUNDED: { label: "مسترجعة", cls: "bg-info/10 text-info border-info/20" },
 };
 
-export default async function PaymentsPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function PaymentsPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const branchId =
     typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 

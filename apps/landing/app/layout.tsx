@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import Navbar from '../components/navbar';
 
 const Footer = dynamic(() => import('../components/footer'));
-const WhatsAppButton = dynamic(() => import('../components/whatsapp-button'), { ssr: false });
+const WhatsAppButton = dynamic(() => import('../components/whatsapp-button'));
 
 const cairo = Cairo({ 
   subsets: ['arabic', 'latin'],

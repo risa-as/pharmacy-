@@ -9,11 +9,12 @@ import { NextResponse } from 'next/server';
 import { requireFeature } from '@/app/lib/page-guards';
 import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 
-export default async function ProfitReportPage({
-    searchParams
-}: {
-    searchParams?: { period?: string; from?: string; to?: string; branchId?: string }
-}) {
+export default async function ProfitReportPage(
+    props: {
+        searchParams?: Promise<{ period?: string; from?: string; to?: string; branchId?: string }>
+    }
+) {
+    const searchParams = await props.searchParams;
     const session = await auth();
     const defaultBranchId = searchParams?.branchId || session?.user?.branchId || '';
 

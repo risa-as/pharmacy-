@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { pharmacyDrugScope } from '@/app/lib/drug-scope';
 
 export async function GET(req: Request) {
     try {
@@ -33,11 +34,14 @@ export async function GET(req: Request) {
         if (isSearch) {
             const matchingDrugs = await prisma.globalDrug.findMany({
                 where: {
-                    OR: [
-                        { tradeName:      { contains: searchQuery, mode: 'insensitive' } },
-                        { scientificName: { contains: searchQuery, mode: 'insensitive' } },
-                        { barcode:        { contains: searchQuery } },
-                    ],
+                    ...pharmacyDrugScope(tenantCtx.organizationId),
+                    AND: [{
+                        OR: [
+                            { tradeName:      { contains: searchQuery, mode: 'insensitive' } },
+                            { scientificName: { contains: searchQuery, mode: 'insensitive' } },
+                            { barcode:        { contains: searchQuery } },
+                        ],
+                    }],
                 },
                 select: { id: true },
                 take: 20,
@@ -80,6 +84,12 @@ export async function GET(req: Request) {
                 tradeName:      drug ? drug.tradeName     : 'Unknown Drug',
                 scientificName: drug ? (drug.scientificName ?? '') : '',
                 quantity: totalQuantity,
+                // Earliest expiry still holding stock — lets the app flag expired
+                // and near-expiry items with the same data the stats card counts.
+                expiryDate: item.batches
+                    .filter((b: any) => b.quantity > 0)
+                    .map((b: any) => b.expiryDate)
+                    .sort((a: Date, b: Date) => new Date(a).getTime() - new Date(b).getTime())[0] ?? null,
                 price: item.price,
                 publicPrice: drug ? (drug as any).publicPrice || item.price : item.price,
                 reorderLevel: item.minStock,

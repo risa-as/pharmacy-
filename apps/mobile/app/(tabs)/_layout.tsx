@@ -1,4 +1,5 @@
 import { Tabs, router } from 'expo-router';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +9,43 @@ import { pollingService } from '../../services/polling';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSyncStatus } from '../../context/SyncContext';
-import { Colors, managerPalette, Radius } from '../../constants/colors';
+import { Colors, Radius } from '../../constants/colors';
+import type { AppShell } from '../../utils/roles';
+
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+// ── Tab definitions (navigation-map §2) ─────────────────────────────────────────
+interface TabDef { route: string; label: string; icon: IconName; iconActive: IconName }
+
+const TAB: Record<string, TabDef> = {
+    index:     { route: 'index',     label: 'الرئيسية',   icon: 'home-outline',          iconActive: 'home' },
+    reports:   { route: 'reports',   label: 'التقارير',   icon: 'stats-chart-outline',   iconActive: 'stats-chart' },
+    inventory: { route: 'inventory', label: 'المخزون',    icon: 'cube-outline',          iconActive: 'cube' },
+    alerts:    { route: 'alerts',    label: 'التنبيهات',  icon: 'notifications-outline', iconActive: 'notifications' },
+    more:      { route: 'more',      label: 'المزيد',     icon: 'menu-outline',          iconActive: 'menu' },
+    sales:     { route: 'sales',     label: 'نقطة البيع', icon: 'cart-outline',          iconActive: 'cart' },
+    debts:     { route: 'debts',     label: 'الديون',     icon: 'wallet-outline',        iconActive: 'wallet' },
+};
+
+/** Order is right-to-left on screen. */
+const SHELL_TABS: Record<AppShell, TabDef[]> = {
+    manager:    [TAB.index, TAB.reports, TAB.inventory, TAB.alerts, TAB.more],
+    pharmacist: [TAB.index, TAB.sales, TAB.inventory, TAB.debts, TAB.more],
+};
+
+/**
+ * Route → owning tab (navigation-map §11). Screens that are not a tab of the
+ * current shell light up the tab that owns them instead of a random one.
+ */
+function ownerTab(routeName: string, shell: AppShell): string {
+    const owned: Record<string, string> = shell === 'manager'
+        ? { settings: 'more', purchases: 'more', 'smart-orders': 'more', debts: 'more', sales: 'more' }
+        : { settings: 'more', alerts: 'more', reports: 'more', purchases: 'more', 'smart-orders': 'more' };
+    return owned[routeName] ?? routeName;
+}
+
+/** Screens whose content is live data → show the sync chip in the header. */
+const DATA_ROUTES = new Set(['index', 'reports', 'inventory', 'alerts', 'debts', 'purchases', 'smart-orders']);
 
 // Relative time helper (Arabic)
 function timeAgoAr(date: Date): string {
@@ -20,105 +57,161 @@ function timeAgoAr(date: Date): string {
     return `منذ ${Math.floor(hrs / 24)} ي`;
 }
 
-// Custom Header — page title + sync status ("آخر تحديث") + user avatar.
-const CustomHeader = ({ title }: { title: string }) => {
+// ── Header — page title + sync status + (pharmacist home) bell + avatar ───────
+const CustomHeader = ({ title, routeName, alertsCount }: { title: string; routeName: string; alertsCount: number }) => {
     const { isDarkMode } = useTheme();
     const { isSyncing, lastSyncedAt } = useSyncStatus();
-    const { user } = useAuth();
-    const C = managerPalette(isDarkMode);
+    const { user, shell } = useAuth();
+    const C = Colors(isDarkMode);
+    const insets = useSafeAreaInsets();
 
-    // Most recent sync across all tracked keys
     const lastSync = Object.values(lastSyncedAt)
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
     const synced = !isSyncing && !!lastSync;
     const chipColor = isSyncing ? C.warning : synced ? C.success : C.mutedForeground;
     const chipBg    = isSyncing ? C.warningBg : synced ? C.successBg : C.input;
-    const chipIcon: keyof typeof Ionicons.glyphMap = isSyncing ? 'sync-outline' : synced ? 'cloud-done-outline' : 'cloud-offline-outline';
+    const chipIcon: IconName = isSyncing ? 'sync-outline' : synced ? 'cloud-done-outline' : 'cloud-offline-outline';
     const syncLabel = isSyncing ? 'جاري التحديث' : synced ? `آخر تحديث ${timeAgoAr(lastSync)}` : 'غير محدّث';
 
     const initial = user?.name?.trim().charAt(0).toUpperCase() ?? '';
+    const showBell = shell === 'pharmacist' && routeName === 'index';
 
     return (
         <View
             style={{
-                backgroundColor: C.card,
-                paddingTop: Platform.OS === 'android' ? 38 : 50,
-                paddingBottom: 14,
-                paddingHorizontal: 20,
-                borderBottomWidth: 1,
-                borderBottomColor: C.border,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.04,
-                shadowRadius: 6,
-                elevation: 2,
-                zIndex: 100,
+                backgroundColor: C.background,
+                paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 24 : 44) + 8,
+                paddingBottom: 10,
+                paddingHorizontal: 16,
             }}
         >
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                {/* Title + sync chip */}
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 22, fontWeight: '900', color: C.foreground, textAlign: 'right', letterSpacing: 0.2 }}>
+                    <Text style={{ fontSize: 24, fontWeight: '900', color: C.foreground, textAlign: 'right' }} numberOfLines={1}>
                         {title}
                     </Text>
-                    <View style={{
-                        flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-                        alignSelf: 'flex-end', marginTop: 6,
-                        backgroundColor: chipBg, borderRadius: Radius.xs,
-                        paddingHorizontal: 8, paddingVertical: 4,
-                    }}>
-                        <Ionicons name={chipIcon} size={11} color={chipColor} />
-                        <Text style={{ color: chipColor, fontSize: 10.5, fontWeight: '700' }}>{syncLabel}</Text>
-                    </View>
+                    {DATA_ROUTES.has(routeName) && (
+                        <View style={{
+                            flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
+                            alignSelf: 'flex-end', marginTop: 6,
+                            backgroundColor: chipBg, borderRadius: Radius.badge,
+                            paddingHorizontal: 8, paddingVertical: 4,
+                        }}>
+                            <Ionicons name={chipIcon} size={12} color={chipColor} />
+                            <Text style={{ color: chipColor, fontSize: 11, fontWeight: '700' }}>{syncLabel}</Text>
+                        </View>
+                    )}
                 </View>
 
-                {/* Avatar → settings */}
-                <TouchableOpacity
-                    onPress={() => router.push('/(tabs)/settings' as any)}
-                    activeOpacity={0.8}
-                    style={{
-                        width: 44, height: 44, borderRadius: Radius.sm,
-                        backgroundColor: C.primary,
-                        alignItems: 'center', justifyContent: 'center',
-                        shadowColor: C.primary, shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
-                    }}
-                >
-                    {initial
-                        ? <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{initial}</Text>
-                        : <Ionicons name="person" size={20} color="#fff" />}
-                    {/* Presence dot */}
-                    <View style={{
-                        position: 'absolute', bottom: -2, left: -2,
-                        width: 14, height: 14, borderRadius: 7,
-                        backgroundColor: C.success, borderWidth: 2.5, borderColor: C.card,
-                    }} />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <TouchableOpacity
+                        onPress={() => router.push('/(tabs)/more' as any)}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel="المزيد والحساب"
+                        style={{
+                            width: 46, height: 46, borderRadius: Radius.card,
+                            backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center',
+                        }}
+                    >
+                        {initial
+                            ? <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{initial}</Text>
+                            : <Ionicons name="person" size={20} color="#fff" />}
+                    </TouchableOpacity>
+                    {showBell && (
+                        <TouchableOpacity
+                            onPress={() => router.push('/(tabs)/alerts' as any)}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`التنبيهات${alertsCount > 0 ? `، ${alertsCount} غير مقروء` : ''}`}
+                            style={{
+                                width: 46, height: 46, borderRadius: Radius.card,
+                                backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+                                alignItems: 'center', justifyContent: 'center',
+                            }}
+                        >
+                            <Ionicons name="notifications-outline" size={22} color={C.primary} />
+                            {alertsCount > 0 && <CountBadge count={alertsCount} color={C.danger} />}
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
         </View>
     );
 };
 
-/** Tab icon — active glyph is slightly larger and tinted with the brand colour. */
-function TabBarIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: string; focused: boolean }) {
-    return <Ionicons name={name} size={focused ? 24 : 22} color={color} />;
+function CountBadge({ count, color }: { count: number; color: string }) {
+    return (
+        <View style={{
+            position: 'absolute', top: -4, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+            backgroundColor: color, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+        }}>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{count > 99 ? '99+' : count}</Text>
+        </View>
+    );
+}
+
+// ── Bottom bar — fixed per shell, colour marks the active owner tab ─────────────
+function ShellTabBar({ state, navigation, shell, alertsCount }: BottomTabBarProps & { shell: AppShell; alertsCount: number }) {
+    const { isDarkMode } = useTheme();
+    const C = Colors(isDarkMode);
+    const insets = useSafeAreaInsets();
+    const focusedName = state.routes[state.index]?.name ?? 'index';
+    const activeKey = ownerTab(focusedName, shell);
+
+    return (
+        <View style={{
+            flexDirection: 'row-reverse',
+            backgroundColor: C.card,
+            borderTopWidth: 1, borderTopColor: C.border,
+            paddingTop: 8, paddingBottom: insets.bottom + 8,
+        }}>
+            {SHELL_TABS[shell].map(tab => {
+                const active = tab.route === activeKey;
+                const color = active ? C.primary : C.mutedForeground;
+                // Pharmacist alerts live under «المزيد» — its badge moves there too.
+                const badge = (shell === 'manager' && tab.route === 'alerts') || (shell === 'pharmacist' && tab.route === 'more')
+                    ? alertsCount : 0;
+                return (
+                    <TouchableOpacity
+                        key={tab.route}
+                        onPress={() => {
+                            const route = state.routes.find(r => r.name === tab.route);
+                            const event = route
+                                ? navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
+                                : null;
+                            if (!event?.defaultPrevented) navigation.navigate(tab.route as never);
+                        }}
+                        activeOpacity={0.8}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={badge > 0 ? `${tab.label}، ${badge} تنبيه` : tab.label}
+                        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 }}
+                    >
+                        <View>
+                            <Ionicons name={active ? tab.iconActive : tab.icon} size={24} color={color} />
+                            {badge > 0 && <CountBadge count={badge} color={C.danger} />}
+                        </View>
+                        <Text style={{ color, fontSize: 11.5, fontWeight: active ? '800' : '600' }}>{tab.label}</Text>
+                    </TouchableOpacity>
+                );
+            })}
+        </View>
+    );
 }
 
 export default function TabLayout() {
     const [alertsCount, setAlertsCount] = useState(0);
     const { isDarkMode } = useTheme();
-    const { isPharmacist, isLoading } = useAuth();
-    const insets = useSafeAreaInsets();
+    const { shell, isLoading } = useAuth();
     const { markSynced, setSyncing, registerTrigger } = useSyncStatus();
     const C = Colors(isDarkMode);
-    // Medical-blue brand accent for the navigation bar (matches manager dashboard).
-    const brand = isDarkMode ? '#3B8FD6' : '#1E6FBF';
 
     useEffect(() => {
         if (isLoading) return;
 
-        // ── Alerts / Notifications (30s) ──────────────────────────────────
+        // ── Alerts / Notifications (30s) — real unread count ────────────────
         const fetchAlerts = async () => {
             setSyncing('alerts', true);
             try {
@@ -134,7 +227,6 @@ export default function TabLayout() {
         registerTrigger('alerts', () => pollingService.trigger('alerts'));
 
         // ── Inventory low-stock heartbeat (2 min) ─────────────────────────
-        // Screens watching SyncContext.lastSyncedAt.inventory can refetch locally
         const pingInventory = async () => {
             setSyncing('inventory', true);
             markSynced('inventory');
@@ -159,132 +251,25 @@ export default function TabLayout() {
 
     return (
         <Tabs
-            screenOptions={{
+            tabBar={(props) => <ShellTabBar {...props} shell={shell} alertsCount={alertsCount} />}
+            screenOptions={({ route }) => ({
                 headerShown: true,
-                header: ({ options }) => <CustomHeader title={options.title || ''} />,
-                tabBarActiveTintColor: brand,
-                tabBarInactiveTintColor: C.mutedForeground,
-                tabBarStyle: {
-                    backgroundColor: C.card,
-                    borderTopWidth: 1,
-                    borderTopColor: C.border,
-                    elevation: 0,
-                    shadowColor: '#000',
-                    shadowOpacity: 0.08,
-                    shadowRadius: 12,
-                    shadowOffset: { width: 0, height: -3 },
-                    height: 60 + insets.bottom,
-                    paddingBottom: insets.bottom + 8,
-                    paddingTop: 8,
-                },
-                tabBarItemStyle: {
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                },
-                tabBarLabelStyle: {
-                    fontSize: 10,
-                    fontWeight: '700',
-                    marginTop: 3,
-                },
-            }}
+                header: ({ options }) => (
+                    <CustomHeader title={options.title || ''} routeName={route.name} alertsCount={alertsCount} />
+                ),
+                sceneStyle: { backgroundColor: C.background },
+            })}
         >
-            <Tabs.Screen
-                name="index"
-                options={{
-                    title: 'الرئيسية',
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="home" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            {/* Manager Tabs */}
-            <Tabs.Screen
-                name="reports"
-                options={{
-                    title: 'التقارير',
-                    href: isPharmacist ? null : '/reports',
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="stats-chart" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="sales"
-                options={{
-                    title: 'نقطة بيع',
-                    href: isPharmacist ? '/sales' : null,
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="cart" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="debts"
-                options={{
-                    title: 'الديون',
-                    href: isPharmacist ? '/debts' : null,
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="book" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="inventory"
-                options={{
-                    title: 'المخزون',
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="cube" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="alerts"
-                options={{
-                    title: 'تنبيهات',
-                    href: '/alerts',
-                    tabBarBadge: alertsCount > 0 ? alertsCount : undefined,
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="notifications" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="smart-orders"
-                options={{
-                    title: 'الطلبات',
-                    href: isPharmacist ? null : '/smart-orders',
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="bulb" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="purchases"
-                options={{
-                    title: 'المشتريات',
-                    href: isPharmacist ? null : '/purchases',
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="receipt" color={color} focused={focused} />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="settings"
-                options={{
-                    title: 'الإعدادات',
-                    tabBarIcon: ({ color, focused }) => (
-                        <TabBarIcon name="settings" color={color} focused={focused} />
-                    ),
-                }}
-            />
+            <Tabs.Screen name="index" options={{ title: 'الرئيسية' }} />
+            <Tabs.Screen name="reports" options={{ title: 'التقارير' }} />
+            <Tabs.Screen name="sales" options={{ title: 'نقطة البيع', headerShown: false }} />
+            <Tabs.Screen name="debts" options={{ title: 'الديون', headerShown: false }} />
+            <Tabs.Screen name="inventory" options={{ title: 'المخزون', headerShown: false }} />
+            <Tabs.Screen name="alerts" options={{ title: 'التنبيهات', headerShown: false }} />
+            <Tabs.Screen name="smart-orders" options={{ title: 'الطلبات الذكية', headerShown: false }} />
+            <Tabs.Screen name="purchases" options={{ title: 'المشتريات', headerShown: false }} />
+            <Tabs.Screen name="more" options={{ title: 'المزيد' }} />
+            <Tabs.Screen name="settings" options={{ title: 'الإعدادات' }} />
         </Tabs>
     );
 }

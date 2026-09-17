@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { updateInventory } from "@/app/lib/actions/inventory";
 import { Package, ArrowRight } from "lucide-react";
 import { SubmitButton } from "@/app/ui/submit-button";
@@ -40,7 +39,7 @@ export default function EditForm({
 }) {
     const initialState: any = { message: "", errors: {} };
     const updateInventoryWithId = updateInventory.bind(null, inventory.id);
-    const [state, dispatch] = useFormState(updateInventoryWithId, initialState);
+    const [state, dispatch] = useActionState(updateInventoryWithId, initialState);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

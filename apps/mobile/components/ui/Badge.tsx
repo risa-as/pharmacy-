@@ -25,8 +25,9 @@ export function Badge({ label, variant = 'default', className, ...props }: Badge
 
     return (
         <View
-            className={`${container} rounded-full px-2.5 py-0.5 self-start ${className ?? ''}`}
+            className={`${container} px-2.5 py-0.5 self-start ${className ?? ''}`}
             {...props}
+            style={[{ borderRadius: 5 }, props.style]}
         >
             <Text className={`${text} text-xs font-medium`}>{label}</Text>
         </View>

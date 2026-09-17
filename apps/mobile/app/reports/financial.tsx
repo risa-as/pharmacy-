@@ -1,713 +1,373 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-    View, Text, ScrollView, ActivityIndicator,
-    TouchableOpacity, RefreshControl,
-} from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { request } from '../../services/api';
-import { useTheme } from '../../context/ThemeContext';
-import { useAuth } from '../../context/AuthContext';
-import { managerPalette, Radius } from '../../constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { request } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { Radius } from '../../constants/colors';
 import { BranchSelector } from '../../components/BranchSelector';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { usePalette, Surface, IconTile, SegmentedTabs, StatusBadge, SectionTitle, InfoNote, StateBlock, AppButton, Tone } from '../../components/ui/Kit';
+import { formatDate } from '../../utils/date';
+import { formatNumber, formatIQD, CURRENCY } from '../../utils/format';
 
-type Palette = ReturnType<typeof managerPalette>;
-
-// ── Types ──────────────────────────────────────────────────────────────────────
 type Period = 'daily' | 'weekly' | 'monthly';
-const PERIODS: { key: Period; label: string }[] = [
-    { key: 'daily',   label: 'يومي' },
-    { key: 'weekly',  label: 'أسبوعي' },
-    { key: 'monthly', label: 'شهري' },
-];
+type Section = 'products' | 'dead' | 'expiry';
 
-interface ProductProfit {
-    drugId: string;
-    tradeName: string;
-    totalRevenue: number;
-    totalCost: number;
-    totalQuantitySold: number;
-    profitMargin: number;
-}
-interface DeadStockItem {
-    drugId: string;
-    tradeName: string;
-    currentStock: number;
-    estimatedValue: number;
-    branch?: string;
-}
-interface NearExpiryItem {
-    tradeName: string;
-    quantity: number;
-    expiryDate: string;
-    daysRemaining: number;
-    estimatedLoss: number;
-    batchNumber?: string;
-}
-interface BranchRow {
-    branchId: string; branchName: string;
-    revenue: number; expenses: number;
-    netProfit: number; profitMargin: number; salesCount: number;
-}
+interface ProductProfit { drugId: string; tradeName: string; totalRevenue: number; totalCost: number; totalQuantitySold: number; profitMargin: number }
+interface DeadStockItem { drugId: string; tradeName: string; currentStock: number; estimatedValue: number; branch?: string }
+interface NearExpiryItem { tradeName: string; quantity: number; expiryDate: string; daysRemaining: number; estimatedLoss: number; batchNumber?: string }
+interface BranchRow { branchId: string; branchName: string; revenue: number; expenses: number; netProfit: number; profitMargin: number; salesCount: number }
 interface AnalysisData {
     summary: {
-        totalRevenue: number;
-        totalCost: number;
-        netProfit: number;
-        overallMargin: number;
-        deadStockCount: number;
-        totalDeadStockValue: number;
-        nearExpiryCount: number;
-        totalNearExpiryLoss: number;
+        totalRevenue: number; totalCost: number; netProfit: number; overallMargin: number;
+        deadStockCount: number; totalDeadStockValue: number; nearExpiryCount: number; totalNearExpiryLoss: number;
     };
     profitByProduct: ProductProfit[];
     deadStock: DeadStockItem[];
     nearExpiryLoss: NearExpiryItem[];
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function abbr(n: number): string {
-    if (n === 0) return '0';
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} مليون`;
-    if (n >= 1_000)     return `${(n / 1_000).toFixed(0)} ألف`;
-    return n.toLocaleString('en-US');
-}
-
-function periodQuery(period: Period, branchId?: string | null): string {
-    const now = new Date();
+function periodRange(period: Period): { from: Date; to: Date } {
+    const to = new Date();
     const from = new Date();
-    if (period === 'daily') {
-        from.setHours(0, 0, 0, 0);
-    } else if (period === 'weekly') {
-        from.setDate(from.getDate() - 6);
-        from.setHours(0, 0, 0, 0);
-    } else {
-        from.setDate(1);
-        from.setHours(0, 0, 0, 0);
-    }
-    let q = `?from=${from.toISOString()}&to=${now.toISOString()}`;
-    if (branchId) q += `&branchId=${branchId}`;
-    return q;
+    if (period === 'weekly') from.setDate(from.getDate() - 6);
+    else if (period === 'monthly') from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+    return { from, to };
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
-// Ranks use the brand accent (blue) so the page stays colour-coherent.
-function RankBadge({ rank, C }: { rank: number; C: Palette }) {
-    return (
-        <View style={{
-            width: 28, height: 28, borderRadius: Radius.xs,
-            backgroundColor: `${C.primary}1A`,
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-            <Text style={{ color: C.primary, fontWeight: '900', fontSize: 12 }}>{rank}</Text>
-        </View>
-    );
-}
+const marginTone = (m: number): Tone => (m >= 20 ? 'success' : m >= 10 ? 'warning' : 'danger');
 
-function SectionHeader({
-    title, icon, iconColor, iconBg, badge, C,
-}: {
-    title: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    iconColor: string; iconBg: string;
-    badge?: number;
-    C: Palette;
-}) {
-    return (
-        <View style={{
-            flexDirection: 'row-reverse', justifyContent: 'space-between',
-            alignItems: 'center', marginBottom: 16,
-        }}>
-            <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15 }}>{title}</Text>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
-                {badge !== undefined && badge > 0 && (
-                    <View style={{ backgroundColor: iconColor, borderRadius: Radius.xs, paddingHorizontal: 9, paddingVertical: 2 }}>
-                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{badge}</Text>
-                    </View>
-                )}
-                <View style={{ backgroundColor: iconBg, borderRadius: Radius.xs, padding: 7 }}>
-                    <Ionicons name={icon} size={16} color={iconColor} />
-                </View>
-            </View>
-        </View>
-    );
-}
+type DrugSort = 'quantity' | 'profit' | 'margin';
 
-function Divider({ C }: { C: Palette }) {
-    return <View style={{ height: 1, backgroundColor: C.border }} />;
-}
+const DRUG_SORTS: { key: DrugSort; label: string }[] = [
+    { key: 'quantity', label: 'الأكثر بيعاً' },
+    { key: 'profit',   label: 'الأعلى ربحاً' },
+    { key: 'margin',   label: 'أعلى هامش' },
+];
 
-// ── Main Screen ────────────────────────────────────────────────────────────────
+/** Drugs shown before «عرض المزيد». */
+const DRUGS_PAGE = 10;
+
+/** Financial analysis (design financial.png): sections per topic, explicit period, no forecasts. */
 export default function FinancialReportScreen() {
-    const { isDarkMode } = useTheme();
-    const { branchId: authBranchId, isAdmin } = useAuth();
-    const C = managerPalette(isDarkMode);
+    const C = usePalette();
     const insets = useSafeAreaInsets();
+    const { branchId: authBranchId, isAdmin } = useAuth();
 
     const [analysis, setAnalysis]           = useState<AnalysisData | null>(null);
     const [branchComparison, setBranchComp] = useState<BranchRow[]>([]);
     const [loading, setLoading]             = useState(true);
+    const [failed, setFailed]               = useState(false);
     const [refreshing, setRefreshing]       = useState(false);
     const [compLoading, setCompLoading]     = useState(false);
-    const [period, setPeriod]               = useState<Period>('monthly');
+    const [period, setPeriod]               = useState<Period>('daily');
+    const [section, setSection]             = useState<Section>('products');
     const [selectedBranch, setSelectedBranch] = useState<string | null>(authBranchId);
+    const [drugSort, setDrugSort]           = useState<DrugSort>('quantity');
+    const [drugLimit, setDrugLimit]         = useState(DRUGS_PAGE);
+    const [showComparison, setShowComparison] = useState(false);
 
-    // Outlined card matching the manager home — light surface, soft tinted accent border.
-    const card = (accent: string) => ({
-        backgroundColor: C.card,
-        borderRadius: Radius.sm,
-        borderWidth: 1.5,
-        borderColor: `${accent}33`,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 } as const,
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        elevation: 2,
-    });
+    const range = useMemo(() => periodRange(period), [period, refreshing]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const fetchAnalysis = useCallback(async () => {
         try {
-            const q = periodQuery(period, selectedBranch);
-            const data = await request<AnalysisData>(`/reports/profit-analysis${q}`);
-            setAnalysis(data);
+            let q = `?from=${range.from.toISOString()}&to=${range.to.toISOString()}`;
+            if (selectedBranch) q += `&branchId=${selectedBranch}`;
+            setAnalysis(await request<AnalysisData>(`/reports/profit-analysis${q}`));
+            setFailed(false);
         } catch (err) {
             console.error('FinancialReportScreen:', err);
+            setFailed(true);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [period, selectedBranch]);
+    }, [range, selectedBranch]);
 
     useEffect(() => { setLoading(true); fetchAnalysis(); }, [fetchAnalysis]);
-    const onRefresh = useCallback(() => { setRefreshing(true); fetchAnalysis(); }, [fetchAnalysis]);
+    const onRefresh = useCallback(() => { setRefreshing(true); }, []);
 
-    const fetchComparison = useCallback(async () => {
+    useEffect(() => {
         if (!isAdmin) return;
         setCompLoading(true);
-        try {
-            const res = await request<{ comparison: BranchRow[] }>('/reports/branch-comparison');
-            setBranchComp(Array.isArray(res.comparison) ? res.comparison : []);
-        } catch {
-            setBranchComp([]);
-        } finally {
-            setCompLoading(false);
-        }
+        request<{ comparison: BranchRow[] }>('/reports/branch-comparison')
+            .then(res => setBranchComp(Array.isArray(res.comparison) ? res.comparison : []))
+            .catch(() => setBranchComp([]))
+            .finally(() => setCompLoading(false));
     }, [isAdmin]);
 
-    useEffect(() => { fetchComparison(); }, [fetchComparison]);
+    const summary = analysis?.summary;
+    const netProfit = summary?.netProfit ?? 0;
 
-    // ── Derived ────────────────────────────────────────────────────────────────
-    const summary        = analysis?.summary;
-    const netProfit      = summary?.netProfit ?? 0;
-    const profitPositive = netProfit >= 0;
-    const profitColor    = profitPositive ? C.success : C.danger;
-    const profitBg       = profitPositive ? C.successBg : C.dangerBg;
-    const showComparison = isAdmin && branchComparison.length > 1;
+    // Drugs, ordered by what the user picked; the list grows in pages of 10.
+    const sortedDrugs = useMemo(() => {
+        const list = [...(analysis?.profitByProduct ?? [])];
+        return drugSort === 'quantity'
+            ? list.sort((a, b) => b.totalQuantitySold - a.totalQuantitySold)
+            : drugSort === 'profit'
+                ? list.sort((a, b) => (b.totalRevenue - b.totalCost) - (a.totalRevenue - a.totalCost))
+                : list.sort((a, b) => b.profitMargin - a.profitMargin);
+    }, [analysis, drugSort]);
+    const products = useMemo(() => sortedDrugs.slice(0, drugLimit), [sortedDrugs, drugLimit]);
+    const dead = useMemo(() => (analysis?.deadStock ?? []).slice(0, 10), [analysis]);
+    const expiry = useMemo(() => [...(analysis?.nearExpiryLoss ?? [])].sort((a, b) => a.daysRemaining - b.daysRemaining).slice(0, 10), [analysis]);
 
-    const topByRevenue = useMemo(() =>
-        (analysis?.profitByProduct ?? [])
-            .slice()
-            .sort((a, b) => b.totalRevenue - a.totalRevenue)
-            .slice(0, 5),
-    [analysis]);
-
-    const topByMargin = useMemo(() =>
-        (analysis?.profitByProduct ?? [])
-            .filter(p => p.totalRevenue > 0)
-            .slice()
-            .sort((a, b) => b.profitMargin - a.profitMargin)
-            .slice(0, 5),
-    [analysis]);
-
-    const nearExpiry = useMemo(() =>
-        [...(analysis?.nearExpiryLoss ?? [])]
-            .sort((a, b) => a.daysRemaining - b.daysRemaining)
-            .slice(0, 6),
-    [analysis]);
-
-    const deadStock = useMemo(() =>
-        (analysis?.deadStock ?? []).slice(0, 6),
-    [analysis]);
-
-    const periodLabel = PERIODS.find(p => p.key === period)?.label ?? '';
-    const revenueBarPct = (summary?.totalRevenue ?? 0) > 0
-        ? Math.max(0, Math.min(100, ((summary?.totalRevenue ?? 0) - (summary?.totalCost ?? 0)) / (summary?.totalRevenue ?? 1) * 100))
-        : 0;
+    const rangeLabel = period === 'daily'
+        ? formatDate(range.to, { weekday: 'long', day: 'numeric', month: 'long' })
+        : `${formatDate(range.from, { day: 'numeric', month: 'long' })} — ${formatDate(range.to, { day: 'numeric', month: 'long' })}`;
 
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
-
-            {/* ── Header bar (matches the purchases sub-page header) ──────────── */}
-            <View style={{
-                paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 10,
-                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                backgroundColor: C.background,
-            }}>
-                <TouchableOpacity
-                    onPress={() => router.back()}
-                    activeOpacity={0.8}
-                    style={{ width: 40, height: 40, borderRadius: Radius.xs, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' }}
-                >
-                    <Ionicons name="arrow-forward" size={20} color={C.foreground} />
-                </TouchableOpacity>
-                <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800' }}>تحليل الربحية</Text>
-                <View style={{ width: 40 }} />
-            </View>
+            <ScreenHeader title="التحليل المالي" subtitle={rangeLabel} fallbackHref="/(tabs)/reports" />
 
             <ScrollView
-                contentContainerStyle={{ padding: 20, paddingBottom: 110 }}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 32, gap: 14 }}
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
             >
-                {/* ── Period segmented control ───────────────────────────────── */}
-                <View style={{
-                    flexDirection: 'row-reverse',
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    borderWidth: 1.5,
-                    borderColor: `${C.primary}33`,
-                    padding: 4, gap: 4, marginBottom: 16,
-                }}>
-                    {PERIODS.map(({ key, label }) => {
-                        const sel = period === key;
-                        return (
-                            <TouchableOpacity
-                                key={key} onPress={() => setPeriod(key)} activeOpacity={0.8}
-                                style={{
-                                    flex: 1, paddingVertical: 9, borderRadius: Radius.xs,
-                                    alignItems: 'center',
-                                    backgroundColor: sel ? C.primary : 'transparent',
-                                }}
-                            >
-                                <Text style={{ fontSize: 13, fontWeight: sel ? '800' : '600', color: sel ? '#fff' : C.mutedForeground }}>
-                                    {label}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-
-                {/* ── Branch selector ────────────────────────────────────────── */}
-                <BranchSelector
-                    selectedBranchId={selectedBranch}
-                    onSelectBranch={setSelectedBranch}
-                    hideIfSingle
-                    accent={C.primary}
-                    accentMuted={C.primaryMuted}
+                <SegmentedTabs<Period>
+                    items={[{ key: 'daily', label: 'يومي' }, { key: 'weekly', label: 'أسبوعي' }, { key: 'monthly', label: 'شهري' }]}
+                    value={period}
+                    onChange={setPeriod}
                 />
+                {isAdmin && <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle />}
 
-                {/* ── Loading ────────────────────────────────────────────────── */}
                 {loading && !refreshing ? (
-                    <View style={{ paddingVertical: 60, alignItems: 'center', gap: 12 }}>
-                        <ActivityIndicator size="large" color={C.primary} />
-                        <Text style={{ color: C.mutedForeground, fontSize: 13 }}>جاري تحليل البيانات...</Text>
-                    </View>
+                    <StateBlock loading title="جارِ تحليل البيانات…" />
+                ) : failed ? (
+                    <StateBlock icon="cloud-offline-outline" title="تعذّر تحميل التحليل" message="تحقق من الاتصال ثم أعد المحاولة." actionLabel="إعادة المحاولة" onAction={() => { setLoading(true); fetchAnalysis(); }} />
                 ) : (
-                    <View style={{ gap: 16 }}>
-
-                        {/* ══ 1. Profit Overview Card ═══════════════════════════ */}
-                        <View style={{ ...card(C.primary), padding: 18, gap: 16 }}>
-                            {/* Header: title + profit-margin badge */}
-                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Text style={{ color: C.foreground, fontSize: 13, fontWeight: '800' }}>
-                                    تحليل الربحية — {periodLabel}
-                                </Text>
-                                <View style={{
-                                    flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-                                    backgroundColor: profitBg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.xs,
-                                }}>
-                                    <Ionicons name={profitPositive ? 'trending-up' : 'trending-down'} size={14} color={profitColor} />
-                                    <Text style={{ color: profitColor, fontSize: 11, fontWeight: '800' }}>
-                                        {summary?.overallMargin?.toFixed(1) ?? '0'}% هامش
-                                    </Text>
-                                </View>
+                    <>
+                        <Surface style={{ gap: 8 }}>
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800' }}>إجمالي الربح</Text>
+                                <IconTile icon="cash-outline" />
                             </View>
+                            <Text style={{ color: netProfit >= 0 ? C.primary : C.danger, fontSize: 34, fontWeight: '900', textAlign: 'right' }}>
+                                {netProfit < 0 ? '−' : ''}{formatNumber(Math.abs(netProfit))} <Text style={{ fontSize: 15, color: C.mutedForeground }}>{CURRENCY}</Text>
+                            </Text>
+                            <StatusBadge label={`هامش ${(summary?.overallMargin ?? 0).toFixed(1)}%`} tone={netProfit >= 0 ? 'success' : 'danger'} icon={netProfit >= 0 ? 'trending-up' : 'trending-down'} />
+                            <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>الربح = الإيراد − تكلفة البضاعة المباعة خلال الفترة.</Text>
+                        </Surface>
 
-                            {/* Net profit – large number */}
-                            <View style={{ alignItems: 'flex-end' }}>
-                                <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: '600', marginBottom: 4 }}>
-                                    صافي الربح الإجمالي
-                                </Text>
-                                <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 6 }}>
-                                    <Text style={{ color: profitColor, fontSize: 32, fontWeight: '900' }}>
-                                        {abbr(Math.abs(netProfit))}
-                                    </Text>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 14, fontWeight: '700' }}>د.ع</Text>
-                                </View>
-                            </View>
-
-                            {/* Revenue / Cost split bar */}
-                            <View style={{ gap: 6 }}>
-                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: C.success, fontSize: 13, fontWeight: '800' }}>
-                                        {abbr(summary?.totalRevenue ?? 0)} د.ع
-                                    </Text>
-                                    <Text style={{ color: C.danger, fontSize: 13, fontWeight: '800' }}>
-                                        {abbr(summary?.totalCost ?? 0)} د.ع
-                                    </Text>
-                                </View>
-                                <View style={{ height: 8, borderRadius: 4, backgroundColor: C.dangerBg, overflow: 'hidden', flexDirection: 'row-reverse' }}>
-                                    <View style={{ width: `${revenueBarPct}%`, backgroundColor: C.success, borderRadius: 4 }} />
-                                </View>
-                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>الإيرادات الإجمالية</Text>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>تكلفة البضاعة</Text>
-                                </View>
-                            </View>
-
-                            <Divider C={C} />
-
-                            {/* Risk KPIs */}
-                            <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                                <View style={{ flex: 1, backgroundColor: C.warningBg, borderRadius: Radius.sm, padding: 12, alignItems: 'center', gap: 3 }}>
-                                    <Ionicons name="cube-outline" size={18} color={C.warning} />
-                                    <Text style={{ color: C.warning, fontWeight: '900', fontSize: 18 }}>
-                                        {summary?.deadStockCount ?? 0}
-                                    </Text>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>
-                                        مخزون راكد
-                                    </Text>
-                                    <Text style={{ color: C.warning, fontSize: 10, fontWeight: '700' }}>
-                                        {abbr(summary?.totalDeadStockValue ?? 0)} د.ع
-                                    </Text>
-                                </View>
-                                <View style={{ flex: 1, backgroundColor: C.dangerBg, borderRadius: Radius.sm, padding: 12, alignItems: 'center', gap: 3 }}>
-                                    <Ionicons name="time-outline" size={18} color={C.danger} />
-                                    <Text style={{ color: C.danger, fontWeight: '900', fontSize: 18 }}>
-                                        {summary?.nearExpiryCount ?? 0}
-                                    </Text>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>
-                                        تنتهي قريباً
-                                    </Text>
-                                    <Text style={{ color: C.danger, fontSize: 10, fontWeight: '700' }}>
-                                        {abbr(summary?.totalNearExpiryLoss ?? 0)} د.ع
-                                    </Text>
-                                </View>
-                                <View style={{ flex: 1, backgroundColor: C.primaryMuted, borderRadius: Radius.sm, padding: 12, alignItems: 'center', gap: 3 }}>
-                                    <Ionicons name="medkit-outline" size={18} color={C.primary} />
-                                    <Text style={{ color: C.primary, fontWeight: '900', fontSize: 18 }}>
-                                        {analysis?.profitByProduct?.length ?? 0}
-                                    </Text>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 9, fontWeight: '600', textAlign: 'center' }}>
-                                        صنف محلل
-                                    </Text>
-                                </View>
-                            </View>
+                        <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                            <MoneyTile label="الإيراد" icon="stats-chart-outline" tone="success" value={summary?.totalRevenue ?? 0} />
+                            <MoneyTile label="التكلفة" icon="layers-outline" tone="danger" value={summary?.totalCost ?? 0} />
                         </View>
 
-                        {/* ══ 2. Top Products by Revenue ════════════════════════ */}
-                        {topByRevenue.length > 0 && (
-                            <View style={{ ...card(C.primary), padding: 18 }}>
-                                <SectionHeader
-                                    title="أكثر الأدوية مبيعاً"
-                                    icon="podium"
-                                    iconColor={C.primary}
-                                    iconBg={C.primaryMuted}
-                                    C={C}
-                                />
-                                <View style={{ gap: 14 }}>
-                                    {topByRevenue.map((p, idx) => {
-                                        const mc = p.profitMargin >= 20 ? C.success
-                                                 : p.profitMargin >= 10 ? C.warning : C.danger;
-                                        return (
-                                            <View key={p.drugId}>
-                                                {idx > 0 && <Divider C={C} />}
-                                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingTop: idx > 0 ? 14 : 0 }}>
-                                                    <RankBadge rank={idx + 1} C={C} />
-                                                    <View style={{ flex: 1 }}>
-                                                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                                                            <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13, flex: 1, textAlign: 'right' }} numberOfLines={1}>
-                                                                {p.tradeName}
-                                                            </Text>
-                                                            <View style={{ backgroundColor: `${mc}18`, borderRadius: Radius.xs, paddingHorizontal: 7, paddingVertical: 2, marginLeft: 8 }}>
-                                                                <Text style={{ color: mc, fontSize: 10, fontWeight: '800' }}>
-                                                                    {p.profitMargin.toFixed(0)}% هامش
-                                                                </Text>
-                                                            </View>
-                                                        </View>
-                                                        {/* Margin progress bar */}
-                                                        <View style={{ height: 4, backgroundColor: `${mc}22`, borderRadius: 2, overflow: 'hidden', flexDirection: 'row-reverse', marginBottom: 5 }}>
-                                                            <View style={{ width: `${Math.min(100, Math.max(0, p.profitMargin))}%`, height: '100%', backgroundColor: mc, borderRadius: 2 }} />
-                                                        </View>
-                                                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
-                                                            <Text style={{ color: C.success, fontSize: 12, fontWeight: '700' }}>
-                                                                {abbr(p.totalRevenue)} د.ع
-                                                            </Text>
-                                                            <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-                                                                {p.totalQuantitySold.toLocaleString('en-US')} وحدة مباعة
-                                                            </Text>
-                                                        </View>
-                                                    </View>
-                                                </View>
-                                            </View>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-                        )}
-
-                        {/* ══ 3. Highest Profit Margins ════════════════════════ */}
-                        {topByMargin.length > 0 && (
-                            <View style={{ ...card(C.primary), padding: 18 }}>
-                                <SectionHeader
-                                    title="أعلى هوامش الربح"
-                                    icon="ribbon"
-                                    iconColor={C.primary}
-                                    iconBg={C.primaryMuted}
-                                    C={C}
-                                />
-                                {topByMargin.map((p, idx) => {
-                                    const mc = p.profitMargin >= 20 ? C.success
-                                             : p.profitMargin >= 10 ? C.warning : C.danger;
-                                    return (
-                                        <View key={p.drugId} style={{ marginBottom: idx < topByMargin.length - 1 ? 12 : 0 }}>
-                                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
-                                                {/* Margin pill */}
-                                                <View style={{ backgroundColor: `${mc}18`, borderRadius: Radius.xs, paddingHorizontal: 10, paddingVertical: 5, minWidth: 56, alignItems: 'center' }}>
-                                                    <Text style={{ color: mc, fontSize: 14, fontWeight: '900' }}>
-                                                        {p.profitMargin.toFixed(0)}%
-                                                    </Text>
-                                                </View>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13, textAlign: 'right' }} numberOfLines={1}>
-                                                        {p.tradeName}
-                                                    </Text>
-                                                    <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 1 }}>
-                                                        ربح: {abbr(p.totalRevenue - p.totalCost)} د.ع · {p.totalQuantitySold} وحدة
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                            {idx < topByMargin.length - 1 && (
-                                                <View style={{ height: 1, backgroundColor: C.border, marginTop: 12 }} />
-                                            )}
-                                        </View>
-                                    );
-                                })}
-                            </View>
-                        )}
-
-                        {/* ══ 4. Near-Expiry Risk ═══════════════════════════════ */}
-                        {nearExpiry.length > 0 && (
-                            <View style={{ ...card(C.danger), overflow: 'hidden' }}>
-                                {/* Tinted header */}
-                                <View style={{
-                                    backgroundColor: `${C.danger}12`,
-                                    borderBottomWidth: 1, borderBottomColor: `${C.danger}25`,
-                                    paddingHorizontal: 18, paddingVertical: 14,
-                                }}>
-                                    <SectionHeader
-                                        title="خطر انتهاء الصلاحية"
-                                        icon="skull-outline"
-                                        iconColor={C.danger}
-                                        iconBg={C.dangerBg}
-                                        badge={analysis?.nearExpiryLoss?.length}
-                                        C={C}
-                                    />
-                                    {/* Total loss banner */}
-                                    <View style={{
-                                        flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
-                                        backgroundColor: C.dangerBg, borderRadius: Radius.sm, padding: 12,
-                                    }}>
-                                        <Ionicons name="warning" size={16} color={C.danger} />
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={{ color: C.danger, fontWeight: '700', fontSize: 12, textAlign: 'right' }}>
-                                                إجمالي الخسائر المحتملة
-                                            </Text>
-                                            <Text style={{ color: C.danger, fontWeight: '900', fontSize: 16, textAlign: 'right' }}>
-                                                {abbr(summary?.totalNearExpiryLoss ?? 0)} د.ع
-                                            </Text>
-                                        </View>
-                                    </View>
-                                </View>
-
-                                <View style={{ padding: 18, gap: 14 }}>
-                                    {nearExpiry.map((item, idx) => {
-                                        const expired = item.daysRemaining <= 0;
-                                        const urgentC = expired ? C.danger
-                                                      : item.daysRemaining <= 30 ? C.warning
-                                                      : C.mutedForeground;
-                                        const urgentBg = expired ? C.dangerBg
-                                                       : item.daysRemaining <= 30 ? C.warningBg
-                                                       : C.border;
-                                        return (
-                                            <View key={idx}>
-                                                {idx > 0 && <Divider C={C} />}
-                                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingTop: idx > 0 ? 14 : 0 }}>
-                                                    {/* Days pill */}
-                                                    <View style={{ backgroundColor: urgentBg, borderRadius: Radius.xs, paddingHorizontal: 8, paddingVertical: 6, alignItems: 'center', minWidth: 52 }}>
-                                                        <Text style={{ color: urgentC, fontWeight: '900', fontSize: 14 }}>
-                                                            {expired ? '!' : item.daysRemaining}
-                                                        </Text>
-                                                        <Text style={{ color: urgentC, fontSize: 8, fontWeight: '600', marginTop: 1 }}>
-                                                            {expired ? 'منتهي' : 'يوم'}
-                                                        </Text>
-                                                    </View>
-                                                    <View style={{ flex: 1 }}>
-                                                        <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13, textAlign: 'right' }} numberOfLines={1}>
-                                                            {item.tradeName}
-                                                        </Text>
-                                                        <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
-                                                            {item.quantity} وحدة
-                                                        </Text>
-                                                    </View>
-                                                    <Text style={{ color: C.danger, fontWeight: '800', fontSize: 13 }}>
-                                                        {abbr(item.estimatedLoss)} د.ع
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        );
-                                    })}
-                                    {(analysis?.nearExpiryLoss?.length ?? 0) > 6 && (
-                                        <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'center', marginTop: 4 }}>
-                                            و {(analysis?.nearExpiryLoss?.length ?? 0) - 6} دفعات أخرى...
-                                        </Text>
-                                    )}
-                                </View>
-                            </View>
-                        )}
-
-                        {/* ══ 5. Dead Stock ════════════════════════════════════ */}
-                        {deadStock.length > 0 && (
-                            <View style={{ ...card(C.warning), overflow: 'hidden' }}>
-                                <View style={{
-                                    backgroundColor: `${C.warning}12`,
-                                    borderBottomWidth: 1, borderBottomColor: `${C.warning}25`,
-                                    paddingHorizontal: 18, paddingVertical: 14,
-                                }}>
-                                    <SectionHeader
-                                        title="مخزون راكد"
-                                        icon="cube-outline"
-                                        iconColor={C.warning}
-                                        iconBg={C.warningBg}
-                                        badge={analysis?.deadStock?.length}
-                                        C={C}
-                                    />
-                                    <View style={{
-                                        flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
-                                        backgroundColor: C.warningBg, borderRadius: Radius.sm, padding: 12,
-                                    }}>
-                                        <Ionicons name="information-circle" size={16} color={C.warning} />
-                                        <Text style={{ color: C.mutedForeground, fontSize: 12, flex: 1, textAlign: 'right' }}>
-                                            أصناف لم تُباع منذ أكثر من 90 يوماً
-                                        </Text>
-                                        <Text style={{ color: C.warning, fontWeight: '900', fontSize: 14 }}>
-                                            {abbr(summary?.totalDeadStockValue ?? 0)} د.ع
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                <View style={{ padding: 18, gap: 14 }}>
-                                    {deadStock.map((item, idx) => (
-                                        <View key={item.drugId}>
-                                            {idx > 0 && <Divider C={C} />}
-                                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingTop: idx > 0 ? 14 : 0 }}>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13, textAlign: 'right' }} numberOfLines={1}>
-                                                        {item.tradeName}
-                                                    </Text>
-                                                    <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
-                                                        {item.currentStock.toLocaleString('en-US')} وحدة متبقية
-                                                        {item.branch ? ` · ${item.branch}` : ''}
-                                                    </Text>
-                                                </View>
-                                                <View style={{ alignItems: 'flex-start', gap: 2 }}>
-                                                    <Text style={{ color: C.warning, fontWeight: '800', fontSize: 13 }}>
-                                                        {abbr(item.estimatedValue)} د.ع
-                                                    </Text>
-                                                    <Text style={{ color: C.mutedForeground, fontSize: 9 }}>قيمة مجمدة</Text>
-                                                </View>
-                                            </View>
-                                        </View>
-                                    ))}
-                                    {(analysis?.deadStock?.length ?? 0) > 6 && (
-                                        <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'center', marginTop: 4 }}>
-                                            و {(analysis?.deadStock?.length ?? 0) - 6} أصناف أخرى...
-                                        </Text>
-                                    )}
-                                </View>
-                            </View>
-                        )}
-
-                        {/* ══ 6. Branch Comparison (admin, >1 branch) ═══════════ */}
-                        {showComparison && (
-                            <View style={{ ...card(C.primary), padding: 18 }}>
-                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                    <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15 }}>
-                                        مقارنة الفروع
-                                    </Text>
-                                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                                        {compLoading && <ActivityIndicator size="small" color={C.primary} />}
-                                        <View style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.xs, padding: 7 }}>
-                                            <Ionicons name="git-compare" size={16} color={C.primary} />
-                                        </View>
-                                    </View>
-                                </View>
-                                {branchComparison.map((branch, idx) => {
-                                    const maxRev  = Math.max(...branchComparison.map(b => b.revenue), 1);
-                                    const barPct  = branch.revenue / maxRev;
-                                    const mc      = branch.profitMargin >= 20 ? C.success
-                                                  : branch.profitMargin >= 10 ? C.warning : C.danger;
-                                    const mcBg    = branch.profitMargin >= 20 ? C.successBg
-                                                  : branch.profitMargin >= 10 ? C.warningBg : C.dangerBg;
-                                    return (
-                                        <View key={branch.branchId} style={{
-                                            borderTopWidth: idx === 0 ? 0 : 1,
-                                            borderTopColor: C.border,
-                                            paddingTop: idx === 0 ? 0 : 14,
-                                            marginTop: idx === 0 ? 0 : 14,
+                        <Surface padded={false} style={{ overflow: 'hidden' }}>
+                            <SegmentedTabs<Section>
+                                items={[
+                                    { key: 'products', label: 'الأدوية' },
+                                    { key: 'dead', label: 'الراكد', count: summary?.deadStockCount || undefined },
+                                    { key: 'expiry', label: 'الصلاحية', count: summary?.nearExpiryCount || undefined },
+                                ]}
+                                value={section}
+                                onChange={setSection}
+                                style={{ borderWidth: 0, borderRadius: 0, borderBottomWidth: 1, borderBottomColor: C.border }}
+                            />
+                            <View style={{ padding: 14, gap: 12 }}>
+                                {section === 'products' && (products.length === 0 ? (
+                                    <Text style={{ color: C.mutedForeground, textAlign: 'center', paddingVertical: 12 }}>لا توجد مبيعات في هذه الفترة</Text>
+                                ) : (
+                                    <>
+                                        {/* Sort: one compact control on a single line */}
+                                        <View style={{
+                                            flexDirection: 'row-reverse', backgroundColor: C.background,
+                                            borderRadius: Radius.control, padding: 3, height: 32,
                                         }}>
-                                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                                <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 13 }}>
-                                                    {branch.branchName}
+                                            {DRUG_SORTS.map(s => {
+                                                const active = s.key === drugSort;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={s.key}
+                                                        onPress={() => { setDrugSort(s.key); setDrugLimit(DRUGS_PAGE); }}
+                                                        activeOpacity={0.8}
+                                                        accessibilityRole="button"
+                                                        accessibilityState={{ selected: active }}
+                                                        style={{
+                                                            flex: 1, alignItems: 'center', justifyContent: 'center',
+                                                            borderRadius: Radius.control - 1,
+                                                            backgroundColor: active ? C.card : 'transparent',
+                                                            borderWidth: 1, borderColor: active ? C.primary : 'transparent',
+                                                        }}
+                                                    >
+                                                        <Text
+                                                            numberOfLines={1}
+                                                            adjustsFontSizeToFit
+                                                            minimumFontScale={0.8}
+                                                            style={{ color: active ? C.primary : C.mutedForeground, fontSize: 12, fontWeight: active ? '800' : '600' }}
+                                                        >
+                                                            {s.label}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                        <View style={{ flexDirection: 'row-reverse' }}>
+                                            <Text style={{ flex: 2, color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>الدواء</Text>
+                                            <Text style={{ flex: 2, color: C.mutedForeground, fontSize: 12.5, textAlign: 'center' }}>المبيعات · الهامش</Text>
+                                            <Text style={{ flex: 1.3, color: C.mutedForeground, fontSize: 12.5, textAlign: 'left' }}>الربح</Text>
+                                        </View>
+                                        {products.map(p => (
+                                            <View key={p.drugId} style={{ flexDirection: 'row-reverse', alignItems: 'center', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 }}>
+                                                <Text style={{ flex: 2, color: C.foreground, fontSize: 14, fontWeight: '800', textAlign: 'right' }} numberOfLines={2}>{p.tradeName}</Text>
+                                                {/* Sold units and margin on one line */}
+                                                <View style={{ flex: 2, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                                    <Text style={{ color: C.mutedForeground, fontSize: 12.5 }} numberOfLines={1}>
+                                                        {formatNumber(p.totalQuantitySold)} وحدة
+                                                    </Text>
+                                                    <StatusBadge label={`${p.profitMargin.toFixed(0)}%`} tone={marginTone(p.profitMargin)} />
+                                                </View>
+                                                <Text style={{ flex: 1.3, color: C.primary, fontSize: 14, fontWeight: '900', textAlign: 'left' }}>{formatNumber(p.totalRevenue - p.totalCost)}</Text>
+                                            </View>
+                                        ))}
+                                        {sortedDrugs.length > DRUGS_PAGE && (
+                                            <View style={{ borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 }}>
+                                                {drugLimit < sortedDrugs.length ? (
+                                                    <AppButton
+                                                        label={`عرض المزيد (${formatNumber(sortedDrugs.length - drugLimit)})`}
+                                                        icon="chevron-down"
+                                                        variant="outline"
+                                                        compact
+                                                        onPress={() => setDrugLimit(n => n + DRUGS_PAGE)}
+                                                    />
+                                                ) : (
+                                                    <AppButton
+                                                        label="عرض أقل"
+                                                        icon="chevron-up"
+                                                        variant="outline"
+                                                        compact
+                                                        onPress={() => setDrugLimit(DRUGS_PAGE)}
+                                                    />
+                                                )}
+                                                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'center', marginTop: 6 }}>
+                                                    {formatNumber(products.length)} من {formatNumber(sortedDrugs.length)} دواء بيع في هذه الفترة
                                                 </Text>
-                                                <View style={{ backgroundColor: mcBg, borderRadius: Radius.xs, paddingHorizontal: 8, paddingVertical: 3 }}>
-                                                    <Text style={{ color: mc, fontSize: 11, fontWeight: '700' }}>
-                                                        {branch.profitMargin}% هامش
+                                            </View>
+                                        )}
+                                    </>
+                                ))}
+
+                                {section === 'dead' && (dead.length === 0 ? (
+                                    <Text style={{ color: C.mutedForeground, textAlign: 'center', paddingVertical: 12 }}>لا يوجد مخزون راكد</Text>
+                                ) : (
+                                    <>
+                                        <InfoNote tone="warning" text={`أصناف لم تُبع منذ أكثر من 90 يوماً · القيمة ${formatIQD(summary?.totalDeadStockValue ?? 0)}`} />
+                                        {dead.map(item => (
+                                            <View key={item.drugId} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 }}>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '800', textAlign: 'right' }} numberOfLines={1}>{item.tradeName}</Text>
+                                                    <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>
+                                                        {formatNumber(item.currentStock)} وحدة متبقية{item.branch ? ` · ${item.branch}` : ''}
                                                     </Text>
                                                 </View>
+                                                <Text style={{ color: C.warning, fontSize: 14, fontWeight: '800' }}>{formatIQD(item.estimatedValue)}</Text>
                                             </View>
-                                            <View style={{ height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', flexDirection: 'row-reverse', marginBottom: 10 }}>
-                                                <View style={{ width: `${barPct * 100}%`, backgroundColor: C.primary, borderRadius: 3 }} />
+                                        ))}
+                                    </>
+                                ))}
+
+                                {section === 'expiry' && (expiry.length === 0 ? (
+                                    <Text style={{ color: C.mutedForeground, textAlign: 'center', paddingVertical: 12 }}>لا توجد دفعات قريبة من الانتهاء</Text>
+                                ) : (
+                                    <>
+                                        <InfoNote tone="danger" text={`الخسارة المحتملة إن لم تُبع قبل الانتهاء: ${formatIQD(summary?.totalNearExpiryLoss ?? 0)}`} />
+                                        {expiry.map((item, idx) => (
+                                            <View key={`${item.tradeName}-${idx}`} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 }}>
+                                                <StatusBadge label={item.daysRemaining <= 0 ? 'منتهي' : `${item.daysRemaining} يوم`} tone={item.daysRemaining <= 0 ? 'danger' : 'warning'} />
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '800', textAlign: 'right' }} numberOfLines={1}>{item.tradeName}</Text>
+                                                    <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>{formatNumber(item.quantity)} وحدة{item.batchNumber ? ` · دفعة ${item.batchNumber}` : ''}</Text>
+                                                </View>
+                                                <Text style={{ color: C.danger, fontSize: 14, fontWeight: '800' }}>{formatIQD(item.estimatedLoss)}</Text>
                                             </View>
-                                            <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                                                {[
-                                                    { label: 'الإيرادات',  value: abbr(branch.revenue),    color: C.success },
-                                                    { label: 'صافي الربح', value: abbr(branch.netProfit),   color: branch.netProfit >= 0 ? C.success : C.danger },
-                                                    { label: 'المبيعات',   value: String(branch.salesCount), color: C.primary },
-                                                ].map(s => (
-                                                    <View key={s.label} style={{
-                                                        flex: 1, backgroundColor: C.background,
-                                                        borderRadius: Radius.xs, padding: 8, alignItems: 'center',
-                                                    }}>
-                                                        <Text style={{ color: s.color, fontWeight: '700', fontSize: 12 }}>{s.value}</Text>
-                                                        <Text style={{ color: C.mutedForeground, fontSize: 10, marginTop: 2 }}>{s.label}</Text>
-                                                    </View>
-                                                ))}
-                                            </View>
+                                        ))}
+                                    </>
+                                ))}
+                            </View>
+                        </Surface>
+
+                        {/* Branch comparison card (design financial.png): opens the comparison below */}
+                        {isAdmin && (
+                            <View>
+                                <TouchableOpacity
+                                    onPress={() => setShowComparison(v => !v)}
+                                    activeOpacity={0.8}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ expanded: showComparison }}
+                                >
+                                    <Surface style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
+                                        <IconTile icon="stats-chart-outline" size={38} />
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right' }}>مقارنة الفروع</Text>
+                                            <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right', marginTop: 2 }}>
+                                                {compLoading ? 'جارِ التحميل…' : 'مقارنة الأداء بين فروع الصيدلية'}
+                                            </Text>
                                         </View>
-                                    );
-                                })}
+                                        <Ionicons name={showComparison ? 'chevron-down' : 'chevron-back'} size={20} color={C.primary} />
+                                    </Surface>
+                                </TouchableOpacity>
+                                {showComparison && branchComparison.length <= 1 && !compLoading && (
+                                    <InfoNote style={{ marginTop: 10 }} text="لا توجد مقارنة: المؤسسة تعمل بفرع واحد." />
+                                )}
                             </View>
                         )}
 
-                        {/* ── Empty state ────────────────────────────────────── */}
-                        {!loading
-                            && !topByRevenue.length
-                            && !nearExpiry.length
-                            && !deadStock.length
-                            && (
-                            <View style={{ paddingVertical: 40, alignItems: 'center', gap: 10 }}>
-                                <Ionicons name="analytics-outline" size={48} color={C.mutedForeground} />
-                                <Text style={{ color: C.mutedForeground, fontSize: 14, fontWeight: '600' }}>
-                                    لا توجد بيانات للفترة المحددة
-                                </Text>
+                        {isAdmin && showComparison && branchComparison.length > 1 && (
+                            <View>
+                                <Surface padded={false} style={{ overflow: 'hidden' }}>
+                                    {branchComparison.map((b, idx) => {
+                                        const maxRev = Math.max(...branchComparison.map(x => x.revenue), 1);
+                                        return (
+                                            <View key={b.branchId} style={{ padding: 14, gap: 8, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: C.border }}>
+                                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '800' }}>{b.branchName}</Text>
+                                                    <StatusBadge label={`هامش ${b.profitMargin}%`} tone={marginTone(b.profitMargin)} />
+                                                </View>
+                                                <View style={{ height: 6, backgroundColor: C.input, borderRadius: 3, overflow: 'hidden', flexDirection: 'row-reverse' }}>
+                                                    <View style={{ width: `${(b.revenue / maxRev) * 100}%`, backgroundColor: C.primary, borderRadius: 3 }} />
+                                                </View>
+                                                <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>
+                                                    الإيراد {formatIQD(b.revenue)} · صافي الربح {formatIQD(b.netProfit)} · {formatNumber(b.salesCount)} فاتورة
+                                                </Text>
+                                            </View>
+                                        );
+                                    })}
+                                </Surface>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 6 }}>مقارنة الفروع لكامل الفترة المتاحة على الخادم، وليست مقيدة بفلتر الفترة أعلاه.</Text>
                             </View>
                         )}
-
-                    </View>
+                        {compLoading && branchComparison.length === 0 && isAdmin ? <ActivityIndicator color={C.primary} /> : null}
+                        <View style={{ height: Radius.card }} />
+                    </>
                 )}
             </ScrollView>
         </View>
+    );
+}
+
+/** Compact money tile: amount and currency on one line, tight vertical padding. */
+function MoneyTile({ label, icon, tone, value }: {
+    label: string; icon: React.ComponentProps<typeof IconTile>['icon']; tone: Tone; value: number;
+}) {
+    const C = usePalette();
+    return (
+        <Surface padded={false} style={{ flex: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}>
+            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: C.mutedForeground, fontSize: 13.5 }}>{label}</Text>
+                <IconTile icon={icon} tone={tone} size={30} />
+            </View>
+            <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+                style={{ color: C.foreground, fontSize: 19, fontWeight: '900', textAlign: 'right' }}
+            >
+                {formatNumber(value)} <Text style={{ fontSize: 11.5, fontWeight: '600', color: C.mutedForeground }}>{CURRENCY}</Text>
+            </Text>
+        </Surface>
     );
 }

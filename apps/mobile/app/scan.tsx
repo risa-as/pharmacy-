@@ -3,11 +3,14 @@ import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform, Anima
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, Stack } from 'expo-router';
+import { router, useLocalSearchParams, Stack, Href } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Linking } from 'react-native';
 import { apiService } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { managerPalette, Radius } from '../constants/colors';
 import { Badge } from '../components/ui/Badge';
+import { requestManualEntry, ManualEntryScreen } from '../utils/manual-entry';
 
 interface DrugResult {
     id: string;
@@ -22,9 +25,11 @@ const FRAME = 250;
 
 export default function ScanScreen() {
     const [permission, requestPermission] = useCameraPermissions();
+    const insets = useSafeAreaInsets();
     const [scanned, setScanned] = useState(false);
     const [loading, setLoading] = useState(false);
     const [drugResult, setDrugResult] = useState<DrugResult | null>(null);
+    const [scannedCode, setScannedCode] = useState<string | null>(null);
     const { isDarkMode } = useTheme();
     const C = managerPalette(isDarkMode);
     const params = useLocalSearchParams();
@@ -42,6 +47,22 @@ export default function ScanScreen() {
         anim.start();
         return () => anim.stop();
     }, [scanLine]);
+
+    /** Return to the screen that opened the scanner; standalone opens inventory search. */
+    const goBack = () => {
+        if (router.canGoBack()) router.back();
+        else router.replace((fromScreen === 'sales' ? '/(tabs)/sales' : '/(tabs)/inventory') as Href);
+    };
+    /**
+     * Manual entry uses the existing search of the source screen, and asks that
+     * screen to focus it so the keyboard is already open on arrival.
+     */
+    const goManual = async () => {
+        const target: ManualEntryScreen = fromScreen === 'sales' ? 'sales' : 'inventory';
+        await requestManualEntry(target);
+        if (fromScreen === 'sales' || fromScreen === 'inventory') goBack();
+        else router.replace('/(tabs)/inventory' as Href);
+    };
 
     if (!permission) {
         return <View style={{ flex: 1, backgroundColor: '#000' }} />;
@@ -61,11 +82,17 @@ export default function ScanScreen() {
                     نحتاج إذن الكاميرا لمسح الباركود
                 </Text>
                 <TouchableOpacity
-                    onPress={requestPermission}
+                    onPress={() => (permission.canAskAgain ? requestPermission() : Linking.openSettings())}
                     activeOpacity={0.85}
                     style={{ backgroundColor: C.primary, borderRadius: Radius.sm, paddingHorizontal: 30, paddingVertical: 14 }}
                 >
-                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>منح الإذن</Text>
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{permission.canAskAgain ? 'منح الإذن' : 'فتح إعدادات الجهاز'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={goManual} style={{ marginTop: 16, padding: 8 }}>
+                    <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '700' }}>إدخال يدوي بدلاً من الكاميرا</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={goBack} style={{ marginTop: 4, padding: 8 }}>
+                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>رجوع</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -74,6 +101,7 @@ export default function ScanScreen() {
     const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
         if (scanned || loading) return;
         setScanned(true);
+        setScannedCode(data);
 
         // Inventory flow: navigate back immediately with barcode param
         if (fromScreen === 'inventory') {
@@ -122,13 +150,15 @@ export default function ScanScreen() {
         if (!drugResult) return;
         router.replace({
             pathname: '/(tabs)/sales',
-            params: { scannedBarcode: drugResult.id },
+            // Hand over the scanned barcode itself (the sale screen looks it up by barcode).
+            params: { scannedBarcode: scannedCode ?? '' },
         });
     };
 
     const handleReset = () => {
         setScanned(false);
         setDrugResult(null);
+        setScannedCode(null);
     };
 
     const stockVariant = drugResult
@@ -162,24 +192,29 @@ export default function ScanScreen() {
                 }}
             />
 
-            {/* Header overlay */}
+            {/* Header overlay — back at the top-right (navigation-map §11) */}
             <View style={{
-                position: 'absolute', top: Platform.OS === 'ios' ? 56 : 40, left: 0, right: 0,
-                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                paddingHorizontal: 20, paddingVertical: 12,
+                position: 'absolute', top: insets.top + 8, left: 0, right: 0,
+                flexDirection: 'row-reverse', alignItems: 'center', gap: 12,
+                paddingHorizontal: 16, paddingVertical: 8,
             }}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                    <View style={{ width: 32, height: 32, borderRadius: Radius.xs, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="barcode-outline" size={18} color="#fff" />
-                    </View>
-                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>مسح الباركود</Text>
-                </View>
                 <TouchableOpacity
-                    onPress={() => router.back()}
+                    onPress={goBack}
                     activeOpacity={0.8}
-                    style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: Radius.xs, padding: 8 }}
+                    accessibilityLabel="رجوع"
+                    style={{ width: 42, height: 42, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: Radius.control, alignItems: 'center', justifyContent: 'center' }}
                 >
-                    <Ionicons name="close" size={22} color="#fff" />
+                    <Ionicons name="arrow-forward" size={22} color="#fff" />
+                </TouchableOpacity>
+                <Text style={{ flex: 1, color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'right' }}>ماسح الباركود</Text>
+                <TouchableOpacity
+                    onPress={goManual}
+                    activeOpacity={0.8}
+                    accessibilityLabel="إدخال يدوي"
+                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: Radius.control, paddingHorizontal: 12, height: 42 }}
+                >
+                    <Ionicons name="keypad-outline" size={18} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>إدخال يدوي</Text>
                 </TouchableOpacity>
             </View>
 
@@ -223,7 +258,7 @@ export default function ScanScreen() {
                                 ? <ActivityIndicator size="small" color={C.primary} />
                                 : <Ionicons name="barcode-outline" size={18} color={C.primary} />}
                             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
-                                {loading ? 'جاري البحث...' : 'وجّه الكاميرا نحو الباركود'}
+                                {loading ? 'جارِ البحث…' : 'وجّه الباركود داخل الإطار'}
                             </Text>
                         </View>
                     </View>

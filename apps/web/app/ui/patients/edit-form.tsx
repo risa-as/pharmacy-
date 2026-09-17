@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { updatePatient } from "@/app/lib/actions/patient";
 import { Users, ArrowRight } from "lucide-react";
 import { SubmitButton } from "@/app/ui/submit-button";
@@ -21,7 +20,7 @@ interface Patient {
 export default function EditForm({ patient }: { patient: Patient }) {
     const initialState: any = { message: "", errors: {} };
     const updatePatientWithId = updatePatient.bind(null, patient.id);
-    const [state, dispatch] = useFormState(updatePatientWithId, initialState);
+    const [state, dispatch] = useActionState(updatePatientWithId, initialState);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

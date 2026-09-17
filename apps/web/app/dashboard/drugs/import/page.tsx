@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Upload, FileSpreadsheet, CheckCircle, AlertTriangle, Loader2, Download } from "lucide-react";
-import * as XLSX from "xlsx";
+import { downloadWorkbook, readFirstSheetRows } from "@/app/lib/exceljs-browser";
 
 interface ImportRow {
     name: string;
@@ -74,11 +74,13 @@ function parseCSV(text: string): ImportRow[] {
     }).filter((r: any) => r.name);
 }
 
-function parseExcel(buffer: ArrayBuffer): ImportRow[] {
-    const wb = XLSX.read(buffer, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const json: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    if (json.length === 0) return [];
+async function parseExcel(buffer: ArrayBuffer): Promise<ImportRow[]> {
+    const matrix = await readFirstSheetRows(buffer);
+    if (matrix.length < 2) return [];
+    const headers = matrix[0].map((value) => String(value ?? "").trim());
+    const json = matrix.slice(1).filter((row) => row.some((value) => value != null && String(value).trim() !== "")).map((values) =>
+        Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]))
+    ) as Record<string, unknown>[];
 
     // Normalize keys to lowercase
     return json.map((raw) => {
@@ -134,16 +136,22 @@ export default function DrugImportPage() {
     const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (/\.xls$/i.test(file.name)) {
+            setRows([]);
+            setFileName("");
+            setResult({ success: false, imported: 0, updated: 0, errors: ["صيغة .xls القديمة غير مدعومة؛ احفظ الملف بصيغة .xlsx أو CSV."], total: 0 });
+            return;
+        }
 
         setFileName(file.name);
         setResult(null);
 
-        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+        const isExcel = /\.xlsx$/i.test(file.name);
         const reader = new FileReader();
 
         if (isExcel) {
-            reader.onload = (ev) => {
-                const parsed = parseExcel(ev.target?.result as ArrayBuffer);
+            reader.onload = async (ev) => {
+                const parsed = await parseExcel(ev.target?.result as ArrayBuffer);
                 setRows(parsed);
             };
             reader.readAsArrayBuffer(file);
@@ -175,16 +183,13 @@ export default function DrugImportPage() {
         setLoading(false);
     };
 
-    const downloadTemplate = () => {
+    const downloadTemplate = async () => {
         const data = [
             ["اسم الدواء", "الباركود", "سعر البيع", "سعر الشراء", "الكمية", "تاريخ الانتهاء", "الاسم العلمي", "الشركة"],
             ["أموكسيسيلين 500", "6281001210019", 5000, 3500, 100, "2026-06-30", "Amoxicillin", "الحكمة"],
             ["باراسيتامول 500", "6281001210020", 2000, 1200, 200, "2027-01-15", "Paracetamol", "سامراء"],
         ];
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "أدوية");
-        XLSX.writeFile(wb, "import_template.xlsx");
+        await downloadWorkbook("import_template.xlsx", [{ name: "أدوية", rows: data }]);
     };
 
     return (
@@ -213,12 +218,12 @@ export default function DrugImportPage() {
                     {fileName || "اسحب ملف CSV أو Excel هنا أو انقر للاختيار"}
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
-                    يدعم ملفات CSV و Excel (.xlsx, .xls). استخدم النموذج أعلاه كمرجع
+                    يدعم ملفات CSV و Excel (.xlsx). استخدم النموذج أعلاه كمرجع
                 </p>
                 <input
                     ref={fileRef}
                     type="file"
-                    accept=".csv,.txt,.xlsx,.xls"
+                    accept=".csv,.txt,.xlsx"
                     className="hidden"
                     onChange={handleFile}
                 />

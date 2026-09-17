@@ -28,9 +28,11 @@ async function getDrugs(
   organizationId: string | undefined,
   source: DrugSource,
 ) {
+  // صفوف المذاخر الخاصة (warehouseId != null) ليست جزءاً من الكتالوج المشترك
+  // ولا من أدوية المؤسسة — تُستثنى من كل شرائح هذه الصفحة.
   const orgVisible = {
     OR: [
-      { organizationId: null },
+      { organizationId: null, warehouseId: null },
       ...(organizationId ? [{ organizationId }] : []),
     ],
   };
@@ -43,9 +45,9 @@ async function getDrugs(
   if (source === "custom") {
     sourceFilter = organizationId
       ? { organizationId }
-      : { NOT: { organizationId: null } };
+      : { NOT: { organizationId: null }, warehouseId: null };
   } else if (source === "global") {
-    sourceFilter = { organizationId: null };
+    sourceFilter = { organizationId: null, warehouseId: null };
   }
 
   const searchFilter = query
@@ -131,15 +133,16 @@ function StatChip({
   );
 }
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams?: {
-    query?: string;
-    page?: string;
-    source?: string;
-  };
-}) {
+export default async function Page(
+  props: {
+    searchParams?: Promise<{
+      query?: string;
+      page?: string;
+      source?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) redirect("/login");
 

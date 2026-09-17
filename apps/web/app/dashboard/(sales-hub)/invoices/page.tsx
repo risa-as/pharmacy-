@@ -21,11 +21,12 @@ function buildDateRange(from: string, to: string) {
     return { start, end };
 }
 
-export default async function Page({
-    searchParams,
-}: {
-    searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function Page(
+    props: {
+        searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
     const { tenantBranchWhere } = tenantCtx;

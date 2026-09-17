@@ -8,11 +8,12 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
 
-export default async function EmployeesReportPage({
-    searchParams,
-}: {
-    searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function EmployeesReportPage(
+    props: {
+        searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const branchId = typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
     const tenantCtx = await getTenantContext();

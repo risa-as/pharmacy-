@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { updateSupplier } from "@/app/lib/actions/supplier";
 import { Users, ArrowRight } from "lucide-react";
 import { SubmitButton } from "@/app/ui/submit-button";
@@ -18,7 +17,7 @@ interface Supplier {
 export default function EditForm({ supplier }: { supplier: Supplier }) {
     const initialState: any = { message: "", errors: {} };
     const updateSupplierWithId = updateSupplier.bind(null, supplier.id);
-    const [state, dispatch] = useFormState(updateSupplierWithId, initialState);
+    const [state, dispatch] = useActionState(updateSupplierWithId, initialState);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

@@ -4,6 +4,7 @@ node_modules/
 
 # Next.js
 .next/
+.next-*/
 out/
 build/
 
@@ -19,6 +20,7 @@ apps/desktop/release/
 apps/desktop/dist/
 apps/desktop/dist-electron/
 apps/desktop/out/
+apps/desktop/release-seed/
 
 # Environment variables
 .env
@@ -67,6 +69,7 @@ settings_output_utf8.txt
 tmp/
 temp/
 coverage/
+artifacts/
 *.tsbuildinfo
 
 # AI & Tooling

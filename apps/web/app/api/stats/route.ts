@@ -1,8 +1,55 @@
 export const dynamic = 'force-dynamic';
 
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+
+/** Stock of an inventory row = sum of its batches (same basis as GET /api/inventory). */
+const STOCK_SQL = Prisma.sql`COALESCE((SELECT SUM(b.quantity) FROM "Batch" b WHERE b."inventoryId" = i.id), 0)`;
+
+/**
+ * Items in stock but at or below the reorder level — the same rule the mobile
+ * inventory tab «نواقص» uses, so both screens always show one number.
+ * Out-of-stock items are counted separately (`outOfStock`), never here.
+ *
+ * Counted in SQL: loading every inventory row with its batches to count them
+ * took 25–45 s on a branch with ~3,000 items and timed out the mobile app.
+ */
+async function countLowStock(tenantBranchWhere: Record<string, any>, branchId: string | null): Promise<number> {
+    const conditions = [...scopeConditions(tenantBranchWhere, branchId), Prisma.sql`i."minStock" > 0`];
+    const [row] = await prisma.$queryRaw<{ count: number }[]>`
+        SELECT COUNT(*)::int AS count
+        FROM "Inventory" i
+        WHERE ${Prisma.join(conditions, ' AND ')}
+          AND ${STOCK_SQL} > 0 AND ${STOCK_SQL} <= i."minStock"
+    `;
+    return row?.count ?? 0;
+}
+
+/** Items with no stock left — the inventory tab «نافد». */
+async function countOutOfStock(tenantBranchWhere: Record<string, any>, branchId: string | null): Promise<number> {
+    const conditions = scopeConditions(tenantBranchWhere, branchId);
+    const [row] = await prisma.$queryRaw<{ count: number }[]>`
+        SELECT COUNT(*)::int AS count FROM "Inventory" i
+        WHERE ${Prisma.join(conditions, ' AND ')} AND ${STOCK_SQL} <= 0
+    `;
+    return row?.count ?? 0;
+}
+
+/** Scope clauses shared by the inventory counts. */
+function scopeConditions(tenantBranchWhere: Record<string, any>, branchId: string | null): Prisma.Sql[] {
+    const conditions: Prisma.Sql[] = [Prisma.sql`TRUE`];
+    if (typeof tenantBranchWhere.branchId === 'string') {
+        conditions.push(Prisma.sql`i."branchId" = ${tenantBranchWhere.branchId}`);
+    }
+    const orgId = tenantBranchWhere.branch?.organizationId;
+    if (typeof orgId === 'string') {
+        conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "Branch" br WHERE br.id = i."branchId" AND br."organizationId" = ${orgId})`);
+    }
+    if (branchId) conditions.push(Prisma.sql`i."branchId" = ${branchId}`);
+    return conditions;
+}
 
 export async function GET(request: NextRequest) {
     try {
@@ -29,7 +76,8 @@ export async function GET(request: NextRequest) {
             salesTodayAgg,
             salesCountToday,
             inventoryCount,
-            inventoriesForStock,
+            lowStockCount,
+            outOfStockCount,
             expiringCount,
             expiredCount,
             debtsCount,
@@ -47,25 +95,23 @@ export async function GET(request: NextRequest) {
             }),
             // 3. Total inventory items
             prisma.inventory.count({ where: branchFilter }),
-            // 4. Low stock inventory items (minStock > 0)
-            prisma.inventory.findMany({
-                where: { ...branchFilter, minStock: { gt: 0 } },
-                include: { batches: { select: { quantity: true }, where: { quantity: { gt: 0 } } } },
-            }),
-            // 5. Expiring batches within 90 days (still valid, approaching expiry)
-            prisma.batch.count({
+            // 4. Low stock inventory items (minStock > 0), counted in the database
+            countLowStock(tenantBranchWhere, branchId),
+            // 5. Items with no stock left — the inventory tab «نافد»
+            countOutOfStock(tenantBranchWhere, branchId),
+            // 6. Items with a batch expiring within 90 days (still valid)
+            prisma.inventory.count({
                 where: {
-                    expiryDate: { gt: now, lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) },
-                    quantity: { gt: 0 },
-                    inventory: branchFilter,
+                    ...branchFilter,
+                    batches: { some: { expiryDate: { gt: now, lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) }, quantity: { gt: 0 } } },
                 },
             }),
-            // 6. Already-expired batches (UI referenced this but it was never returned)
-            prisma.batch.count({
+            // 7. Items holding expired stock. Counted per item, not per batch, so
+            //    it matches the inventory list the card opens.
+            prisma.inventory.count({
                 where: {
-                    expiryDate: { lt: now },
-                    quantity: { gt: 0 },
-                    inventory: branchFilter,
+                    ...branchFilter,
+                    batches: { some: { expiryDate: { lt: now }, quantity: { gt: 0 } } },
                 },
             }),
             // 7. Patients with outstanding balance (debts) — count
@@ -82,16 +128,13 @@ export async function GET(request: NextRequest) {
         ]);
 
         const salesToday = salesTodayAgg._sum.total ?? 0;
-        const lowStockCount = inventoriesForStock.filter((inv: any) => {
-            const total = inv.batches.reduce((s: number, b: any) => s + b.quantity, 0);
-            return total < inv.minStock;
-        }).length;
 
         return NextResponse.json({
             salesToday,
             salesCount: salesCountToday,
             inventory: inventoryCount,
             lowStock: lowStockCount,
+            outOfStock: outOfStockCount,
             expiring: expiringCount,
             expiredCount,
             debtsCount,

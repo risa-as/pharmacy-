@@ -22,11 +22,11 @@ module.exports = {
         extend: {
             colors: {
                 // ── Brand ──────────────────────────────────────────
-                // Medical teal — source: staticTokens.colors.primary
+                // Medical blue — mirrors constants/colors.ts (mobile redesign 012)
                 primary: {
-                    DEFAULT: '#0F7575',
-                    light:   '#1CABAC',
-                    dark:    '#0B5E5E',
+                    DEFAULT: '#1E6FBF',
+                    light:   '#3B8FD6',
+                    dark:    '#185A9C',
                 },
 
                 // ── Semantic ────────────────────────────────────────
@@ -51,12 +51,12 @@ module.exports = {
 
                 // ── Surfaces (static — no CSS vars in RN) ───────────
                 surface: {
-                    DEFAULT: '#FAFAF8',   // warm off-white (matches --background light)
-                    dark:    '#181614',   // warm dark      (matches --background dark)
+                    DEFAULT: '#F4F7FB',
+                    dark:    '#0E1620',
                 },
                 card: {
                     DEFAULT: '#FFFFFF',
-                    dark:    '#211E1B',   // matches --card dark
+                    dark:    '#16202C',
                 },
             },
 

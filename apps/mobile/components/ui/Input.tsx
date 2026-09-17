@@ -32,10 +32,10 @@ export function Input({ label, error, style, ...props }: InputProps) {
             <TextInput
                 style={[
                     {
-                        backgroundColor: C.input,
+                        backgroundColor: C.card,
                         borderColor,
                         borderWidth: focused ? 2 : 1,
-                        borderRadius: 12,
+                        borderRadius: 6,
                         paddingHorizontal: 14,
                         paddingVertical: 10,
                         color: C.foreground,

@@ -1,15 +1,15 @@
 "use client";
+import { useActionState } from "react";
 
 import Link from "next/link";
 import { SubmitButton } from "@/app/ui/submit-button";
-import { useFormState } from "react-dom";
 import { updateOrganization } from "@/app/lib/actions/organization";
 interface Organization { id: string; name: string; }
 
 export default function EditForm({ organization }: { organization: Organization }) {
     const initialState: any = { message: "", errors: {} };
     const updateOrganizationWithId = updateOrganization.bind(null, organization.id);
-    const [state, dispatch] = useFormState(updateOrganizationWithId as any, initialState);
+    const [state, dispatch] = useActionState(updateOrganizationWithId as any, initialState);
 
     return (
         <form action={dispatch} className="font-cairo">

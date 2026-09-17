@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { createInsurancePolicy } from "@/app/lib/actions/insurance";
 import { Shield, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -26,7 +25,7 @@ export default function CreatePolicyForm({
     companies: InsuranceCompany[];
 }) {
     const initialState: any = { message: "", errors: {}, success: false };
-    const [state, dispatch] = useFormState(createInsurancePolicy, initialState);
+    const [state, dispatch] = useActionState(createInsurancePolicy, initialState);
     const [mounted, setMounted] = useState(false);
     const router = useRouter();
 

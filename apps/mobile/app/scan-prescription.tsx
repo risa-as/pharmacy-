@@ -6,7 +6,12 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { router, Stack } from 'expo-router';
+import { router, Href } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Linking } from 'react-native';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { AppButton, InfoNote, StateBlock } from '../components/ui/Kit';
+import { Radius } from '../constants/colors';
 import * as ImageManipulator from 'expo-image-manipulator';
 import {
     PinchGestureHandler, PanGestureHandler, TapGestureHandler,
@@ -127,9 +132,34 @@ function ImageZoomModal({ uri, onClose }: { uri: string; onClose: () => void }) 
 // مفتاح AsyncStorage لتمرير الأدوية المحددة إلى شاشة المبيعات
 export const PRESCRIPTION_DRUGS_KEY = 'pendingPrescriptionDrugs';
 
-// الإطار الأزرق: عرضه 80% وارتفاعه 60% — نفس قيم الـ UI
+// الإطار: عرضه 80% وارتفاعه 60% — نفس قيم الـ UI
 const FRAME_WIDTH_RATIO  = 0.80;
 const FRAME_HEIGHT_RATIO = 0.60;
+
+const CORNER_LENGTH = 30;
+const CORNER_WIDTH  = 3;
+
+/** ركن واحد من أركان إطار الالتقاط (التصميم يرسم الزوايا لا مستطيلاً كاملاً). */
+function FrameCorner({ top, bottom, left, right }: { top?: boolean; bottom?: boolean; left?: boolean; right?: boolean }) {
+    return (
+        <View
+            style={{
+                position: 'absolute', width: CORNER_LENGTH, height: CORNER_LENGTH,
+                ...(top ? { top: 0 } : { bottom: 0 }),
+                ...(left ? { left: 0 } : { right: 0 }),
+                borderColor: '#fff',
+                borderTopWidth: top ? CORNER_WIDTH : 0,
+                borderBottomWidth: bottom ? CORNER_WIDTH : 0,
+                borderLeftWidth: left ? CORNER_WIDTH : 0,
+                borderRightWidth: right ? CORNER_WIDTH : 0,
+                borderTopLeftRadius: top && left ? Radius.card : 0,
+                borderTopRightRadius: top && right ? Radius.card : 0,
+                borderBottomLeftRadius: bottom && left ? Radius.card : 0,
+                borderBottomRightRadius: bottom && right ? Radius.card : 0,
+            }}
+        />
+    );
+}
 
 export default function ScanPrescriptionScreen() {
     const { isDarkMode } = useTheme();
@@ -147,25 +177,43 @@ export default function ScanPrescriptionScreen() {
     const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
     const [step, setStep]                 = useState<'camera' | 'review'>('camera');
     const [scanUsage, setScanUsage]       = useState<{ limit: number; used: number; remaining: number } | null>(null);
+    const [reviewed, setReviewed]         = useState(false);
+    // Measured heights of the two overlays, so the frame sits clear of both.
+    const [captureCardHeight, setCaptureCardHeight] = useState(140);
+    const [headerHeight, setHeaderHeight] = useState(110);
+    // Height of the review screen's fixed bottom bar (confirm + continue).
+    const [actionBarHeight, setActionBarHeight] = useState(180);
+    // The frame's on-screen rectangle; the crop is taken from exactly this area.
+    const frameRect = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+    const insets = useSafeAreaInsets();
 
     // جلب حالة الاستخدام عند فتح الشاشة
     React.useEffect(() => {
         apiService.getScanUsage().then(setScanUsage);
     }, []);
 
-    if (!permission) return <View style={{ flex: 1, backgroundColor: C.background }} />;
-    if (!permission.granted) {
+    if (!permission) return <View style={{ flex: 1, backgroundColor: C.background }}><StateBlock loading title="جارِ التحقق من إذن الكاميرا…" /></View>;
+    if (!permission.granted && step === 'camera') {
+        const usageText = scanUsage
+            ? (scanUsage.remaining === 0 ? 'نفدت مسوحات اليوم — تتجدد منتصف الليل.' : `المستخدم ${scanUsage.used} من ${scanUsage.limit} · المتبقي ${scanUsage.remaining} اليوم`)
+            : null;
         return (
-            <View style={{ flex: 1, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-                <Text style={{ fontSize: 16, color: C.foreground, textAlign: 'center', marginBottom: 20 }}>
-                    نحتاج إذن الكاميرا لتصوير الوصفة
-                </Text>
-                <TouchableOpacity
-                    style={{ backgroundColor: C.primary, padding: 14, borderRadius: 12, alignItems: 'center', width: '100%' }}
-                    onPress={requestPermission}
-                >
-                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>منح الإذن</Text>
-                </TouchableOpacity>
+            <View style={{ flex: 1, backgroundColor: C.background }}>
+                <ScreenHeader title="فحص الوصفة" fallbackHref={'/(tabs)/more' as Href} />
+                <View style={{ padding: 16, gap: 12 }}>
+                    <StateBlock
+                        icon="camera-outline"
+                        title="إذن الكاميرا مطلوب"
+                        message={permission.canAskAgain ? 'نحتاج إذن الكاميرا لتصوير الوصفة.' : 'تم رفض إذن الكاميرا. فعّله من إعدادات الجهاز، أو اختر صورة من المعرض.'}
+                    />
+                    <AppButton
+                        label={permission.canAskAgain ? 'منح الإذن' : 'فتح إعدادات الجهاز'}
+                        icon="camera-outline"
+                        onPress={() => (permission.canAskAgain ? requestPermission() : Linking.openSettings())}
+                    />
+                    <AppButton label="اختيار صورة من المعرض" icon="images-outline" variant="outline" loading={loading} disabled={scanUsage?.remaining === 0} onPress={() => pickImage()} />
+                    {usageText ? <InfoNote tone={scanUsage?.remaining === 0 ? 'danger' : 'primary'} text={usageText} /> : null}
+                </View>
             </View>
         );
     }
@@ -203,10 +251,19 @@ export default function ScanPrescriptionScreen() {
             visY = Math.round((imgH - visH) / 2);
         }
 
-        const cropW   = Math.round(visW * FRAME_WIDTH_RATIO);
-        const cropH   = Math.round(visH * FRAME_HEIGHT_RATIO);
-        const originX = visX + Math.round((visW - cropW) / 2);
-        const originY = visY + Math.round((visH - cropH) / 2);
+        // The drawn frame is the source of truth: map its on-screen rectangle
+        // into image pixels. (It is no longer centred — the capture card takes
+        // the bottom of the screen — so a centred crop would not match it.)
+        const frame = frameRect.current;
+        const fx = frame ? frame.x / screenW : (1 - FRAME_WIDTH_RATIO) / 2;
+        const fy = frame ? frame.y / screenH : (1 - FRAME_HEIGHT_RATIO) / 2;
+        const fw = frame ? frame.width / screenW : FRAME_WIDTH_RATIO;
+        const fh = frame ? frame.height / screenH : FRAME_HEIGHT_RATIO;
+
+        const cropW   = Math.round(visW * fw);
+        const cropH   = Math.round(visH * fh);
+        const originX = visX + Math.round(visW * fx);
+        const originY = visY + Math.round(visH * fy);
 
         const cropped = await ImageManipulator.manipulateAsync(
             processUri,
@@ -238,7 +295,7 @@ export default function ScanPrescriptionScreen() {
     };
 
     // ── اختيار صورة من المعرض ────────────────────────────────────────────────
-    const pickImage = async () => {
+    async function pickImage() {
         try {
             const ImagePicker = require('expo-image-picker');
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -261,12 +318,12 @@ export default function ScanPrescriptionScreen() {
                 Alert.alert('خطأ', 'فشل قراءة الصورة');
             }
         } catch {
-            Alert.alert('خطأ', 'يرجى التأكد من تثبيت expo-image-picker');
+            Alert.alert('خطأ', 'تعذّر فتح معرض الصور');
         }
-    };
+    }
 
     // ── إرسال الصورة للـ API ──────────────────────────────────────────────────
-    const processImage = async (base64: string) => {
+    async function processImage(base64: string) {
         try {
             console.log('[PRESCRIPTION] Sending image, base64 length:', base64.length);
             if (base64.length < 1000) {
@@ -283,6 +340,7 @@ export default function ScanPrescriptionScreen() {
             setSuggestions(sugg);
             // تحديد الأدوية المتوفرة فقط تلقائياً
             setSelectedIds(new Set(sugg.filter((s: any) => s.inStock !== false).map((s: any) => s.id)));
+            setReviewed(false);
             setStep('review');
             // تحديث عداد الاستخدام بعد المسح الناجح
             apiService.getScanUsage().then(setScanUsage);
@@ -292,7 +350,7 @@ export default function ScanPrescriptionScreen() {
         } finally {
             setLoading(false);
         }
-    };
+    }
 
     // ── تبديل تحديد دواء ─────────────────────────────────────────────────────
     const toggleSelect = (id: string) => {
@@ -311,13 +369,17 @@ export default function ScanPrescriptionScreen() {
             Alert.alert('تنبيه', 'يرجى تحديد دواء متوفر في المخزون');
             return;
         }
+        if (!reviewed) {
+            Alert.alert('مراجعة مطلوبة', 'أكّد أنك راجعت النتائج مع الوصفة قبل إضافتها للبيع.');
+            return;
+        }
         try {
             // نخزن أسماء الأدوية في AsyncStorage لتقرأها شاشة المبيعات
             await AsyncStorage.setItem(
                 PRESCRIPTION_DRUGS_KEY,
                 JSON.stringify(selected.map((s: any) => s.tradeName)),
             );
-            router.push('/(tabs)/sales');
+            router.push('/(tabs)/sales' as Href);
         } catch {
             Alert.alert('خطأ', 'تعذر الانتقال إلى نقطة البيع');
         }
@@ -331,11 +393,13 @@ export default function ScanPrescriptionScreen() {
 
         return (
             <View style={{ flex: 1, backgroundColor: C.background }}>
-                <Stack.Screen options={{ title: 'نتائج تحليل الوصفة', headerShown: true }} />
+                <ScreenHeader title="مراجعة النتائج" subtitle="نتائج مساعدة — القرار للصيدلاني" onBack={() => { setStep('camera'); setSuggestions([]); setSelectedIds(new Set()); }} />
 
                 <ScrollView
                     showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 110 : 30 }}
+                    // Reserve exactly the height of the fixed bar; a fixed guess
+                    // leaves the last drug card half-hidden behind it.
+                    contentContainerStyle={{ paddingBottom: (selectedCount > 0 ? actionBarHeight : 0) + 24 }}
                 >
                     {croppedUri && (
                         <>
@@ -357,9 +421,9 @@ export default function ScanPrescriptionScreen() {
 
                     {/* النص المقروء */}
                     <View style={{
-                        margin: 16, padding: 16,
+                        margin: 16, padding: 14,
                         backgroundColor: C.card,
-                        borderRadius: 8, borderWidth: 1, borderColor: C.border,
+                        borderRadius: Radius.card, borderWidth: 1, borderColor: C.border,
                     }}>
                         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                             <Ionicons name="document-text" size={20} color={C.primary} />
@@ -373,9 +437,9 @@ export default function ScanPrescriptionScreen() {
                     {/* الأدوية المقترحة */}
                     <View style={{ paddingHorizontal: 16 }}>
                         {/* رأس القسم + تحديد الكل / إلغاء الكل */}
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 12 }}>
-                            <Ionicons name="medical" size={20} color={C.success} />
-                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: C.foreground, flex: 1, marginRight: 8, textAlign: 'right' }}>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+                            <View style={{ width: 4, height: 20, borderRadius: 2, backgroundColor: C.primary }} />
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: C.foreground, flex: 1, textAlign: 'right' }}>
                                 الأدوية المقترحة ({suggestions.length})
                             </Text>
                             {suggestions.some((s: any) => s.inStock !== false) && (
@@ -391,7 +455,7 @@ export default function ScanPrescriptionScreen() {
                                         }
                                     }}
                                     style={{
-                                        backgroundColor: C.input, borderRadius: 8,
+                                        backgroundColor: C.input, borderRadius: Radius.badge,
                                         paddingHorizontal: 10, paddingVertical: 5,
                                         borderWidth: 1, borderColor: C.border,
                                     }}
@@ -424,11 +488,11 @@ export default function ScanPrescriptionScreen() {
                                             alignItems: 'center',
                                             backgroundColor: !inStock
                                                 ? C.input
-                                                : isSelected ? `${C.primary}12` : C.card,
-                                            padding: 14,
-                                            borderRadius: 12,
+                                                : isSelected ? C.primaryMuted : C.card,
+                                            padding: 12,
+                                            borderRadius: Radius.card,
                                             marginBottom: 10,
-                                            borderWidth: 2,
+                                            borderWidth: 1,
                                             borderColor: !inStock
                                                 ? C.border
                                                 : isSelected ? C.primary : C.border,
@@ -439,9 +503,9 @@ export default function ScanPrescriptionScreen() {
                                         {/* Checkbox — مخفي للأدوية غير المتوفرة */}
                                         {inStock && (
                                         <View style={{
-                                            width: 24, height: 24,
-                                            borderRadius: 6,
-                                            borderWidth: 2,
+                                            width: 22, height: 22,
+                                            borderRadius: Radius.badge,
+                                            borderWidth: 1,
                                             borderColor: isSelected ? C.primary : C.border,
                                             backgroundColor: isSelected ? C.primary : 'transparent',
                                             justifyContent: 'center', alignItems: 'center',
@@ -472,12 +536,13 @@ export default function ScanPrescriptionScreen() {
 
                                         {/* شارة التوفر */}
                                         <View style={{
-                                            backgroundColor: inStock ? `${C.success}20` : `${C.mutedForeground}20`,
-                                            paddingHorizontal: 8, paddingVertical: 4,
-                                            borderRadius: 6, flexShrink: 0,
+                                            backgroundColor: inStock ? C.successBg : C.input,
+                                            borderWidth: 1, borderColor: inStock ? `${C.success}55` : C.border,
+                                            paddingHorizontal: 8, paddingVertical: 3,
+                                            borderRadius: Radius.badge, flexShrink: 0,
                                         }}>
                                             <Text style={{ fontSize: 11, color: inStock ? C.success : C.mutedForeground, fontWeight: '700' }}>
-                                                {inStock ? '✓ متوفر' : '✗ غير متوفر'}
+                                                {inStock ? 'متوفر' : 'غير متوفر'}
                                             </Text>
                                         </View>
                                     </TouchableOpacity>
@@ -489,29 +554,40 @@ export default function ScanPrescriptionScreen() {
 
                 {/* زر الإضافة الثابت في الأسفل */}
                 {selectedCount > 0 && (
-                    <View style={{
+                    <View
+                        onLayout={e => setActionBarHeight(e.nativeEvent.layout.height)}
+                        style={{
                         position: 'absolute', bottom: 0, left: 0, right: 0,
-                        padding: 16,
+                        padding: 16, paddingBottom: insets.bottom + 16,
                         backgroundColor: C.card,
                         borderTopWidth: 1, borderTopColor: C.border,
                     }}>
+                        {/* تأكيد المراجعة — بطاقة مستقلة كما في التصميم */}
                         <TouchableOpacity
-                            onPress={handleAddSelected}
+                            onPress={() => setReviewed(v => !v)}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: reviewed }}
+                            activeOpacity={0.8}
                             style={{
-                                backgroundColor: C.primary,
-                                borderRadius: 14,
-                                padding: 16,
-                                flexDirection: 'row-reverse',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 10,
+                                flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 12,
+                                borderWidth: 1, borderColor: reviewed ? C.primary : C.border,
+                                backgroundColor: reviewed ? C.primaryMuted : C.card,
+                                borderRadius: Radius.card, paddingHorizontal: 12, paddingVertical: 10,
                             }}
                         >
-                            <Ionicons name="cart" size={22} color="#fff" />
-                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>
-                                إضافة {selectedCount} {selectedCount === 1 ? 'دواء' : 'أدوية'} إلى السلة
-                            </Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: C.foreground, fontSize: 14.5, fontWeight: '800', textAlign: 'right' }}>راجعت النتائج</Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right', marginTop: 1 }}>أؤكد أني راجعت النتائج قبل إضافتها للبيع</Text>
+                            </View>
+                            <Ionicons name={reviewed ? 'checkbox' : 'square-outline'} size={24} color={reviewed ? C.primary : C.mutedForeground} />
                         </TouchableOpacity>
+                        <AppButton
+                            label={`متابعة إلى البيع (${selectedCount})`}
+                            icon="arrow-back"
+                            disabled={!reviewed}
+                            onPress={handleAddSelected}
+                            style={{ paddingVertical: 13 }}
+                        />
                     </View>
                 )}
             </View>
@@ -524,13 +600,34 @@ export default function ScanPrescriptionScreen() {
     return (
         <View style={{ flex: 1 }}>
             {/* شريط العنوان + مؤشر الاستخدام — متكدسان رأسياً */}
-            <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 10, alignItems: 'center', gap: 8 }}>
-                {/* صف العنوان وزر الإغلاق */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', width: '100%', paddingHorizontal: 16 }}>
-                    <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 8 }}>
-                        <Ionicons name="close" size={28} color="#fff" />
+            <View
+                onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)}
+                style={{ position: 'absolute', top: insets.top + 8, left: 0, right: 0, zIndex: 10, alignItems: 'center', gap: 8 }}
+            >
+                {/* صف العنوان وزر الرجوع (أعلى اليمين) */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', width: '100%', paddingHorizontal: 16, gap: 12 }}>
+                    <TouchableOpacity
+                        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/more' as Href))}
+                        accessibilityLabel="رجوع"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.5)', width: 42, height: 42, borderRadius: Radius.control, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        <Ionicons name="arrow-forward" size={22} color="#fff" />
                     </TouchableOpacity>
-                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginRight: 16 }}>تصوير الوصفة (AI)</Text>
+                    <Text style={{ flex: 1, color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'right' }}>فحص الوصفة</Text>
+                </View>
+
+                {/* تنبيه التصميم: النتائج مساعدة والقرار للصيدلاني */}
+                <View style={{
+                    marginHorizontal: 16, alignSelf: 'stretch',
+                    flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
+                    backgroundColor: C.warningBg, borderWidth: 1, borderColor: `${C.warning}55`,
+                    borderRadius: Radius.card, paddingHorizontal: 12, paddingVertical: 6,
+                }}>
+                    <Ionicons name="alert-circle-outline" size={20} color={C.warning} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: C.warning, fontSize: 13.5, fontWeight: '800', textAlign: 'right' }}>مساعدة للصيدلاني</Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right' }}>راجع النتائج قبل إضافتها للبيع</Text>
+                    </View>
                 </View>
 
                 {/* مؤشر الاستخدام اليومي */}
@@ -544,7 +641,7 @@ export default function ScanPrescriptionScreen() {
                         <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
                             {scanUsage.remaining === 0
                                 ? 'نفذت مسوحات اليوم — تتجدد منتصف الليل'
-                                : `${scanUsage.remaining} من ${scanUsage.limit} مسح متبقٍ اليوم`}
+                                : `المستخدم ${scanUsage.used} من ${scanUsage.limit} · المتبقي ${scanUsage.remaining} اليوم`}
                         </Text>
                     </View>
                 )}
@@ -552,49 +649,61 @@ export default function ScanPrescriptionScreen() {
 
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} autofocus={'on'} />
 
-            {/* الإطار الأزرق المرئي */}
-            <View style={StyleSheet.absoluteFillObject}>
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <View style={{
-                        width: '80%', height: '60%',
-                        borderWidth: 2, borderColor: '#3b82f6',
-                        borderRadius: 12, backgroundColor: 'rgba(59,130,246,0.08)',
-                    }} />
-                    <Text style={{
-                        color: '#fff', marginTop: 16, fontSize: 13,
-                        backgroundColor: 'rgba(0,0,0,0.65)',
-                        paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8,
-                    }}>
-                        اجعل الوصفة داخل الإطار وتأكد من وضوح الكلمات
-                    </Text>
+            {/* إطار الالتقاط — زواياه فقط، كما في التصميم. يُوضع في المساحة
+                الخالية بين الترويسة وبطاقة التصوير، والقصّ يتبع موضعه الفعلي. */}
+            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                <View style={{
+                    flex: 1, justifyContent: 'center', alignItems: 'center',
+                    paddingTop: insets.top + headerHeight + 20, paddingBottom: captureCardHeight + 16,
+                }}>
+                    <View
+                        onLayout={e => { frameRect.current = e.nativeEvent.layout; }}
+                        style={{ width: '84%', height: '92%' }}
+                    >
+                        <FrameCorner top left />
+                        <FrameCorner top right />
+                        <FrameCorner bottom left />
+                        <FrameCorner bottom right />
+                    </View>
                 </View>
             </View>
 
-            {/* أزرار الكاميرا */}
+            {/* بطاقة التصوير السفلية (التصميم): عنوان وإرشاد وزرّان مكتوبان */}
             {(() => {
                 const limitReached = scanUsage !== null && scanUsage.remaining === 0;
                 return (
-                    <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 30 }}>
-                        <TouchableOpacity
-                            style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', opacity: limitReached ? 0.4 : 1 }}
-                            onPress={pickImage}
-                            disabled={loading || limitReached}
-                        >
-                            <Ionicons name="images" size={28} color="#fff" />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: '#fff', padding: 4, justifyContent: 'center', alignItems: 'center', opacity: (loading || limitReached) ? 0.4 : 1 }}
-                            onPress={takePicture}
-                            disabled={loading || limitReached}
-                        >
-                            {loading
-                                ? <ActivityIndicator color={C.primary} size="large" />
-                                : <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: limitReached ? '#9ca3af' : C.primary }} />
-                            }
-                        </TouchableOpacity>
-
-                        <View style={{ width: 50, height: 50 }} />
+                    <View
+                        onLayout={e => setCaptureCardHeight(e.nativeEvent.layout.height)}
+                        style={{
+                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                        backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border,
+                        borderTopLeftRadius: Radius.card, borderTopRightRadius: Radius.card,
+                        padding: 16, paddingBottom: insets.bottom + 16, gap: 12,
+                    }}>
+                        <View>
+                            <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right' }}>تصوير الوصفة</Text>
+                            <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }}>
+                                ضع الوصفة كاملة داخل الإطار وتأكد من وضوح الكلمات
+                            </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                            <AppButton
+                                label="تصوير"
+                                icon="camera-outline"
+                                style={{ flex: 1, paddingVertical: 12 }}
+                                loading={loading}
+                                disabled={loading || limitReached}
+                                onPress={takePicture}
+                            />
+                            <AppButton
+                                label="اختيار صورة"
+                                icon="image-outline"
+                                variant="outline"
+                                style={{ flex: 1, paddingVertical: 12 }}
+                                disabled={loading || limitReached}
+                                onPress={pickImage}
+                            />
+                        </View>
                     </View>
                 );
             })()}
@@ -603,7 +712,7 @@ export default function ScanPrescriptionScreen() {
                 <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', zIndex: 20 }]}>
                     <ActivityIndicator size="large" color="#fff" />
                     <Text style={{ color: '#fff', marginTop: 16, fontSize: 16, fontWeight: 'bold' }}>
-                        جاري تحليل الوصفة بالذكاء الاصطناعي...
+                        جارِ قراءة الوصفة…
                     </Text>
                 </View>
             )}

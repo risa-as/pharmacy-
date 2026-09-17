@@ -1,90 +1,49 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { apiService } from '../../services/api';
-import { useTheme } from '../../context/ThemeContext';
+import { useRouter, Href } from 'expo-router';
+import { apiService, request } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { managerPalette, Radius } from '../../constants/colors';
+import { Radius } from '../../constants/colors';
 import { Skeleton } from '../ui/Skeleton';
 import { ShiftSummaryHero } from './ShiftSummaryHero';
-import { formatDate, formatTime, iraqDateString, todayIraq } from '../../utils/date';
+import { usePalette, Surface, IconTile, PressableCard, LinkLabel, SectionTitle, AppButton, Tone } from '../ui/Kit';
+import { RecentSaleCard } from './RecentSaleCard';
+import { iraqDateString, todayIraq } from '../../utils/date';
+import { formatNumber } from '../../utils/format';
 
-const { width } = Dimensions.get('window');
-const PAGE_PAD = 20;
-const GAP = 12;
-// Three-column bento grid for quick actions (matches the manager dashboard).
-const COL3 = (width - PAGE_PAD * 2 - GAP * 2) / 3;
+interface AlertRow { id: string; drugName?: string; message?: string; type?: string; quantity?: number }
+interface Sale { id: string; invoiceNumber?: number | null; total: number; createdAt: string; payment?: { method?: string | null } | null }
 
-interface Alert { id: string; drugName?: string; message?: string; type?: string; }
-interface Sale  { id: string; total: number; createdAt: string; paymentMethod?: string; }
-
-const QUICK_ACTIONS = [
-    { title: 'بيع جديد',     icon: 'cart-outline'    as const, route: '/(tabs)/sales',        iconColor: (C: any) => C.primary,  iconBg: (C: any) => C.primaryMuted },
-    { title: 'مسح باركود',   icon: 'barcode-outline' as const, route: '/scan',                iconColor: (C: any) => C.info,     iconBg: (C: any) => C.infoBg       },
-    { title: 'بحث دواء',     icon: 'search-outline'  as const, route: '/(tabs)/inventory',    iconColor: (C: any) => C.success,  iconBg: (C: any) => C.successBg    },
-    { title: 'سجل الديون',   icon: 'book-outline'    as const, route: '/(tabs)/debts',        iconColor: (C: any) => C.warning,  iconBg: (C: any) => C.warningBg    },
-    { title: 'فحص الوصفة',  icon: 'scan-outline'    as const, route: '/scan-prescription',   iconColor: (C: any) => '#8b5cf6',  iconBg: (C: any) => 'rgba(139,92,246,0.1)' },
-] as const;
-
-const ALERT_ICON: Record<string, { icon: keyof typeof Ionicons.glyphMap; iconColor: (C: any) => string; iconBg: (C: any) => string; label: string }> = {
-    LOW_STOCK: { icon: 'cube-outline',  iconColor: C => C.danger,  iconBg: C => C.dangerBg,  label: 'نقص مخزون'    },
-    EXPIRY:    { icon: 'time-outline',  iconColor: C => C.warning, iconBg: C => C.warningBg, label: 'قرب الانتهاء' },
+const ALERT_META: Record<string, { icon: React.ComponentProps<typeof Ionicons>['name']; tone: Tone; label: string }> = {
+    LOW_STOCK: { icon: 'cube-outline', tone: 'warning', label: 'مخزون منخفض' },
+    EXPIRY: { icon: 'time-outline', tone: 'warning', label: 'قرب الانتهاء' },
+    EXPIRED: { icon: 'alert-circle-outline', tone: 'danger', label: 'منتهي' },
 };
 
-function SectionLabel({ text, action, onAction }: { text: string; action?: string; onAction?: () => void }) {
-    const { isDarkMode } = useTheme();
-    const C = managerPalette(isDarkMode);
-    return (
-        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingHorizontal: 2 }}>
-                <View style={{ width: 3, height: 13, borderRadius: 2, backgroundColor: C.primary }} />
-                <Text style={{ color: C.mutedForeground, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>
-                    {text}
-                </Text>
-            </View>
-            {action && onAction && (
-                <TouchableOpacity onPress={onAction} hitSlop={8}>
-                    <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>{action}</Text>
-                </TouchableOpacity>
-            )}
-        </View>
-    );
-}
-
+/** Pharmacist home (design home-pharmacist.png): search & sell first, compact shift summary. */
 export function PharmacistDashboard() {
-    const { isDarkMode } = useTheme();
-    const { branchId, user } = useAuth();
-    const C = managerPalette(isDarkMode);
+    const C = usePalette();
     const router = useRouter();
+    const { branchId, user } = useAuth();
 
-    // Outlined card matching the system identity — light surface, soft tinted border.
-    const card = (accent: string) => ({
-        backgroundColor: C.card,
-        borderRadius: Radius.sm,
-        borderWidth: 1.5,
-        borderColor: `${accent}33`,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 } as const,
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        elevation: 2,
-    });
-
-    const [sales, setSales]       = useState<Sale[]>([]);
-    const [alerts, setAlerts]     = useState<Alert[]>([]);
-    const [loading, setLoading]   = useState(true);
+    const [sales, setSales]           = useState<Sale[]>([]);
+    const [alerts, setAlerts]         = useState<AlertRow[]>([]);
+    const [loading, setLoading]       = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     const fetchData = useCallback(async () => {
         try {
+            const from = new Date();
+            from.setHours(0, 0, 0, 0);
             const [salesData, alertsData] = await Promise.all([
-                apiService.getSales().catch(() => [] as Sale[]),
-                apiService.getAlerts(branchId ?? undefined).catch(() => [] as Alert[]),
+                // mine=1: this screen is the pharmacist's own shift, not the branch total.
+                request<Sale[]>(`/sales?mine=1&limit=100&from=${from.toISOString()}`).catch(() => [] as Sale[]),
+                apiService.getAlerts(branchId ?? undefined).catch(() => [] as AlertRow[]),
             ]);
             const today = todayIraq();
-            setSales((salesData as Sale[]).filter(s => s.createdAt && iraqDateString(s.createdAt) === today));
-            setAlerts((alertsData as Alert[]).slice(0, 3));
+            setSales((Array.isArray(salesData) ? salesData : []).filter(s => s.createdAt && iraqDateString(s.createdAt) === today));
+            setAlerts((Array.isArray(alertsData) ? alertsData : []).slice(0, 3));
         } catch (err) {
             console.error('PharmacistDashboard:', err);
         } finally {
@@ -96,194 +55,117 @@ export function PharmacistDashboard() {
     useEffect(() => { fetchData(); }, [fetchData]);
     const onRefresh = useCallback(() => { setRefreshing(true); fetchData(); }, [fetchData]);
 
+    const go = (href: Href) => router.push(href);
     const todayRevenue = sales.reduce((s, x) => s + (x.total ?? 0), 0);
-    const cashCount    = sales.filter(s => !s.paymentMethod || s.paymentMethod === 'CASH').length;
-    const creditCount  = sales.length - cashCount;
-    const firstName    = user?.name?.split(' ')[0] ?? 'الصيدلاني';
+    const methodOf = (s: Sale) => s.payment?.method ?? 'CASH';
+    const cashCount = sales.filter(s => methodOf(s) === 'CASH').length;
+    const cardCount = sales.filter(s => methodOf(s) === 'CARD').length;
+    const creditCount = sales.filter(s => methodOf(s) === 'CREDIT').length;
+    const firstName = user?.name?.trim().split(' ')[0] ?? '';
 
     return (
         <ScrollView
             style={{ flex: 1, backgroundColor: C.background }}
-            contentContainerStyle={{ paddingBottom: 110 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32, gap: 16 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
             showsVerticalScrollIndicator={false}
         >
-            {/* ── Loading skeleton ─────────────────────────────────────────────── */}
-            {loading && !refreshing && (
-                <View style={{ padding: 20, gap: 16 }}>
-                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <View style={{ gap: 8 }}>
-                            <Skeleton width={180} height={12} radius={Radius.xs} />
-                            <Skeleton width={130} height={24} radius={Radius.xs} />
-                        </View>
-                        <Skeleton width={48} height={48} radius={Radius.sm} />
-                    </View>
-                    <Skeleton height={170} radius={Radius.sm} />
-                    <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                        {[1,2,3].map(i => <Skeleton key={i} style={{ flex: 1 }} height={96} radius={Radius.sm} />)}
-                    </View>
-                </View>
-            )}
+            <View>
+                <Text style={{ color: C.foreground, fontSize: 24, fontWeight: '900', textAlign: 'right' }}>أهلاً{firstName ? `، ${firstName}` : ''}</Text>
+                <Text style={{ color: C.mutedForeground, fontSize: 13.5, textAlign: 'right', marginTop: 2 }}>دائماً معك لصحة أفضل</Text>
+            </View>
 
-            {!loading && (
-                <View style={{ padding: PAGE_PAD, gap: 24 }}>
-
-                    {/* ── Header ──────────────────────────────────────────────── */}
-                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginBottom: 3 }}>
-                                {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </Text>
-                            <Text style={{ color: C.foreground, fontSize: 23, fontWeight: '900', textAlign: 'right' }}>
-                                أهلاً، {firstName}
-                            </Text>
-                        </View>
-                        <View style={{
-                            width: 48, height: 48, borderRadius: Radius.sm,
-                            backgroundColor: C.primaryMuted,
-                            alignItems: 'center', justifyContent: 'center',
-                            borderWidth: 1.5, borderColor: `${C.primary}30`,
-                        }}>
-                            <Text style={{ color: C.primary, fontSize: 20, fontWeight: '900' }}>
-                                {firstName.charAt(0)}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* ── Shift summary hero ──────────────────────────────────── */}
+            {loading && !refreshing ? (
+                <Skeleton height={210} radius={Radius.card} />
+            ) : (
                     <ShiftSummaryHero
                         title="ملخص وردية اليوم"
-                        headerIcon="time-outline"
-                        accent={C.primary}
-                        revenueLabel="إجمالي مبيعات اليوم"
+                        headerIcon="document-text-outline"
                         revenue={todayRevenue}
+                        metricsVariant="plain"
                         metrics={[
-                            { icon: 'receipt-outline', value: sales.length, label: 'فاتورة' },
-                            { icon: 'cash-outline',    value: cashCount,    label: 'نقدي' },
-                            { icon: 'time-outline',    value: creditCount,  label: 'آجل', onPress: () => router.push('/(tabs)/debts' as any) },
+                            { icon: 'reader-outline', value: sales.length, label: 'فاتورة', onPress: () => go('/sales-history' as Href) },
+                            { icon: 'cash-outline', value: cashCount + cardCount, label: 'نقدي' },
+                            { icon: 'time-outline', value: creditCount, label: 'آجل', onPress: () => go('/(tabs)/debts' as Href) },
                         ]}
                     />
+            )}
 
-                    {/* ── Quick Actions (bento grid) ──────────────────────────── */}
-                    <View>
-                        <SectionLabel text="وصول سريع" />
-                        <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: GAP }}>
-                            {QUICK_ACTIONS.map(action => (
-                                <TouchableOpacity
-                                    key={action.title}
-                                    onPress={() => router.push(action.route as any)}
-                                    activeOpacity={0.85}
-                                    style={{ ...card(action.iconColor(C)), width: COL3, paddingVertical: 16, alignItems: 'center', gap: 10 }}
-                                >
-                                    <View style={{
-                                        width: 46, height: 46, borderRadius: Radius.xs,
-                                        backgroundColor: action.iconBg(C),
-                                        justifyContent: 'center', alignItems: 'center',
-                                    }}>
-                                        <Ionicons name={action.icon} size={23} color={action.iconColor(C)} />
-                                    </View>
-                                    <Text style={{ color: C.foreground, fontSize: 11.5, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
-                                        {action.title}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
+            {/* Quick access (design home-pharmacist.png) */}
+            <View style={{ gap: 10 }}>
+                <SectionTitle title="وصول سريع" style={{ marginBottom: 0 }} />
+                <AppButton label="بيع جديد" icon="cart-outline" onPress={() => go('/(tabs)/sales' as Href)} style={{ paddingVertical: 14 }} />
+                <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                    <QuickTile label="مسح باركود" icon="barcode-outline" onPress={() => go({ pathname: '/scan', params: { from: 'sales' } } as unknown as Href)} />
+                    <QuickTile label="بحث دواء" icon="search-outline" tone="success" onPress={() => go('/(tabs)/inventory' as Href)} />
+                </View>
+                <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                    <QuickTile label="فحص الوصفة" icon="scan-outline" onPress={() => go('/scan-prescription' as Href)} />
+                    <QuickTile label="سجل الديون" icon="wallet-outline" tone="warning" onPress={() => go('/(tabs)/debts' as Href)} />
+                </View>
+            </View>
 
-                    {/* ── Recent Alerts ────────────────────────────────────────── */}
+            {!loading && (
+                <>
+
                     {alerts.length > 0 && (
                         <View>
-                            <SectionLabel
-                                text="التنبيهات"
-                                action="عرض الكل"
-                                onAction={() => router.push('/(tabs)/alerts' as any)}
-                            />
+                            <SectionTitle title="التنبيهات" trailing="عرض الكل" onTrailingPress={() => go('/(tabs)/alerts' as Href)} />
                             <View style={{ gap: 10 }}>
                                 {alerts.map(alert => {
-                                    const cfg = ALERT_ICON[alert.type ?? ''] ?? ALERT_ICON['EXPIRY'];
-                                    const ac = cfg.iconColor(C);
+                                    const meta = ALERT_META[alert.type ?? ''] ?? ALERT_META.EXPIRY;
                                     return (
-                                        <TouchableOpacity
+                                        <PressableCard
                                             key={alert.id}
-                                            onPress={() => router.push('/(tabs)/alerts' as any)}
-                                            activeOpacity={0.8}
-                                            style={{
-                                                ...card(ac),
-                                                flexDirection: 'row-reverse', alignItems: 'center',
-                                                paddingVertical: 12, paddingHorizontal: 14, gap: 12,
-                                            }}
+                                            onPress={() => go('/(tabs)/alerts' as Href)}
+                                            style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingVertical: 12 }}
+                                            accessibilityLabel={`${alert.drugName ?? alert.message ?? 'تنبيه'}، ${meta.label}`}
                                         >
-                                            <View style={{
-                                                width: 36, height: 36, borderRadius: Radius.xs,
-                                                backgroundColor: cfg.iconBg(C),
-                                                justifyContent: 'center', alignItems: 'center', flexShrink: 0,
-                                            }}>
-                                                <Ionicons name={cfg.icon} size={17} color={ac} />
+                                            <IconTile icon={meta.icon} tone={meta.tone} size={40} />
+                                            <View style={{ flex: 1, minWidth: 0 }}>
+                                                <LinkLabel
+                                                    label={alert.drugName ?? alert.message ?? 'تنبيه'}
+                                                    style={{ color: C.foreground, fontSize: 15, fontWeight: '800' }}
+                                                    textProps={{ numberOfLines: 1 }}
+                                                />
+                                                <Text style={{ color: meta.tone === 'danger' ? C.danger : C.warning, fontSize: 13, textAlign: 'right', marginTop: 2 }}>{meta.label}</Text>
                                             </View>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={{ color: C.foreground, fontWeight: '700', textAlign: 'right', fontSize: 13 }} numberOfLines={1}>
-                                                    {alert.drugName ?? alert.message ?? 'تنبيه'}
-                                                </Text>
-                                                <Text style={{ color: ac, fontSize: 11, fontWeight: '600', textAlign: 'right', marginTop: 2 }}>
-                                                    {cfg.label}
-                                                </Text>
-                                            </View>
-                                            <Ionicons name="chevron-back" size={15} color={C.mutedForeground} />
-                                        </TouchableOpacity>
+                                            {typeof alert.quantity === 'number' && (
+                                                <Text style={{ color: C.mutedForeground, fontSize: 13 }}>{formatNumber(alert.quantity)} وحدات</Text>
+                                            )}
+                                        </PressableCard>
                                     );
                                 })}
                             </View>
                         </View>
                     )}
 
-                    {/* ── Today's Sales ────────────────────────────────────────── */}
                     {sales.length > 0 && (
                         <View>
-                            <SectionLabel
-                                text="مبيعات اليوم"
-                                action="عرض الكل"
-                                onAction={() => router.push('/sales-history' as any)}
-                            />
-                            <View style={{ ...card(C.primary), paddingHorizontal: 14 }}>
-                                {sales.slice(0, 5).map((sale, idx) => {
-                                    const isCash = !sale.paymentMethod || sale.paymentMethod === 'CASH';
-                                    const isLast = idx === Math.min(sales.length, 5) - 1;
-                                    return (
-                                        <React.Fragment key={sale.id}>
-                                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 13, gap: 12 }}>
-                                                <View style={{
-                                                    width: 36, height: 36, borderRadius: Radius.xs,
-                                                    backgroundColor: isCash ? C.successBg : C.primaryMuted,
-                                                    justifyContent: 'center', alignItems: 'center', flexShrink: 0,
-                                                }}>
-                                                    <Ionicons name={isCash ? 'cash-outline' : 'card-outline'} size={17} color={isCash ? C.success : C.primary} />
-                                                </View>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={{ color: C.foreground, fontWeight: '600', textAlign: 'right', fontSize: 13 }}>
-                                                        {sale.createdAt ? formatTime(sale.createdAt, { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                                    </Text>
-                                                    <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 1 }}>
-                                                        {isCash ? 'نقدي' : (sale.paymentMethod ?? '')}
-                                                    </Text>
-                                                </View>
-                                                <View style={{ alignItems: 'flex-end' }}>
-                                                    <Text style={{ color: C.success, fontWeight: '800', fontSize: 15 }}>
-                                                        {sale.total.toLocaleString('en-US')}
-                                                    </Text>
-                                                    <Text style={{ color: C.mutedForeground, fontSize: 10 }}>د.ع</Text>
-                                                </View>
-                                            </View>
-                                            {!isLast && <View style={{ height: 1, backgroundColor: C.border }} />}
-                                        </React.Fragment>
-                                    );
-                                })}
+                            <SectionTitle title="آخر المبيعات" trailing="عرض الكل" onTrailingPress={() => go('/sales-history' as Href)} />
+                            <View style={{ gap: 8 }}>
+                                {sales.slice(0, 5).map(sale => (
+                                    <RecentSaleCard key={sale.id} sale={sale} onPress={() => go('/sales-history' as Href)} />
+                                ))}
                             </View>
                         </View>
                     )}
-
-                </View>
+                </>
             )}
         </ScrollView>
+    );
+}
+
+function QuickTile({ label, icon, tone = 'primary', onPress }: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; tone?: Tone; onPress: () => void }) {
+    const C = usePalette();
+    const color = tone === 'success' ? C.success : tone === 'warning' ? C.warning : tone === 'danger' ? C.danger : C.primary;
+    return (
+        <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={{ flex: 1 }} accessibilityRole="button">
+            <Surface padded={false} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14 }}>
+                <Text style={{ flex: 1, color: C.foreground, fontSize: 15, fontWeight: '800', textAlign: 'right' }} numberOfLines={1}>{label}</Text>
+                <Ionicons name={icon} size={22} color={color} />
+            </Surface>
+        </TouchableOpacity>
     );
 }
 

@@ -12,7 +12,7 @@ const ALL_FLAGS = [
     { key: 'branchManagement', label: 'إدارة الفروع', tier: 'Pro' },
     { key: 'advancedReports', label: 'التقارير المتقدمة', tier: 'Enterprise' },
     { key: 'branchComparison', label: 'مقارنة الفروع', tier: 'Enterprise' },
-    { key: 'warehouseManagement', label: 'إدارة المستودعات', tier: 'Enterprise' },
+    { key: 'warehouseManagement', label: 'إدارة المذاخر', tier: 'Enterprise' },
     { key: 'interBranchTransfers', label: 'التحويلات بين الفروع', tier: 'Enterprise' },
     { key: 'marketplace', label: 'السوق الإلكتروني', tier: 'Enterprise' },
 ];

@@ -11,11 +11,12 @@ import { requireFeature } from '@/app/lib/page-guards';
 import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 import ShortagesTable, { ShortageRow } from "@/app/ui/inventory/shortages-table";
 
-export default async function ShortagesPage({
-    searchParams,
-}: {
-    searchParams?: { branch?: string };
-}) {
+export default async function ShortagesPage(
+    props: {
+        searchParams?: Promise<{ branch?: string }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, organizationId } = tenantCtx;

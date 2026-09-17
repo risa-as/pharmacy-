@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { pharmacyDrugScope } from '@/app/lib/drug-scope';
 
 export async function GET(req: Request) {
     try {
@@ -19,10 +20,13 @@ export async function GET(req: Request) {
         // Find matching drugs by trade or scientific name
         const drugs = await prisma.globalDrug.findMany({
             where: {
-                OR: [
-                    { tradeName:     { contains: query, mode: 'insensitive' } },
-                    { scientificName: { contains: query, mode: 'insensitive' } },
-                ],
+                ...pharmacyDrugScope(tenantCtx.organizationId),
+                AND: [{
+                    OR: [
+                        { tradeName:     { contains: query, mode: 'insensitive' } },
+                        { scientificName: { contains: query, mode: 'insensitive' } },
+                    ],
+                }],
             },
             select: { id: true, tradeName: true, scientificName: true, barcode: true },
             take: 10,

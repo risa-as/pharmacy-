@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
         // Map existing global drugs by barcode
         const barcodes = Array.from(new Set(valid.map((r) => r.barcode)));
         const existing = await prisma.globalDrug.findMany({
-            where: { organizationId: null, barcode: { in: barcodes } },
+            where: { organizationId: null, warehouseId: null, barcode: { in: barcodes } },
             select: { id: true, barcode: true },
         });
         const existingMap = new Map(existing.map((d: any) => [d.barcode, d.id]));

@@ -1,32 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-    View, Text, ScrollView, ActivityIndicator,
-    TouchableOpacity, RefreshControl,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, ScrollView, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
-import { request } from '../../services/api';
-import { useTheme } from '../../context/ThemeContext';
-import { useAuth } from '../../context/AuthContext';
-import { managerPalette, Radius } from '../../constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { request, apiService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { Radius } from '../../constants/colors';
 import { BranchSelector } from '../../components/BranchSelector';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { usePalette, Surface, IconTile, SegmentedTabs, InfoNote, StateBlock, Tone } from '../../components/ui/Kit';
+import { formatDate } from '../../utils/date';
+import { formatNumber, initials, CURRENCY } from '../../utils/format';
+import { roleLabel } from '../../utils/roles';
 
-type Palette = ReturnType<typeof managerPalette>;
-
-// ── Types ──────────────────────────────────────────────────────────────────
 type Period = 'daily' | 'weekly' | 'monthly';
-const PERIODS: { key: Period; label: string }[] = [
-    { key: 'daily',   label: 'يومي' },
-    { key: 'weekly',  label: 'أسبوعي' },
-    { key: 'monthly', label: 'شهري' },
-];
 
 interface EmployeeStat {
     id: string;
     name: string;
     role: string;
+    branchName?: string;
     totalSales: number;
     transactionCount: number;
     averageBasket: number;
@@ -34,58 +27,38 @@ interface EmployeeStat {
     salesPerHour: number;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-    ADMIN:      'مدير',
-    SUPER_ADMIN:'مدير النظام',
-    PHARMACIST: 'صيدلاني',
-    MANAGER:    'مشرف',
-    CASHIER:    'كاشير',
-};
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function abbr(n: number): string {
-    if (n === 0) return '0';
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} مليون`;
-    if (n >= 1_000)     return `${(n / 1_000).toFixed(0)} ألف`;
-    return n.toLocaleString('en-US');
+/** Text for the «الفترة» field: the actual range the numbers cover. */
+function periodLabel(period: Period): string {
+    const now = new Date();
+    if (period === 'daily') return formatDate(now, { weekday: 'long', day: 'numeric', month: 'long' });
+    if (period === 'weekly') return 'آخر 7 أيام';
+    return formatDate(now, { month: 'long', year: 'numeric' });
 }
 
-function RankBadge({ rank, C }: { rank: number; C: Palette }) {
-    return (
-        <View style={{
-            width: 28, height: 28, borderRadius: Radius.xs,
-            backgroundColor: `${C.primary}1A`,
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-            <Text style={{ color: C.primary, fontWeight: '900', fontSize: 12 }}>{rank}</Text>
-        </View>
-    );
-}
-
-// ── Main Screen ────────────────────────────────────────────────────────────
+/**
+ * Employee performance (design employees.png): branch and period on top, one
+ * card per employee with their figures, then work hours and sales per hour.
+ * Hours show «غير متوفر» when no shift data exists — never an invented score.
+ */
 export default function EmployeesReportScreen() {
-    const { isDarkMode } = useTheme();
-    const { branchId: authBranchId, isPharmacist } = useAuth();
-    const C = managerPalette(isDarkMode);
+    const C = usePalette();
     const insets = useSafeAreaInsets();
+    const { branchId: authBranchId, isPharmacistShell, isAdmin } = useAuth();
 
-    const [employees, setEmployees]         = useState<EmployeeStat[]>([]);
-    const [loading, setLoading]             = useState(true);
-    const [refreshing, setRefreshing]       = useState(false);
-    const [period, setPeriod]               = useState<Period>('monthly');
+    const [employees, setEmployees] = useState<EmployeeStat[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [period, setPeriod] = useState<Period>('daily');
     const [selectedBranch, setSelectedBranch] = useState<string | null>(authBranchId);
+    const [branchCount, setBranchCount] = useState(0);
 
-    const card = (accent: string) => ({
-        backgroundColor: C.card,
-        borderRadius: Radius.sm,
-        borderWidth: 1.5,
-        borderColor: `${accent}33`,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 } as const,
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        elevation: 2,
-    });
+    useEffect(() => {
+        if (!isAdmin) return;
+        apiService.getBranches()
+            .then(list => setBranchCount(Array.isArray(list) ? list.length : 0))
+            .catch(() => setBranchCount(0));
+    }, [isAdmin]);
 
     const fetchEmployees = useCallback(async () => {
         try {
@@ -93,9 +66,11 @@ export default function EmployeesReportScreen() {
             if (selectedBranch) q += `&branchId=${selectedBranch}`;
             const data = await request<EmployeeStat[]>(`/reports/employees${q}`);
             setEmployees(Array.isArray(data) ? data : []);
+            setFailed(false);
         } catch (err) {
             console.error('EmployeesReportScreen:', err);
             setEmployees([]);
+            setFailed(true);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -105,198 +80,178 @@ export default function EmployeesReportScreen() {
     useEffect(() => { setLoading(true); fetchEmployees(); }, [fetchEmployees]);
     const onRefresh = useCallback(() => { setRefreshing(true); fetchEmployees(); }, [fetchEmployees]);
 
-    // Rank by revenue (totalSales) descending
-    const ranked = useMemo(() =>
-        [...employees].sort((a, b) => b.totalSales - a.totalSales),
-    [employees]);
+    const ranked = useMemo(() => [...employees].sort((a, b) => b.totalSales - a.totalSales), [employees]);
+    const totals = useMemo(() => {
+        const revenue = ranked.reduce((s, e) => s + (e.totalSales ?? 0), 0);
+        const count = ranked.reduce((s, e) => s + (e.transactionCount ?? 0), 0);
+        return { revenue, count, basket: count > 0 ? Math.round(revenue / count) : 0 };
+    }, [ranked]);
 
-    const maxSales = useMemo(() => Math.max(...ranked.map(e => e.totalSales), 1), [ranked]);
-
-    const totals = useMemo(() => ({
-        revenue: ranked.reduce((s, e) => s + (e.totalSales ?? 0), 0),
-        count:   ranked.reduce((s, e) => s + (e.transactionCount ?? 0), 0),
-    }), [ranked]);
-
-    // ── Pharmacist guard (mirrors reports.tsx) ──────────────────────────────
-    if (isPharmacist) {
+    if (isPharmacistShell) {
         return (
-            <View style={{ flex: 1, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-                <EmptyState
-                    icon="lock-closed"
-                    title="لا تملك صلاحية الوصول"
-                    subtitle="هذه الصفحة مخصصة للمدير فقط"
-                    actionLabel="رجوع"
-                    onAction={() => router.back()}
-                />
+            <View style={{ flex: 1, backgroundColor: C.background, justifyContent: 'center', padding: 24 }}>
+                <EmptyState icon="lock-closed" title="لا تملك صلاحية الوصول" subtitle="هذه الصفحة مخصصة للإدارة" actionLabel="رجوع" onAction={() => router.back()} />
             </View>
         );
     }
 
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
-
-            {/* ── Header bar ─────────────────────────────────────────────── */}
-            <View style={{
-                paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 10,
-                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                backgroundColor: C.background,
-            }}>
-                <TouchableOpacity
-                    onPress={() => router.back()}
-                    activeOpacity={0.8}
-                    style={{ width: 40, height: 40, borderRadius: Radius.xs, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' }}
-                >
-                    <Ionicons name="arrow-forward" size={20} color={C.foreground} />
-                </TouchableOpacity>
-                <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800' }}>تقرير الموظفين</Text>
-                <View style={{ width: 40 }} />
-            </View>
-
+            <ScreenHeader title="أداء الموظفين" fallbackHref="/(tabs)/reports" />
             <ScrollView
-                contentContainerStyle={{ padding: 20, paddingBottom: 110 }}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 32, gap: 14 }}
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
             >
-                {/* ── Period segmented control ───────────────────────────── */}
-                <View style={{
-                    flexDirection: 'row-reverse',
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    borderWidth: 1.5,
-                    borderColor: `${C.primary}33`,
-                    padding: 4, gap: 4, marginBottom: 16,
-                }}>
-                    {PERIODS.map(({ key, label }) => {
-                        const sel = period === key;
-                        return (
-                            <TouchableOpacity
-                                key={key} onPress={() => setPeriod(key)} activeOpacity={0.8}
-                                style={{
-                                    flex: 1, paddingVertical: 9, borderRadius: Radius.xs,
-                                    alignItems: 'center',
-                                    backgroundColor: sel ? C.primary : 'transparent',
-                                }}
-                            >
-                                <Text style={{ fontSize: 13, fontWeight: sel ? '800' : '600', color: sel ? '#fff' : C.mutedForeground }}>
-                                    {label}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
+                {/* Branch + period, labelled as in the design */}
+                <Surface style={{ flexDirection: 'row-reverse', gap: 12, alignItems: 'flex-start' }}>
+                    {/* Branch field only when the organisation actually has more than one */}
+                    {isAdmin && branchCount > 1 && (
+                        <View style={{ flex: 1 }}>
+                            <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} label="الفرع" />
+                        </View>
+                    )}
+                    <View style={{ flex: 1, gap: 6 }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>الفترة</Text>
+                        <View style={{
+                            backgroundColor: C.input, borderRadius: Radius.control, borderWidth: 1, borderColor: C.border,
+                            paddingHorizontal: 12, height: 44, justifyContent: 'center',
+                        }}>
+                            <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '700', textAlign: 'right' }} numberOfLines={1}>
+                                {periodLabel(period)}
+                            </Text>
+                        </View>
+                    </View>
+                </Surface>
 
-                {/* ── Branch selector ────────────────────────────────────── */}
-                <BranchSelector
-                    selectedBranchId={selectedBranch}
-                    onSelectBranch={setSelectedBranch}
-                    hideIfSingle
-                    accent={C.primary}
-                    accentMuted={C.primaryMuted}
+                <SegmentedTabs<Period>
+                    items={[{ key: 'daily', label: 'يومي' }, { key: 'weekly', label: 'أسبوعي' }, { key: 'monthly', label: 'شهري' }]}
+                    value={period}
+                    onChange={setPeriod}
                 />
 
-                {/* ── Loading ────────────────────────────────────────────── */}
                 {loading && !refreshing ? (
-                    <View style={{ paddingVertical: 60, alignItems: 'center', gap: 12 }}>
-                        <ActivityIndicator size="large" color={C.primary} />
-                        <Text style={{ color: C.mutedForeground, fontSize: 13 }}>جاري تحميل بيانات الموظفين...</Text>
-                    </View>
+                    <StateBlock loading title="جارِ تحميل بيانات الموظفين…" />
+                ) : failed ? (
+                    <StateBlock icon="cloud-offline-outline" title="تعذّر تحميل التقرير" message="تحقق من الاتصال ثم أعد المحاولة." actionLabel="إعادة المحاولة" onAction={onRefresh} />
                 ) : ranked.length === 0 ? (
-                    <View style={{ paddingVertical: 40 }}>
-                        <EmptyState
-                            icon="people-outline"
-                            title="لا توجد بيانات"
-                            subtitle="لا توجد مبيعات مسجلة للموظفين في هذه الفترة"
-                        />
-                    </View>
+                    <StateBlock icon="people-outline" title="لا توجد بيانات" message="لا توجد مبيعات مسجلة للموظفين في هذه الفترة" />
                 ) : (
-                    <View style={{ gap: 16 }}>
-
-                        {/* ── Summary card ───────────────────────────────── */}
-                        <View style={{ ...card(C.primary), padding: 16, flexDirection: 'row-reverse', gap: 10 }}>
-                            {[
-                                { label: 'عدد الموظفين', value: String(ranked.length),   color: C.primary },
-                                { label: 'إجمالي المبيعات', value: abbr(totals.revenue),  color: C.success },
-                                { label: 'عدد الفواتير',  value: String(totals.count),    color: C.info },
-                            ].map(s => (
-                                <View key={s.label} style={{ flex: 1, alignItems: 'center', gap: 3 }}>
-                                    <Text style={{ color: s.color, fontWeight: '900', fontSize: 18 }}>{s.value}</Text>
-                                    <Text style={{ color: C.mutedForeground, fontSize: 10, fontWeight: '600', textAlign: 'center' }}>{s.label}</Text>
+                    <>
+                        {/* Branch totals — skipped when one employee is the whole branch */}
+                        {ranked.length > 1 && (
+                            <View style={{ gap: 12 }}>
+                                <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                                    <MetricTile label="الموظفون" icon="people" value={formatNumber(ranked.length)} />
+                                    <MetricTile label="المبيعات" icon="stats-chart" value={formatNumber(totals.revenue)} currency />
                                 </View>
-                            ))}
-                        </View>
-
-                        {/* ── Ranked employee cards ──────────────────────── */}
-                        <View style={{ ...card(C.primary), padding: 18 }}>
-                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15 }}>أداء الموظفين</Text>
-                                <View style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.xs, padding: 7 }}>
-                                    <Ionicons name="people" size={16} color={C.primary} />
+                                <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                                    <MetricTile label="المعاملات" icon="receipt" value={formatNumber(totals.count)} />
+                                    <MetricTile label="متوسط السلة" icon="cart" value={formatNumber(totals.basket)} currency />
                                 </View>
                             </View>
+                        )}
 
-                            {ranked.map((emp, idx) => {
-                                const barPct = emp.totalSales / maxSales;
-                                return (
-                                    <View key={emp.id} style={{
-                                        borderTopWidth: idx === 0 ? 0 : 1,
-                                        borderTopColor: C.border,
-                                        paddingTop: idx === 0 ? 0 : 14,
-                                        marginTop: idx === 0 ? 0 : 14,
-                                    }}>
-                                        {/* Name + rank + role */}
-                                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                                            <RankBadge rank={idx + 1} C={C} />
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={{ color: C.foreground, fontWeight: '700', fontSize: 14, textAlign: 'right' }} numberOfLines={1}>
-                                                    {emp.name || 'موظف'}
-                                                </Text>
-                                            </View>
-                                            <View style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.xs, paddingHorizontal: 8, paddingVertical: 3 }}>
-                                                <Text style={{ color: C.primary, fontSize: 10, fontWeight: '700' }}>
-                                                    {ROLE_LABELS[emp.role] ?? emp.role}
-                                                </Text>
-                                            </View>
-                                        </View>
+                        {ranked.map(emp => (
+                            <EmployeeBlock key={emp.id} employee={emp} />
+                        ))}
 
-                                        {/* Relative bar */}
-                                        <View style={{ height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', flexDirection: 'row-reverse', marginBottom: 10 }}>
-                                            <View style={{ width: `${barPct * 100}%`, backgroundColor: C.primary, borderRadius: 3 }} />
-                                        </View>
-
-                                        {/* Stats */}
-                                        <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                                            {[
-                                                { label: 'الإيرادات',    value: abbr(emp.totalSales),        color: C.success },
-                                                { label: 'الفواتير',     value: String(emp.transactionCount), color: C.primary },
-                                                { label: 'متوسط الفاتورة', value: abbr(Math.round(emp.averageBasket)), color: C.info },
-                                            ].map(s => (
-                                                <View key={s.label} style={{
-                                                    flex: 1, backgroundColor: C.background,
-                                                    borderRadius: Radius.xs, padding: 8, alignItems: 'center',
-                                                }}>
-                                                    <Text style={{ color: s.color, fontWeight: '700', fontSize: 12 }}>{s.value}</Text>
-                                                    <Text style={{ color: C.mutedForeground, fontSize: 10, marginTop: 2, textAlign: 'center' }}>{s.label}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-
-                                        {/* Sales-per-hour (only when shift hours are recorded) */}
-                                        {emp.totalHours > 0 && (
-                                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                                                <Ionicons name="time-outline" size={13} color={C.mutedForeground} />
-                                                <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-                                                    {abbr(Math.round(emp.salesPerHour))} د.ع/ساعة · {emp.totalHours.toLocaleString('en-US')} ساعة عمل
-                                                </Text>
-                                            </View>
-                                        )}
-                                    </View>
-                                );
-                            })}
-                        </View>
-
-                    </View>
+                        <InfoNote text="تُعرض «غير متوفر» عند غياب بيانات الدوام." />
+                    </>
                 )}
             </ScrollView>
+        </View>
+    );
+}
+
+/** One employee: identity, their four figures, then hours and sales per hour. */
+function EmployeeBlock({ employee }: { employee: EmployeeStat }) {
+    const C = usePalette();
+    const hasHours = employee.totalHours > 0;
+
+    return (
+        <View style={{ gap: 12 }}>
+            <Surface style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
+                <View style={{ width: 52, height: 52, borderRadius: Radius.control, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ color: C.primary, fontSize: 17, fontWeight: '900' }}>{initials(employee.name) || '#'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '900', textAlign: 'right' }} numberOfLines={1}>{employee.name || 'موظف'}</Text>
+                    <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>
+                        {[roleLabel(employee.role), employee.branchName].filter(Boolean).join(' · ')}
+                    </Text>
+                </View>
+            </Surface>
+
+            <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                <MetricTile label="المبيعات" icon="stats-chart" value={formatNumber(employee.totalSales)} currency />
+                <MetricTile label="المعاملات" icon="receipt" value={formatNumber(employee.transactionCount)} />
+            </View>
+            <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
+                <MetricTile label="متوسط السلة" icon="cart" value={formatNumber(Math.round(employee.averageBasket))} currency />
+                <MetricTile label="مبيعات الساعة" icon="speedometer" value={hasHours ? formatNumber(Math.round(employee.salesPerHour)) : '—'} currency={hasHours} />
+            </View>
+
+            <Surface padded={false} style={{ paddingHorizontal: 14 }}>
+                <DetailRow
+                    icon="time-outline"
+                    label="ساعات العمل"
+                    value={hasHours ? `${formatNumber(employee.totalHours)} ساعات` : 'غير متوفر'}
+                    hint={hasHours ? 'حسب السجل' : 'لا توجد ورديات مسجلة'}
+                    tone={hasHours ? 'primary' : 'neutral'}
+                    divider
+                />
+                <DetailRow
+                    icon="stats-chart-outline"
+                    label="مبيعات الساعة"
+                    value={hasHours ? `${formatNumber(Math.round(employee.salesPerHour))} ${CURRENCY}` : 'غير متوفر'}
+                    hint={hasHours ? `${formatNumber(employee.totalSales)} ÷ ${formatNumber(employee.totalHours)}` : undefined}
+                    tone={hasHours ? 'primary' : 'neutral'}
+                />
+            </Surface>
+        </View>
+    );
+}
+
+/** KPI tile: label with its icon, then the figure in blue. */
+function MetricTile({ label, icon, value, currency }: {
+    label: string; icon: React.ComponentProps<typeof IconTile>['icon']; value: string; currency?: boolean;
+}) {
+    const C = usePalette();
+    return (
+        <Surface padded={false} style={{ flex: 1, paddingHorizontal: 12, paddingVertical: 11, gap: 8 }}>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: C.mutedForeground, fontSize: 13.5 }} numberOfLines={1}>{label}</Text>
+                <IconTile icon={icon} size={30} />
+            </View>
+            <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+                style={{ color: C.primary, fontSize: 22, fontWeight: '900', textAlign: 'right' }}
+            >
+                {value}{currency ? <Text style={{ fontSize: 11.5, fontWeight: '600', color: C.mutedForeground }}> {CURRENCY}</Text> : null}
+            </Text>
+        </Surface>
+    );
+}
+
+function DetailRow({ icon, label, value, hint, tone, divider }: {
+    icon: React.ComponentProps<typeof IconTile>['icon'];
+    label: string; value: string; hint?: string; tone: Tone; divider?: boolean;
+}) {
+    const C = usePalette();
+    return (
+        <View style={{
+            flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingVertical: 12,
+            borderBottomWidth: divider ? 1 : 0, borderBottomColor: C.border,
+        }}>
+            <IconTile icon={icon} tone={tone} size={36} />
+            <Text style={{ flex: 1, color: C.mutedForeground, fontSize: 14, textAlign: 'right' }}>{label}</Text>
+            <View style={{ alignItems: 'flex-start' }}>
+                <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '900' }} numberOfLines={1}>{value}</Text>
+                {hint ? <Text style={{ color: C.mutedForeground, fontSize: 12 }} numberOfLines={1}>{hint}</Text> : null}
+            </View>
         </View>
     );
 }

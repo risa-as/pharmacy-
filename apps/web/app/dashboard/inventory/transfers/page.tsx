@@ -14,15 +14,16 @@ export const metadata: Metadata = {
     title: 'تحويلات الأدوية بين الأفرع | Faramace',
 };
 
-export default async function Page({
-    searchParams,
-}: {
-    searchParams?: {
-        query?: string;
-        page?: string;
-        tab?: string;
-    };
-}) {
+export default async function Page(
+    props: {
+        searchParams?: Promise<{
+            query?: string;
+            page?: string;
+            tab?: string;
+        }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const session = await auth();
     const branchId = session?.user?.branchId;
 

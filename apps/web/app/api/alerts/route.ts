@@ -65,6 +65,8 @@ export async function GET(req: Request) {
                 alerts.push({
                     id: `exp-${batch.id}`,
                     type: 'EXPIRED',
+                    drugName,
+                    drugId: batch.inventory?.drugId ?? null,
                     title: `منتهي الصلاحية: ${drugName}`,
                     description: `الكمية المتبقية: ${batch.quantity} · ${branchName}`,
                     date: `انتهى منذ ${Math.abs(daysDiff)} يوم (${dateStr})`,
@@ -74,6 +76,8 @@ export async function GET(req: Request) {
                 alerts.push({
                     id: `exp-${batch.id}`,
                     type: 'EXPIRY',
+                    drugName,
+                    drugId: batch.inventory?.drugId ?? null,
                     title: `يقترب من الانتهاء: ${drugName}`,
                     description: `الكمية: ${batch.quantity} · ${branchName}`,
                     date: `ينتهي خلال ${daysDiff} يوم (${dateStr})`,
@@ -92,6 +96,8 @@ export async function GET(req: Request) {
                 alerts.push({
                     id: `stock-${inv.id}`,
                     type: 'OUT_OF_STOCK',
+                    drugName,
+                    drugId: inv.drugId,
                     title: `نفاد المخزون: ${drugName}`,
                     description: `لا يوجد مخزون متاح · ${branchName}`,
                     date: null,
@@ -101,6 +107,8 @@ export async function GET(req: Request) {
                 alerts.push({
                     id: `stock-${inv.id}`,
                     type: 'LOW_STOCK',
+                    drugName,
+                    drugId: inv.drugId,
                     title: `مخزون منخفض: ${drugName}`,
                     description: `المتبقي: ${totalQty} · الحد الأدنى: ${inv.minStock} · ${branchName}`,
                     date: null,

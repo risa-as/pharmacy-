@@ -85,11 +85,12 @@ function getDaysBetween(start: Date, end: Date) {
   return days;
 }
 
-export default async function SalesReportPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function SalesReportPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) return null;
   const { tenantBranchWhere } = tenantCtx;

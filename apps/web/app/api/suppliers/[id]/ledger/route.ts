@@ -4,10 +4,8 @@ import { getTenantContext } from "@/app/lib/tenant-utils";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return tenantCtx;
 

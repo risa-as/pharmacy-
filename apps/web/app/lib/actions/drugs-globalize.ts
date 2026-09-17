@@ -21,6 +21,10 @@ export type GlobalizeResult =
     | { success: true; organizationName: string; promoted: number; skipped: SkippedDrug[] }
     | { success: false; error: string; skipped?: SkippedDrug[] };
 
+export type WarehouseGlobalizeResult =
+    | { success: true; warehouseName: string; promoted: number; skipped: SkippedDrug[] }
+    | { success: false; error: string; skipped?: SkippedDrug[] };
+
 export async function globalizeOrganizationDrugs(organizationId: string): Promise<GlobalizeResult> {
     const session = await auth();
     const user = session?.user as { id?: string; name?: string; role?: string } | undefined;
@@ -54,7 +58,7 @@ export async function globalizeOrganizationDrugs(organizationId: string): Promis
         // would be silent, not an error.
         const barcodes = Array.from(new Set(custom.map((d) => d.barcode)));
         const existingGlobal = await prisma.globalDrug.findMany({
-            where: { organizationId: null, barcode: { in: barcodes } },
+            where: { organizationId: null, warehouseId: null, barcode: { in: barcodes } },
             select: { barcode: true },
         });
         const taken = new Set(existingGlobal.map((g) => g.barcode));
@@ -100,6 +104,7 @@ export async function globalizeOrganizationDrugs(organizationId: string): Promis
             entity: "GLOBAL_DRUG",
             entityId: org.id,
             details: JSON.stringify({
+                scope: "ORGANIZATION",
                 organizationName: org.name,
                 promoted: res.count,
                 skipped: skipped.length,
@@ -111,6 +116,104 @@ export async function globalizeOrganizationDrugs(organizationId: string): Promis
         return { success: true, organizationName: org.name, promoted: res.count, skipped };
     } catch (error: any) {
         console.error("[globalizeOrganizationDrugs] failed:", error);
+        return { success: false, error: error?.message || "تعذر تحويل الأدوية." };
+    }
+}
+
+/**
+ * نظير globalizeOrganizationDrugs للمذاخر: يُرقّي أدوية أضافها مذخر إلى الكتالوج
+ * العالمي بتصفير warehouseId. نفس الميكانيكا حرفياً — الصفوف تحفظ معرّفاتها فيبقى
+ * كل ما يشير إليها سليماً (WarehouseCatalogItem، دفعات المذخر، حركات المخزون،
+ * فواتير المندوبين)، ولا يتغيّر إلا نطاق الرؤية. بعد الترقية يصبح الصنف قابلاً
+ * للطلب من الصيدليات لأن معرّفه صار معرّفاً عالمياً يفهمه الطرفان.
+ */
+export async function globalizeWarehouseDrugs(warehouseId: string): Promise<WarehouseGlobalizeResult> {
+    const session = await auth();
+    const user = session?.user as { id?: string; name?: string; role?: string } | undefined;
+    if (user?.role !== "SUPER_ADMIN") {
+        return { success: false, error: "غير مصرح: يتطلب صلاحية SUPER_ADMIN" };
+    }
+    if (!warehouseId) {
+        return { success: false, error: "المذخر مطلوب" };
+    }
+
+    try {
+        const warehouse = await prisma.warehouse.findUnique({
+            where: { id: warehouseId },
+            select: { id: true, name: true },
+        });
+        if (!warehouse) return { success: false, error: "المذخر غير موجود" };
+
+        const custom = await prisma.globalDrug.findMany({
+            where: { warehouseId },
+            select: { id: true, barcode: true, tradeName: true },
+            orderBy: { tradeName: "asc" },
+        });
+        if (custom.length === 0) {
+            return { success: false, error: "لا توجد أدوية خاصة بهذا المذخر" };
+        }
+
+        // نفس سبب الفحص المسبق في دالة المؤسسات أعلاه: NULL مميز في فهارس Postgres،
+        // فلا شيء يمنع صفاً عالمياً ثانياً بنفس الباركود إلا هذا الفحص.
+        const barcodes = Array.from(new Set(custom.map((d) => d.barcode)));
+        const existingGlobal = await prisma.globalDrug.findMany({
+            where: { organizationId: null, warehouseId: null, barcode: { in: barcodes } },
+            select: { barcode: true },
+        });
+        const taken = new Set(existingGlobal.map((g) => g.barcode));
+
+        const seen = new Set<string>();
+        const promote: string[] = [];
+        const skipped: SkippedDrug[] = [];
+
+        for (const d of custom) {
+            if (taken.has(d.barcode)) {
+                skipped.push({ barcode: d.barcode, tradeName: d.tradeName, reason: "already-global" });
+                continue;
+            }
+            if (seen.has(d.barcode)) {
+                skipped.push({ barcode: d.barcode, tradeName: d.tradeName, reason: "duplicate-barcode" });
+                continue;
+            }
+            seen.add(d.barcode);
+            promote.push(d.id);
+        }
+
+        if (promote.length === 0) {
+            return {
+                success: false,
+                error: "كل هذه الأدوية لها باركود موجود مسبقاً في الكتالوج العالمي — لم يتم تحويل أي دواء.",
+                skipped,
+            };
+        }
+
+        const res = await prisma.globalDrug.updateMany({
+            where: { id: { in: promote } },
+            data: { warehouseId: null },
+        });
+
+        // سجل التراجع: الاستعادة = إعادة warehouseId لهذه المعرّفات بالضبط.
+        await logAudit({
+            userId: user.id || "unknown",
+            userName: user.name || "SUPER_ADMIN",
+            action: "GLOBALIZE",
+            entity: "GLOBAL_DRUG",
+            entityId: warehouse.id,
+            details: JSON.stringify({
+                // scope يفرّق ترقية مذخر عن ترقية مؤسسة في السجل — الاثنتان تحملان
+                // نفس action/entity، والتراجع يحتاج معرفة أي حقل نطاق يُعاد.
+                scope: "WAREHOUSE",
+                warehouseName: warehouse.name,
+                promoted: res.count,
+                skipped: skipped.length,
+                promotedIds: promote,
+            }),
+        });
+
+        revalidatePath("/dashboard/admin/drugs");
+        return { success: true, warehouseName: warehouse.name, promoted: res.count, skipped };
+    } catch (error: any) {
+        console.error("[globalizeWarehouseDrugs] failed:", error);
         return { success: false, error: error?.message || "تعذر تحويل الأدوية." };
     }
 }

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { pharmacyDrugScope } from "@/app/lib/drug-scope";
 
 export async function POST(req: Request) {
     try {
@@ -18,7 +19,9 @@ export async function POST(req: Request) {
 
         // 1. Check if drug exists globally
         const drug = await prisma.globalDrug.findFirst({
-            where: { barcode },
+            // النطاق: الكتالوج العالمي + أدوية هذه المؤسسة، بلا صفوف المذاخر ولا
+            // أدوية المؤسسات الأخرى — انظر app/lib/drug-scope.ts.
+            where: { barcode, ...pharmacyDrugScope(tenantCtx.organizationId) },
             select: {
                 id: true,
                 barcode: true,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
+import { downloadWorkbook, readFirstSheetRows } from '@/app/lib/exceljs-browser';
 import {
     FileSpreadsheet, Download, Upload, ArrowRight, CheckCircle2, AlertTriangle,
     Loader2, X, Package, RotateCcw,
@@ -110,15 +110,12 @@ export default function InventoryImportPage() {
     const invalidRows = useMemo(() => rows.filter(r => r.error), [rows]);
 
     // ── Template ──────────────────────────────────────────────────────────────
-    const downloadTemplate = () => {
+    const downloadTemplate = async () => {
         const headers = ['اسم الدواء', 'الباركود', 'الاسم العلمي', 'الشركة', 'سعر البيع', 'سعر الشراء', 'الكمية', 'تاريخ الانتهاء', 'رقم الدفعة', 'الحد الأدنى', 'الحد الأقصى'];
         const example = [
             ['أموكسيسيلين 500 ملغ', '6281001210019', 'Amoxicillin', 'الحكمة', 5000, 3500, 100, '2027-06-30', 'B-2026-01', 10, 500],
             ['باراسيتامول 500 ملغ', '6281001210020', 'Paracetamol', 'سامراء', 2000, 1200, 200, '2027-01-15', '', 20, 1000],
         ];
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...example]);
-        ws['!cols'] = headers.map((h, i) => ({ wch: i === 0 ? 25 : Math.max(12, h.length + 4) }));
-
         const instructions = [
             ['العمود', 'إلزامي؟', 'الشرح'],
             ['اسم الدواء', 'نعم', 'الاسم التجاري للدواء'],
@@ -133,13 +130,10 @@ export default function InventoryImportPage() {
             ['الحد الأدنى', 'لا', 'حد تنبيه انخفاض المخزون'],
             ['الحد الأقصى', 'لا', 'الحد الأقصى للتخزين'],
         ];
-        const wsInfo = XLSX.utils.aoa_to_sheet(instructions);
-        wsInfo['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 80 }];
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'المخزون');
-        XLSX.utils.book_append_sheet(wb, wsInfo, 'تعليمات');
-        XLSX.writeFile(wb, 'قالب-استيراد-المخزون.xlsx');
+        await downloadWorkbook('قالب-استيراد-المخزون.xlsx', [
+            { name: 'المخزون', rows: [headers, ...example], widths: headers.map((h, i) => i === 0 ? 25 : Math.max(12, h.length + 4)) },
+            { name: 'تعليمات', rows: instructions, widths: [18, 20, 80] },
+        ]);
     };
 
     // ── File parsing ──────────────────────────────────────────────────────────
@@ -149,10 +143,7 @@ export default function InventoryImportPage() {
         setRows([]);
         setFileName(file.name);
         try {
-            const buffer = await file.arrayBuffer();
-            const wb = XLSX.read(buffer, { type: 'array' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const matrix: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            const matrix = await readFirstSheetRows(await file.arrayBuffer());
             if (matrix.length < 2) { setParseError('الملف فارغ أو لا يحتوي صفوف بيانات'); return; }
 
             const cols = matchColumns(matrix[0].map(String));
@@ -325,7 +316,7 @@ export default function InventoryImportPage() {
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".xlsx,.xls,.csv"
+                                accept=".xlsx,.csv"
                                 className="hidden"
                                 onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); }}
                             />

@@ -20,7 +20,7 @@ export function DeleteDrug({ id }: { id: string }) {
     const deleteDrugWithId = deleteDrug.bind(null, id);
 
     return (
-        <form action={deleteDrugWithId}>
+        <form>
             <DeleteButton action={deleteDrugWithId} description="الدواء" />
         </form>
     );

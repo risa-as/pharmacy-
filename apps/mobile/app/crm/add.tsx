@@ -1,121 +1,97 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { View, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { router, Href, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { crmService } from '../../services/crm';
-import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { useCheckout } from '../../context/CheckoutContext';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { usePalette, Surface, InfoNote, FormField, AppButton } from '../../components/ui/Kit';
 
-export default function CRMAddScreen() {
+const NOTES_MAX = 500;
+
+/**
+ * Add patient (design patient-add.png). Only the fields the server stores for
+ * this form (name, phone, notes); required rules mirror POST /patients.
+ * Errors appear beside a field only after the user has interacted with it.
+ */
+export default function PatientAddScreen() {
+    const C = usePalette();
+    const insets = useSafeAreaInsets();
+    const { forSale } = useLocalSearchParams<{ forSale?: string }>();
+    const { setPatient } = useCheckout();
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [notes, setNotes] = useState('');
+    const [touched, setTouched] = useState({ name: false, phone: false });
+    const [serverError, setServerError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
+
+    const nameError = !name.trim() ? 'يرجى إدخال الاسم الكامل.' : null;
+    const phoneDigits = phone.replace(/[^0-9]/g, '');
+    const phoneError = !phoneDigits ? 'يرجى إدخال رقم الهاتف.' : null;
+    const phoneHint = phoneDigits && !/^07\d{9}$/.test(phoneDigits) ? 'تأكد من الرقم — الصيغة المعتادة 07XXXXXXXXX' : 'مثال: 07XXXXXXXXX';
 
     const handleSave = async () => {
-        if (!name || !phone) {
-            Alert.alert('خطأ', 'الاسم ورقم الهاتف مطلوبان');
-            return;
-        }
+        setTouched({ name: true, phone: true });
+        setServerError(null);
+        if (nameError || phoneError) return;
         setLoading(true);
         try {
-            await crmService.createPatient({ name, phone, notes });
-            Alert.alert('نجاح', 'تم إضافة المريض بنجاح', [
-                { text: 'حسناً', onPress: () => router.back() },
-            ]);
+            const created = await crmService.createPatient({ name: name.trim(), phone: phoneDigits, notes: notes.trim() || undefined });
+            const id = (created as any)?.id ?? (created as any)?.patient?.id;
+            if (forSale === '1' && id) {
+                // Opened from the sale flow: hand the new record back to the cart.
+                setPatient({ id, name: name.trim(), phone: phoneDigits });
+                router.back();
+            } else if (id) router.replace(`/crm/${id}` as Href);
+            else router.back();
         } catch (error: any) {
-            Alert.alert('خطأ', error.message);
+            const msg = String(error?.message ?? '');
+            if (/already exists|409/i.test(msg)) setServerError('يوجد مريض مسجّل بنفس رقم الهاتف في هذا الفرع.');
+            else Alert.alert('تعذّر الحفظ', 'لم يُحفظ المريض. تحقق من الاتصال وحاول مرة أخرى.');
         } finally {
             setLoading(false);
         }
     };
 
-    const inputStyle = {
-        backgroundColor: C.input,
-        borderRadius: 12,
-        padding: 14,
-        fontSize: 16,
-        color: C.foreground,
-        borderWidth: 1,
-        borderColor: C.border,
-        textAlign: 'right' as const,
-    };
-
     return (
-        <View style={{ flex: 1, backgroundColor: C.background }}>
-            {/* Header */}
-            <View style={{
-                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                padding: 16, paddingTop: 50,
-                backgroundColor: C.card,
-                borderBottomWidth: 1, borderBottomColor: C.border,
-            }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
-                    <Ionicons name="arrow-back" size={24} color={C.foreground} />
-                </TouchableOpacity>
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: C.foreground }}>إضافة مريض جديد</Text>
-                <View style={{ width: 40 }} />
-            </View>
-
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
-                <View style={{ marginBottom: 20 }}>
-                    <Text style={{ fontSize: 14, color: C.mutedForeground, marginBottom: 8, textAlign: 'right', fontWeight: '600' }}>
-                        الاسم الكامل *
-                    </Text>
-                    <TextInput
-                        style={inputStyle}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.background }}>
+            <ScreenHeader title="إضافة مريض" fallbackHref={'/crm' as Href} />
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24, gap: 14 }} keyboardShouldPersistTaps="handled">
+                <InfoNote text="الحقول المعلّمة بنجمة مطلوبة." />
+                <Surface style={{ gap: 16 }}>
+                    <FormField
+                        label="الاسم الكامل"
+                        required
                         value={name}
                         onChangeText={setName}
-                        placeholder="أدخل اسم المريض"
-                        placeholderTextColor={C.mutedForeground}
+                        onBlur={() => setTouched(t => ({ ...t, name: true }))}
+                        placeholder="أدخل الاسم الكامل"
+                        error={touched.name ? nameError : null}
                     />
-                </View>
-
-                <View style={{ marginBottom: 20 }}>
-                    <Text style={{ fontSize: 14, color: C.mutedForeground, marginBottom: 8, textAlign: 'right', fontWeight: '600' }}>
-                        رقم الهاتف *
-                    </Text>
-                    <TextInput
-                        style={inputStyle}
+                    <FormField
+                        label="رقم الهاتف"
+                        required
                         value={phone}
-                        onChangeText={setPhone}
+                        onChangeText={(v) => { setPhone(v); setServerError(null); }}
+                        onBlur={() => setTouched(t => ({ ...t, phone: true }))}
                         keyboardType="phone-pad"
-                        placeholder="07xxxxxxxxx"
-                        placeholderTextColor={C.mutedForeground}
+                        placeholder="07XXXXXXXXX"
+                        style={{ writingDirection: 'ltr' }}
+                        error={serverError ?? (touched.phone ? phoneError : null)}
+                        hint={phoneHint}
                     />
-                </View>
-
-                <View style={{ marginBottom: 20 }}>
-                    <Text style={{ fontSize: 14, color: C.mutedForeground, marginBottom: 8, textAlign: 'right', fontWeight: '600' }}>
-                        ملاحظات
-                    </Text>
-                    <TextInput
-                        style={[inputStyle, { height: 100, textAlignVertical: 'top' }]}
+                    <FormField
+                        label="ملاحظات"
                         value={notes}
-                        onChangeText={setNotes}
+                        onChangeText={(v) => setNotes(v.slice(0, NOTES_MAX))}
+                        placeholder="أدخل أي ملاحظات إضافية"
                         multiline
-                        placeholder="أي ملاحظات إضافية..."
-                        placeholderTextColor={C.mutedForeground}
+                        hint={`${notes.length}/${NOTES_MAX}`}
                     />
-                </View>
-
-                <TouchableOpacity
-                    style={{
-                        backgroundColor: loading ? C.primarySoft : C.primary,
-                        padding: 16, borderRadius: 12, alignItems: 'center',
-                        marginTop: 8, opacity: loading ? 0.7 : 1,
-                    }}
-                    onPress={handleSave}
-                    disabled={loading}
-                    activeOpacity={0.8}
-                >
-                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>
-                        {loading ? 'جاري الحفظ...' : 'حفظ'}
-                    </Text>
-                </TouchableOpacity>
+                    <AppButton label="حفظ المريض" loading={loading} onPress={handleSave} />
+                </Surface>
             </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
     );
 }

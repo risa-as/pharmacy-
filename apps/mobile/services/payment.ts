@@ -12,15 +12,5 @@ export const paymentService = {
         if (!response.ok) throw new Error('Stripe init failed');
         return await response.json();
     },
-
-    async initZainCash(amount: number, orderId: string) {
-        const baseUrl = await getBaseUrl();
-        const response = await fetch(`${baseUrl}/payments/zaincash`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount, orderId }),
-        });
-        if (!response.ok) throw new Error('ZainCash init failed');
-        return await response.json();
-    },
+    // ZainCash is intentionally not offered in the mobile POS (012 decision).
 };

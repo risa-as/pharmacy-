@@ -17,7 +17,10 @@ export default function DashboardLoading() {
             </div>
 
             {/* Main content skeleton */}
-            <div className="flex-grow flex flex-col gap-4 p-6 bg-background overflow-hidden">
+            {/* أرضية المحتوى: يجب أن تطابق app/dashboard/layout.tsx
+                (bg-muted/60 dark:bg-background) — وإلا ومض أبيض أثناء التحميل
+                قبل أن يُركَّب المحتوى الحقيقي على الأرضية الرمادية. */}
+            <div className="flex-grow flex flex-col gap-4 p-6 bg-muted/60 dark:bg-background overflow-hidden">
                 {/* Top bar */}
                 <div className="h-10 bg-muted rounded-lg w-full" />
 

@@ -5,10 +5,8 @@ import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
 
 // PATCH — Toggle isActive, update expiresAt, or unbind hardware
-export async function PATCH(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const session = await auth();
         const user = session?.user as { role?: string } | undefined;
@@ -74,10 +72,8 @@ export async function PATCH(
 }
 
 // DELETE — Remove a license permanently
-export async function DELETE(
-    _req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const session = await auth();
         const user = session?.user as { role?: string } | undefined;

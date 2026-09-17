@@ -10,7 +10,8 @@ import { notificationsService } from '../services/notifications';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { AuthProvider } from '../context/AuthContext';
 import { SyncProvider, useSyncStatus } from '../context/SyncContext';
-import { Colors, LightColors } from '../constants/colors';
+import { CheckoutProvider } from '../context/CheckoutContext';
+import { Colors } from '../constants/colors';
 import ThemedAlertHost from '../components/ThemedAlert';
 
 // T049 — RTL-correct animation: slide from left for forward navigation in Arabic
@@ -33,6 +34,8 @@ function RootStack() {
 
         // Register Expo push token with the backend (non-blocking)
         notificationsService.registerPushToken();
+        // Respect per-category notification preferences for in-app delivery
+        notificationsService.installPreferenceFilter();
 
         // Listen for connection changes → trigger sync when online
         const unsubNetInfo = NetInfo.addEventListener(state => {
@@ -73,31 +76,17 @@ function RootStack() {
 
     return (
         <>
-            <StatusBar style="light" />
+            <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+            {/* Every screen draws its own header (components/ui/ScreenHeader). */}
             <Stack
                 screenOptions={{
                     animation: SLIDE_ANIMATION,
-                    headerStyle: {
-                        backgroundColor: C.primary,
-                    },
-                    headerTintColor: LightColors.card, // always white on brand-primary header
-                    headerTitleStyle: {
-                        fontWeight: 'bold',
-                    },
-                    headerTitleAlign: 'center',
+                    headerShown: false,
+                    contentStyle: { backgroundColor: C.background },
                 }}
             >
-                <Stack.Screen name="login"           options={{ headerShown: false, animation: 'fade' }} />
-                <Stack.Screen name="server-config"   options={{ headerShown: false }} />
-                <Stack.Screen name="printer-settings" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)"          options={{ headerShown: false }} />
-                <Stack.Screen name="settings"           options={{ headerShown: false }} />
-                <Stack.Screen name="reports/financial" options={{ headerShown: false }} />
-                <Stack.Screen name="reports/employees" options={{ headerShown: false }} />
-                <Stack.Screen name="sales-history"     options={{ headerShown: false }} />
-                <Stack.Screen name="accounting/expenses" options={{ headerShown: false }} />
-                <Stack.Screen name="scan"              options={{ headerShown: false }} />
-                <Stack.Screen name="scan-prescription" options={{ headerShown: false }} />
+                <Stack.Screen name="login" options={{ animation: 'fade' }} />
+                <Stack.Screen name="(tabs)" />
             </Stack>
         </>
     );
@@ -108,7 +97,9 @@ export default function RootLayout() {
         <ThemeProvider>
             <AuthProvider>
                 <SyncProvider>
-                    <RootStack />
+                    <CheckoutProvider>
+                        <RootStack />
+                    </CheckoutProvider>
                     {/* Branded replacement for native Alert.alert across the whole app */}
                     <ThemedAlertHost />
                 </SyncProvider>

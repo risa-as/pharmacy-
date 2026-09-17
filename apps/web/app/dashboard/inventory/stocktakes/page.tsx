@@ -10,11 +10,12 @@ export const metadata: Metadata = {
     title: 'جرد المخزون | Faramace',
 };
 
-export default async function Page({
-    searchParams,
-}: {
-    searchParams?: { query?: string; page?: string; branch?: string };
-}) {
+export default async function Page(
+    props: {
+        searchParams?: Promise<{ query?: string; page?: string; branch?: string }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const query = searchParams?.query || '';
     const currentPage = Number(searchParams?.page) || 1;
     const selectedBranchId = searchParams?.branch;

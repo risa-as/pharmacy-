@@ -10,10 +10,8 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
  * تفاصيل فاتورة بيع — الأصناف والمريض والدفع والمرتجعات السابقة.
  * متاح لأي مستخدم موثّق ضمن نطاق مؤسسته/فرعه.
  */
-export async function GET(
-    request: Request,
-    { params }: { params: { id: string } }
-) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
@@ -49,10 +47,8 @@ export async function GET(
  * تعديل فاتورة بيع (الكميات، الأسعار، الخصم) — للمدير فقط.
  * يعالج فروقات المخزون والصندوق/الدين بشكل ذرّي للحفاظ على السلامة المالية.
  */
-export async function PUT(
-    request: Request,
-    { params }: { params: { id: string } }
-) {
+export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;

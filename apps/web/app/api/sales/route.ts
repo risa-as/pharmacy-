@@ -5,6 +5,76 @@ import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 
+const SEARCH_LIMIT = 20;
+const DRUG_SEARCH_DAYS = 30;
+const MAX_INT32 = 2147483647;
+
+/**
+ * Finds sales to return, the same two ways the desktop POS does:
+ *  - invoice: exact invoice number (Arabic-Indic digits and a leading "#"
+ *    accepted), or the id prefix of a sale that has no invoice number;
+ *  - drug: sales from the last 30 days containing a drug whose trade name or
+ *    barcode matches. Items are included so the client can show the match.
+ */
+async function searchSalesForReturn(mode: 'invoice' | 'drug', rawQuery: string, tenantBranchWhere: Record<string, any>) {
+    const include = {
+        payment: { select: { method: true } },
+        patient: { select: { name: true } },
+        branch: { select: { name: true } },
+    };
+
+    if (mode === 'invoice') {
+        const normalized = rawQuery
+            .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+            .replace(/^#/, '')
+            .trim();
+        const or: any[] = [];
+        if (/^\d+$/.test(normalized)) {
+            const n = Number(normalized);
+            if (n <= MAX_INT32) or.push({ invoiceNumber: n });
+        }
+        // Id prefix only for sales without a number: only those show their id to
+        // users (formatInvoiceNumber), and a numbered sale's uuid can start with
+        // another invoice's digits (e.g. #13743 has id "138880f1-…").
+        if (normalized.length >= 4) or.push({ invoiceNumber: null, id: { startsWith: normalized.toLowerCase() } });
+        if (or.length === 0) return NextResponse.json([]);
+
+        const sales = await prisma.sale.findMany({
+            where: { ...tenantBranchWhere, OR: or },
+            orderBy: { createdAt: 'desc' },
+            take: SEARCH_LIMIT,
+            include,
+        });
+        return NextResponse.json(sales);
+    }
+
+    if (rawQuery.length < 2) return NextResponse.json([]);
+    const since = new Date(Date.now() - DRUG_SEARCH_DAYS * 24 * 60 * 60 * 1000);
+    const sales = await prisma.sale.findMany({
+        where: {
+            ...tenantBranchWhere,
+            createdAt: { gte: since },
+            items: {
+                some: {
+                    drug: {
+                        OR: [
+                            { tradeName: { contains: rawQuery, mode: 'insensitive' } },
+                            { barcode: { contains: rawQuery } },
+                        ],
+                    },
+                },
+            },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: SEARCH_LIMIT,
+        include: {
+            ...include,
+            items: { select: { drugId: true, drug: { select: { tradeName: true, barcode: true } } } },
+        },
+    });
+    return NextResponse.json(sales);
+}
+
 export async function GET(request: Request) {
     try {
         const tenantCtx = await getTenantContext();
@@ -18,7 +88,20 @@ export async function GET(request: Request) {
         const fromDate = searchParams.get('from') ? new Date(searchParams.get('from')!) : null;
         const toDate = searchParams.get('to') ? new Date(searchParams.get('to')!) : null;
 
+        // Return lookup (mirrors the desktop SaleReturnModal): ?mode=invoice|drug&q=…
+        const searchMode = searchParams.get('mode');
+        const rawQuery = (searchParams.get('q') ?? '').trim();
+        if (rawQuery && (searchMode === 'invoice' || searchMode === 'drug')) {
+            return searchSalesForReturn(searchMode, rawQuery, tenantBranchWhere);
+        }
+
         const where: any = { ...tenantBranchWhere };
+
+        // ?mine=1 — only the signed-in user's own sales (the pharmacist's shift
+        // summary). The id comes from the session, never from the query, so no
+        // one can read another user's sales.
+        if (searchParams.get('mine') === '1') where.userId = tenantCtx.user.id;
+
         if ((fromDate && !isNaN(fromDate.getTime())) || (toDate && !isNaN(toDate.getTime()))) {
             where.createdAt = {};
             if (fromDate && !isNaN(fromDate.getTime())) where.createdAt.gte = fromDate;
@@ -29,7 +112,9 @@ export async function GET(request: Request) {
             where,
             orderBy: { createdAt: 'desc' },
             take: limit,
-            skip: offset
+            skip: offset,
+            // Additive: lets list views label cash / card / credit without a detail fetch.
+            include: { payment: { select: { method: true } } },
         });
         return NextResponse.json(sales);
     } catch (error) {
@@ -53,7 +138,17 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { items, totalAmount, patientId, discount, paymentMethod } = body;
+        const { items, totalAmount, patientId, discount } = body;
+
+        // Supported methods for this endpoint: cash, card, credit. Legacy clients
+        // that omit the field are cash sales.
+        const paymentMethod: 'CASH' | 'CARD' | 'CREDIT' = body.paymentMethod ?? 'CASH';
+        if (!['CASH', 'CARD', 'CREDIT'].includes(paymentMethod)) {
+            return NextResponse.json({ message: 'طريقة الدفع غير مدعومة.' }, { status: 400 });
+        }
+        if (paymentMethod === 'CREDIT' && !patientId) {
+            return NextResponse.json({ message: 'البيع الآجل يتطلب اختيار عميل.' }, { status: 400 });
+        }
 
         if (discount && discount > 0 && !tenantCtx.userPermissions.canApplyDiscount) {
             return NextResponse.json({ message: 'ليس لديك صلاحية لتطبيق الخصم.' }, { status: 403 });
@@ -140,23 +235,34 @@ export async function POST(request: Request) {
                 }
 
                 const unitCost = item.quantity > 0 ? (itemTotalCost / item.quantity) : 0;
+                const originalPrice = Number.isFinite(Number(item.originalPrice)) ? Number(item.originalPrice) : null;
                 saleItemsData.push({
                     drugId: item.drugId,
                     quantity: item.quantity,
                     price: item.price,
+                    originalPrice,
                     cost: unitCost
                 });
             }
 
-            // 4. Find the branch's default CASH_DRAWER safe (for CASH payments)
-            const cashSafe = paymentMethod !== 'CREDIT'
+            // Same rule as the sale-edit route: a line whose price differs from
+            // the list price it was added at makes the invoice price-overridden,
+            // which is what the dashboard flags in amber.
+            const hasPriceOverride = saleItemsData.some(
+                i => i.originalPrice != null && i.price !== i.originalPrice
+            );
+
+            // 4. Find the branch's default CASH_DRAWER safe — CASH only. Card
+            //    sales are recorded as a CARD payment without touching the drawer,
+            //    matching the desktop app and the web POS.
+            const cashSafe = paymentMethod === 'CASH'
                 ? await tx.safe.findFirst({
                     where: { branchId: user.branchId!, type: 'CASH_DRAWER' },
                     select: { id: true }
                 })
                 : null;
 
-            // 5. Create Sale (link to safe if CASH)
+            // 5. Create Sale (linked to the safe only for CASH)
             const newSale = await tx.sale.create({
                 data: {
                     branchId: user.branchId!,
@@ -165,6 +271,7 @@ export async function POST(request: Request) {
                     discount: discount ?? 0,
                     patientId: patientId || null,
                     safeId: cashSafe?.id ?? null,
+                    hasPriceOverride,
                     ...(invoiceNumber !== undefined ? { invoiceNumber } : {}),
                     items: { create: saleItemsData }
                 }
@@ -175,13 +282,13 @@ export async function POST(request: Request) {
                 data: {
                     saleId: newSale.id,
                     amount: totalAmount,
-                    method: (paymentMethod ?? 'CASH') as any,
+                    method: paymentMethod,
                     status: 'COMPLETED' as any,
                 }
             });
 
             // 7. CASH: update safe balance + create Transaction record
-            if (paymentMethod !== 'CREDIT' && cashSafe) {
+            if (paymentMethod === 'CASH' && cashSafe) {
                 await tx.safe.update({
                     where: { id: cashSafe.id },
                     data: { balance: { increment: totalAmount } }

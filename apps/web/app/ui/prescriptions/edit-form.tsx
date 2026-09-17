@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { updatePrescription } from "@/app/lib/actions/prescription";
 import { FileText, ArrowRight } from "lucide-react";
 import { SubmitButton } from "@/app/ui/submit-button";
@@ -31,7 +30,7 @@ export default function EditForm({
 }) {
     const initialState: any = { message: "", errors: {} };
     const updatePrescriptionWithId = updatePrescription.bind(null, prescription.id);
-    const [state, dispatch] = useFormState(updatePrescriptionWithId, initialState);
+    const [state, dispatch] = useActionState(updatePrescriptionWithId, initialState);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

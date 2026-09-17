@@ -1,124 +1,115 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect, Href } from 'expo-router';
 import { crmService, Patient } from '../../services/crm';
-import { useTheme } from '../../context/ThemeContext';
-import { Colors } from '../../constants/colors';
+import { Radius } from '../../constants/colors';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { usePalette, Surface, SectionTitle, AppButton, InfoNote, StateBlock } from '../../components/ui/Kit';
+import { formatNumber, initials } from '../../utils/format';
 
-export default function CRMListScreen() {
+/** Arabic count for the list header, as in the design: «مريضين (2)». */
+function patientsLabel(count: number): string {
+    const word = count === 1 ? 'مريض' : count === 2 ? 'مريضين' : count <= 10 ? 'مرضى' : 'مريضاً';
+    return `${word} (${formatNumber(count)})`;
+}
+
+/** Patients list (design patients.png): name, phone, initials — no photos. */
+export default function PatientsListScreen() {
+    const C = usePalette();
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const [search, setSearch] = useState('');
-    const { isDarkMode } = useTheme();
-    const C = Colors(isDarkMode);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchRef = useRef('');
 
-    useEffect(() => { fetchPatients(); }, []);
-
-    const fetchPatients = async (query = '') => {
-        setLoading(true);
+    const fetchPatients = useCallback(async (query = '') => {
         try {
             const data = await crmService.getPatients(query);
-            setPatients(data);
+            setPatients(Array.isArray(data) ? data : []);
+            setFailed(false);
         } catch (error) {
             console.error(error);
-            Alert.alert('خطأ', 'تعذّر تحميل قائمة المرضى. تحقق من الاتصال وحاول مجدداً.');
+            setFailed(true);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    };
+    }, []);
+
+    // Refresh when returning from «إضافة مريض».
+    useFocusEffect(useCallback(() => { fetchPatients(searchRef.current); }, [fetchPatients]));
+    useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
     const handleSearch = (text: string) => {
         setSearch(text);
+        searchRef.current = text;
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => fetchPatients(text), 400);
+        debounceRef.current = setTimeout(() => fetchPatients(text.trim()), 400);
     };
 
     const renderItem = ({ item }: { item: Patient }) => (
-        <TouchableOpacity
-            style={{
-                flexDirection: 'row-reverse',
-                alignItems: 'center',
-                backgroundColor: C.card,
-                padding: 16,
-                borderRadius: 5,
-                marginBottom: 12,
-                borderWidth: 1,
-                borderColor: C.border,
-            }}
-            onPress={() => router.push(`/crm/${item.id}` as any)}
-            activeOpacity={0.7}
-        >
-            <View style={{
-                width: 48, height: 48, borderRadius: 5,
-                backgroundColor: C.primaryMuted,
-                justifyContent: 'center', alignItems: 'center',
-                marginLeft: 12,
-            }}>
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: C.primary }}>
-                    {item.name.charAt(0)}
-                </Text>
+        <Surface style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 10, paddingVertical: 12 }}>
+            <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: C.primary, fontSize: 15, fontWeight: '800' }}>{initials(item.name)}</Text>
             </View>
-            <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: '600', color: C.foreground, textAlign: 'right' }}>
-                    {item.name}
-                </Text>
-                <Text style={{ fontSize: 14, color: C.mutedForeground, textAlign: 'right', marginTop: 2 }}>
-                    {item.phone}
-                </Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right' }} numberOfLines={1}>{item.name}</Text>
+                <Text style={{ color: C.mutedForeground, fontSize: 13.5, textAlign: 'right', marginTop: 2, writingDirection: 'ltr' }} numberOfLines={1}>{item.phone}</Text>
             </View>
-            <Ionicons name="chevron-back" size={20} color={C.mutedForeground} />
-        </TouchableOpacity>
+            {/* Divider before the action, as in the design. */}
+            <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: C.border }} />
+            <AppButton label="فتح الملف" icon="document-text-outline" variant="outline" compact onPress={() => router.push(`/crm/${item.id}` as Href)} />
+        </Surface>
     );
 
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
-            {/* Header */}
-            <View style={{
-                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                padding: 16, paddingTop: 50,
-                backgroundColor: C.card,
-                borderBottomWidth: 1, borderBottomColor: C.border,
-            }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
-                    <Ionicons name="arrow-back" size={24} color={C.foreground} />
-                </TouchableOpacity>
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: C.foreground }}>المرضى والعملاء</Text>
-                <TouchableOpacity onPress={() => router.push('/crm/add' as any)} style={{ padding: 8 }}>
-                    <Ionicons name="add" size={24} color={C.primary} />
-                </TouchableOpacity>
-            </View>
+            <ScreenHeader title="المرضى" subtitle="ملفات العملاء ومشترياتهم" fallbackHref="/(tabs)/more" />
 
-            {/* Search */}
-            <View style={{
-                flexDirection: 'row-reverse', alignItems: 'center',
-                backgroundColor: C.card, margin: 16,
-                paddingHorizontal: 12, borderRadius: 12,
-                borderWidth: 1, borderColor: C.border,
-            }}>
-                <Ionicons name="search" size={20} color={C.mutedForeground} style={{ marginLeft: 8 }} />
-                <TextInput
-                    style={{ flex: 1, paddingVertical: 12, fontSize: 16, textAlign: 'right', color: C.foreground }}
-                    placeholder="بحث بالاسم أو الهاتف..."
-                    placeholderTextColor={C.mutedForeground}
-                    value={search}
-                    onChangeText={handleSearch}
-                />
+            <View style={{ paddingHorizontal: 16, gap: 10, paddingBottom: 6 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: Radius.control, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12 }}>
+                    <Ionicons name="search-outline" size={20} color={C.mutedForeground} />
+                    <TextInput
+                        style={{ flex: 1, paddingVertical: 12, fontSize: 15, textAlign: 'right', color: C.foreground }}
+                        placeholder="ابحث باسم المريض أو الهاتف"
+                        placeholderTextColor={C.mutedForeground}
+                        value={search}
+                        onChangeText={handleSearch}
+                    />
+                    {search.length > 0 && (
+                        <TouchableOpacity onPress={() => handleSearch('')} hitSlop={8} accessibilityLabel="مسح البحث">
+                            <Ionicons name="close-circle" size={18} color={C.mutedForeground} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+                <AppButton label="إضافة مريض" icon="add" onPress={() => router.push('/crm/add' as Href)} style={{ paddingVertical: 11 }} />
             </View>
 
             {loading ? (
-                <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 20 }} />
+                <View style={{ padding: 16, gap: 10 }}>
+                    {[1, 2, 3, 4].map(i => <Skeleton key={i} height={76} radius={Radius.card} />)}
+                </View>
+            ) : failed ? (
+                <StateBlock icon="cloud-offline-outline" title="تعذّر تحميل المرضى" message="تحقق من الاتصال ثم أعد المحاولة." actionLabel="إعادة المحاولة" onAction={() => { setLoading(true); fetchPatients(searchRef.current); }} />
             ) : (
                 <FlatList
                     data={patients}
                     renderItem={renderItem}
                     keyExtractor={item => item.id}
-                    contentContainerStyle={{ padding: 16, paddingTop: 0 }}
+                    contentContainerStyle={{ flexGrow: patients.length === 0 ? 1 : 0, padding: 16, paddingTop: 10, paddingBottom: 32 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPatients(searchRef.current); }} tintColor={C.primary} />}
+                    ListHeaderComponent={patients.length > 0 ? <SectionTitle title="المرضى والعملاء" trailing={patientsLabel(patients.length)} /> : null}
+                    ListFooterComponent={patients.length > 0 ? <InfoNote style={{ marginTop: 6 }} text="المعلومات الصحية المسجلة وسجل المشتريات داخل ملف المريض." /> : null}
                     ListEmptyComponent={
-                        <View style={{ alignItems: 'center', marginTop: 40 }}>
-                            <Text style={{ color: C.mutedForeground }}>لا يوجد مرضى</Text>
-                        </View>
+                        <StateBlock
+                            icon={search ? 'search-outline' : 'people-outline'}
+                            title={search ? 'لا توجد نتائج' : 'لا يوجد مرضى بعد'}
+                            message={search ? `لا يوجد مريض يطابق "${search}"` : 'أضف أول مريض لربط المبيعات والمعلومات الصحية المسجلة.'}
+                        />
                     }
                 />
             )}

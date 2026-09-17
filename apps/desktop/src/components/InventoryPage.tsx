@@ -1,1497 +1,2680 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Package, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, RefreshCcw, Scan, Loader2, Upload, Search, X, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, ChevronDown, Zap } from "lucide-react";
+import {
+  Package,
+  AlertTriangle,
+  CheckCircle,
+  Plus,
+  Edit2,
+  Trash2,
+  RefreshCcw,
+  Scan,
+  Loader2,
+  Upload,
+  Search,
+  X,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  BarChart3,
+  ArrowUpDown,
+  ChevronDown,
+  Zap,
+} from "lucide-react";
 import SyncHealthDashboard from "./SyncHealthDashboard";
 import SyncFailuresPanel from "./SyncFailuresPanel";
 import Toggle from "./Toggle";
 import { showConfirm } from "../lib/dialog";
+import { checkExpiry } from "../lib/expiry";
+import {
+  loadInventoryDraft,
+  saveInventoryDraft,
+  clearInventoryDraft,
+  draftHasContent,
+  formatDraftAge,
+  type InventoryDraft,
+} from "../lib/inventory-draft";
 
 function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
-    return Promise.race([
-        window.ipcRenderer.invoke(channel, ...args) as Promise<T>,
-        new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error(`IPC timeout (${channel})`)), 12000)
-        ),
-    ]);
+  return Promise.race([
+    window.ipcRenderer.invoke(channel, ...args) as Promise<T>,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`IPC timeout (${channel})`)), 12000),
+    ),
+  ]);
 }
 
+/**
+ * فارق التكلفة فوق سعر البيع الذي يُعتبر خطأ إدخال شبه مؤكد (دينار).
+ * تجاوزه يعني غالباً أن سعر الباكيت أُدخل دون قسمته على عدد الأشرطة.
+ */
+const COST_OVER_PRICE_GAP = 500;
+
 interface InventoryItem {
+  id: string;
+  drugId: string;
+  drug: {
     id: string;
-    drugId: string;
-    drug: {
-        id: string;
-        tradeName: string;
-        scientificName: string;
-        barcode: string;
-        price: number;
-        isQuickSale: boolean;
-    };
-    quantity: number;
-    costPrice: number;
-    minStock: number;
-    maxStock: number;
-    branchId: string;
+    tradeName: string;
+    scientificName: string;
+    barcode: string;
+    price: number;
+    isQuickSale: boolean;
+  };
+  quantity: number;
+  costPrice: number;
+  minStock: number;
+  maxStock: number;
+  branchId: string;
 }
 
 type UploadToast = {
-    message: string;
-    type: "success" | "error" | "info";
+  message: string;
+  type: "success" | "error" | "info";
 };
 
 type SyncHealth = {
-    pendingCount: number;
-    failedCount: number;
-    inProgress: boolean;
-    oldestPendingAt: string | null;
-    oldestPendingAgeSec: number;
-    nextRetryAt: string | null;
-    nextRetryInSec: number | null;
-    byType: {
-        "create-drug": number;
-        "add-inventory": number;
-        "delete-inventory": number;
-    };
-    topError: string | null;
-    autoRetryIntervalSec: number;
+  pendingCount: number;
+  failedCount: number;
+  inProgress: boolean;
+  oldestPendingAt: string | null;
+  oldestPendingAgeSec: number;
+  nextRetryAt: string | null;
+  nextRetryInSec: number | null;
+  byType: {
+    "create-drug": number;
+    "add-inventory": number;
+    "delete-inventory": number;
+  };
+  topError: string | null;
+  autoRetryIntervalSec: number;
 };
 
-type SortField = 'name' | 'quantity' | 'price' | 'costPrice' | 'profit';
-type SortDir = 'asc' | 'desc';
-type StockFilter = 'all' | 'out' | 'low' | 'good' | 'over';
+type SortField = "name" | "quantity" | "price" | "costPrice" | "profit";
+type SortDir = "asc" | "desc";
+type StockFilter = "all" | "out" | "low" | "good" | "over";
 
 export default function InventoryPage({ user }: { user: any }) {
-    const isAdmin = user?.role === 'ADMIN';
-    const [barcode, setBarcode] = useState("");
-    const [searchTerm, setSearchTerm] = useState("");
-    const [isChecking, setIsChecking] = useState(false);
-    const [items, setItems] = useState<InventoryItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [pendingSyncCount, setPendingSyncCount] = useState(0);
-    const [isUploadingPending, setIsUploadingPending] = useState(false);
-    const [uploadToast, setUploadToast] = useState<UploadToast | null>(null);
-    const [syncHealth, setSyncHealth] = useState<SyncHealth | null>(null);
-    const [sortField, setSortField] = useState<SortField>('name');
-    const [sortDir, setSortDir] = useState<SortDir>('asc');
-    const [stockFilter, setStockFilter] = useState<StockFilter>('all');
-    const [currentPage, setCurrentPage] = useState(1);
-    const PAGE_SIZE = 200;
-    const barcodeInputRef = useRef<HTMLInputElement>(null);
-    const searchInputRef = useRef<HTMLInputElement>(null);
-    const syncingRef = useRef(false); // guard: prevent overlapping sync button clicks
+  const isAdmin = user?.role === "ADMIN";
+  const [barcode, setBarcode] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isChecking, setIsChecking] = useState(false);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [isUploadingPending, setIsUploadingPending] = useState(false);
+  const [uploadToast, setUploadToast] = useState<UploadToast | null>(null);
+  const [syncHealth, setSyncHealth] = useState<SyncHealth | null>(null);
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 200;
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const syncingRef = useRef(false); // guard: prevent overlapping sync button clicks
 
-    // Quick-Sale Toggle State
-    const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>({});
-    const [togglingQuickSale, setTogglingQuickSale] = useState<string | null>(null);
+  // Quick-Sale Toggle State
+  const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [togglingQuickSale, setTogglingQuickSale] = useState<string | null>(
+    null,
+  );
 
-    const handleQuickSaleToggle = async (drugId: string) => {
-        setTogglingQuickSale(drugId);
-        const newValue = !quickSaleState[drugId];
-        setQuickSaleState((prev) => ({ ...prev, [drugId]: newValue }));
-        try {
-            const res = await ipcInvoke('toggle-quick-sale', { drugId, isQuickSale: newValue });
-            if (!res.success) setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
-        } catch {
-            setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
-        } finally {
-            setTogglingQuickSale(null);
-        }
+  const handleQuickSaleToggle = async (drugId: string) => {
+    setTogglingQuickSale(drugId);
+    const newValue = !quickSaleState[drugId];
+    setQuickSaleState((prev) => ({ ...prev, [drugId]: newValue }));
+    try {
+      const res = await ipcInvoke("toggle-quick-sale", {
+        drugId,
+        isQuickSale: newValue,
+      });
+      if (!res.success)
+        setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+    } catch {
+      setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+    } finally {
+      setTogglingQuickSale(null);
+    }
+  };
+
+  const [dlqCount, setDlqCount] = useState(0);
+  const [showDLQ, setShowDLQ] = useState(false);
+
+  // Modal States
+  const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState<InventoryItem | null>(
+    null,
+  );
+  const [showBatchModal, setShowBatchModal] = useState<InventoryItem | null>(
+    null,
+  );
+  const [showCreateDrugModal, setShowCreateDrugModal] = useState<string | null>(
+    null,
+  );
+  const [showAddToInventoryModal, setShowAddToInventoryModal] = useState<
+    any | null
+  >(null);
+
+  // Form States for Add Batch
+  const [batchPacketPrice, setBatchPacketPrice] = useState(0);
+  const [batchStripsPerPacket, setBatchStripsPerPacket] = useState(1);
+  const batchComputedCost =
+    batchStripsPerPacket > 0 ? batchPacketPrice / batchStripsPerPacket : 0;
+  const [batchData, setBatchData] = useState({
+    quantity: 0,
+    costPrice: 0,
+    expiryDate: "",
+    supplierId: "" as string,
+  });
+  // التكلفة الفعلية للشريط: من حاسبة الباكيت إن استُخدمت، وإلا الحقل المباشر
+  const batchEffectiveCost =
+    batchPacketPrice > 0 ? batchComputedCost : Number(batchData.costPrice) || 0;
+
+  // Local supplier cache for offline dropdown
+  const [suppliers, setSuppliers] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  // Supplier combobox state — shared between batch modal and create-drug modal
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const supplierRef = useRef<HTMLDivElement>(null);
+  // Supplier for create-drug modal (batchData.supplierId is used for add-batch modal)
+  const [createDrugSupplierId, setCreateDrugSupplierId] = useState("");
+
+  // Packet price calculator state (create-drug modal)
+  const [packetPrice, setPacketPrice] = useState<number>(0);
+  const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
+  const computedCostPrice =
+    stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+
+  // ─── مسودة الإدخال (حفظ تلقائي) ────────────────────────────────────────
+  // الصفحة تُفكَّك عند الانتقال إلى نقطة البيع، فتضيع حالة النموذج. نحفظها في
+  // localStorage تلقائياً ونعرض شريط استعادة عند العودة.
+  const [draftBanner, setDraftBanner] = useState<InventoryDraft | null>(null);
+  /** حقول نموذج «دواء جديد» المستعادة — تُمرَّر كـ defaultValue لأنها غير مرتبطة بحالة React. */
+  const [restoredCreateFields, setRestoredCreateFields] = useState<Record<
+    string,
+    string | number
+  > | null>(null);
+  const createDrugFormRef = useRef<HTMLFormElement>(null);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** يُعاد ضبطه كل رِندر ليرى دائماً أحدث حالة — يستخدمه cleanup الخاص بالـ unmount. */
+  const saveDraftNowRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    ipcInvoke("get-local-suppliers")
+      .then((result: any) => {
+        if (Array.isArray(result)) setSuppliers(result);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Close supplier dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        supplierRef.current &&
+        !supplierRef.current.contains(e.target as Node)
+      ) {
+        setSupplierOpen(false);
+        setSupplierSearch("");
+      }
     };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-    const [dlqCount, setDlqCount] = useState(0);
-    const [showDLQ, setShowDLQ] = useState(false);
+  // ─── حفظ/استعادة مسودة الإدخال ─────────────────────────────────────────
+  /** لقطة لحالة النموذج المفتوح حالياً، أو null إن لم يكن فيه بيانات تستحق الحفظ. */
+  const snapshotDraft = (): InventoryDraft | null => {
+    if (showBatchModal) {
+      const fields = {
+        quantity: batchData.quantity,
+        costPrice: batchData.costPrice,
+        expiryDate: batchData.expiryDate,
+        supplierId: batchData.supplierId,
+        batchPacketPrice,
+        batchStripsPerPacket,
+      };
+      if (!draftHasContent("batch", fields)) return null;
+      return {
+        kind: "batch",
+        savedAt: new Date().toISOString(),
+        inventoryId: showBatchModal.id,
+        drugName: showBatchModal.drug?.tradeName ?? "",
+        fields,
+      };
+    }
+    if (showCreateDrugModal) {
+      const fields: Record<string, string | number> = {
+        packetPrice,
+        stripsPerPacket,
+        supplierId: createDrugSupplierId,
+      };
+      // حقول هذا النموذج غير مرتبطة بحالة React (تُقرأ عبر FormData عند الحفظ)،
+      // لذا نقرأها من الـ DOM مباشرة.
+      const form = createDrugFormRef.current;
+      if (form) {
+        const fd = new FormData(form);
+        for (const key of [
+          "tradeName",
+          "scientificName",
+          "origin",
+          "price",
+          "minStock",
+          "maxStock",
+          "quantity",
+          "expiryDate",
+        ]) {
+          const v = fd.get(key);
+          if (typeof v === "string") fields[key] = v;
+        }
+      }
+      if (!draftHasContent("create-drug", fields)) return null;
+      return {
+        kind: "create-drug",
+        savedAt: new Date().toISOString(),
+        barcode: showCreateDrugModal,
+        fields,
+      };
+    }
+    return null;
+  };
 
+  // يُحدَّث كل رِندر حتى يرى cleanup الخاص بالـ unmount أحدث حالة، لا أول واحدة.
+  saveDraftNowRef.current = () => {
+    if (!user?.id) return;
+    const draft = snapshotDraft();
+    if (draft) saveInventoryDraft(user.id, draft);
+  };
 
-    // Modal States
-    const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
-    const [showEditModal, setShowEditModal] = useState<InventoryItem | null>(null);
-    const [showBatchModal, setShowBatchModal] = useState<InventoryItem | null>(null);
-    const [showCreateDrugModal, setShowCreateDrugModal] = useState<string | null>(null);
-    const [showAddToInventoryModal, setShowAddToInventoryModal] = useState<any | null>(null);
+  /** حفظ مؤجَّل — يُستدعى من onInput للحقول غير المرتبطة بالحالة. */
+  const queueDraftSave = () => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => saveDraftNowRef.current(), 400);
+  };
 
-    // Form States for Add Batch
-    const [batchPacketPrice, setBatchPacketPrice] = useState(0);
-    const [batchStripsPerPacket, setBatchStripsPerPacket] = useState(1);
-    const batchComputedCost = batchStripsPerPacket > 0 ? batchPacketPrice / batchStripsPerPacket : 0;
-    const [batchData, setBatchData] = useState({
+  /**
+   * إغلاق النموذج مع الاحتفاظ بما كُتب.
+   *
+   * النافذة تغطي الشاشة كاملة (z-50) بينما شريط التنقل z-30، أي أن إغلاقها هو
+   * الطريقة الوحيدة للوصول إلى نقطة البيع. لذلك لا يجوز اعتبار الإغلاق تخلياً
+   * عن الإدخال — نحفظ المسودة ونُظهر شريط الاستعادة فوراً بدل حذفها.
+   */
+  const stashDraftAndClose = (which: "batch" | "create-drug") => {
+    // الحفظ أولاً: اللقطة تقرأ حالة النافذة، فلا بد أن تكون ما تزال مفتوحة.
+    saveDraftNowRef.current();
+    const stashed = user?.id ? loadInventoryDraft(user.id) : null;
+
+    if (which === "batch") {
+      setShowBatchModal(null);
+    } else {
+      setShowCreateDrugModal(null);
+      setPacketPrice(0);
+      setStripsPerPacket(1);
+    }
+    // يظهر الشريط فوراً حتى لو بقي المستخدم في الصفحة، ليعرف أن بياناته محفوظة.
+    if (stashed) setDraftBanner(stashed);
+  };
+
+  /** يُستدعى بعد الحفظ الناجح أو عند الضغط على «تجاهل» — لا مسودة بعد الآن. */
+  const dropDraft = () => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    if (user?.id) clearInventoryDraft(user.id);
+    setRestoredCreateFields(null);
+    setDraftBanner(null);
+  };
+
+  // الحقول المرتبطة بحالة React: أي تغيير فيها يُجدول حفظاً.
+  useEffect(() => {
+    if (!showBatchModal && !showCreateDrugModal) return;
+    queueDraftSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showBatchModal,
+    showCreateDrugModal,
+    batchData,
+    batchPacketPrice,
+    batchStripsPerPacket,
+    packetPrice,
+    stripsPerPacket,
+    createDrugSupplierId,
+  ]);
+
+  // الحالة الأساسية التي طُلب حلّها: مغادرة الصفحة تُفكِّك المكوّن. نحفظ فوراً
+  // (لا عبر المؤقّت، فقد لا يعمل قبل التفكيك).
+  useEffect(() => {
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+      saveDraftNowRef.current();
+    };
+  }, []);
+
+  // عند فتح الصفحة: هل توجد مسودة غير مكتملة؟
+  useEffect(() => {
+    if (!user?.id) return;
+    const existing = loadInventoryDraft(user.id);
+    if (existing) setDraftBanner(existing);
+  }, [user?.id]);
+
+  /**
+   * فتح نموذج دفعة جديد ونظيف. مهم: حالة النموذج مشتركة بين كل الأصناف، فبدون
+   * تصفير صريح تبقى قيم صنف سابق (أو مسودة مستعادة) ظاهرة عند فتح صنف آخر —
+   * وهذا يعني إدخال تكلفة خاطئة لدواء خاطئ.
+   */
+  const openBatchModal = (item: InventoryItem) => {
+    setBatchData({
+      quantity: 0,
+      costPrice: 0,
+      expiryDate: "",
+      supplierId: "",
+    });
+    setBatchPacketPrice(0);
+    setBatchStripsPerPacket(1);
+    setShowBatchModal(item);
+  };
+
+  /** فتح نموذج «دواء جديد» نظيف — يمسح أي قيم مُستعادة من مسودة سابقة. */
+  const openCreateDrugModal = (code: string) => {
+    setRestoredCreateFields(null);
+    setCreateDrugSupplierId("");
+    setPacketPrice(0);
+    setStripsPerPacket(1);
+    setShowCreateDrugModal(code);
+  };
+
+  /** استعادة المسودة إلى النموذج المناسب. */
+  const restoreDraft = () => {
+    const draft = draftBanner;
+    if (!draft) return;
+    const f = draft.fields;
+
+    if (draft.kind === "batch") {
+      const item = items.find((i: InventoryItem) => i.id === draft.inventoryId);
+      if (!item) {
+        setUploadToast({
+          type: "error",
+          message: "تعذّر استعادة المسودة: الصنف لم يعد موجوداً في المخزون",
+        });
+        dropDraft();
+        return;
+      }
+      setBatchData({
+        quantity: Number(f.quantity) || 0,
+        costPrice: Number(f.costPrice) || 0,
+        expiryDate: String(f.expiryDate ?? ""),
+        supplierId: String(f.supplierId ?? ""),
+      });
+      setBatchPacketPrice(Number(f.batchPacketPrice) || 0);
+      setBatchStripsPerPacket(Number(f.batchStripsPerPacket) || 1);
+      setShowBatchModal(item);
+    } else {
+      setRestoredCreateFields(f);
+      setPacketPrice(Number(f.packetPrice) || 0);
+      setStripsPerPacket(Number(f.stripsPerPacket) || 1);
+      setCreateDrugSupplierId(String(f.supplierId ?? ""));
+      setShowCreateDrugModal(String(draft.barcode ?? ""));
+    }
+    setDraftBanner(null);
+  };
+
+  const formatIQD = (amount: number) => {
+    return (
+      new Intl.NumberFormat("en-US", {
+        style: "decimal",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount) + " د.ع"
+    );
+  };
+
+  const formatDuration = (totalSeconds: number | null | undefined) => {
+    if (totalSeconds == null || !Number.isFinite(totalSeconds)) return "—";
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    if (seconds < 60) return `${seconds}ث`;
+    const minutes = Math.floor(seconds / 60);
+    const remSeconds = seconds % 60;
+    if (minutes < 60)
+      return remSeconds === 0 ? `${minutes}د` : `${minutes}د ${remSeconds}ث`;
+    const hours = Math.floor(minutes / 60);
+    const remMinutes = minutes % 60;
+    return remMinutes === 0 ? `${hours}س` : `${hours}س ${remMinutes}د`;
+  };
+
+  // === Stats ===
+  const stats = useMemo(() => {
+    const totalItems = items.length;
+    const totalStock = items.reduce((a, b) => a + b.quantity, 0);
+    const lowStockCount = items.filter(
+      (i) => i.quantity < i.minStock && i.quantity > 0,
+    ).length;
+    const outOfStockCount = items.filter((i) => i.quantity <= 0).length;
+    const overStockCount = items.filter((i) => i.quantity > i.maxStock).length;
+    const totalCostValue = items.reduce(
+      (a, b) => a + b.costPrice * b.quantity,
+      0,
+    );
+    const totalRetailValue = items.reduce(
+      (a, b) => a + b.drug.price * b.quantity,
+      0,
+    );
+    const totalProfit = totalRetailValue - totalCostValue;
+    return {
+      totalItems,
+      totalStock,
+      lowStockCount,
+      outOfStockCount,
+      overStockCount,
+      totalCostValue,
+      totalRetailValue,
+      totalProfit,
+    };
+  }, [items]);
+
+  // === Filtered & Sorted Items ===
+  const filteredItems = useMemo(() => {
+    let result = [...items];
+
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (i) =>
+          i.drug.tradeName.toLowerCase().includes(term) ||
+          i.drug.barcode.includes(term) ||
+          i.drug.scientificName?.toLowerCase().includes(term),
+      );
+    }
+
+    // Stock filter
+    if (stockFilter === "out") result = result.filter((i) => i.quantity <= 0);
+    else if (stockFilter === "low")
+      result = result.filter((i) => i.quantity > 0 && i.quantity < i.minStock);
+    else if (stockFilter === "good")
+      result = result.filter(
+        (i) => i.quantity >= i.minStock && i.quantity <= i.maxStock,
+      );
+    else if (stockFilter === "over")
+      result = result.filter((i) => i.quantity > i.maxStock);
+
+    // Sort
+    result.sort((a, b) => {
+      let va: number | string = 0,
+        vb: number | string = 0;
+      switch (sortField) {
+        case "name":
+          va = a.drug.tradeName;
+          vb = b.drug.tradeName;
+          break;
+        case "quantity":
+          va = a.quantity;
+          vb = b.quantity;
+          break;
+        case "price":
+          va = a.drug.price;
+          vb = b.drug.price;
+          break;
+        case "costPrice":
+          va = a.costPrice;
+          vb = b.costPrice;
+          break;
+        case "profit":
+          va = (a.drug.price - a.costPrice) * a.quantity;
+          vb = (b.drug.price - b.costPrice) * b.quantity;
+          break;
+      }
+      if (typeof va === "string")
+        return sortDir === "asc"
+          ? va.localeCompare(vb as string)
+          : (vb as string).localeCompare(va);
+      return sortDir === "asc"
+        ? (va as number) - (vb as number)
+        : (vb as number) - (va as number);
+    });
+
+    return result;
+  }, [items, searchTerm, stockFilter, sortField, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const paginatedItems = filteredItems.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  // Reset to page 1 when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, stockFilter, sortField, sortDir]);
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  const checkBarcode = async (code: string) => {
+    if (!window.ipcRenderer) return;
+    setIsChecking(true);
+    try {
+      const data = await ipcInvoke("check-barcode-local", {
+        barcode: code,
+        branchId: user.branchId,
+      });
+
+      if (data.exists) {
+        if (data.inventory) {
+          openBatchModal(data.inventory);
+        } else {
+          setShowAddToInventoryModal(data.drug);
+        }
+      } else {
+        openCreateDrugModal(code);
+      }
+    } catch (error) {
+      console.error("Barcode check error:", error);
+    } finally {
+      setIsChecking(false);
+      setBarcode("");
+    }
+  };
+
+  const handleBarcodeSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && barcode.trim()) {
+      checkBarcode(barcode.trim());
+    }
+  };
+
+  const fetchInventory = async () => {
+    if (window.ipcRenderer) {
+      setLoading(true);
+      try {
+        // Use direct invoke (no 12s timeout wrapper) — these are local
+        // SQLite queries that should be fast, and the timeout was causing
+        // silent failures when called after sync completion.
+        const [data, pending, health] = await Promise.all([
+          window.ipcRenderer.invoke("get-inventory-items", {
+            searchTerm: "",
+            user,
+          }),
+          window.ipcRenderer.invoke("get-pending-sync-count"),
+          window.ipcRenderer.invoke("get-sync-health"),
+        ]);
+        setItems(data);
+        if (Array.isArray(data)) {
+          setQuickSaleState(
+            Object.fromEntries(
+              data.map((i: InventoryItem) => [
+                i.drug.id,
+                i.drug.isQuickSale ?? false,
+              ]),
+            ),
+          );
+        }
+        const pendingCount = Number(
+          health?.pendingCount ?? pending?.count ?? 0,
+        );
+        setPendingSyncCount(Number.isFinite(pendingCount) ? pendingCount : 0);
+        setSyncHealth(health ?? null);
+      } catch (error) {
+        console.error("Failed to fetch inventory", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleUploadPending = async () => {
+    if (!window.ipcRenderer) return;
+    setIsUploadingPending(true);
+    try {
+      const res = await ipcInvoke("sync-pending-inventory");
+      await fetchInventory();
+
+      if (!res.success && res.failed > 0) {
+        setUploadToast({
+          type: "error",
+          message: `تم رفع ${res.processed || 0}، فشل ${res.failed || 0}، معلق ${res.pending || 0}`,
+        });
+        return;
+      }
+      if ((res.processed || 0) === 0 && (res.pending || 0) === 0) {
+        setUploadToast({
+          type: "info",
+          message: "لا توجد بيانات معلقة للرفع.",
+        });
+        return;
+      }
+      setUploadToast({
+        type: "success",
+        message: `تم رفع ${res.processed || 0} عنصر. معلق ${res.pending || 0}`,
+      });
+    } catch (error) {
+      setUploadToast({ type: "error", message: "فشل رفع البيانات للسيرفر." });
+    } finally {
+      setIsUploadingPending(false);
+    }
+  };
+
+  const handleSync = () => {
+    if (!window.ipcRenderer || syncingRef.current) return;
+    syncingRef.current = true;
+    setLoading(true);
+
+    // Listen for the async completion signal BEFORE invoking.
+    // The event now carries result data so we can show accurate toasts.
+    window.ipcRenderer.once("sync-inventory-done", (result: any) => {
+      syncingRef.current = false;
+      clearTimeout(safetyTimer);
+
+      // Always refresh UI from local DB after sync
+      fetchInventory().finally(() => setLoading(false));
+
+      // Show toast based on actual results
+      if (result?.success) {
+        const pullCount = result?.pull?.count ?? "?";
+        setUploadToast({
+          type: "success",
+          message: `تمت المزامنة بنجاح ✓ (${pullCount} منتج)`,
+        });
+      } else {
+        const pullReason = result?.pull?.reason || "";
+        const pushErr = result?.push?.error || "";
+        let msg = "فشلت المزامنة";
+        if (pullReason === "offline" || pushErr.includes("offline")) {
+          msg = "تعذر الاتصال بالسيرفر";
+        } else if (pullReason === "no_branch_id") {
+          msg = "لم يتم تحديد الفرع";
+        } else if (pullReason === "lock_timeout") {
+          msg = "المزامنة مشغولة، حاول مرة أخرى";
+        } else if (pullReason) {
+          // Show enough of the error to be useful for diagnosis
+          msg = `فشلت المزامنة: ${pullReason.substring(0, 200)}`;
+        }
+        setUploadToast({ type: "error", message: msg });
+      }
+    });
+
+    // Safety: release the spinner after 3 minutes if the done event never fires
+    const safetyTimer = setTimeout(() => {
+      syncingRef.current = false;
+      setLoading(false);
+    }, 3 * 60_000);
+
+    // Fire the IPC — returns immediately (sync runs in background)
+    window.ipcRenderer.invoke("sync-inventory").catch(() => {
+      clearTimeout(safetyTimer);
+      syncingRef.current = false;
+      setLoading(false);
+      setUploadToast({ type: "error", message: "تعذر الاتصال بالسيرفر." });
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't steal focus when a modal is open
+      if (
+        showEditModal ||
+        showBatchModal ||
+        showCreateDrugModal ||
+        showAddToInventoryModal
+      )
+        return;
+      if (e.key === "Escape") {
+        setBarcode("");
+        setSearchTerm("");
+      }
+      if (e.key === "F2") {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+      }
+      if (e.key === "/" && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    showEditModal,
+    showBatchModal,
+    showCreateDrugModal,
+    showAddToInventoryModal,
+  ]);
+
+  // Restore focus to search field when modals close (OS blur/focus cycle)
+  const prevInventoryModal = useRef(false);
+  useEffect(() => {
+    const anyOpen =
+      showEditModal ||
+      showBatchModal ||
+      showCreateDrugModal ||
+      showAddToInventoryModal;
+    if (prevInventoryModal.current && !anyOpen) {
+      window.ipcRenderer?.send("refocus-window");
+      const t = setTimeout(() => searchInputRef.current?.focus(), 200);
+      return () => clearTimeout(t);
+    }
+    prevInventoryModal.current = anyOpen;
+  }, [
+    showEditModal,
+    showBatchModal,
+    showCreateDrugModal,
+    showAddToInventoryModal,
+  ]);
+
+  useEffect(() => {
+    fetchInventory();
+  }, []);
+
+  // Auto-focus barcode input on page load
+  useEffect(() => {
+    const t = setTimeout(() => barcodeInputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!uploadToast) return;
+    // Error toasts stay longer so the user can read the message
+    const duration = uploadToast.type === "error" ? 10_000 : 3200;
+    const timer = setTimeout(() => setUploadToast(null), duration);
+    return () => clearTimeout(timer);
+  }, [uploadToast]);
+
+  useEffect(() => {
+    const onPendingSyncCount = (_event: unknown, count: number) => {
+      setPendingSyncCount(Number.isFinite(count) ? count : 0);
+    };
+    window.ipcRenderer.on("pending-sync-count", onPendingSyncCount as any);
+    return () => {
+      window.ipcRenderer.off("pending-sync-count", onPendingSyncCount as any);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onSyncHealthUpdated = (_event: unknown, health: SyncHealth) => {
+      if (!health || typeof health !== "object") return;
+      setSyncHealth(health);
+      const count = Number(health.pendingCount || 0);
+      setPendingSyncCount(Number.isFinite(count) ? count : 0);
+    };
+    window.ipcRenderer.on("sync-health-updated", onSyncHealthUpdated as any);
+    return () => {
+      window.ipcRenderer.off("sync-health-updated", onSyncHealthUpdated as any);
+    };
+  }, []);
+
+  // Track DLQ (failed sync) count
+  useEffect(() => {
+    const refreshDlq = async () => {
+      try {
+        const n = await ipcInvoke<number>("get-sync-failures-count");
+        setDlqCount(typeof n === "number" ? n : 0);
+      } catch {
+        /* ignore */
+      }
+    };
+    refreshDlq();
+    const onFailure = () => refreshDlq();
+    window.ipcRenderer.on("sync-failure-recorded", onFailure as any);
+    return () => {
+      window.ipcRenderer.off("sync-failure-recorded", onFailure as any);
+    };
+  }, []);
+
+  const handleDelete = async () => {
+    if (!showDeleteModal) return;
+    try {
+      await ipcInvoke("delete-inventory-item", showDeleteModal);
+      setShowDeleteModal(null);
+      fetchInventory();
+    } catch (error) {
+      setUploadToast({ type: "error", message: "فشل حذف العنصر" });
+    }
+  };
+
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!showEditModal) return;
+    const formData = new FormData(e.currentTarget);
+    try {
+      await ipcInvoke("update-inventory-item", {
+        id: showEditModal.id,
+        drugId: showEditModal.drugId || showEditModal.drug?.id,
+        price: formData.get("price"),
+        costPrice: formData.get("costPrice"),
+        minStock: formData.get("minStock"),
+        maxStock: formData.get("maxStock"),
+      });
+      setShowEditModal(null);
+      fetchInventory();
+      setUploadToast({ type: "success", message: "تم تحديث البيانات بنجاح ✓" });
+    } catch (error) {
+      setUploadToast({ type: "error", message: "فشل تحديث البيانات" });
+    }
+  };
+
+  const handleAddBatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showBatchModal) return;
+    // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+    if (
+      batchPacketPrice > 0 &&
+      (batchStripsPerPacket > 20 ||
+        (batchData.quantity > 10 && batchStripsPerPacket >= batchData.quantity))
+    ) {
+      const ok = await showConfirm({
+        variant: "warning",
+        title: "تحقق من عدد الأشرطة",
+        message:
+          `عدد الأشرطة في الباكيت (${batchStripsPerPacket}) يبدو غير صحيح.\n` +
+          `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${batchData.quantity}).\n` +
+          `سعر التكلفة للشريط سيُحسب: ${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // سعر الباكيت أقل من 125 دينار = غالباً خطأ إدخال
+    if (batchPacketPrice > 0 && batchPacketPrice < 125) {
+      const ok = await showConfirm({
+        variant: "warning",
+        title: "سعر الباكيت منخفض",
+        message: `سعر الباكيت المدخل (${batchPacketPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nتأكد أنه سعر الباكيت الصحيح.`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // التكلفة للشريط أعلى من سعر البيع الحالي = غالباً أُدخل سعر الباكيت بدون قسمة
+    const currentSellPrice = Number(showBatchModal.drug?.price) || 0;
+    if (currentSellPrice > 0 && batchEffectiveCost >= currentSellPrice) {
+      const gap = batchEffectiveCost - currentSellPrice;
+      const bigGap = gap >= COST_OVER_PRICE_GAP;
+      const fmtCost = batchEffectiveCost.toLocaleString("en", {
+        maximumFractionDigits: 2,
+      });
+      const fmtPrice = currentSellPrice.toLocaleString("en");
+      const fmtGap = gap.toLocaleString("en", { maximumFractionDigits: 2 });
+      const ok = await showConfirm({
+        variant: "error",
+        title: bigGap
+          ? `التكلفة أعلى من سعر البيع بأكثر من ${COST_OVER_PRICE_GAP} دينار`
+          : "التكلفة أعلى من سعر البيع",
+        message:
+          (bigGap
+            ? `سعر التكلفة للشريط (${fmtCost} د.ع) أعلى من سعر البيع الحالي للشريط (${fmtPrice} د.ع) بفارق ${fmtGap} د.ع.\n`
+            : `سعر التكلفة للشريط (${fmtCost} د.ع) أعلى من أو يساوي سعر البيع الحالي للشريط (${fmtPrice} د.ع).\n`) +
+          `غالباً أُدخل سعر الباكيت دون تحديد عدد الأشرطة الصحيح.`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // تصحيح سنة الصلاحية (27 → 2027) والتحذير من التواريخ المنتهية/البعيدة
+    const batchExpiry = checkExpiry(batchData.expiryDate);
+    if (batchExpiry.warning) {
+      const ok = await showConfirm({
+        variant: batchExpiry.severity ?? "warning",
+        title: "تحقق من تاريخ الانتهاء",
+        message: batchExpiry.warning,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    try {
+      await ipcInvoke("add-inventory-batch", {
+        inventoryId: showBatchModal.id,
+        ...batchData,
+        expiryDate: batchExpiry.value || batchData.expiryDate,
+        costPrice:
+          batchPacketPrice > 0 ? batchComputedCost : batchData.costPrice,
+      });
+      setShowBatchModal(null);
+      setBatchData({
         quantity: 0,
         costPrice: 0,
         expiryDate: "",
-        supplierId: "" as string,
-    });
+        supplierId: "",
+      });
+      setBatchPacketPrice(0);
+      setBatchStripsPerPacket(1);
+      dropDraft();
+      fetchInventory();
+      setUploadToast({ type: "success", message: "تمت إضافة الدفعة بنجاح ✓" });
+    } catch (error) {
+      setUploadToast({ type: "error", message: "فشل إضافة الدفعة" });
+    }
+  };
 
-    // Local supplier cache for offline dropdown
-    const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
-    // Supplier combobox state — shared between batch modal and create-drug modal
-    const [supplierSearch, setSupplierSearch] = useState("");
-    const [supplierOpen, setSupplierOpen] = useState(false);
-    const supplierRef = useRef<HTMLDivElement>(null);
-    // Supplier for create-drug modal (batchData.supplierId is used for add-batch modal)
-    const [createDrugSupplierId, setCreateDrugSupplierId] = useState("");
-
-    // Packet price calculator state (create-drug modal)
-    const [packetPrice, setPacketPrice] = useState<number>(0);
-    const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
-    const computedCostPrice = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
-
-    useEffect(() => {
-        ipcInvoke('get-local-suppliers')
-            .then((result: any) => { if (Array.isArray(result)) setSuppliers(result); })
-            .catch(() => {});
-    }, []);
-
-    // Close supplier dropdown on outside click
-    useEffect(() => {
-        const handler = (e: MouseEvent) => {
-            if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
-                setSupplierOpen(false);
-                setSupplierSearch("");
-            }
-        };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
-    }, []);
-
-    const formatIQD = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'decimal',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        }).format(amount) + ' د.ع';
+  const handleCreateDrug = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!showCreateDrugModal) return;
+    const formData = new FormData(e.currentTarget);
+    const stripCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+    // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+    const createQty = parseInt(formData.get("quantity") as string, 10) || 0;
+    if (
+      stripsPerPacket > 20 ||
+      (createQty > 10 && stripsPerPacket >= createQty)
+    ) {
+      const ok = await showConfirm({
+        variant: "warning",
+        title: "تحقق من عدد الأشرطة",
+        message:
+          `عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
+          `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${createQty}).\n` +
+          `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${stripCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // سعر الباكيت أقل من 125 دينار = غالباً خطأ إدخال
+    if (packetPrice > 0 && packetPrice < 125) {
+      const ok = await showConfirm({
+        variant: "warning",
+        title: "سعر الباكيت منخفض",
+        message: `سعر الباكيت المدخل (${packetPrice.toLocaleString("en")} د.ع) أقل من 125 دينار.\nتأكد أنه سعر الباكيت الصحيح.`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    const sellPrice = parseFloat(formData.get("price") as string) || 0;
+    // البيع أقل من أو يساوي الشراء = غالباً خطأ إدخال
+    if (stripCost > 0 && sellPrice > 0 && sellPrice <= stripCost) {
+      const ok = await showConfirm({
+        variant: "error",
+        title: "سعر البيع أقل من التكلفة",
+        message:
+          `سعر بيع الشريط (${sellPrice.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
+          `أقل من أو يساوي تكلفته (${stripCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع).`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // البيع أكثر من ضعف الشراء = ربما أُدخل سعر الباكيت بدلاً من الشريط
+    if (stripCost > 0 && sellPrice > 2 * stripCost) {
+      const ok = await showConfirm({
+        variant: "warning",
+        title: "سعر البيع مرتفع جداً",
+        message:
+          `سعر بيع الشريط (${sellPrice.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
+          `أكثر من ضعف تكلفته (${stripCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع).\n` +
+          `تأكد أنك أدخلت سعر الشريط وليس سعر الباكيت.`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // تصحيح سنة الصلاحية (27 → 2027) والتحذير من التواريخ المنتهية/البعيدة
+    const createExpiry = checkExpiry(formData.get("expiryDate") as string);
+    if (createExpiry.warning) {
+      const ok = await showConfirm({
+        variant: createExpiry.severity ?? "warning",
+        title: "تحقق من تاريخ الانتهاء",
+        message: createExpiry.warning,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    const data = {
+      barcode: showCreateDrugModal,
+      tradeName: formData.get("tradeName"),
+      scientificName: formData.get("scientificName"),
+      price: formData.get("price"),
+      costPrice: stripCost,
+      quantity: formData.get("quantity"),
+      minStock: formData.get("minStock"),
+      maxStock: formData.get("maxStock"),
+      origin: formData.get("origin"),
+      expiryDate: createExpiry.value || formData.get("expiryDate"),
+      supplierId: createDrugSupplierId || null,
     };
 
-    const formatDuration = (totalSeconds: number | null | undefined) => {
-        if (totalSeconds == null || !Number.isFinite(totalSeconds)) return "—";
-        const seconds = Math.max(0, Math.floor(totalSeconds));
-        if (seconds < 60) return `${seconds}ث`;
-        const minutes = Math.floor(seconds / 60);
-        const remSeconds = seconds % 60;
-        if (minutes < 60) return remSeconds === 0 ? `${minutes}د` : `${minutes}د ${remSeconds}ث`;
-        const hours = Math.floor(minutes / 60);
-        const remMinutes = minutes % 60;
-        return remMinutes === 0 ? `${hours}س` : `${hours}س ${remMinutes}د`;
-    };
-
-    // === Stats ===
-    const stats = useMemo(() => {
-        const totalItems = items.length;
-        const totalStock = items.reduce((a, b) => a + b.quantity, 0);
-        const lowStockCount = items.filter(i => i.quantity < i.minStock && i.quantity > 0).length;
-        const outOfStockCount = items.filter(i => i.quantity <= 0).length;
-        const overStockCount = items.filter(i => i.quantity > i.maxStock).length;
-        const totalCostValue = items.reduce((a, b) => a + (b.costPrice * b.quantity), 0);
-        const totalRetailValue = items.reduce((a, b) => a + (b.drug.price * b.quantity), 0);
-        const totalProfit = totalRetailValue - totalCostValue;
-        return { totalItems, totalStock, lowStockCount, outOfStockCount, overStockCount, totalCostValue, totalRetailValue, totalProfit };
-    }, [items]);
-
-    // === Filtered & Sorted Items ===
-    const filteredItems = useMemo(() => {
-        let result = [...items];
-
-        // Search filter
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            result = result.filter(i =>
-                i.drug.tradeName.toLowerCase().includes(term) ||
-                i.drug.barcode.includes(term) ||
-                i.drug.scientificName?.toLowerCase().includes(term)
-            );
-        }
-
-        // Stock filter
-        if (stockFilter === 'out') result = result.filter(i => i.quantity <= 0);
-        else if (stockFilter === 'low') result = result.filter(i => i.quantity > 0 && i.quantity < i.minStock);
-        else if (stockFilter === 'good') result = result.filter(i => i.quantity >= i.minStock && i.quantity <= i.maxStock);
-        else if (stockFilter === 'over') result = result.filter(i => i.quantity > i.maxStock);
-
-        // Sort
-        result.sort((a, b) => {
-            let va: number | string = 0, vb: number | string = 0;
-            switch (sortField) {
-                case 'name': va = a.drug.tradeName; vb = b.drug.tradeName; break;
-                case 'quantity': va = a.quantity; vb = b.quantity; break;
-                case 'price': va = a.drug.price; vb = b.drug.price; break;
-                case 'costPrice': va = a.costPrice; vb = b.costPrice; break;
-                case 'profit': va = (a.drug.price - a.costPrice) * a.quantity; vb = (b.drug.price - b.costPrice) * b.quantity; break;
-            }
-            if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
-            return sortDir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    try {
+      const res = await ipcInvoke("create-global-drug-local", data);
+      if (res.success) {
+        await ipcInvoke("add-to-inventory-local", {
+          drugId: res.drug.id,
+          branchId: user.branchId,
+          costPrice: stripCost,
+          price: formData.get("price"),
+          quantity: formData.get("quantity"),
+          minStock: formData.get("minStock"),
+          maxStock: formData.get("maxStock"),
+          expiryDate: createExpiry.value || formData.get("expiryDate"),
+          supplierId: createDrugSupplierId || null,
+          skipCloudPush: true,
         });
+        setShowCreateDrugModal(null);
+        setCreateDrugSupplierId("");
+        setPacketPrice(0);
+        setStripsPerPacket(1);
+        dropDraft();
+        fetchInventory();
+        setUploadToast({ type: "success", message: "تم إضافة الدواء بنجاح ✓" });
+      }
+    } catch (error) {
+      setUploadToast({ type: "error", message: "فشل إضافة الدواء" });
+    }
+  };
 
-        return result;
-    }, [items, searchTerm, stockFilter, sortField, sortDir]);
+  const handleAddToInventory = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!showAddToInventoryModal) return;
+    const formData = new FormData(e.currentTarget);
+    const stripCost = parseFloat(formData.get("costPrice") as string) || 0;
+    const sellPrice = parseFloat(formData.get("price") as string) || 0;
+    // البيع أقل من أو يساوي الشراء = غالباً خطأ إدخال
+    if (stripCost > 0 && sellPrice > 0 && sellPrice <= stripCost) {
+      const ok = await showConfirm({
+        variant: "error",
+        title: "سعر البيع أقل من التكلفة",
+        message:
+          `سعر بيع الشريط (${sellPrice.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
+          `أقل من أو يساوي تكلفته (${stripCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع).`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // البيع أكثر من ضعف الشراء = ربما أُدخل سعر الباكيت بدلاً من الشريط
+    if (stripCost > 0 && sellPrice > 2 * stripCost) {
+      const ok = await showConfirm({
+        variant: "warning",
+        title: "سعر البيع مرتفع جداً",
+        message:
+          `سعر بيع الشريط (${sellPrice.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع) ` +
+          `أكثر من ضعف تكلفته (${stripCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع).\n` +
+          `تأكد أنك أدخلت سعر الشريط وليس سعر الباكيت.`,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    // تصحيح سنة الصلاحية (27 → 2027) والتحذير من التواريخ المنتهية/البعيدة
+    const invExpiry = checkExpiry(formData.get("expiryDate") as string);
+    if (invExpiry.warning) {
+      const ok = await showConfirm({
+        variant: invExpiry.severity ?? "warning",
+        title: "تحقق من تاريخ الانتهاء",
+        message: invExpiry.warning,
+        actionLabel: "متابعة على أي حال",
+      });
+      if (!ok) return;
+    }
+    try {
+      await ipcInvoke("add-to-inventory-local", {
+        drugId: showAddToInventoryModal.id,
+        branchId: user.branchId,
+        costPrice: formData.get("costPrice"),
+        price: sellPrice > 0 ? sellPrice : undefined,
+        quantity: formData.get("quantity"),
+        minStock: formData.get("minStock"),
+        maxStock: formData.get("maxStock"),
+        expiryDate: invExpiry.value || formData.get("expiryDate"),
+      });
+      setShowAddToInventoryModal(null);
+      fetchInventory();
+      setUploadToast({ type: "success", message: "تم الإضافة للمخزون ✓" });
+    } catch (error) {
+      setUploadToast({ type: "error", message: "فشل الإضافة للمخزن" });
+    }
+  };
 
-    const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-    const paginatedItems = filteredItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const syncHealthView = useMemo(() => {
+    const pending = Number(syncHealth?.pendingCount ?? pendingSyncCount ?? 0);
+    const failed = Number(syncHealth?.failedCount ?? 0);
+    const inProgress = Boolean(syncHealth?.inProgress);
+    const topErr = syncHealth?.topError ?? null;
 
-    // Reset to page 1 when filters/search change
-    useEffect(() => { setCurrentPage(1); }, [searchTerm, stockFilter, sortField, sortDir]);
+    // Classify error type to avoid showing scary messages for simple offline state
+    const isOfflineError =
+      !!topErr &&
+      (topErr.toLowerCase().includes("retries") ||
+        topErr.toLowerCase().includes("fetch") ||
+        topErr.toLowerCase().includes("network") ||
+        topErr.toLowerCase().includes("abort") ||
+        topErr.toLowerCase().includes("timeout"));
+    const friendlyError = isOfflineError
+      ? "الإنترنت غير متاح — سيُعاد المحاولة تلقائياً"
+      : topErr
+        ? "سيُعاد المحاولة تلقائياً"
+        : null;
 
-    const toggleSort = (field: SortField) => {
-        if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-        else { setSortField(field); setSortDir('asc'); }
+    const status = inProgress
+      ? "جاري الرفع"
+      : pending === 0
+        ? "مستقر"
+        : isOfflineError
+          ? "غير متصل"
+          : failed > 0
+            ? "بحاجة متابعة"
+            : "ينتظر المزامنة";
+    const statusClass = inProgress
+      ? "bg-primary/10 text-primary border-primary/30"
+      : pending === 0
+        ? "bg-success/10 text-success border-success/30"
+        : isOfflineError
+          ? "bg-muted text-muted-foreground border-border"
+          : failed > 0
+            ? "bg-warning/10 text-warning border-warning/30"
+            : "bg-muted text-muted-foreground border-border";
+
+    return {
+      pending,
+      failed,
+      inProgress,
+      status,
+      statusClass,
+      oldestAge: formatDuration(syncHealth?.oldestPendingAgeSec),
+      nextRetry: formatDuration(syncHealth?.nextRetryInSec),
+      topError: friendlyError,
+      isOffline: isOfflineError,
+      autoRetryInterval: formatDuration(
+        syncHealth?.autoRetryIntervalSec ?? null,
+      ),
     };
+  }, [syncHealth, pendingSyncCount]);
 
-    const checkBarcode = async (code: string) => {
-        if (!window.ipcRenderer) return;
-        setIsChecking(true);
-        try {
-            const data = await ipcInvoke('check-barcode-local', {
-                barcode: code,
-                branchId: user.branchId
-            });
+  const getStockPercent = (item: InventoryItem) =>
+    Math.min(100, Math.round((item.quantity / item.maxStock) * 100));
 
-            if (data.exists) {
-                if (data.inventory) {
-                    setShowBatchModal(data.inventory);
-                } else {
-                    setShowAddToInventoryModal(data.drug);
-                }
-            } else {
-                setShowCreateDrugModal(code);
-            }
-        } catch (error) {
-            console.error("Barcode check error:", error);
-        } finally {
-            setIsChecking(false);
-            setBarcode("");
-        }
-    };
-
-    const handleBarcodeSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Enter" && barcode.trim()) {
-            checkBarcode(barcode.trim());
-        }
-    };
-
-    const fetchInventory = async () => {
-        if (window.ipcRenderer) {
-            setLoading(true);
-            try {
-                // Use direct invoke (no 12s timeout wrapper) — these are local
-                // SQLite queries that should be fast, and the timeout was causing
-                // silent failures when called after sync completion.
-                const [data, pending, health] = await Promise.all([
-                    window.ipcRenderer.invoke('get-inventory-items', { searchTerm: "", user }),
-                    window.ipcRenderer.invoke('get-pending-sync-count'),
-                    window.ipcRenderer.invoke('get-sync-health')
-                ]);
-                setItems(data);
-                if (Array.isArray(data)) {
-                    setQuickSaleState(Object.fromEntries(data.map((i: InventoryItem) => [i.drug.id, i.drug.isQuickSale ?? false])));
-                }
-                const pendingCount = Number(health?.pendingCount ?? pending?.count ?? 0);
-                setPendingSyncCount(Number.isFinite(pendingCount) ? pendingCount : 0);
-                setSyncHealth(health ?? null);
-            } catch (error) {
-                console.error("Failed to fetch inventory", error);
-            } finally {
-                setLoading(false);
-            }
-        }
-    };
-
-    const handleUploadPending = async () => {
-        if (!window.ipcRenderer) return;
-        setIsUploadingPending(true);
-        try {
-            const res = await ipcInvoke('sync-pending-inventory');
-            await fetchInventory();
-
-            if (!res.success && res.failed > 0) {
-                setUploadToast({ type: "error", message: `تم رفع ${res.processed || 0}، فشل ${res.failed || 0}، معلق ${res.pending || 0}` });
-                return;
-            }
-            if ((res.processed || 0) === 0 && (res.pending || 0) === 0) {
-                setUploadToast({ type: "info", message: "لا توجد بيانات معلقة للرفع." });
-                return;
-            }
-            setUploadToast({ type: "success", message: `تم رفع ${res.processed || 0} عنصر. معلق ${res.pending || 0}` });
-        } catch (error) {
-            setUploadToast({ type: "error", message: "فشل رفع البيانات للسيرفر." });
-        } finally {
-            setIsUploadingPending(false);
-        }
-    };
-
-    const handleSync = () => {
-        if (!window.ipcRenderer || syncingRef.current) return;
-        syncingRef.current = true;
-        setLoading(true);
-
-        // Listen for the async completion signal BEFORE invoking.
-        // The event now carries result data so we can show accurate toasts.
-        window.ipcRenderer.once('sync-inventory-done', (result: any) => {
-            syncingRef.current = false;
-            clearTimeout(safetyTimer);
-
-            // Always refresh UI from local DB after sync
-            fetchInventory().finally(() => setLoading(false));
-
-            // Show toast based on actual results
-            if (result?.success) {
-                const pullCount = result?.pull?.count ?? '?';
-                setUploadToast({ type: "success", message: `تمت المزامنة بنجاح ✓ (${pullCount} منتج)` });
-            } else {
-                const pullReason = result?.pull?.reason || '';
-                const pushErr = result?.push?.error || '';
-                let msg = "فشلت المزامنة";
-                if (pullReason === 'offline' || pushErr.includes('offline')) {
-                    msg = "تعذر الاتصال بالسيرفر";
-                } else if (pullReason === 'no_branch_id') {
-                    msg = "لم يتم تحديد الفرع";
-                } else if (pullReason === 'lock_timeout') {
-                    msg = "المزامنة مشغولة، حاول مرة أخرى";
-                } else if (pullReason) {
-                    // Show enough of the error to be useful for diagnosis
-                    msg = `فشلت المزامنة: ${pullReason.substring(0, 200)}`;
-                }
-                setUploadToast({ type: "error", message: msg });
-            }
-        });
-
-        // Safety: release the spinner after 3 minutes if the done event never fires
-        const safetyTimer = setTimeout(() => {
-            syncingRef.current = false;
-            setLoading(false);
-        }, 3 * 60_000);
-
-        // Fire the IPC — returns immediately (sync runs in background)
-        window.ipcRenderer.invoke('sync-inventory')
-            .catch(() => {
-                clearTimeout(safetyTimer);
-                syncingRef.current = false;
-                setLoading(false);
-                setUploadToast({ type: "error", message: "تعذر الاتصال بالسيرفر." });
-            });
-    };
-
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Don't steal focus when a modal is open
-            if (showEditModal || showBatchModal || showCreateDrugModal || showAddToInventoryModal) return;
-            if (e.key === "Escape") { setBarcode(""); setSearchTerm(""); }
-            if (e.key === "F2") { e.preventDefault(); barcodeInputRef.current?.focus(); }
-            if (e.key === "/" && !(e.target instanceof HTMLInputElement)) { e.preventDefault(); searchInputRef.current?.focus(); }
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [showEditModal, showBatchModal, showCreateDrugModal, showAddToInventoryModal]);
-
-    // Restore focus to search field when modals close (OS blur/focus cycle)
-    const prevInventoryModal = useRef(false);
-    useEffect(() => {
-        const anyOpen = showEditModal || showBatchModal || showCreateDrugModal || showAddToInventoryModal;
-        if (prevInventoryModal.current && !anyOpen) {
-            window.ipcRenderer?.send('refocus-window');
-            const t = setTimeout(() => searchInputRef.current?.focus(), 200);
-            return () => clearTimeout(t);
-        }
-        prevInventoryModal.current = anyOpen;
-    }, [showEditModal, showBatchModal, showCreateDrugModal, showAddToInventoryModal]);
-
-    useEffect(() => { fetchInventory(); }, []);
-
-    // Auto-focus barcode input on page load
-    useEffect(() => {
-        const t = setTimeout(() => barcodeInputRef.current?.focus(), 100);
-        return () => clearTimeout(t);
-    }, []);
-
-    useEffect(() => {
-        if (!uploadToast) return;
-        // Error toasts stay longer so the user can read the message
-        const duration = uploadToast.type === 'error' ? 10_000 : 3200;
-        const timer = setTimeout(() => setUploadToast(null), duration);
-        return () => clearTimeout(timer);
-    }, [uploadToast]);
-
-    useEffect(() => {
-        const onPendingSyncCount = (_event: unknown, count: number) => {
-            setPendingSyncCount(Number.isFinite(count) ? count : 0);
-        };
-        window.ipcRenderer.on('pending-sync-count', onPendingSyncCount as any);
-        return () => { window.ipcRenderer.off('pending-sync-count', onPendingSyncCount as any); };
-    }, []);
-
-    useEffect(() => {
-        const onSyncHealthUpdated = (_event: unknown, health: SyncHealth) => {
-            if (!health || typeof health !== 'object') return;
-            setSyncHealth(health);
-            const count = Number(health.pendingCount || 0);
-            setPendingSyncCount(Number.isFinite(count) ? count : 0);
-        };
-        window.ipcRenderer.on('sync-health-updated', onSyncHealthUpdated as any);
-        return () => { window.ipcRenderer.off('sync-health-updated', onSyncHealthUpdated as any); };
-    }, []);
-
-    // Track DLQ (failed sync) count
-    useEffect(() => {
-        const refreshDlq = async () => {
-            try {
-                const n = await ipcInvoke<number>('get-sync-failures-count');
-                setDlqCount(typeof n === 'number' ? n : 0);
-            } catch { /* ignore */ }
-        };
-        refreshDlq();
-        const onFailure = () => refreshDlq();
-        window.ipcRenderer.on('sync-failure-recorded', onFailure as any);
-        return () => { window.ipcRenderer.off('sync-failure-recorded', onFailure as any); };
-    }, []);
-
-    const handleDelete = async () => {
-        if (!showDeleteModal) return;
-        try {
-            await ipcInvoke('delete-inventory-item', showDeleteModal);
-            setShowDeleteModal(null);
-            fetchInventory();
-        } catch (error) {
-            setUploadToast({ type: "error", message: "فشل حذف العنصر" });
-        }
-    };
-
-    const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (!showEditModal) return;
-        const formData = new FormData(e.currentTarget);
-        try {
-            await ipcInvoke('update-inventory-item', {
-                id: showEditModal.id,
-                drugId: showEditModal.drugId || showEditModal.drug?.id,
-                price: formData.get('price'),
-                costPrice: formData.get('costPrice'),
-                minStock: formData.get('minStock'),
-                maxStock: formData.get('maxStock'),
-            });
-            setShowEditModal(null);
-            fetchInventory();
-            setUploadToast({ type: "success", message: "تم تحديث البيانات بنجاح ✓" });
-        } catch (error) {
-            setUploadToast({ type: "error", message: "فشل تحديث البيانات" });
-        }
-    };
-
-    const handleAddBatch = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!showBatchModal) return;
-        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
-        if (
-            batchPacketPrice > 0 &&
-            (batchStripsPerPacket > 20 || (batchData.quantity > 10 && batchStripsPerPacket >= batchData.quantity))
-        ) {
-            const ok = await showConfirm({
-                variant: "warning",
-                title: "تحقق من عدد الأشرطة",
-                message:
-                    `عدد الأشرطة في الباكيت (${batchStripsPerPacket}) يبدو غير صحيح.\n` +
-                    `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${batchData.quantity}).\n` +
-                    `سعر التكلفة للشريط سيُحسب: ${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
-                actionLabel: "متابعة على أي حال",
-            });
-            if (!ok) return;
-        }
-        try {
-            await ipcInvoke('add-inventory-batch', {
-                inventoryId: showBatchModal.id,
-                ...batchData,
-                costPrice: batchPacketPrice > 0 ? batchComputedCost : batchData.costPrice,
-            });
-            setShowBatchModal(null);
-            setBatchData({ quantity: 0, costPrice: 0, expiryDate: "", supplierId: "" });
-            setBatchPacketPrice(0);
-            setBatchStripsPerPacket(1);
-            fetchInventory();
-            setUploadToast({ type: "success", message: "تمت إضافة الدفعة بنجاح ✓" });
-        } catch (error) {
-            setUploadToast({ type: "error", message: "فشل إضافة الدفعة" });
-        }
-    };
-
-    const handleCreateDrug = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (!showCreateDrugModal) return;
-        const formData = new FormData(e.currentTarget);
-        const stripCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
-        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
-        const createQty = parseInt(formData.get('quantity') as string, 10) || 0;
-        if (stripsPerPacket > 20 || (createQty > 10 && stripsPerPacket >= createQty)) {
-            const ok = await showConfirm({
-                variant: "warning",
-                title: "تحقق من عدد الأشرطة",
-                message:
-                    `عدد الأشرطة في الباكيت (${stripsPerPacket}) يبدو غير صحيح.\n` +
-                    `هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${createQty}).\n` +
-                    `سعر التكلفة للشريط سيُحسب: ${packetPrice} ÷ ${stripsPerPacket} = ${stripCost.toLocaleString("en", { maximumFractionDigits: 2 })} د.ع`,
-                actionLabel: "متابعة على أي حال",
-            });
-            if (!ok) return;
-        }
-        const data = {
-            barcode: showCreateDrugModal,
-            tradeName: formData.get('tradeName'),
-            scientificName: formData.get('scientificName'),
-            price: formData.get('price'),
-            costPrice: stripCost,
-            quantity: formData.get('quantity'),
-            minStock: formData.get('minStock'),
-            maxStock: formData.get('maxStock'),
-            origin: formData.get('origin'),
-            expiryDate: formData.get('expiryDate'),
-            supplierId: createDrugSupplierId || null,
-        };
-
-        try {
-            const res = await ipcInvoke('create-global-drug-local', data);
-            if (res.success) {
-                await ipcInvoke('add-to-inventory-local', {
-                    drugId: res.drug.id,
-                    branchId: user.branchId,
-                    costPrice: stripCost,
-                    price: formData.get('price'),
-                    quantity: formData.get('quantity'),
-                    minStock: formData.get('minStock'),
-                    maxStock: formData.get('maxStock'),
-                    expiryDate: formData.get('expiryDate'),
-                    supplierId: createDrugSupplierId || null,
-                    skipCloudPush: true,
-                });
-                setShowCreateDrugModal(null);
-                setCreateDrugSupplierId("");
-                setPacketPrice(0);
-                setStripsPerPacket(1);
-                fetchInventory();
-                setUploadToast({ type: "success", message: "تم إضافة الدواء بنجاح ✓" });
-            }
-        } catch (error) {
-            setUploadToast({ type: "error", message: "فشل إضافة الدواء" });
-        }
-    };
-
-    const handleAddToInventory = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (!showAddToInventoryModal) return;
-        const formData = new FormData(e.currentTarget);
-        try {
-            await ipcInvoke('add-to-inventory-local', {
-                drugId: showAddToInventoryModal.id,
-                branchId: user.branchId,
-                costPrice: formData.get('costPrice'),
-                quantity: formData.get('quantity'),
-                minStock: formData.get('minStock'),
-                maxStock: formData.get('maxStock'),
-                expiryDate: formData.get('expiryDate'),
-            });
-            setShowAddToInventoryModal(null);
-            fetchInventory();
-            setUploadToast({ type: "success", message: "تم الإضافة للمخزون ✓" });
-        } catch (error) {
-            setUploadToast({ type: "error", message: "فشل الإضافة للمخزن" });
-        }
-    };
-
-    const syncHealthView = useMemo(() => {
-        const pending = Number(syncHealth?.pendingCount ?? pendingSyncCount ?? 0);
-        const failed = Number(syncHealth?.failedCount ?? 0);
-        const inProgress = Boolean(syncHealth?.inProgress);
-        const topErr = syncHealth?.topError ?? null;
-
-        // Classify error type to avoid showing scary messages for simple offline state
-        const isOfflineError = !!topErr && (
-            topErr.toLowerCase().includes('retries') ||
-            topErr.toLowerCase().includes('fetch') ||
-            topErr.toLowerCase().includes('network') ||
-            topErr.toLowerCase().includes('abort') ||
-            topErr.toLowerCase().includes('timeout')
-        );
-        const friendlyError = isOfflineError
-            ? 'الإنترنت غير متاح — سيُعاد المحاولة تلقائياً'
-            : topErr
-                ? 'سيُعاد المحاولة تلقائياً'
-                : null;
-
-        const status = inProgress
-            ? "جاري الرفع"
-            : pending === 0
-                ? "مستقر"
-                : isOfflineError
-                    ? "غير متصل"
-                    : failed > 0
-                        ? "بحاجة متابعة"
-                        : "ينتظر المزامنة";
-        const statusClass = inProgress
-            ? "bg-primary/10 text-primary border-primary/30"
-            : pending === 0
-                ? "bg-success/10 text-success border-success/30"
-                : isOfflineError
-                    ? "bg-muted text-muted-foreground border-border"
-                    : failed > 0
-                        ? "bg-warning/10 text-warning border-warning/30"
-                        : "bg-muted text-muted-foreground border-border";
-
-        return {
-            pending,
-            failed,
-            inProgress,
-            status,
-            statusClass,
-            oldestAge: formatDuration(syncHealth?.oldestPendingAgeSec),
-            nextRetry: formatDuration(syncHealth?.nextRetryInSec),
-            topError: friendlyError,
-            isOffline: isOfflineError,
-            autoRetryInterval: formatDuration(syncHealth?.autoRetryIntervalSec ?? null),
-        };
-    }, [syncHealth, pendingSyncCount]);
-
-    const getStockPercent = (item: InventoryItem) => Math.min(100, Math.round((item.quantity / item.maxStock) * 100));
-
-    return (
-        <div dir="rtl" className="h-full flex flex-col bg-background">
-            {/* ======= HEADER ======= */}
-            <div className="bg-card/80 backdrop-blur-xl border-b border-border/60 px-6 py-4 shadow-sm relative z-10">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                            <Package className="w-6 h-6 text-primary-foreground" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-black text-foreground tracking-tight">إدارة المخزون</h1>
-                            <p className="text-xs text-muted-foreground">{stats.totalItems} صنف • {stats.totalStock} وحدة</p>
-                        </div>
-                        {user.role === 'ADMIN' && (
-                            <span className="text-[9px] font-black text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20">مدير ⚡</span>
-                        )}
-                    </div>
-
-                    <div className="flex gap-2 mt-4 items-center">
-                        <SyncHealthDashboard />
-                        {dlqCount > 0 && (
-                            <button
-                                onClick={() => setShowDLQ(true)}
-                                className="flex items-center gap-2 bg-warning/10 border border-warning/30 text-warning hover:bg-warning/20 px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
-                            >
-                                <AlertTriangle className="w-4 h-4" />
-                                <span>تعديلات فاشلة</span>
-                                <span className="min-w-5 h-5 px-1.5 rounded-full bg-warning text-warning-foreground text-[10px] flex items-center justify-center font-black">
-                                    {dlqCount}
-                                </span>
-                            </button>
-                        )}
-                        {pendingSyncCount > 0 && (
-                            <button
-                                onClick={handleUploadPending}
-                                disabled={isUploadingPending}
-                                className="flex items-center gap-2 bg-success/10 border border-success/30 text-success hover:bg-success/20 px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
-                            >
-                                <Upload className={`w-4 h-4 ${isUploadingPending ? 'animate-pulse' : ''}`} />
-                                <span>رفع للسيرفر</span>
-                                <span className="min-w-5 h-5 px-1.5 rounded-full bg-success text-success-foreground text-[10px] flex items-center justify-center font-black">
-                                    {pendingSyncCount}
-                                </span>
-                            </button>
-                        )}
-                        <button
-                            onClick={handleSync}
-                            disabled={loading}
-                            className="flex items-center gap-2 bg-card border border-border text-muted-foreground hover:border-primary hover:text-primary px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
-                        >
-                            <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                            <span>مزامنة</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
-                    <div className={`rounded-xl border px-3 py-2 ${syncHealthView.statusClass}`}>
-                        <p className="text-[10px] font-bold opacity-75">حالة المزامنة</p>
-                        <p className="text-sm font-black">{syncHealthView.status}</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-[10px] text-muted-foreground font-bold">المعلق</p>
-                        <p className="text-sm font-black text-foreground">{syncHealthView.pending}</p>
-                    </div>
-                    <div className="rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
-                        <p className="text-[10px] text-warning font-bold">فشل سابق</p>
-                        <p className="text-sm font-black text-warning">{syncHealthView.failed}</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-[10px] text-muted-foreground font-bold">أقدم عملية</p>
-                        <p className="text-sm font-black text-foreground">{syncHealthView.oldestAge}</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-[10px] text-muted-foreground font-bold">إعادة المحاولة</p>
-                        <p className="text-sm font-black text-foreground">{syncHealthView.nextRetry}</p>
-                    </div>
-                </div>
-                {syncHealthView.topError && (
-                    <div className={`mb-4 rounded-xl border px-3 py-2 flex items-center gap-2 ${syncHealthView.isOffline ? 'border-border/50 bg-muted/30' : 'border-warning/20 bg-warning/5'}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${syncHealthView.isOffline ? 'bg-muted-foreground/40' : 'bg-warning/60'}`} />
-                        <p className={`text-xs truncate ${syncHealthView.isOffline ? 'text-muted-foreground' : 'text-foreground/70'}`}>
-                            {syncHealthView.topError}
-                            <span className="opacity-50 mr-1">· كل {syncHealthView.autoRetryInterval}</span>
-                        </p>
-                    </div>
-                )}
-
-                {/* Barcode Input */}
-                <div className="relative group">
-                    <div className="absolute -inset-0.5 bg-gradient-to-l from-primary via-primary/80 to-primary/60 rounded-2xl opacity-0 group-focus-within:opacity-20 blur transition-opacity duration-300"></div>
-                    <div className="relative flex items-center bg-card border-2 border-border/80 rounded-2xl px-4 py-0.5 focus-within:border-ring focus-within:shadow-xl focus-within:shadow-ring/10 transition-all duration-300">
-                        <div className="flex items-center justify-center pl-3 text-muted-foreground group-focus-within:text-primary transition-colors duration-300">
-                            {isChecking ? <Loader2 className="w-5 h-5 animate-spin" /> : <Scan className="w-5 h-5 stroke-[2.5]" />}
-                        </div>
-                        <input
-                            ref={barcodeInputRef}
-                            type="text"
-                            placeholder="امسح الباركود للبحث أو الإضافة..."
-                            value={barcode}
-                            onChange={(e) => setBarcode(e.target.value)}
-                            onKeyDown={handleBarcodeSubmit}
-                            className="w-full bg-transparent border-none py-3 px-3 text-base focus:ring-0 outline-none placeholder-muted-foreground font-bold text-foreground font-mono tracking-wide"
-                        />
-                        <kbd className="hidden group-focus-within:flex shrink-0 items-center gap-1 bg-muted text-muted-foreground text-[10px] font-bold px-2 py-1 rounded-lg border border-border">F2</kbd>
-                    </div>
-                </div>
-            </div>
-
-            {/* ======= STATS CARDS ======= */}
-            <div className="px-6 pt-5 pb-2">
-                <div className={`grid gap-3 ${isAdmin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'}`}>
-                    {/* Total Value — ADMIN only */}
-                    {isAdmin && (
-                        <div className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-muted-foreground font-bold">قيمة المخزون</span>
-                                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                                    <DollarSign className="w-4 h-4 text-primary" />
-                                </div>
-                            </div>
-                            <p className="text-lg font-black text-foreground tabular-nums">{formatIQD(stats.totalRetailValue)}</p>
-                            <p className="text-[10px] text-muted-foreground mt-1">تكلفة: {formatIQD(stats.totalCostValue)}</p>
-                        </div>
-                    )}
-
-                    {/* Profit — ADMIN only */}
-                    {isAdmin && (
-                        <div className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-muted-foreground font-bold">الربح المتوقع</span>
-                                <div className="w-8 h-8 bg-success/10 rounded-lg flex items-center justify-center">
-                                    <TrendingUp className="w-4 h-4 text-success" />
-                                </div>
-                            </div>
-                            <p className="text-lg font-black text-success tabular-nums">{formatIQD(stats.totalProfit)}</p>
-                            <p className="text-[10px] text-muted-foreground mt-1">هامش {stats.totalRetailValue > 0 ? Math.round((stats.totalProfit / stats.totalRetailValue) * 100) : 0}%</p>
-                        </div>
-                    )}
-
-                    {/* Low Stock */}
-                    <div className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setStockFilter(stockFilter === 'low' ? 'all' : 'low')}>
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-muted-foreground font-bold">نقص المخزون</span>
-                            <div className="w-8 h-8 bg-destructive/10 rounded-lg flex items-center justify-center">
-                                <TrendingDown className="w-4 h-4 text-destructive" />
-                            </div>
-                        </div>
-                        <p className="text-lg font-black text-destructive tabular-nums">{stats.lowStockCount}</p>
-                        <p className="text-[10px] text-muted-foreground mt-1">نفد: {stats.outOfStockCount} صنف</p>
-                    </div>
-
-                    {/* Total Items */}
-                    <div className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-muted-foreground font-bold">إجمالي الأصناف</span>
-                            <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center">
-                                <BarChart3 className="w-4 h-4 text-purple-600" />
-                            </div>
-                        </div>
-                        <p className="text-lg font-black text-foreground tabular-nums">{stats.totalItems}</p>
-                        <p className="text-[10px] text-muted-foreground mt-1">فائض: {stats.overStockCount} صنف</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* ======= SEARCH & FILTER BAR ======= */}
-            <div className="px-6 py-3 flex items-center gap-3">
-                <div className="flex-1 relative">
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="بحث بالاسم أو الباركود..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-card border border-border rounded-xl py-2.5 pr-10 pl-4 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/10 transition-all placeholder:text-muted-foreground"
-                    />
-                    {searchTerm && (
-                        <button onClick={() => setSearchTerm("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl p-1">
-                    {([
-                        { key: 'all' as StockFilter, label: 'الكل', count: items.length },
-                        { key: 'out' as StockFilter, label: 'نفد', count: items.filter(i => i.quantity <= 0).length },
-                        { key: 'low' as StockFilter, label: 'نقص', count: items.filter(i => i.quantity > 0 && i.quantity < i.minStock).length },
-                        { key: 'good' as StockFilter, label: 'جيد', count: items.filter(i => i.quantity >= i.minStock && i.quantity <= i.maxStock).length },
-                        { key: 'over' as StockFilter, label: 'فائض', count: items.filter(i => i.quantity > i.maxStock).length },
-                    ]).map(f => (
-                        <button
-                            key={f.key}
-                            onClick={() => setStockFilter(f.key)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${stockFilter === f.key
-                                ? 'bg-primary text-primary-foreground shadow-sm'
-                                : 'text-muted-foreground hover:bg-muted'
-                                }`}
-                        >
-                            {f.label} <span className="opacity-60">({f.count})</span>
-                        </button>
-                    ))}
-                </div>
-
-                <span className="text-xs text-muted-foreground font-medium">
-                    {filteredItems.length} نتيجة
-                    {totalPages > 1 && ` — صفحة ${currentPage} من ${totalPages}`}
-                </span>
-            </div>
-
-            {/* ======= TABLE ======= */}
-            <div className="flex-1 overflow-auto px-6 pb-6">
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center h-64 gap-4">
-                        <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
-                        <p className="text-muted-foreground font-bold text-sm">جاري تحميل البيانات...</p>
-                    </div>
-                ) : (
-                    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                        <table className="w-full text-right border-collapse">
-                            <thead>
-                                <tr className="bg-muted/50 text-muted-foreground text-xs font-bold border-b border-border">
-                                    <th className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors" onClick={() => toggleSort('name')}>
-                                        <div className="flex items-center gap-1">
-                                            اسم الدواء
-                                            {sortField === 'name' && <ArrowUpDown className="w-3 h-3" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors" onClick={() => toggleSort('quantity')}>
-                                        <div className="flex items-center gap-1">
-                                            المخزون
-                                            {sortField === 'quantity' && <ArrowUpDown className="w-3 h-3" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-4 py-3.5">الحالة</th>
-                                    {isAdmin && (
-                                        <th className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors" onClick={() => toggleSort('costPrice')}>
-                                            <div className="flex items-center gap-1">
-                                                التكلفة
-                                                {sortField === 'costPrice' && <ArrowUpDown className="w-3 h-3" />}
-                                            </div>
-                                        </th>
-                                    )}
-                                    <th className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors" onClick={() => toggleSort('price')}>
-                                        <div className="flex items-center gap-1">
-                                            البيع
-                                            {sortField === 'price' && <ArrowUpDown className="w-3 h-3" />}
-                                        </div>
-                                    </th>
-                                    {isAdmin && (
-                                        <th className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors" onClick={() => toggleSort('profit')}>
-                                            <div className="flex items-center gap-1">
-                                                الربح
-                                                {sortField === 'profit' && <ArrowUpDown className="w-3 h-3" />}
-                                            </div>
-                                        </th>
-                                    )}
-                                    <th className="px-4 py-3.5 text-center">
-                                        <span className="flex items-center justify-center gap-1"><Zap className="w-3.5 h-3.5 text-amber-500" />سريع</span>
-                                    </th>
-                                    <th className="px-4 py-3.5 text-center">إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/30">
-                                {paginatedItems.map((item) => {
-                                    const stockPct = getStockPercent(item);
-                                    const isOut = item.quantity <= 0;
-                                    const isLow = !isOut && item.quantity < item.minStock;
-                                    const isOver = item.quantity > item.maxStock;
-                                    const profit = (item.drug.price - item.costPrice) * item.quantity;
-                                    const profitPerUnit = item.drug.price - item.costPrice;
-                                    const profitMargin = item.drug.price > 0 ? Math.round((profitPerUnit / item.drug.price) * 100) : 0;
-
-                                    return (
-                                        <tr key={item.id} className="hover:bg-primary/5 transition-colors group">
-                                            {/* Drug Name */}
-                                            <td className="px-4 py-3.5">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 ${isOut ? 'bg-destructive/10' : isLow ? 'bg-warning/10' : 'bg-primary/10'
-                                                        }`}>
-                                                        💊
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="font-bold text-foreground text-sm truncate">{item.drug.tradeName}</p>
-                                                        <p className="text-[10px] text-muted-foreground font-mono">{item.drug.barcode}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-
-                                            {/* Stock with Progress Bar */}
-                                            <td className="px-4 py-3.5">
-                                                <div className="flex flex-col gap-1.5 w-32">
-                                                    <div className="flex items-baseline justify-between">
-                                                        <span className={`text-base font-black tabular-nums ${isOut ? 'text-destructive' : isLow ? 'text-warning' : 'text-foreground'}`}>
-                                                            {item.quantity}
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground">
-                                                            {item.minStock} - {item.maxStock}
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                                                        <div
-                                                            className={`h-full rounded-full transition-all duration-500 ${isOut ? 'bg-destructive' : isLow ? 'bg-warning' : isOver ? 'bg-purple-500' : 'bg-success'
-                                                                }`}
-                                                            style={{ width: `${stockPct}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </td>
-
-                                            {/* Status Badge */}
-                                            <td className="px-4 py-3.5">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold ${isOut ? 'bg-destructive/10 text-destructive' :
-                                                    isLow ? 'bg-warning/10 text-warning' :
-                                                        isOver ? 'bg-purple-100 text-purple-700' :
-                                                            'bg-success/10 text-success'
-                                                    }`}>
-                                                    {isOut ? <AlertTriangle className="w-3 h-3" /> : isLow ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
-                                                    {isOut ? 'نفد' : isLow ? 'نقص' : isOver ? 'فائض' : 'جيد'}
-                                                </span>
-                                            </td>
-
-                                            {/* Cost Price — ADMIN only */}
-                                            {isAdmin && (
-                                                <td className="px-4 py-3.5">
-                                                    <span className="text-sm font-bold text-muted-foreground tabular-nums">{formatIQD(item.costPrice || 0)}</span>
-                                                </td>
-                                            )}
-
-                                            {/* Retail Price */}
-                                            <td className="px-4 py-3.5">
-                                                <span className="text-sm font-bold text-primary tabular-nums">{formatIQD(item.drug.price)}</span>
-                                            </td>
-
-                                            {/* Profit — ADMIN only */}
-                                            {isAdmin && (
-                                                <td className="px-4 py-3.5">
-                                                    <div className="flex flex-col">
-                                                        <span className={`text-sm font-black tabular-nums ${profit > 0 ? 'text-success' : 'text-destructive'}`}>
-                                                            {formatIQD(profit)}
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground">{profitMargin}% هامش</span>
-                                                    </div>
-                                                </td>
-                                            )}
-
-                                            {/* Quick Sale Toggle */}
-                                            <td className="px-4 py-3.5 text-center">
-                                                <Toggle
-                                                    size="sm"
-                                                    checked={!!quickSaleState[item.drug.id]}
-                                                    onChange={() => handleQuickSaleToggle(item.drug.id)}
-                                                    disabled={togglingQuickSale === item.drug.id}
-                                                    activeClass="bg-amber-400"
-                                                    title="تفعيل/إلغاء البيع السريع"
-                                                />
-                                            </td>
-
-                                            {/* Actions */}
-                                            <td className="px-4 py-3.5">
-                                                <div className="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => setShowBatchModal(item)}
-                                                        title="إضافة دفعة"
-                                                        className="flex items-center gap-1 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground px-2.5 py-1.5 rounded-lg transition-all font-bold text-[11px]"
-                                                    >
-                                                        <Plus className="w-3.5 h-3.5" />
-                                                        دفعة
-                                                    </button>
-                                                    {isAdmin && (
-                                                        <>
-                                                            <button
-                                                                onClick={() => setShowEditModal(item)}
-                                                                title="تعديل"
-                                                                className="p-1.5 text-muted-foreground hover:text-warning hover:bg-warning/10 rounded-lg transition-all"
-                                                            >
-                                                                <Edit2 className="w-3.5 h-3.5" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setShowDeleteModal(item.id)}
-                                                                title="حذف"
-                                                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
-                                                            >
-                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {paginatedItems.length === 0 && (
-                                    <tr>
-                                        <td colSpan={isAdmin ? 7 : 5} className="px-6 py-16 text-center">
-                                            <div className="flex flex-col items-center gap-3">
-                                                <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
-                                                    <Package className="w-8 h-8 text-muted-foreground/30" />
-                                                </div>
-                                                <p className="text-muted-foreground text-sm font-bold">
-                                                    {searchTerm ? `لا توجد نتائج لـ "${searchTerm}"` : 'لم يتم العثور على أدوية في المخزن'}
-                                                </p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="flex items-center justify-center gap-2 py-4 border-t border-border">
-                                <button
-                                    disabled={currentPage <= 1}
-                                    onClick={() => setCurrentPage(p => p - 1)}
-                                    className="px-3 py-1.5 rounded-lg text-sm font-bold border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    السابق
-                                </button>
-                                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
-                                    .reduce<(number | 'dots')[]>((acc, p, idx, arr) => {
-                                        if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('dots');
-                                        acc.push(p);
-                                        return acc;
-                                    }, [])
-                                    .map((p, i) =>
-                                        p === 'dots' ? (
-                                            <span key={`dots-${i}`} className="px-1 text-muted-foreground">…</span>
-                                        ) : (
-                                            <button
-                                                key={p}
-                                                onClick={() => setCurrentPage(p as number)}
-                                                className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${currentPage === p ? 'bg-primary text-white' : 'border border-border hover:bg-muted'}`}
-                                            >
-                                                {p}
-                                            </button>
-                                        )
-                                    )}
-                                <button
-                                    disabled={currentPage >= totalPages}
-                                    onClick={() => setCurrentPage(p => p + 1)}
-                                    className="px-3 py-1.5 rounded-lg text-sm font-bold border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    التالي
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* ======= TOAST ======= */}
-            {
-                uploadToast && (
-                    <div
-                        className={`fixed bottom-5 left-5 z-[70] max-w-sm rounded-xl border px-4 py-3 shadow-xl backdrop-blur-md animate-slideUp ${uploadToast.type === "success"
-                            ? "bg-success/10 border-success/30 text-success"
-                            : uploadToast.type === "error"
-                                ? "bg-destructive/10 border-destructive/30 text-destructive"
-                                : "bg-primary/10 border-primary/30 text-primary"
-                            }`}
-                    >
-                        <div className="flex items-center gap-2">
-                            {uploadToast.type === "success" && <CheckCircle className="w-4 h-4 shrink-0" />}
-                            {uploadToast.type === "error" && <AlertTriangle className="w-4 h-4 shrink-0" />}
-                            {uploadToast.type === "info" && <Package className="w-4 h-4 shrink-0" />}
-                            <p className="text-sm font-bold">{uploadToast.message}</p>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* ======= DLQ PANEL ======= */}
-            {showDLQ && (
-                <SyncFailuresPanel onClose={() => { setShowDLQ(false); ipcInvoke<number>('get-sync-failures-count').then(n => setDlqCount(typeof n === 'number' ? n : 0)).catch(() => {}); }} />
-            )}
-
-            {/* ======= DELETE MODAL ======= */}
-            {
-                showDeleteModal && (
-                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-card rounded-2xl max-w-md w-full p-6 shadow-2xl border border-border">
-                            <div className="w-14 h-14 bg-destructive/10 text-destructive rounded-xl flex items-center justify-center mx-auto mb-4">
-                                <Trash2 className="w-7 h-7" />
-                            </div>
-                            <h2 className="text-xl font-bold text-center mb-2">تأكيد الحذف</h2>
-                            <p className="text-muted-foreground text-center text-sm mb-6">هل أنت متأكد؟ لا يمكن التراجع عن هذه الخطوة.</p>
-                            <div className="flex gap-3">
-                                <button onClick={handleDelete} className="flex-1 bg-destructive text-destructive-foreground py-2.5 rounded-xl font-bold hover:bg-destructive/90 transition-colors text-sm">تأكيد الحذف</button>
-                                <button onClick={() => setShowDeleteModal(null)} className="flex-1 bg-muted text-foreground py-2.5 rounded-xl font-bold hover:bg-muted/80 transition-colors text-sm">إلغاء</button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* ======= EDIT MODAL ======= */}
-            {
-                showEditModal && (
-                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-card rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-border overflow-y-auto max-h-[90vh]">
-                            <h2 className="text-xl font-bold mb-5 flex items-center gap-2">
-                                <Edit2 className="w-5 h-5 text-warning" />
-                                تعديل بيانات الدواء
-                            </h2>
-                            <form onSubmit={handleEdit} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">الدواء</label>
-                                    <input type="text" defaultValue={showEditModal.drug.tradeName} disabled className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-muted-foreground text-sm" />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر الجمهور</label>
-                                        <input name="price" type="number" defaultValue={showEditModal.drug.price} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر التكلفة</label>
-                                        <input name="costPrice" type="number" defaultValue={showEditModal.costPrice} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأدنى</label>
-                                        <input name="minStock" type="number" defaultValue={showEditModal.minStock} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأقصى</label>
-                                        <input name="maxStock" type="number" defaultValue={showEditModal.maxStock} className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                    </div>
-                                </div>
-                                <div className="flex gap-3 pt-3">
-                                    <button type="submit" className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl font-bold hover:bg-primary/90 transition-colors text-sm shadow-lg shadow-primary/20">حفظ التغييرات</button>
-                                    <button type="button" onClick={() => setShowEditModal(null)} className="flex-1 bg-muted text-foreground py-2.5 rounded-xl font-bold hover:bg-muted/80 transition-colors text-sm">إلغاء</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* ======= ADD BATCH MODAL ======= */}
-            {
-                showBatchModal && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-card rounded-xl max-w-md w-full p-6 shadow-xl border border-border overflow-y-auto max-h-[90vh]">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-foreground">إضافة دفعة جديدة</h3>
-                                <button type="button" onClick={() => setShowBatchModal(null)} className="p-2 hover:bg-muted rounded-lg">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-4">للدواء: <span className="font-bold text-foreground">{showBatchModal.drug?.tradeName}</span></p>
-
-                            <form onSubmit={handleAddBatch} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-foreground mb-1">المورد (اختياري)</label>
-                                    {(() => {
-                                        const selectedName = suppliers.find(s => s.id === batchData.supplierId)?.name ?? "";
-                                        const filteredBatch = suppliers.filter(s =>
-                                            !supplierSearch || s.name.toLowerCase().includes(supplierSearch.toLowerCase())
-                                        );
-                                        return (
-                                            <div ref={supplierRef} className="relative">
-                                                <div
-                                                    className="flex items-center gap-2 w-full rounded-lg border border-border bg-background px-3 py-2 cursor-pointer focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
-                                                    onClick={() => setSupplierOpen(true)}
-                                                >
-                                                    <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                                                    <input
-                                                        className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
-                                                        placeholder={selectedName || "اكتب للبحث عن مورد..."}
-                                                        value={supplierOpen ? supplierSearch : selectedName}
-                                                        onChange={e => { setSupplierSearch(e.target.value); setSupplierOpen(true); }}
-                                                        onFocus={() => setSupplierOpen(true)}
-                                                        dir="rtl"
-                                                    />
-                                                    {batchData.supplierId && (
-                                                        <button type="button" onClick={e => { e.stopPropagation(); setBatchData({ ...batchData, supplierId: "" }); setSupplierSearch(""); }}
-                                                            className="text-muted-foreground hover:text-destructive shrink-0">
-                                                            <X className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    )}
-                                                    <ChevronDown className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
-                                                </div>
-                                                {supplierOpen && (
-                                                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
-                                                        {filteredBatch.length === 0 ? (
-                                                            <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
-                                                        ) : (
-                                                            filteredBatch.map(s => (
-                                                                <button key={s.id} type="button"
-                                                                    onClick={() => { setBatchData({ ...batchData, supplierId: s.id }); setSupplierOpen(false); setSupplierSearch(""); }}
-                                                                    className={`w-full text-right px-4 py-2.5 text-sm hover:bg-muted transition-colors block ${s.id === batchData.supplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
-                                                                    {s.name}
-                                                                </button>
-                                                            ))
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-foreground mb-1">الكمية</label>
-                                    <input type="number" placeholder="0" min="1" value={batchData.quantity || ""} onChange={(e) => setBatchData({ ...batchData, quantity: parseInt(e.target.value) || 0 })} required autoFocus className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-foreground mb-2">سعر التكلفة (من الباكيت)</label>
-                                    <div className="grid grid-cols-2 gap-3 mb-2">
-                                        <div>
-                                            <label className="block text-xs text-muted-foreground mb-1">سعر الباكيت</label>
-                                            <input type="number" min="0" step="any" value={batchPacketPrice || ""} onChange={(e) => setBatchPacketPrice(parseFloat(e.target.value) || 0)} placeholder="0" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
-                                            <input type="number" min="1" step="1" value={batchStripsPerPacket || ""} onChange={(e) => setBatchStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))} placeholder="1" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
-                                        <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
-                                        <span className="text-sm font-bold text-primary mr-auto tabular-nums">
-                                            {batchPacketPrice > 0 ? `${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })}` : "—"}
-                                        </span>
-                                    </div>
-                                    {batchStripsPerPacket > 20 && (
-                                        <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
-                                            <span>⚠</span>
-                                            هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
-                                        </p>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-foreground mb-1">تاريخ انتهاء الصلاحية</label>
-                                    <input type="date" value={batchData.expiryDate} onChange={(e) => setBatchData({ ...batchData, expiryDate: e.target.value })} required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                </div>
-                                <div className="flex gap-3 pt-2">
-                                    <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-lg font-bold hover:bg-primary/90 transition-colors text-sm">
-                                        <Plus className="w-4 h-4" />
-                                        إضافة الدفعة
-                                    </button>
-                                    <button type="button" onClick={() => setShowBatchModal(null)} className="px-4 py-2.5 bg-muted hover:bg-muted/80 text-muted-foreground rounded-lg font-bold text-sm">إلغاء</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* ======= CREATE DRUG MODAL ======= */}
-            {
-                showCreateDrugModal && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-card rounded-xl max-w-lg w-full p-6 shadow-xl border border-border overflow-y-auto max-h-[90vh]">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-xl font-bold text-foreground">تسجيل دواء جديد</h3>
-                                <button type="button" onClick={() => { setShowCreateDrugModal(null); setPacketPrice(0); setStripsPerPacket(1); }} className="p-2 hover:bg-muted rounded-lg">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleCreateDrug} className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-bold text-foreground mb-1">الباركود</label>
-                                        <input type="text" value={showCreateDrugModal} readOnly className="w-full rounded-lg border border-border px-4 py-2 bg-muted font-mono text-sm" />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-bold text-foreground mb-1">الاسم التجاري</label>
-                                        <input type="text" name="tradeName" required autoFocus className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-bold text-foreground mb-1">الاسم العلمي</label>
-                                        <input type="text" name="scientificName" required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-bold text-foreground mb-1">المصدر/المنشأ</label>
-                                        <input type="text" name="origin" placeholder="مثال: Pfizer, Generic..." className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-bold text-foreground mb-1">سعر الجمهور</label>
-                                        <input type="number" step="any" min="0" name="price" required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                    </div>
-                                    {/* Packet price calculator */}
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-bold text-foreground mb-2">سعر التكلفة (من الباكيت)</label>
-                                        <div className="grid grid-cols-2 gap-3 mb-2">
-                                            <div>
-                                                <label className="block text-xs text-muted-foreground mb-1">سعر الباكيت</label>
-                                                <input
-                                                    type="number"
-                                                    step="any"
-                                                    min="0"
-                                                    value={packetPrice || ""}
-                                                    onChange={e => setPacketPrice(parseFloat(e.target.value) || 0)}
-                                                    placeholder="0"
-                                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs text-muted-foreground mb-1">عدد الأشرطة في الباكيت</label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    step="1"
-                                                    value={stripsPerPacket || ""}
-                                                    onChange={e => setStripsPerPacket(Math.max(1, parseInt(e.target.value) || 1))}
-                                                    placeholder="1"
-                                                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
-                                            <span className="text-xs text-muted-foreground">سعر التكلفة للشريط:</span>
-                                            <span className="text-sm font-bold text-primary mr-auto tabular-nums">
-                                                {packetPrice > 0 && stripsPerPacket > 0
-                                                    ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCostPrice.toLocaleString('en', { maximumFractionDigits: 2 })}`
-                                                    : '—'}
-                                            </span>
-                                        </div>
-                                        {stripsPerPacket > 20 && (
-                                            <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
-                                                <span>⚠</span>
-                                                هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-foreground mb-1">الحد الأدنى</label>
-                                        <input type="number" name="minStock" defaultValue="1" min="1" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-foreground mb-1">الحد الأقصى</label>
-                                        <input type="number" name="maxStock" defaultValue="10" min="0" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-bold text-foreground mb-1">المورد (اختياري)</label>
-                                        {(() => {
-                                            const selectedName = suppliers.find(s => s.id === createDrugSupplierId)?.name ?? "";
-                                            const filteredCreate = suppliers.filter(s =>
-                                                !supplierSearch || s.name.toLowerCase().includes(supplierSearch.toLowerCase())
-                                            );
-                                            return (
-                                                <div ref={supplierRef} className="relative">
-                                                    <div
-                                                        className="flex items-center gap-2 w-full rounded-lg border border-border bg-background px-3 py-2 cursor-pointer focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
-                                                        onClick={() => setSupplierOpen(true)}
-                                                    >
-                                                        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                                                        <input
-                                                            className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
-                                                            placeholder={selectedName || "اكتب للبحث عن مورد..."}
-                                                            value={supplierOpen ? supplierSearch : selectedName}
-                                                            onChange={e => { setSupplierSearch(e.target.value); setSupplierOpen(true); }}
-                                                            onFocus={() => setSupplierOpen(true)}
-                                                            dir="rtl"
-                                                        />
-                                                        {createDrugSupplierId && (
-                                                            <button type="button" onClick={e => { e.stopPropagation(); setCreateDrugSupplierId(""); setSupplierSearch(""); }}
-                                                                className="text-muted-foreground hover:text-destructive shrink-0">
-                                                                <X className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
-                                                        <ChevronDown className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`} />
-                                                    </div>
-                                                    {supplierOpen && (
-                                                        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
-                                                            {filteredCreate.length === 0 ? (
-                                                                <p className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</p>
-                                                            ) : (
-                                                                filteredCreate.map(s => (
-                                                                    <button key={s.id} type="button"
-                                                                        onClick={() => { setCreateDrugSupplierId(s.id); setSupplierOpen(false); setSupplierSearch(""); }}
-                                                                        className={`w-full text-right px-4 py-2.5 text-sm hover:bg-muted transition-colors block ${s.id === createDrugSupplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}>
-                                                                        {s.name}
-                                                                    </button>
-                                                                ))
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                    <div className="col-span-2 border-t pt-4 mt-2">
-                                        <h4 className="text-sm font-bold text-foreground mb-3">الدفعة الأولى (اختياري)</h4>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-bold text-foreground mb-1">الكمية</label>
-                                                <input type="number" name="quantity" defaultValue="0" min="0" required className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-bold text-foreground mb-1">تاريخ الانتهاء</label>
-                                                <input type="date" name="expiryDate" defaultValue={new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0]} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground py-2.5 rounded-lg font-bold transition-all text-sm">
-                                        <Plus className="w-4 h-4" />
-                                        حفظ الدواء
-                                    </button>
-                                    <button type="button" onClick={() => { setShowCreateDrugModal(null); setPacketPrice(0); setStripsPerPacket(1); }} className="px-4 py-2.5 bg-muted hover:bg-muted text-foreground rounded-lg font-bold text-sm">إلغاء</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* ======= ADD TO INVENTORY MODAL ======= */}
-            {
-                showAddToInventoryModal && (
-                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-card rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-border overflow-y-auto max-h-[90vh]">
-                            <h2 className="text-xl font-bold mb-1">إضافة للمخزن</h2>
-                            <p className="text-muted-foreground text-sm mb-5">الدواء <span className="text-primary font-bold">{showAddToInventoryModal.tradeName}</span> موجود في النظام.</p>
-
-                            <form onSubmit={handleAddToInventory} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">سعر التكلفة</label>
-                                    <input type="number" step="0.01" name="costPrice" required className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted-foreground mb-1.5">الكمية الحالية</label>
-                                    <input type="number" name="quantity" defaultValue="0" required className="w-full bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring font-bold text-primary" />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأدنى</label>
-                                        <input type="number" name="minStock" defaultValue="1" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">الحد الأعلى</label>
-                                        <input type="number" name="maxStock" defaultValue="10" className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring" />
-                                    </div>
-                                </div>
-                                <div className="flex gap-3 pt-3">
-                                    <button type="submit" className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl font-bold hover:bg-primary/90 transition-colors text-sm shadow-lg shadow-primary/20">إضافة للمخزون</button>
-                                    <button type="button" onClick={() => setShowAddToInventoryModal(null)} className="flex-1 bg-muted text-foreground py-2.5 rounded-xl font-bold hover:bg-muted/80 transition-colors text-sm">إلغاء</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )}
+  return (
+    <div dir="rtl" className="h-full flex flex-col bg-background">
+      {/* ======= شريط استعادة المسودة ======= */}
+      {/* لا يُفتح النموذج تلقائياً: الاستعادة بقرار المستخدم، مع إظهار عمر
+          المسودة ليحكم إن كانت ما تزال صالحة. */}
+      {draftBanner && (
+        <div className="bg-warning/10 border-b border-warning/30 px-6 py-3 flex items-center gap-3 flex-wrap">
+          <RefreshCcw className="w-4 h-4 text-warning shrink-0" />
+          <div className="text-sm text-foreground min-w-0">
+            <span className="font-bold">لديك إدخال غير مكتمل</span>
+            <span className="text-muted-foreground">
+              {" — "}
+              {draftBanner.kind === "batch"
+                ? `دفعة لـ ${draftBanner.drugName || "دواء"}`
+                : `دواء جديد (${draftBanner.barcode})`}
+              {" • "}
+              {formatDraftAge(draftBanner.savedAt)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mr-auto shrink-0">
+            <button
+              type="button"
+              onClick={restoreDraft}
+              className="px-3 py-1.5 rounded-lg bg-warning text-warning-foreground text-xs font-bold hover:opacity-90"
+            >
+              استعادة البيانات
+            </button>
+            <button
+              type="button"
+              onClick={dropDraft}
+              className="px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-bold hover:bg-muted/80"
+            >
+              تجاهل
+            </button>
+          </div>
         </div>
-    );
+      )}
+
+      {/* ======= HEADER ======= */}
+      <div className="bg-card/80 backdrop-blur-xl border-b border-border/60 px-6 py-4 shadow-sm relative z-10">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+              <Package className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-foreground tracking-tight">
+                إدارة المخزون
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                {stats.totalItems} صنف • {stats.totalStock} وحدة
+              </p>
+            </div>
+            {user.role === "ADMIN" && (
+              <span className="text-[9px] font-black text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20">
+                مدير ⚡
+              </span>
+            )}
+          </div>
+
+          <div className="flex gap-2 mt-4 items-center">
+            <SyncHealthDashboard />
+            {dlqCount > 0 && (
+              <button
+                onClick={() => setShowDLQ(true)}
+                className="flex items-center gap-2 bg-warning/10 border border-warning/30 text-warning hover:bg-warning/20 px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span>تعديلات فاشلة</span>
+                <span className="min-w-5 h-5 px-1.5 rounded-full bg-warning text-warning-foreground text-[10px] flex items-center justify-center font-black">
+                  {dlqCount}
+                </span>
+              </button>
+            )}
+            {pendingSyncCount > 0 && (
+              <button
+                onClick={handleUploadPending}
+                disabled={isUploadingPending}
+                className="flex items-center gap-2 bg-success/10 border border-success/30 text-success hover:bg-success/20 px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
+              >
+                <Upload
+                  className={`w-4 h-4 ${isUploadingPending ? "animate-pulse" : ""}`}
+                />
+                <span>رفع للسيرفر</span>
+                <span className="min-w-5 h-5 px-1.5 rounded-full bg-success text-success-foreground text-[10px] flex items-center justify-center font-black">
+                  {pendingSyncCount}
+                </span>
+              </button>
+            )}
+            <button
+              onClick={handleSync}
+              disabled={loading}
+              className="flex items-center gap-2 bg-card border border-border text-muted-foreground hover:border-primary hover:text-primary px-4 py-2.5 rounded-xl transition-all font-bold text-sm"
+            >
+              <RefreshCcw
+                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+              />
+              <span>مزامنة</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+          <div
+            className={`rounded-xl border px-3 py-2 ${syncHealthView.statusClass}`}
+          >
+            <p className="text-[10px] font-bold opacity-75">حالة المزامنة</p>
+            <p className="text-sm font-black">{syncHealthView.status}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card px-3 py-2">
+            <p className="text-[10px] text-muted-foreground font-bold">
+              المعلق
+            </p>
+            <p className="text-sm font-black text-foreground">
+              {syncHealthView.pending}
+            </p>
+          </div>
+          <div className="rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
+            <p className="text-[10px] text-warning font-bold">فشل سابق</p>
+            <p className="text-sm font-black text-warning">
+              {syncHealthView.failed}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-card px-3 py-2">
+            <p className="text-[10px] text-muted-foreground font-bold">
+              أقدم عملية
+            </p>
+            <p className="text-sm font-black text-foreground">
+              {syncHealthView.oldestAge}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-card px-3 py-2">
+            <p className="text-[10px] text-muted-foreground font-bold">
+              إعادة المحاولة
+            </p>
+            <p className="text-sm font-black text-foreground">
+              {syncHealthView.nextRetry}
+            </p>
+          </div>
+        </div>
+        {syncHealthView.topError && (
+          <div
+            className={`mb-4 rounded-xl border px-3 py-2 flex items-center gap-2 ${syncHealthView.isOffline ? "border-border/50 bg-muted/30" : "border-warning/20 bg-warning/5"}`}
+          >
+            <div
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${syncHealthView.isOffline ? "bg-muted-foreground/40" : "bg-warning/60"}`}
+            />
+            <p
+              className={`text-xs truncate ${syncHealthView.isOffline ? "text-muted-foreground" : "text-foreground/70"}`}
+            >
+              {syncHealthView.topError}
+              <span className="opacity-50 mr-1">
+                · كل {syncHealthView.autoRetryInterval}
+              </span>
+            </p>
+          </div>
+        )}
+
+        {/* Barcode Input */}
+        <div className="relative group">
+          <div className="absolute -inset-0.5 bg-gradient-to-l from-primary via-primary/80 to-primary/60 rounded-2xl opacity-0 group-focus-within:opacity-20 blur transition-opacity duration-300"></div>
+          <div className="relative flex items-center bg-card border-2 border-border/80 rounded-2xl px-4 py-0.5 focus-within:border-ring focus-within:shadow-xl focus-within:shadow-ring/10 transition-all duration-300">
+            <div className="flex items-center justify-center pl-3 text-muted-foreground group-focus-within:text-primary transition-colors duration-300">
+              {isChecking ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Scan className="w-5 h-5 stroke-[2.5]" />
+              )}
+            </div>
+            <input
+              ref={barcodeInputRef}
+              type="text"
+              placeholder="امسح الباركود للبحث أو الإضافة..."
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              onKeyDown={handleBarcodeSubmit}
+              className="w-full bg-transparent border-none py-3 px-3 text-base focus:ring-0 outline-none placeholder-muted-foreground font-bold text-foreground font-mono tracking-wide"
+            />
+            <kbd className="hidden group-focus-within:flex shrink-0 items-center gap-1 bg-muted text-muted-foreground text-[10px] font-bold px-2 py-1 rounded-lg border border-border">
+              F2
+            </kbd>
+          </div>
+        </div>
+      </div>
+
+      {/* ======= STATS CARDS ======= */}
+      <div className="px-6 pt-5 pb-2">
+        <div
+          className={`grid gap-3 ${isAdmin ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2"}`}
+        >
+          {/* Total Value — ADMIN only */}
+          {isAdmin && (
+            <div className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-muted-foreground font-bold">
+                  قيمة المخزون
+                </span>
+                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-4 h-4 text-primary" />
+                </div>
+              </div>
+              <p className="text-lg font-black text-foreground tabular-nums">
+                {formatIQD(stats.totalRetailValue)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                تكلفة: {formatIQD(stats.totalCostValue)}
+              </p>
+            </div>
+          )}
+
+          {/* Profit — ADMIN only */}
+          {isAdmin && (
+            <div className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-muted-foreground font-bold">
+                  الربح المتوقع
+                </span>
+                <div className="w-8 h-8 bg-success/10 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-success" />
+                </div>
+              </div>
+              <p className="text-lg font-black text-success tabular-nums">
+                {formatIQD(stats.totalProfit)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                هامش{" "}
+                {stats.totalRetailValue > 0
+                  ? Math.round(
+                      (stats.totalProfit / stats.totalRetailValue) * 100,
+                    )
+                  : 0}
+                %
+              </p>
+            </div>
+          )}
+
+          {/* Low Stock */}
+          <div
+            className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() =>
+              setStockFilter(stockFilter === "low" ? "all" : "low")
+            }
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground font-bold">
+                نقص المخزون
+              </span>
+              <div className="w-8 h-8 bg-destructive/10 rounded-lg flex items-center justify-center">
+                <TrendingDown className="w-4 h-4 text-destructive" />
+              </div>
+            </div>
+            <p className="text-lg font-black text-destructive tabular-nums">
+              {stats.lowStockCount}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              نفد: {stats.outOfStockCount} صنف
+            </p>
+          </div>
+
+          {/* Total Items */}
+          <div className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground font-bold">
+                إجمالي الأصناف
+              </span>
+              <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center">
+                <BarChart3 className="w-4 h-4 text-purple-600" />
+              </div>
+            </div>
+            <p className="text-lg font-black text-foreground tabular-nums">
+              {stats.totalItems}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              فائض: {stats.overStockCount} صنف
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ======= SEARCH & FILTER BAR ======= */}
+      <div className="px-6 py-3 flex items-center gap-3">
+        <div className="flex-1 relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="بحث بالاسم أو الباركود..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-card border border-border rounded-xl py-2.5 pr-10 pl-4 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/10 transition-all placeholder:text-muted-foreground"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl p-1">
+          {[
+            { key: "all" as StockFilter, label: "الكل", count: items.length },
+            {
+              key: "out" as StockFilter,
+              label: "نفد",
+              count: items.filter((i) => i.quantity <= 0).length,
+            },
+            {
+              key: "low" as StockFilter,
+              label: "نقص",
+              count: items.filter(
+                (i) => i.quantity > 0 && i.quantity < i.minStock,
+              ).length,
+            },
+            {
+              key: "good" as StockFilter,
+              label: "جيد",
+              count: items.filter(
+                (i) => i.quantity >= i.minStock && i.quantity <= i.maxStock,
+              ).length,
+            },
+            {
+              key: "over" as StockFilter,
+              label: "فائض",
+              count: items.filter((i) => i.quantity > i.maxStock).length,
+            },
+          ].map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setStockFilter(f.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                stockFilter === f.key
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {f.label} <span className="opacity-60">({f.count})</span>
+            </button>
+          ))}
+        </div>
+
+        <span className="text-xs text-muted-foreground font-medium">
+          {filteredItems.length} نتيجة
+          {totalPages > 1 && ` — صفحة ${currentPage} من ${totalPages}`}
+        </span>
+      </div>
+
+      {/* ======= TABLE ======= */}
+      <div className="flex-1 overflow-auto px-6 pb-6">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-muted-foreground font-bold text-sm">
+              جاري تحميل البيانات...
+            </p>
+          </div>
+        ) : (
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <table className="w-full text-right border-collapse">
+              <thead>
+                <tr className="bg-muted/50 text-muted-foreground text-xs font-bold border-b border-border">
+                  <th
+                    className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => toggleSort("name")}
+                  >
+                    <div className="flex items-center gap-1">
+                      اسم الدواء
+                      {sortField === "name" && (
+                        <ArrowUpDown className="w-3 h-3" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => toggleSort("quantity")}
+                  >
+                    <div className="flex items-center gap-1">
+                      المخزون
+                      {sortField === "quantity" && (
+                        <ArrowUpDown className="w-3 h-3" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-4 py-3.5">الحالة</th>
+                  {isAdmin && (
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors"
+                      onClick={() => toggleSort("costPrice")}
+                    >
+                      <div className="flex items-center gap-1">
+                        التكلفة
+                        {sortField === "costPrice" && (
+                          <ArrowUpDown className="w-3 h-3" />
+                        )}
+                      </div>
+                    </th>
+                  )}
+                  <th
+                    className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => toggleSort("price")}
+                  >
+                    <div className="flex items-center gap-1">
+                      البيع
+                      {sortField === "price" && (
+                        <ArrowUpDown className="w-3 h-3" />
+                      )}
+                    </div>
+                  </th>
+                  {isAdmin && (
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:text-primary transition-colors"
+                      onClick={() => toggleSort("profit")}
+                    >
+                      <div className="flex items-center gap-1">
+                        الربح
+                        {sortField === "profit" && (
+                          <ArrowUpDown className="w-3 h-3" />
+                        )}
+                      </div>
+                    </th>
+                  )}
+                  <th className="px-4 py-3.5 text-center">
+                    <span className="flex items-center justify-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      سريع
+                    </span>
+                  </th>
+                  <th className="px-4 py-3.5 text-center">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30">
+                {paginatedItems.map((item) => {
+                  const stockPct = getStockPercent(item);
+                  const isOut = item.quantity <= 0;
+                  const isLow = !isOut && item.quantity < item.minStock;
+                  const isOver = item.quantity > item.maxStock;
+                  const profit =
+                    (item.drug.price - item.costPrice) * item.quantity;
+                  const profitPerUnit = item.drug.price - item.costPrice;
+                  const profitMargin =
+                    item.drug.price > 0
+                      ? Math.round((profitPerUnit / item.drug.price) * 100)
+                      : 0;
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-primary/5 transition-colors group"
+                    >
+                      {/* Drug Name */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 ${
+                              isOut
+                                ? "bg-destructive/10"
+                                : isLow
+                                  ? "bg-warning/10"
+                                  : "bg-primary/10"
+                            }`}
+                          >
+                            💊
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-foreground text-sm truncate">
+                              {item.drug.tradeName}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground font-mono">
+                              {item.drug.barcode}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Stock with Progress Bar */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex flex-col gap-1.5 w-32">
+                          <div className="flex items-baseline justify-between">
+                            <span
+                              className={`text-base font-black tabular-nums ${isOut ? "text-destructive" : isLow ? "text-warning" : "text-foreground"}`}
+                            >
+                              {item.quantity}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {item.minStock} - {item.maxStock}
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isOut
+                                  ? "bg-destructive"
+                                  : isLow
+                                    ? "bg-warning"
+                                    : isOver
+                                      ? "bg-purple-500"
+                                      : "bg-success"
+                              }`}
+                              style={{ width: `${stockPct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="px-4 py-3.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                            isOut
+                              ? "bg-destructive/10 text-destructive"
+                              : isLow
+                                ? "bg-warning/10 text-warning"
+                                : isOver
+                                  ? "bg-purple-100 text-purple-700"
+                                  : "bg-success/10 text-success"
+                          }`}
+                        >
+                          {isOut ? (
+                            <AlertTriangle className="w-3 h-3" />
+                          ) : isLow ? (
+                            <AlertTriangle className="w-3 h-3" />
+                          ) : (
+                            <CheckCircle className="w-3 h-3" />
+                          )}
+                          {isOut
+                            ? "نفد"
+                            : isLow
+                              ? "نقص"
+                              : isOver
+                                ? "فائض"
+                                : "جيد"}
+                        </span>
+                      </td>
+
+                      {/* Cost Price — ADMIN only */}
+                      {isAdmin && (
+                        <td className="px-4 py-3.5">
+                          <span className="text-sm font-bold text-muted-foreground tabular-nums">
+                            {formatIQD(item.costPrice || 0)}
+                          </span>
+                        </td>
+                      )}
+
+                      {/* Retail Price */}
+                      <td className="px-4 py-3.5">
+                        <span className="text-sm font-bold text-primary tabular-nums">
+                          {formatIQD(item.drug.price)}
+                        </span>
+                      </td>
+
+                      {/* Profit — ADMIN only */}
+                      {isAdmin && (
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-col">
+                            <span
+                              className={`text-sm font-black tabular-nums ${profit > 0 ? "text-success" : "text-destructive"}`}
+                            >
+                              {formatIQD(profit)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {profitMargin}% هامش
+                            </span>
+                          </div>
+                        </td>
+                      )}
+
+                      {/* Quick Sale Toggle */}
+                      <td className="px-4 py-3.5 text-center">
+                        <Toggle
+                          size="sm"
+                          checked={!!quickSaleState[item.drug.id]}
+                          onChange={() => handleQuickSaleToggle(item.drug.id)}
+                          disabled={togglingQuickSale === item.drug.id}
+                          activeClass="bg-amber-400"
+                          title="تفعيل/إلغاء البيع السريع"
+                        />
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openBatchModal(item)}
+                            title="إضافة دفعة"
+                            className="flex items-center gap-1 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground px-2.5 py-1.5 rounded-lg transition-all font-bold text-[11px]"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            دفعة
+                          </button>
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() => setShowEditModal(item)}
+                                title="تعديل"
+                                className="p-1.5 text-muted-foreground hover:text-warning hover:bg-warning/10 rounded-lg transition-all"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setShowDeleteModal(item.id)}
+                                title="حذف"
+                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {paginatedItems.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={isAdmin ? 7 : 5}
+                      className="px-6 py-16 text-center"
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
+                          <Package className="w-8 h-8 text-muted-foreground/30" />
+                        </div>
+                        <p className="text-muted-foreground text-sm font-bold">
+                          {searchTerm
+                            ? `لا توجد نتائج لـ "${searchTerm}"`
+                            : "لم يتم العثور على أدوية في المخزن"}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 py-4 border-t border-border">
+                <button
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-bold border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  السابق
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(
+                    (p) =>
+                      p === 1 ||
+                      p === totalPages ||
+                      Math.abs(p - currentPage) <= 2,
+                  )
+                  .reduce<(number | "dots")[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - (arr[idx - 1] as number) > 1)
+                      acc.push("dots");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === "dots" ? (
+                      <span
+                        key={`dots-${i}`}
+                        className="px-1 text-muted-foreground"
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setCurrentPage(p as number)}
+                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${currentPage === p ? "bg-primary text-white" : "border border-border hover:bg-muted"}`}
+                      >
+                        {p}
+                      </button>
+                    ),
+                  )}
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-bold border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  التالي
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ======= TOAST ======= */}
+      {uploadToast && (
+        <div
+          className={`fixed bottom-5 left-5 z-[70] max-w-sm rounded-xl border px-4 py-3 shadow-xl backdrop-blur-md animate-slideUp ${
+            uploadToast.type === "success"
+              ? "bg-success/10 border-success/30 text-success"
+              : uploadToast.type === "error"
+                ? "bg-destructive/10 border-destructive/30 text-destructive"
+                : "bg-primary/10 border-primary/30 text-primary"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {uploadToast.type === "success" && (
+              <CheckCircle className="w-4 h-4 shrink-0" />
+            )}
+            {uploadToast.type === "error" && (
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+            )}
+            {uploadToast.type === "info" && (
+              <Package className="w-4 h-4 shrink-0" />
+            )}
+            <p className="text-sm font-bold">{uploadToast.message}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ======= DLQ PANEL ======= */}
+      {showDLQ && (
+        <SyncFailuresPanel
+          onClose={() => {
+            setShowDLQ(false);
+            ipcInvoke<number>("get-sync-failures-count")
+              .then((n) => setDlqCount(typeof n === "number" ? n : 0))
+              .catch(() => {});
+          }}
+        />
+      )}
+
+      {/* ======= DELETE MODAL ======= */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl max-w-md w-full p-6 shadow-2xl border border-border">
+            <div className="w-14 h-14 bg-destructive/10 text-destructive rounded-xl flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-bold text-center mb-2">تأكيد الحذف</h2>
+            <p className="text-muted-foreground text-center text-sm mb-6">
+              هل أنت متأكد؟ لا يمكن التراجع عن هذه الخطوة.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDelete}
+                className="flex-1 bg-destructive text-destructive-foreground py-2.5 rounded-xl font-bold hover:bg-destructive/90 transition-colors text-sm"
+              >
+                تأكيد الحذف
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(null)}
+                className="flex-1 bg-muted text-foreground py-2.5 rounded-xl font-bold hover:bg-muted/80 transition-colors text-sm"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======= EDIT MODAL ======= */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-border overflow-y-auto max-h-[90vh]">
+            <h2 className="text-xl font-bold mb-5 flex items-center gap-2">
+              <Edit2 className="w-5 h-5 text-warning" />
+              تعديل بيانات الدواء
+            </h2>
+            <form onSubmit={handleEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                  الدواء
+                </label>
+                <input
+                  type="text"
+                  defaultValue={showEditModal.drug.tradeName}
+                  disabled
+                  className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-muted-foreground text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    سعر البيع
+                  </label>
+                  <input
+                    name="price"
+                    type="number"
+                    defaultValue={showEditModal.drug.price}
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    سعر التكلفة
+                  </label>
+                  <input
+                    name="costPrice"
+                    type="number"
+                    defaultValue={showEditModal.costPrice}
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    الحد الأدنى
+                  </label>
+                  <input
+                    name="minStock"
+                    type="number"
+                    defaultValue={showEditModal.minStock}
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    الحد الأقصى
+                  </label>
+                  <input
+                    name="maxStock"
+                    type="number"
+                    defaultValue={showEditModal.maxStock}
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="submit"
+                  className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl font-bold hover:bg-primary/90 transition-colors text-sm shadow-lg shadow-primary/20"
+                >
+                  حفظ التغييرات
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(null)}
+                  className="flex-1 bg-muted text-foreground py-2.5 rounded-xl font-bold hover:bg-muted/80 transition-colors text-sm"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======= ADD BATCH MODAL ======= */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl max-w-md w-full p-6 shadow-xl border border-border overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-foreground">
+                إضافة دفعة جديدة
+              </h3>
+              <button
+                type="button"
+                onClick={() => stashDraftAndClose("batch")}
+                className="p-2 hover:bg-muted rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              للدواء:{" "}
+              <span className="font-bold text-foreground">
+                {showBatchModal.drug?.tradeName}
+              </span>
+            </p>
+
+            <form onSubmit={handleAddBatch} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-foreground mb-1">
+                  المورد (اختياري)
+                </label>
+                {(() => {
+                  const selectedName =
+                    suppliers.find((s) => s.id === batchData.supplierId)
+                      ?.name ?? "";
+                  const filteredBatch = suppliers.filter(
+                    (s) =>
+                      !supplierSearch ||
+                      s.name
+                        .toLowerCase()
+                        .includes(supplierSearch.toLowerCase()),
+                  );
+                  return (
+                    <div ref={supplierRef} className="relative">
+                      <div
+                        className="flex items-center gap-2 w-full rounded-lg border border-border bg-background px-3 py-2 cursor-pointer focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
+                        onClick={() => setSupplierOpen(true)}
+                      >
+                        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <input
+                          className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
+                          placeholder={selectedName || "اكتب للبحث عن مورد..."}
+                          value={supplierOpen ? supplierSearch : selectedName}
+                          onChange={(e) => {
+                            setSupplierSearch(e.target.value);
+                            setSupplierOpen(true);
+                          }}
+                          onFocus={() => setSupplierOpen(true)}
+                          dir="rtl"
+                        />
+                        {batchData.supplierId && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBatchData({ ...batchData, supplierId: "" });
+                              setSupplierSearch("");
+                            }}
+                            className="text-muted-foreground hover:text-destructive shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <ChevronDown
+                          className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`}
+                        />
+                      </div>
+                      {supplierOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+                          {filteredBatch.length === 0 ? (
+                            <p className="px-4 py-3 text-sm text-muted-foreground text-center">
+                              لا توجد نتائج
+                            </p>
+                          ) : (
+                            filteredBatch.map((s) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  setBatchData({
+                                    ...batchData,
+                                    supplierId: s.id,
+                                  });
+                                  setSupplierOpen(false);
+                                  setSupplierSearch("");
+                                }}
+                                className={`w-full text-right px-4 py-2.5 text-sm hover:bg-muted transition-colors block ${s.id === batchData.supplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}
+                              >
+                                {s.name}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-foreground mb-1">
+                  الكمية
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  min="1"
+                  value={batchData.quantity || ""}
+                  onChange={(e) =>
+                    setBatchData({
+                      ...batchData,
+                      quantity: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  required
+                  autoFocus
+                  className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-foreground mb-2">
+                  سعر التكلفة (من الباكيت)
+                </label>
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      سعر الباكيت
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={batchPacketPrice || ""}
+                      onChange={(e) =>
+                        setBatchPacketPrice(parseFloat(e.target.value) || 0)
+                      }
+                      placeholder="0"
+                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      عدد الأشرطة في الباكيت
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={batchStripsPerPacket || ""}
+                      onChange={(e) =>
+                        setBatchStripsPerPacket(
+                          Math.max(1, parseInt(e.target.value) || 1),
+                        )
+                      }
+                      placeholder="1"
+                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
+                  <span className="text-xs text-muted-foreground">
+                    سعر التكلفة للشريط:
+                  </span>
+                  <span className="text-sm font-bold text-primary mr-auto tabular-nums">
+                    {batchPacketPrice > 0
+                      ? `${batchPacketPrice} ÷ ${batchStripsPerPacket} = ${batchComputedCost.toLocaleString("en", { maximumFractionDigits: 2 })}`
+                      : "—"}
+                  </span>
+                </div>
+                {batchStripsPerPacket > 20 && (
+                  <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
+                    <span>⚠</span>
+                    هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي
+                    الأشرطة — سيظهر تأكيد عند الحفظ
+                  </p>
+                )}
+                {Number(showBatchModal.drug?.price) > 0 &&
+                  batchEffectiveCost > 0 &&
+                  batchEffectiveCost >= Number(showBatchModal.drug.price) && (
+                    <p className="text-xs font-bold text-destructive mt-1.5 flex items-center gap-1">
+                      <span>⚠</span>
+                      {batchEffectiveCost - Number(showBatchModal.drug.price) >=
+                      COST_OVER_PRICE_GAP
+                        ? `التكلفة أعلى من سعر البيع (${Number(showBatchModal.drug.price).toLocaleString("en")} د.ع) بفارق ${(batchEffectiveCost - Number(showBatchModal.drug.price)).toLocaleString("en", { maximumFractionDigits: 2 })} د.ع — سيظهر تأكيد عند الحفظ`
+                        : `التكلفة أعلى من أو تساوي سعر البيع (${Number(showBatchModal.drug.price).toLocaleString("en")} د.ع) — سيظهر تأكيد عند الحفظ`}
+                    </p>
+                  )}
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-foreground mb-1">
+                  تاريخ انتهاء الصلاحية
+                </label>
+                <input
+                  type="date"
+                  value={batchData.expiryDate}
+                  onChange={(e) =>
+                    setBatchData({ ...batchData, expiryDate: e.target.value })
+                  }
+                  required
+                  className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-lg font-bold hover:bg-primary/90 transition-colors text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  إضافة الدفعة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stashDraftAndClose("batch")}
+                  className="px-4 py-2.5 bg-muted hover:bg-muted/80 text-muted-foreground rounded-lg font-bold text-sm"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======= CREATE DRUG MODAL ======= */}
+      {showCreateDrugModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl max-w-lg w-full p-6 shadow-xl border border-border overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-foreground">
+                تسجيل دواء جديد
+              </h3>
+              <button
+                type="button"
+                onClick={() => stashDraftAndClose("create-drug")}
+                className="p-2 hover:bg-muted rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* onInput: هذه الحقول غير مرتبطة بحالة React، فنلتقطها من الـ DOM
+                عند كل كتابة بدل إعادة رِندر الصفحة على كل حرف. */}
+            <form
+              ref={createDrugFormRef}
+              onSubmit={handleCreateDrug}
+              onInput={queueDraftSave}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    الباركود
+                  </label>
+                  <input
+                    type="text"
+                    value={showCreateDrugModal}
+                    readOnly
+                    className="w-full rounded-lg border border-border px-4 py-2 bg-muted font-mono text-sm"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    الاسم التجاري
+                  </label>
+                  <input
+                    type="text"
+                    name="tradeName"
+                    defaultValue={String(restoredCreateFields?.tradeName ?? "")}
+                    required
+                    autoFocus
+                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    الاسم العلمي
+                  </label>
+                  <input
+                    type="text"
+                    name="scientificName"
+                    defaultValue={String(restoredCreateFields?.scientificName ?? "")}
+                    required
+                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    المصدر/المنشأ
+                  </label>
+                  <input
+                    type="text"
+                    name="origin"
+                    defaultValue={String(restoredCreateFields?.origin ?? "")}
+                    placeholder="مثال: Pfizer, Generic..."
+                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    سعر بيع الشريط (الجمهور)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    name="price"
+                    defaultValue={String(restoredCreateFields?.price ?? "")}
+                    required
+                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    سعر الشريط الواحد — وليس الباكيت
+                  </p>
+                </div>
+                {/* Packet price calculator */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-foreground mb-2">
+                    سعر التكلفة (من الباكيت)
+                  </label>
+                  <div className="grid grid-cols-2 gap-3 mb-2">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">
+                        سعر الباكيت
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={packetPrice || ""}
+                        onChange={(e) =>
+                          setPacketPrice(parseFloat(e.target.value) || 0)
+                        }
+                        placeholder="0"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">
+                        عدد الأشرطة في الباكيت
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={stripsPerPacket || ""}
+                        onChange={(e) =>
+                          setStripsPerPacket(
+                            Math.max(1, parseInt(e.target.value) || 1),
+                          )
+                        }
+                        placeholder="1"
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
+                    <span className="text-xs text-muted-foreground">
+                      سعر التكلفة للشريط:
+                    </span>
+                    <span className="text-sm font-bold text-primary mr-auto tabular-nums">
+                      {packetPrice > 0 && stripsPerPacket > 0
+                        ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCostPrice.toLocaleString("en", { maximumFractionDigits: 2 })}`
+                        : "—"}
+                    </span>
+                  </div>
+                  {stripsPerPacket > 20 && (
+                    <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
+                      <span>⚠</span>
+                      هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي
+                      الأشرطة — سيظهر تأكيد عند الحفظ
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    الحد الأدنى
+                  </label>
+                  <input
+                    type="number"
+                    name="minStock"
+                    defaultValue={String(restoredCreateFields?.minStock ?? "1")}
+                    min="1"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    الحد الأقصى
+                  </label>
+                  <input
+                    type="number"
+                    name="maxStock"
+                    defaultValue={String(restoredCreateFields?.maxStock ?? "10")}
+                    min="0"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-foreground mb-1">
+                    المورد (اختياري)
+                  </label>
+                  {(() => {
+                    const selectedName =
+                      suppliers.find((s) => s.id === createDrugSupplierId)
+                        ?.name ?? "";
+                    const filteredCreate = suppliers.filter(
+                      (s) =>
+                        !supplierSearch ||
+                        s.name
+                          .toLowerCase()
+                          .includes(supplierSearch.toLowerCase()),
+                    );
+                    return (
+                      <div ref={supplierRef} className="relative">
+                        <div
+                          className="flex items-center gap-2 w-full rounded-lg border border-border bg-background px-3 py-2 cursor-pointer focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
+                          onClick={() => setSupplierOpen(true)}
+                        >
+                          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <input
+                            className="flex-1 bg-transparent outline-none text-sm text-right placeholder:text-muted-foreground"
+                            placeholder={
+                              selectedName || "اكتب للبحث عن مورد..."
+                            }
+                            value={supplierOpen ? supplierSearch : selectedName}
+                            onChange={(e) => {
+                              setSupplierSearch(e.target.value);
+                              setSupplierOpen(true);
+                            }}
+                            onFocus={() => setSupplierOpen(true)}
+                            dir="rtl"
+                          />
+                          {createDrugSupplierId && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCreateDrugSupplierId("");
+                                setSupplierSearch("");
+                              }}
+                              className="text-muted-foreground hover:text-destructive shrink-0"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <ChevronDown
+                            className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${supplierOpen ? "rotate-180" : ""}`}
+                          />
+                        </div>
+                        {supplierOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+                            {filteredCreate.length === 0 ? (
+                              <p className="px-4 py-3 text-sm text-muted-foreground text-center">
+                                لا توجد نتائج
+                              </p>
+                            ) : (
+                              filteredCreate.map((s) => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setCreateDrugSupplierId(s.id);
+                                    setSupplierOpen(false);
+                                    setSupplierSearch("");
+                                  }}
+                                  className={`w-full text-right px-4 py-2.5 text-sm hover:bg-muted transition-colors block ${s.id === createDrugSupplierId ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}
+                                >
+                                  {s.name}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="col-span-2 border-t pt-4 mt-2">
+                  <h4 className="text-sm font-bold text-foreground mb-3">
+                    الدفعة الأولى (اختياري)
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-foreground mb-1">
+                        الكمية
+                      </label>
+                      <input
+                        type="number"
+                        name="quantity"
+                        defaultValue={String(restoredCreateFields?.quantity ?? "0")}
+                        min="0"
+                        required
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-foreground mb-1">
+                        تاريخ الانتهاء
+                      </label>
+                      <input
+                        type="date"
+                        name="expiryDate"
+                        defaultValue={
+                          restoredCreateFields?.expiryDate
+                            ? String(restoredCreateFields.expiryDate)
+                            : new Date(
+                            new Date().setFullYear(
+                              new Date().getFullYear() + 2,
+                            ),
+                          )
+                            .toISOString()
+                            .split("T")[0]
+                        }
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground py-2.5 rounded-lg font-bold transition-all text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  حفظ الدواء
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stashDraftAndClose("create-drug")}
+                  className="px-4 py-2.5 bg-muted hover:bg-muted text-foreground rounded-lg font-bold text-sm"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======= ADD TO INVENTORY MODAL ======= */}
+      {showAddToInventoryModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-border overflow-y-auto max-h-[90vh]">
+            <h2 className="text-xl font-bold mb-1">إضافة للمخزن</h2>
+            <p className="text-muted-foreground text-sm mb-5">
+              الدواء{" "}
+              <span className="text-primary font-bold">
+                {showAddToInventoryModal.tradeName}
+              </span>{" "}
+              موجود في النظام.
+            </p>
+
+            <form onSubmit={handleAddToInventory} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    سعر التكلفة (للشريط)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="costPrice"
+                    required
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    سعر بيع الشريط
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="price"
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground -mt-2">
+                الأسعار تُسجل للشريط الواحد — وليس الباكيت
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                  الكمية الحالية
+                </label>
+                <input
+                  type="number"
+                  name="quantity"
+                  defaultValue="0"
+                  required
+                  className="w-full bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring font-bold text-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                  تاريخ انتهاء الصلاحية
+                </label>
+                <input
+                  type="date"
+                  name="expiryDate"
+                  className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    الحد الأدنى
+                  </label>
+                  <input
+                    type="number"
+                    name="minStock"
+                    defaultValue="1"
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                    الحد الأعلى
+                  </label>
+                  <input
+                    type="number"
+                    name="maxStock"
+                    defaultValue="10"
+                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="submit"
+                  className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl font-bold hover:bg-primary/90 transition-colors text-sm shadow-lg shadow-primary/20"
+                >
+                  إضافة للمخزون
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddToInventoryModal(null)}
+                  className="flex-1 bg-muted text-foreground py-2.5 rounded-xl font-bold hover:bg-muted/80 transition-colors text-sm"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

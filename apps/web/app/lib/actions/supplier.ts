@@ -23,6 +23,7 @@ const UpdateSupplier = SupplierSchema;
 export async function createSupplier(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canCreatePurchase || !tenantCtx.organizationId) return { message: 'ليس لديك صلاحية إدارة الموردين ضمن مؤسسة.' };
 
     const validatedFields = CreateSupplier.safeParse({
         name: formData.get("name"),
@@ -72,6 +73,7 @@ export async function createSupplier(prevState: any, formData: FormData) {
 export async function deleteSupplier(id: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canCreatePurchase || !tenantCtx.organizationId) return { message: 'ليس لديك صلاحية إدارة الموردين ضمن مؤسسة.' };
 
     try {
         // Enforce tenant isolation
@@ -84,6 +86,7 @@ export async function deleteSupplier(id: string) {
         }
 
         // Check for existing purchases
+        if (supplier.warehouseId) return { message: 'هذا المورد مرتبط بمذخر على المنصة ولا يمكن حذفه يدوياً.' };
         const purchaseCount = await prisma.purchase.count({
             where: { supplierId: id },
         });
@@ -115,8 +118,10 @@ export async function deleteSupplier(id: string) {
 
 export async function getSupplierById(id: string) {
     try {
-        const supplier = await prisma.supplier.findUnique({
-            where: { id },
+        const ctx = await getTenantContext();
+        if (ctx instanceof NextResponse || !ctx.userPermissions.canViewSuppliers || (!ctx.organizationId && ctx.user.role !== 'SUPER_ADMIN')) return null;
+        const supplier = await prisma.supplier.findFirst({
+            where: { id, ...(ctx.user.role === 'SUPER_ADMIN' ? {} : { organizationId: ctx.organizationId }) },
         });
         return supplier;
     } catch (error) {
@@ -127,6 +132,7 @@ export async function getSupplierById(id: string) {
 export async function updateSupplier(id: string, prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canCreatePurchase || !tenantCtx.organizationId) return { message: 'ليس لديك صلاحية إدارة الموردين ضمن مؤسسة.' };
 
     const validatedFields = CreateSupplier.safeParse({
         name: formData.get("name"),
@@ -154,6 +160,13 @@ export async function updateSupplier(id: string, prevState: any, formData: FormD
             return { message: "لا يمكنك تعديل بيانات هذا المورد لأنه لا يخص مؤسستك." };
         }
 
+        // المورد المرتبط بمذخر تبقى بياناته المحلية قابلة للتعديل من المؤسسة
+        // (§182): الاسم/الهاتف/البريد/العنوان تسميات الصيدلية لمورّدها، وحجبها
+        // بالكامل كان يعني أن ربط مورد قديم بمذخر يُجمّد بياناته إلى الأبد.
+        // ما يبقى ممنوعاً: الحذف (أدناه في deleteSupplier)، وتغيير warehouseId أو
+        // organizationId — وهما غير قابلين للكتابة من هنا أصلاً لأن كائن data
+        // مبنيّ من حقول صريحة لا من نشر الجسم. تعديل الاسم هنا لا يمسّ اسم
+        // المذخر ولا بيانات حسابه؛ لا مزامنة ضمنية بين الكيانين (§183).
         await prisma.supplier.update({
             where: { id },
             data: {

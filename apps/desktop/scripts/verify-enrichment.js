@@ -15,14 +15,24 @@ const path = require("path");
 const dir = path.join(__dirname, "..");
 const { PrismaClient } = require(path.join(dir, "node_modules", ".prisma", "desktop-client"));
 process.env.DATABASE_URL = process.env.DATABASE_URL || ("file:" + path.join(dir, "prisma", "local.db"));
-const XLSX = require(path.join(dir, "..", "..", "node_modules", "xlsx"));
+const ExcelJS = require("exceljs");
 
 const prisma = new PrismaClient();
 const filePath = process.argv[2] || path.join(dir, "drugs-enrichment-review.xlsx");
 
 (async () => {
-  const wb = XLSX.readFile(filePath);
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(filePath);
+  const sheet = wb.worksheets[0];
+  if (!sheet) throw new Error("ملف Excel لا يحتوي ورقة بيانات");
+  const headers = sheet.getRow(1).values.slice(1).map((value) => String(value ?? ""));
+  const rows = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const record = {};
+    headers.forEach((header, index) => { record[header] = row.getCell(index + 1).text; });
+    if (Object.values(record).some(Boolean)) rows.push(record);
+  });
   const db = await prisma.globalDrug.findMany({ select: { barcode: true, tradeName: true } });
 
   const byBar = new Map(db.map(d => [String(d.barcode), d.tradeName]));

@@ -6,7 +6,8 @@ import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { logAudit } from "@/app/lib/audit";
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const transferId = params.id;
         const tenantCtx = await getTenantContext();

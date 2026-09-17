@@ -116,4 +116,52 @@ export const notificationsService = {
         if (IS_EXPO_GO) return { remove: () => {} };
         return getN().addNotificationResponseReceivedListener(handler);
     },
+
+    /** OS permission state, without prompting. 'unavailable' in Expo Go. */
+    async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | 'unavailable'> {
+        if (IS_EXPO_GO) return 'unavailable';
+        try {
+            const { status } = await getN().getPermissionsAsync();
+            return status as 'granted' | 'denied' | 'undetermined';
+        } catch {
+            return 'unavailable';
+        }
+    },
+
+    /**
+     * Applies the per-category preferences (settings › notifications) to
+     * notifications that arrive while the app is open. Notifications delivered
+     * while the app is closed are governed by the OS permission.
+     */
+    installPreferenceFilter(): void {
+        if (IS_EXPO_GO) return;
+        const N = getN();
+        N.setNotificationHandler({
+            handleNotification: async (notification) => {
+                const type = String((notification.request.content.data as Record<string, unknown>)?.type ?? '');
+                const prefs = await readNotificationPrefs();
+                const category = type === 'LOW_STOCK' || type === 'OUT_OF_STOCK' ? 'lowStock'
+                    : type === 'EXPIRY' || type === 'EXPIRED' ? 'expiry'
+                    : type === 'NEW_PURCHASE' ? 'purchases'
+                    : null;
+                const show = category ? prefs[category] : true;
+                return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: show };
+            },
+        });
+    },
 };
+
+export interface NotificationPrefs { lowStock: boolean; expiry: boolean; purchases: boolean }
+export const NOTIFICATION_PREFS_KEY = 'notification_prefs';
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = { lowStock: true, expiry: true, purchases: true };
+
+export async function readNotificationPrefs(): Promise<NotificationPrefs> {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store');
+        const raw = await SecureStore.getItemAsync(NOTIFICATION_PREFS_KEY);
+        return raw ? { ...DEFAULT_NOTIFICATION_PREFS, ...JSON.parse(raw) } : DEFAULT_NOTIFICATION_PREFS;
+    } catch {
+        return DEFAULT_NOTIFICATION_PREFS;
+    }
+}

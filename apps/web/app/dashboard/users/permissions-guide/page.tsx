@@ -280,7 +280,7 @@ const categories: Category[] = [
                 description: "إنشاء طلبات شراء من الموردين",
                 pages: [
                     { path: "/dashboard/purchases", name: "سجل المشتريات" },
-                    { path: "/dashboard/warehouses", name: "المستودعات العراقية" },
+                    { path: "/dashboard/warehouses", name: "المذاخر العراقية" },
                 ],
             },
         ],

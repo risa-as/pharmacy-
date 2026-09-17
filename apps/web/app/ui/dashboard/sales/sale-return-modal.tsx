@@ -4,7 +4,9 @@ import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Undo2, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
+// sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
+// sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
+import { toast } from "sonner";
 
 interface SaleReturnModalProps {
     sale: any;

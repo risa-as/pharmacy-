@@ -1,14 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import {
-    View, Text, ScrollView, TextInput, TouchableOpacity,
-    Alert, Platform, KeyboardAvoidingView, ActivityIndicator,
-} from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../../../services/api';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../../context/ThemeContext';
-import { managerPalette, Radius } from '../../../constants/colors';
+import { ScreenHeader } from '../../../components/ui/ScreenHeader';
+import { usePalette, Surface, InfoNote, FormField, AppButton, StateBlock } from '../../../components/ui/Kit';
+import { formatNumber } from '../../../utils/format';
 
 interface ReceiveItem {
     id: string;
@@ -19,330 +16,282 @@ interface ReceiveItem {
     batchNumber: string;
     expiryMonth: string;
     expiryYear: string;
+    /** Unit purchase price, confirmed at receipt (orders may be created without one). */
+    unitCost: string;
+    /** Last purchase price of this drug in the branch, or null. */
+    lastCost: number | null;
 }
 
+/** A price this far from the last one is usually a packet price typed as a strip price (or the reverse). */
+const PRICE_JUMP_RATIO = 2;
+
+function priceJump(item: ReceiveItem): boolean {
+    const cost = Number(item.unitCost);
+    if (!item.lastCost || !(cost > 0)) return false;
+    return cost / item.lastCost >= PRICE_JUMP_RATIO || item.lastCost / cost >= PRICE_JUMP_RATIO;
+}
+
+/** "27" → "2027": employees often type two-digit years (same guard as inventory). */
+function normalizeYear(raw: string): string {
+    const v = raw.replace(/[^0-9]/g, '');
+    if (v.length === 2) return `20${v}`;
+    return v;
+}
+
+function itemErrors(item: ReceiveItem, nowYear: number) {
+    const qty = parseInt(item.receivedQuantity, 10);
+    const month = parseInt(item.expiryMonth, 10);
+    const year = parseInt(item.expiryYear, 10);
+    const cost = Number(item.unitCost);
+    return {
+        cost: !item.unitCost.trim() ? 'أدخل سعر الشراء' : (!Number.isFinite(cost) || cost < 0) ? 'سعر غير صالح' : null,
+        quantity: !item.receivedQuantity.trim() ? 'أدخل الكمية المستلمة' : (isNaN(qty) || qty <= 0) ? 'الكمية يجب أن تكون أكبر من صفر' : null,
+        batch: !item.batchNumber.trim() ? 'أدخل رقم الدفعة' : null,
+        month: !item.expiryMonth ? 'أدخل شهر الصلاحية' : (isNaN(month) || month < 1 || month > 12) ? 'الشهر بين 1 و 12' : null,
+        year: !item.expiryYear ? 'أدخل سنة الصلاحية' : (isNaN(year) || item.expiryYear.length !== 4 || year < nowYear || year > nowYear + 15) ? 'سنة غير صحيحة' : null,
+    };
+}
+
+/**
+ * Receive a purchase order (design receive.png): actual received quantity,
+ * batch number and expiry month/year — no assumed expiry, and a review summary
+ * before the stock is added.
+ */
 export default function ReceiveItemsScreen() {
-    const { id } = useLocalSearchParams();
+    const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const [items, setItems]       = useState<ReceiveItem[]>([]);
-    const [loading, setLoading]   = useState(true);
-    const [submitting, setSubmitting] = useState(false);
-    const { isDarkMode } = useTheme();
+    const C = usePalette();
     const insets = useSafeAreaInsets();
-    const C = managerPalette(isDarkMode);
 
-    // Outlined card matching the manager identity — light surface, soft tinted border.
-    const card = (accent: string) => ({
-        backgroundColor: C.card,
-        borderRadius: Radius.sm,
-        borderWidth: 1.5,
-        borderColor: `${accent}33`,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 } as const,
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        elevation: 2,
-    });
+    const [items, setItems] = useState<ReceiveItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [touched, setTouched] = useState(false);
+    const nowYear = new Date().getFullYear();
 
-    useEffect(() => { if (id) fetchDetails(); }, [id]);
-
-    const fetchDetails = async () => {
+    const fetchDetails = useCallback(async () => {
+        setLoading(true);
+        setFailed(false);
         try {
             const data: any = await apiService.getPurchaseDetails(id as string);
             const baseTs = Date.now().toString(36).toUpperCase();
             setItems(data.items.map((item: any, idx: number) => ({
                 ...item,
-                itemId:           item.id,
-                receivedQuantity: item.quantity.toString(),
-                batchNumber:      `B${baseTs}${String(idx + 1).padStart(2, '0')}`,
-                expiryMonth:      '',
-                expiryYear:       '',
+                itemId: item.id,
+                receivedQuantity: String(item.quantity),
+                batchNumber: `B${baseTs}${String(idx + 1).padStart(2, '0')}`,
+                expiryMonth: '',
+                expiryYear: '',
+                lastCost: typeof item.lastCost === 'number' && item.lastCost > 0 ? item.lastCost : null,
+                // Ordered price if one was set, else suggest the last purchase price.
+                unitCost: item.cost > 0 ? String(item.cost) : item.lastCost > 0 ? String(item.lastCost) : '',
             })));
         } catch (error) {
             console.error(error);
-            Alert.alert('خطأ', 'تعذّر تحميل تفاصيل الطلب');
+            setFailed(true);
         } finally {
             setLoading(false);
         }
-    };
+    }, [id]);
+
+    useEffect(() => { if (id) fetchDetails(); }, [fetchDetails, id]);
 
     const updateItem = (index: number, field: keyof ReceiveItem, value: string) => {
-        setItems(prev => {
-            const next = [...prev];
-            next[index] = { ...next[index], [field]: value };
-            return next;
-        });
+        setItems(prev => prev.map((it, i) => (i === index ? { ...it, [field]: value } : it)));
     };
 
-    const handleReceive = async () => {
-        const nowYear = new Date().getFullYear();
-        for (const item of items) {
-            const month = parseInt(item.expiryMonth);
-            const year  = parseInt(item.expiryYear);
-            if (!item.expiryMonth || !item.expiryYear) {
-                Alert.alert('حقل مطلوب', `يرجى إدخال تاريخ الانتهاء لـ "${item.drugName}"`);
-                return;
-            }
-            if (isNaN(month) || month < 1 || month > 12) {
-                Alert.alert('خطأ في الشهر', `الشهر يجب أن يكون بين 01 و 12 لـ "${item.drugName}"`);
-                return;
-            }
-            if (isNaN(year) || year < nowYear) {
-                Alert.alert('خطأ في السنة', `السنة "${year}" غير صحيحة أو منتهية لـ "${item.drugName}"`);
-                return;
-            }
-        }
+    const allErrors = items.map(it => itemErrors(it, nowYear));
+    const invoiceTotal = items.reduce((sum, it) => {
+        const qty = parseInt(it.receivedQuantity, 10);
+        const cost = Number(it.unitCost);
+        return sum + (qty > 0 && cost > 0 ? qty * cost : 0);
+    }, 0);
+    const firstInvalid = allErrors.findIndex(e => Object.values(e).some(Boolean));
 
+    const submit = async () => {
         setSubmitting(true);
         try {
             const payload = items.map(item => ({
-                itemId:      item.itemId,
-                quantity:    parseInt(item.receivedQuantity) || item.quantity,
-                batchNumber: item.batchNumber,
-                expiryDate:  new Date(
-                    `${item.expiryYear}-${item.expiryMonth.padStart(2, '0')}-01`
-                ).toISOString(),
+                itemId: item.itemId,
+                quantity: parseInt(item.receivedQuantity, 10),
+                batchNumber: item.batchNumber.trim(),
+                expiryDate: new Date(`${item.expiryYear}-${item.expiryMonth.padStart(2, '0')}-01`).toISOString(),
+                cost: Number(item.unitCost),
             }));
             await apiService.receivePurchase(id as string, payload);
-            Alert.alert('تم الاستلام ✓', 'تمت إضافة المواد إلى المخزون بنجاح', [
-                { text: 'تم', onPress: () => router.back() },
-            ]);
+            Alert.alert('تم الاستلام', 'أُضيفت المواد إلى المخزون.', [{ text: 'تم', onPress: () => router.back() }]);
         } catch {
-            Alert.alert('خطأ', 'فشل عملية الاستلام، يرجى المحاولة مرة أخرى');
+            Alert.alert('خطأ', 'فشلت عملية الاستلام، يرجى المحاولة مرة أخرى');
         } finally {
             setSubmitting(false);
         }
     };
 
-    const filledCount = items.filter(i => i.expiryMonth && i.expiryYear).length;
-    const allFilled   = filledCount === items.length && items.length > 0;
+    const handleConfirm = () => {
+        setTouched(true);
+        if (firstInvalid >= 0) {
+            Alert.alert('بيانات ناقصة', `أكمل بيانات "${items[firstInvalid].drugName}" قبل الاستلام.`);
+            return;
+        }
+        const differs = items.filter(i => parseInt(i.receivedQuantity, 10) !== i.quantity);
+        const lines = items.map(i => {
+            const cost = Number(i.unitCost);
+            return `• ${i.drugName}: ${formatNumber(parseInt(i.receivedQuantity, 10))} × ${cost > 0 ? `${formatNumber(cost)} د.ع` : 'مجاني'} — دفعة ${i.batchNumber} — ${i.expiryMonth.padStart(2, '0')}/${i.expiryYear}`;
+        }).join('\n');
+        const jumps = items.filter(priceJump);
+        const warnings = [
+            differs.length ? `${differs.length} صنف بكمية مختلفة عن المطلوب.` : '',
+            jumps.length ? `سعر ${jumps.map(i => `«${i.drugName}»`).join('، ')} يختلف كثيراً عن آخر سعر شراء — تأكد أنه سعر الوحدة (الشريط) وليس الباكيت.` : '',
+        ].filter(Boolean);
+        Alert.alert(
+            'تأكيد الاستلام',
+            `${lines}\n\nإجمالي الفاتورة: ${formatNumber(invoiceTotal)} د.ع${warnings.length ? `\n\nتنبيه: ${warnings.join('\n')}` : ''}\n\nستُضاف هذه الكميات إلى المخزون.`,
+            [
+                { text: 'مراجعة', style: 'cancel' },
+                { text: 'تأكيد الاستلام', onPress: submit },
+            ],
+        );
+    };
 
-    // Custom header — replaces the native (brand-coloured) Stack header.
-    const Header = (
-        <>
-            <Stack.Screen options={{ headerShown: false }} />
-            <View style={{
-                paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 10,
-                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                backgroundColor: C.background,
-            }}>
-                <TouchableOpacity
-                    onPress={() => router.back()}
-                    activeOpacity={0.8}
-                    style={{ width: 40, height: 40, borderRadius: Radius.xs, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' }}
-                >
-                    <Ionicons name="arrow-forward" size={20} color={C.foreground} />
-                </TouchableOpacity>
-                <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800' }}>استلام المواد</Text>
-                <View style={{ width: 40 }} />
-            </View>
-        </>
-    );
+    const header = <ScreenHeader title="استلام المشتريات" fallbackHref="/(tabs)/purchases" />;
 
     if (loading) return (
+        <View style={{ flex: 1, backgroundColor: C.background }}>{header}<StateBlock loading title="جارِ تحميل الطلب…" /></View>
+    );
+    if (failed) return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
-            {Header}
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={C.primary} />
-            </View>
+            {header}
+            <StateBlock icon="cloud-offline-outline" title="تعذّر تحميل الطلب" message="تحقق من الاتصال ثم أعد المحاولة." actionLabel="إعادة المحاولة" onAction={fetchDetails} />
         </View>
     );
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ flex: 1, backgroundColor: C.background }}
-        >
-            {Header}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.background }}>
+            {header}
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 14 }} keyboardShouldPersistTaps="handled">
+                <InfoNote
+                    tone="warning"
+                    title="تحقق من الدفعات"
+                    text="أدخل بيانات الاستلام من المواد الفعلية وفاتورة المورد. الكمية والسعر بوحدة البيع نفسها في المخزون (مثل الشريط) — وليس الباكيت."
+                />
 
-            <ScrollView
-                contentContainerStyle={{ padding: 16 }}
-                keyboardShouldPersistTaps="handled"
-            >
-                {/* Banner */}
-                <View style={{
-                    ...card(C.primary), padding: 13, marginBottom: 16,
-                    flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
-                }}>
-                    <View style={{ width: 32, height: 32, borderRadius: Radius.xs, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="information" size={16} color={C.primary} />
-                    </View>
-                    <Text style={{ flex: 1, color: C.foreground, fontSize: 13, textAlign: 'right', lineHeight: 20 }}>
-                        أدخل تاريخ انتهاء الصلاحية (الشهر / السنة) لكل مادة
-                    </Text>
-                </View>
-
-                {/* Progress bar — only when multiple items */}
-                {items.length > 1 && (
-                    <View style={{
-                        ...card(C.primary), padding: 12, marginBottom: 14,
-                        flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
-                    }}>
-                        <Text style={{ color: C.mutedForeground, fontSize: 12, flexShrink: 0 }}>
-                            {filledCount} / {items.length}
-                        </Text>
-                        <View style={{ flex: 1, height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
-                            <View style={{
-                                width: `${(filledCount / items.length) * 100}%`,
-                                height: '100%', backgroundColor: C.success, borderRadius: 3,
-                            }} />
-                        </View>
-                        <Text style={{ color: allFilled ? C.success : C.mutedForeground, fontSize: 12, fontWeight: '700', flexShrink: 0 }}>
-                            {allFilled ? 'مكتمل ✓' : 'قيد الإدخال'}
-                        </Text>
-                    </View>
-                )}
-
-                {/* Item cards */}
                 {items.map((item, index) => {
-                    const filled = !!(item.expiryMonth && item.expiryYear);
+                    const e = touched ? allErrors[index] : { cost: null, quantity: null, batch: null, month: null, year: null };
+                    const jump = priceJump(item);
+                    const costValue = Number(item.unitCost);
+                    const received = parseInt(item.receivedQuantity, 10);
+                    const differs = !isNaN(received) && received > 0 && received !== item.quantity;
                     return (
-                        <View
-                            key={item.id}
-                            style={{ ...card(filled ? C.success : C.primary), padding: 14, marginBottom: 12 }}
-                        >
-                                {/* Header */}
-                                <View style={{
-                                    flexDirection: 'row-reverse', justifyContent: 'space-between',
-                                    alignItems: 'center', marginBottom: 14,
-                                    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border,
-                                }}>
-                                    <Text style={{
-                                        color: C.foreground, fontWeight: '800', fontSize: 15,
-                                        textAlign: 'right', flex: 1,
-                                    }} numberOfLines={1}>
-                                        {item.drugName}
-                                    </Text>
-                                    <View style={{
-                                        backgroundColor: C.primaryMuted, borderRadius: 5,
-                                        paddingHorizontal: 10, paddingVertical: 5, marginLeft: 8,
-                                    }}>
-                                        <Text style={{ color: C.primary, fontSize: 13, fontWeight: '800' }}>
-                                            {item.quantity} قطعة
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                {/* Expiry label */}
-                                <Text style={{
-                                    color: C.mutedForeground, fontSize: 12, fontWeight: '600',
-                                    textAlign: 'right', marginBottom: 10,
-                                }}>
-                                    تاريخ انتهاء الصلاحية *
-                                </Text>
-
-                                {/* Month / Year inputs */}
-                                <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-end', gap: 8 }}>
-                                    {/* Month */}
-                                    <View style={{ flex: 1, alignItems: 'center' }}>
-                                        <Text style={{
-                                            color: C.mutedForeground, fontSize: 11, marginBottom: 6,
-                                        }}>
-                                            الشهر
-                                        </Text>
-                                        <TextInput
-                                            style={{
-                                                width: '100%',
-                                                backgroundColor: C.input, borderRadius: 5,
-                                                borderWidth: 1.5,
-                                                borderColor: item.expiryMonth
-                                                    ? (parseInt(item.expiryMonth) >= 1 && parseInt(item.expiryMonth) <= 12 ? C.success : C.danger)
-                                                    : C.border,
-                                                paddingVertical: 14, paddingHorizontal: 8,
-                                                color: C.foreground, textAlign: 'center',
-                                                fontSize: 22, fontWeight: '900',
-                                            }}
-                                            placeholder="MM"
-                                            placeholderTextColor={C.mutedForeground}
-                                            keyboardType="numeric"
-                                            maxLength={2}
-                                            value={item.expiryMonth}
-                                            onChangeText={v => updateItem(index, 'expiryMonth', v.replace(/[^0-9]/g, ''))}
-                                        />
-                                    </View>
-
-                                    {/* Separator */}
-                                    <View style={{ paddingBottom: 14 }}>
-                                        <Text style={{ color: C.mutedForeground, fontSize: 26, fontWeight: '200' }}>/</Text>
-                                    </View>
-
-                                    {/* Year */}
-                                    <View style={{ flex: 2, alignItems: 'center' }}>
-                                        <Text style={{
-                                            color: C.mutedForeground, fontSize: 11, marginBottom: 6,
-                                        }}>
-                                            السنة
-                                        </Text>
-                                        <TextInput
-                                            style={{
-                                                width: '100%',
-                                                backgroundColor: C.input, borderRadius: 5,
-                                                borderWidth: 1.5,
-                                                borderColor: item.expiryYear
-                                                    ? (item.expiryYear.length === 4 ? C.success : C.border)
-                                                    : C.border,
-                                                paddingVertical: 14, paddingHorizontal: 8,
-                                                color: C.foreground, textAlign: 'center',
-                                                fontSize: 22, fontWeight: '900',
-                                            }}
-                                            placeholder="YYYY"
-                                            placeholderTextColor={C.mutedForeground}
-                                            keyboardType="numeric"
-                                            maxLength={4}
-                                            value={item.expiryYear}
-                                            onChangeText={v => updateItem(index, 'expiryYear', v.replace(/[^0-9]/g, ''))}
-                                        />
-                                    </View>
-                                </View>
-
-                                {/* Confirmed display */}
-                                {filled && (
-                                    <View style={{
-                                        flexDirection: 'row-reverse', alignItems: 'center', gap: 5, marginTop: 10,
-                                    }}>
-                                        <Ionicons name="checkmark-circle" size={15} color={C.success} />
-                                        <Text style={{ color: C.success, fontSize: 12, fontWeight: '600' }}>
-                                            ينتهي {item.expiryMonth.padStart(2, '0')} / {item.expiryYear}
-                                        </Text>
-                                    </View>
-                                )}
-                        </View>
+                        <Surface key={item.id} style={{ gap: 12 }}>
+                            <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '900', textAlign: 'right' }} numberOfLines={2}>{item.drugName}</Text>
+                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: C.border, paddingBottom: 10 }}>
+                                <Text style={{ color: C.mutedForeground, fontSize: 13.5 }}>الكمية المطلوبة</Text>
+                                <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '900' }}>{formatNumber(item.quantity)}</Text>
+                            </View>
+                            <FormField
+                                label="الكمية المستلمة"
+                                required
+                                keyboardType="number-pad"
+                                value={item.receivedQuantity}
+                                onChangeText={v => updateItem(index, 'receivedQuantity', v.replace(/[^0-9]/g, ''))}
+                                error={e.quantity}
+                                hint={differs ? `تختلف عن الكمية المطلوبة (${formatNumber(item.quantity)})` : undefined}
+                            />
+                            <FormField
+                                label="سعر شراء الوحدة"
+                                required
+                                keyboardType="decimal-pad"
+                                suffix="د.ع"
+                                placeholder="من فاتورة المورد"
+                                value={item.unitCost}
+                                onChangeText={v => updateItem(index, 'unitCost', v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
+                                error={e.cost}
+                                hint={
+                                    jump ? `يختلف كثيراً عن آخر سعر (${formatNumber(item.lastCost ?? 0)} د.ع) — تأكد أنه سعر الشريط`
+                                    : item.unitCost.trim() && costValue === 0 ? 'صفر = بونص مجاني من المورد'
+                                    : item.lastCost ? `آخر سعر شراء: ${formatNumber(item.lastCost)} د.ع`
+                                    : 'لا يوجد سعر شراء سابق لهذا الصنف'
+                                }
+                            />
+                            <FormField
+                                label="رقم الدفعة"
+                                required
+                                value={item.batchNumber}
+                                onChangeText={v => updateItem(index, 'batchNumber', v)}
+                                autoCapitalize="characters"
+                                error={e.batch}
+                            />
+                            <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                                <FormField
+                                    containerStyle={{ flex: 1 }}
+                                    label="شهر الصلاحية"
+                                    required
+                                    placeholder="الشهر"
+                                    keyboardType="number-pad"
+                                    maxLength={2}
+                                    value={item.expiryMonth}
+                                    onChangeText={v => updateItem(index, 'expiryMonth', v.replace(/[^0-9]/g, ''))}
+                                    error={e.month}
+                                />
+                                <FormField
+                                    containerStyle={{ flex: 1 }}
+                                    label="سنة الصلاحية"
+                                    required
+                                    placeholder="السنة"
+                                    keyboardType="number-pad"
+                                    maxLength={4}
+                                    value={item.expiryYear}
+                                    onChangeText={v => updateItem(index, 'expiryYear', v.replace(/[^0-9]/g, ''))}
+                                    onBlur={() => updateItem(index, 'expiryYear', normalizeYear(item.expiryYear))}
+                                    error={e.year}
+                                />
+                            </View>
+                        </Surface>
                     );
                 })}
 
-                <View style={{ height: 80 }} />
+                {/* Review summary */}
+                <Surface style={{ gap: 8 }}>
+                    <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right' }}>ملخص المراجعة</Text>
+                    <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right' }}>يرجى التأكد من صحة البيانات قبل تأكيد الاستلام</Text>
+                    {items.map((item, i) => (
+                        <View key={item.id} style={{ borderTopWidth: 1, borderTopColor: C.border, paddingTop: 8, gap: 4 }}>
+                            <SummaryLine label="اسم المنتج" value={item.drugName} />
+                            <SummaryLine label="الكمية المستلمة" value={item.receivedQuantity ? formatNumber(parseInt(item.receivedQuantity, 10)) : '—'} />
+                            <SummaryLine
+                                label="سعر الوحدة"
+                                value={item.unitCost.trim() ? (Number(item.unitCost) > 0 ? `${formatNumber(Number(item.unitCost))} د.ع` : 'مجاني') : '—'}
+                                warn={!!allErrors[i].cost || priceJump(item)}
+                            />
+                            <SummaryLine label="رقم الدفعة" value={item.batchNumber || '—'} />
+                            <SummaryLine
+                                label="تاريخ الصلاحية"
+                                value={item.expiryMonth && item.expiryYear ? `${item.expiryMonth.padStart(2, '0')}/${item.expiryYear}` : '—'}
+                                warn={!allErrors[i].month && !allErrors[i].year ? false : true}
+                            />
+                        </View>
+                    ))}
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10, marginTop: 2 }}>
+                        <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '800' }}>إجمالي الفاتورة</Text>
+                        <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '900' }}>{formatNumber(invoiceTotal)} <Text style={{ fontSize: 12, color: C.mutedForeground }}>د.ع</Text></Text>
+                    </View>
+                </Surface>
             </ScrollView>
 
-            {/* Footer */}
-            <View style={{
-                padding: 16,
-                paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-                backgroundColor: C.card,
-                borderTopWidth: 1, borderTopColor: C.border,
-            }}>
-                <TouchableOpacity
-                    onPress={handleReceive}
-                    disabled={submitting || !allFilled}
-                    activeOpacity={0.85}
-                    style={{
-                        backgroundColor: allFilled && !submitting ? C.primary : C.border,
-                        borderRadius: Radius.sm, paddingVertical: 15,
-                        flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 8,
-                    }}
-                >
-                    {submitting
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                    }
-                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
-                        {submitting
-                            ? 'جاري المعالجة...'
-                            : !allFilled
-                                ? `أكمل بيانات ${items.length - filledCount} صنف`
-                                : 'تأكيد الاستلام'}
-                    </Text>
-                </TouchableOpacity>
+            <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: insets.bottom + 12, borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.background }}>
+                <AppButton label="مراجعة وتأكيد الاستلام" icon="checkmark-circle-outline" loading={submitting} onPress={handleConfirm} />
             </View>
         </KeyboardAvoidingView>
+    );
+}
+
+function SummaryLine({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+    const C = usePalette();
+    return (
+        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', gap: 10 }}>
+            <Text style={{ color: C.mutedForeground, fontSize: 13.5 }}>{label}</Text>
+            <Text style={{ color: warn ? C.warning : C.foreground, fontSize: 14, fontWeight: '700', flexShrink: 1, textAlign: 'left' }} numberOfLines={1}>{value}</Text>
+        </View>
     );
 }

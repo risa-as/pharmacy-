@@ -1,11 +1,12 @@
-import { Prisma } from '@prisma/client';
 'use server';
+import { Prisma } from '@prisma/client';
 
 import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
+import { receivePurchaseStock } from '@/app/lib/purchase-receipt';
 
 // Smart-reorder tuning (matches /api/smart-order).
 const VELOCITY_WINDOW_DAYS = 30; // sales look-back window
@@ -18,7 +19,7 @@ export async function getLowStockInventory(branchId?: string) {
     const { tenantBranchWhere } = tenantCtx;
 
     // 1. Fetch inventory based on branchId (if provided) or tenantBranchWhere
-    const finalWhere = branchId ? { ...tenantBranchWhere, branchId } : { ...tenantBranchWhere };
+    const finalWhere = { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] };
 
     const inventories = await prisma.inventory.findMany({
         where: finalWhere,
@@ -55,7 +56,7 @@ export async function getLowStockInventory(branchId?: string) {
     }).filter((item: any) => item.currentStock < item.minStock);
 
     // 4. Exclude items already in PENDING purchases
-    const pendingFinalWhere = branchId ? { ...tenantBranchWhere, branchId, status: 'PENDING' } : { ...tenantBranchWhere, status: 'PENDING' };
+    const pendingFinalWhere = { AND: [tenantBranchWhere, { status: 'PENDING' }, ...(branchId ? [{ branchId }] : [])] };
     const pendingPurchases = await prisma.purchase.findMany({
         where: pendingFinalWhere,
         include: { items: true }
@@ -79,7 +80,7 @@ export async function getLowStockInventory(branchId?: string) {
     const recentSaleItems = await prisma.saleItem.findMany({
         where: {
             drugId: { in: neededDrugIds },
-            sale: { createdAt: { gte: velocityStart }, ...(branchId ? { branchId } : {}) },
+            sale: { AND: [tenantBranchWhere, { createdAt: { gte: velocityStart } }, ...(branchId ? [{ branchId }] : [])] },
         },
         select: { drugId: true, quantity: true, sale: { select: { branchId: true } } },
     });
@@ -115,7 +116,21 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
         }
         const { tenantBranchWhere } = tenantCtx;
 
-        // Optionally enforce that branchId matches `tenantBranchWhere` if this is not admin...
+
+        const branch = await prisma.branch.findFirst({ where: { AND: [tenantCtx.branchModelWhere, { id: branchId }] } });
+        if (!branch) return { success: false, error: 'الفرع لا ينتمي إلى نطاقك.' };
+        const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, organizationId: branch.organizationId } });
+        if (!supplier) return { success: false, error: 'المورد لا ينتمي إلى مؤسسة الفرع.' };
+        if (!Array.isArray(items) || !items.length || items.length > 500 ||
+            items.some((i) => !i || typeof i.drugId !== 'string' || !Number.isSafeInteger(i.quantity) || i.quantity <= 0 ||
+                typeof i.cost !== 'number' || !Number.isFinite(i.cost) || i.cost < 0)) {
+            return { success: false, error: 'بنود الشراء غير صالحة.' };
+        }
+        const drugIds = Array.from(new Set(items.map((i) => i.drugId)));
+        const count = await prisma.globalDrug.count({
+            where: { id: { in: drugIds }, OR: [{ organizationId: null, warehouseId: null }, { organizationId: branch.organizationId }] },
+        });
+        if (count !== drugIds.length) return { success: false, error: 'صنف غير متاح لمؤسسة الفرع.' };
 
         const total = items.reduce((sum: any, item: any) => sum + (item.quantity * item.cost), 0);
 
@@ -156,7 +171,8 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
 export async function getSuppliers() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return [];
-    const { tenantWhere } = tenantCtx;
+    if (!tenantCtx.organizationId && tenantCtx.user.role !== 'SUPER_ADMIN') return [];
+    const tenantWhere = tenantCtx.user.role === 'SUPER_ADMIN' ? {} : { organizationId: tenantCtx.organizationId };
 
     return await prisma.supplier.findMany({
         where: tenantWhere,
@@ -171,7 +187,7 @@ export async function getPurchases(branchId?: string) {
 
     let finalWhere = { ...tenantBranchWhere };
     if (branchId) {
-        finalWhere = { ...finalWhere, branchId };
+        finalWhere = { AND: [tenantBranchWhere, { branchId }] };
     }
 
     return await prisma.purchase.findMany({
@@ -190,7 +206,7 @@ export async function getPurchaseDetails(id: string) {
     if (tenantCtx instanceof NextResponse) return null;
 
     const purchase = await prisma.purchase.findFirst({
-        where: { id, branch: { organizationId: tenantCtx.organizationId || undefined } },
+        where: { id, ...tenantCtx.tenantBranchWhere },
         include: {
             supplier: true,
             items: true
@@ -219,9 +235,10 @@ export async function getPurchaseDetails(id: string) {
 export async function deletePurchase(purchaseId: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    if (!tenantCtx.userPermissions.canCreatePurchase) return { success: false, error: 'ليس لديك صلاحية إدارة المشتريات.' };
 
     const purchase = await prisma.purchase.findFirst({
-        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
+        where: { id: purchaseId, ...tenantCtx.tenantBranchWhere },
     });
 
     if (!purchase) return { success: false, error: 'الطلب غير موجود' };
@@ -229,8 +246,15 @@ export async function deletePurchase(purchaseId: string) {
         return { success: false, error: 'لا يمكن حذف الطلبات المكتملة' };
     }
 
-    await prisma.purchaseItem.deleteMany({ where: { purchaseId } });
-    await prisma.purchase.delete({ where: { id: purchaseId } });
+    await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Purchase" WHERE "id" = ${purchaseId} FOR UPDATE`;
+        const current = await tx.purchase.findFirst({ where: { id: purchaseId, ...tenantCtx.tenantBranchWhere } });
+        if (!current || !['PENDING', 'CANCELLED'].includes(current.status)) throw new Error('تغيرت حالة الطلب؛ لا يمكن حذفه.');
+        const linked = await tx.warehouseOrderEvent.findFirst({ where: { type: 'APPROVED', payload: { path: ['purchaseId'], equals: purchaseId } } });
+        if (linked) throw new Error('فاتورة مرتبطة بطلب مذخر؛ استخدم إلغاء الطلب من صفحة المذاخر.');
+        await tx.purchaseItem.deleteMany({ where: { purchaseId } });
+        await tx.purchase.delete({ where: { id: purchaseId } });
+    });
 
     await logAudit({
         userId: tenantCtx.user.id,
@@ -249,18 +273,22 @@ export async function deletePurchase(purchaseId: string) {
 export async function cancelPurchase(purchaseId: string) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    if (!tenantCtx.userPermissions.canCreatePurchase) return { success: false, error: 'ليس لديك صلاحية إدارة المشتريات.' };
 
     const purchase = await prisma.purchase.findFirst({
-        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
+        where: { id: purchaseId, ...tenantCtx.tenantBranchWhere },
     });
 
     if (!purchase) return { success: false, error: 'الطلب غير موجود' };
     if (purchase.status !== 'PENDING') return { success: false, error: 'يمكن إلغاء الطلبات المعلقة فقط' };
 
-    await prisma.purchase.update({
-        where: { id: purchaseId },
+    const linked = await prisma.warehouseOrderEvent.findFirst({ where: { type: 'APPROVED', payload: { path: ['purchaseId'], equals: purchaseId } } });
+    if (linked) return { success: false, error: 'ألغِ طلب المذخر المرتبط أولاً من صفحة طلبات المذاخر.' };
+    const changed = await prisma.purchase.updateMany({
+        where: { id: purchaseId, status: 'PENDING', ...tenantCtx.tenantBranchWhere },
         data: { status: 'CANCELLED' },
     });
+    if (changed.count !== 1) return { success: false, error: 'تغيرت حالة الطلب أثناء المعالجة.' };
 
     await logAudit({
         userId: tenantCtx.user.id,
@@ -279,91 +307,11 @@ export async function cancelPurchase(purchaseId: string) {
 
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) throw new Error("غير مصرح");
-    // 1. Get Purchase and verify ownership
-    const purchase = await prisma.purchase.findFirst({
-        where: { id: purchaseId, branch: { organizationId: tenantCtx.organizationId || undefined } },
-        include: { items: true, supplier: true }
-    });
-
-    if (!purchase) throw new Error("لم يتم العثور على طلب الشراء");
-    if (purchase.status !== 'PENDING') throw new Error("تمت معالجة هذا الطلب مسبقاً");
-
-    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        // 2. Process each item
-        for (const receivedItem of items) {
-            const purchaseItem = purchase.items.find((i: any) => i.id === receivedItem.itemId);
-            if (!purchaseItem) continue;
-
-            // Find Inventory for this branch & drug
-            const inventory = await tx.inventory.findFirst({
-                where: {
-                    branchId: purchase.branchId,
-                    drugId: purchaseItem.drugId
-                }
-            });
-
-            if (!inventory) {
-                // Should not happen if Smart Order created it, but maybe manual order for new drug?
-                // If not found, create Inventory?
-                // Let's assume it exists for now or throw.
-                throw new Error(`لم يتم العثور على المخزون للدواء ${purchaseItem.drugId}`);
-            }
-
-            // Create Batch
-            await tx.batch.create({
-                data: {
-                    inventoryId: inventory.id,
-                    quantity: receivedItem.quantity,
-                    initialQuantity: receivedItem.quantity,
-                    expiryDate: receivedItem.expiryDate,
-                    batchNumber: receivedItem.batchNumber,
-                    costPrice: purchaseItem.cost
-                }
-            });
-
-            // Update Inventory Cost (Last Cost Strategy)
-            await tx.inventory.update({
-                where: { id: inventory.id },
-                data: {
-                    cost: purchaseItem.cost,
-                    updatedAt: new Date()
-                }
-            });
-        }
-
-        // 3. Handle payment tracking
-        const paidAmount = isPaid ? purchase.total : 0;
-
-        if (isPaid) {
-            await tx.expense.create({
-                data: {
-                    branchId: purchase.branchId,
-                    amount: purchase.total,
-                    category: 'مشتريات بضاعة',
-                    description: `فاتورة شراء #${purchase.invoiceNumber || purchase.id.slice(0, 8)} من: ${purchase.supplier.name}`,
-                    date: new Date()
-                }
-            });
-        }
-
-        // 4. Update supplier balance (unpaid portion)
-        const unpaidAmount = purchase.total - paidAmount;
-        if (unpaidAmount > 0) {
-            await tx.supplier.update({
-                where: { id: purchase.supplierId },
-                data: { balance: { increment: unpaidAmount } }
-            });
-        }
-
-        // 5. Update Purchase Status
-        return await tx.purchase.update({
-            where: { id: purchaseId },
-            data: {
-                status: 'COMPLETED',
-                paidAmount,
-                updatedAt: new Date()
-            }
-        });
-    });
+    if (tenantCtx instanceof NextResponse) throw new Error('غير مصرح');
+    if (!tenantCtx.userPermissions.canCreatePurchase) throw new Error('ليس لديك صلاحية استلام المشتريات.');
+    if (typeof isPaid !== 'boolean') throw new Error('حالة الدفع غير صالحة.');
+    const result = await receivePurchaseStock(prisma, purchaseId, tenantCtx.tenantBranchWhere, items, isPaid, tenantCtx.user);
+    revalidatePath('/dashboard/purchases');
+    revalidatePath(`/dashboard/purchases/${purchaseId}`);
+    return result;
 }

@@ -36,11 +36,12 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   },
 };
 
-export default async function PurchasesPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function PurchasesPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await auth();
   const branchId = session?.user?.branchId;
   const isAdmin = session?.user?.role === "ADMIN";

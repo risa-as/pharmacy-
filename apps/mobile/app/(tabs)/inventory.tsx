@@ -5,20 +5,23 @@ import {
     InteractionManager, StyleSheet, Animated, PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { apiService } from '../../services/api';
 import { dbService } from '../../services/db';
 import { syncService } from '../../services/sync';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { managerPalette, Radius } from '../../constants/colors';
-import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ScreenHeader, HeaderIconButton } from '../../components/ui/ScreenHeader';
+import { StatusBadge, SegmentedTabs, FormField, AppButton } from '../../components/ui/Kit';
+import { formatNumber, CURRENCY } from '../../utils/format';
+import { consumeManualEntry } from '../../utils/manual-entry';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
 
-type TabKey = 'all' | 'low-stock' | 'expiring' | 'near-expiry';
+type TabKey = 'all' | 'low-stock' | 'out' | 'near-expiry' | 'expired';
 type SortKey = 'name' | 'quantity' | 'expiry';
 
 /**
@@ -34,6 +37,40 @@ function formatExpiry(raw: string): string {
     return out;
 }
 
+// Normalizes a typed expiry date and flags suspicious values. Employees
+// frequently type "27" for the year instead of "2027" — mirrors the web/desktop
+// checkExpiry guard.
+function checkExpiry(raw: string): { value: string; warning: string | null } {
+    const value = (raw ?? '').trim();
+    if (!value) return { value: '', warning: null };
+    const m = value.match(/^(\d{1,4})-(\d{2})-(\d{2})$/);
+    if (!m) {
+        return { value, warning: 'التاريخ غير مكتمل أو غير صحيح — المطلوب: سنة-شهر-يوم (مثال: 2027-05-01).' };
+    }
+    let year = parseInt(m[1], 10);
+    if (year >= 1 && year < 100) year = 2000 + year;
+    else if (year >= 100 && year < 1000) year = 2000 + (year % 100);
+    const fixed = `${year}-${m[2]}-${m[3]}`;
+    const parsed = new Date(`${fixed}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let warning: string | null = null;
+    if (isNaN(parsed.getTime())) {
+        warning = 'التاريخ غير صحيح — تأكد من الشهر واليوم.';
+    } else if (parsed < today) {
+        warning = `تاريخ الانتهاء (${fixed}) منتهي بالفعل! تأكد من السنة — هل تقصد ${today.getFullYear() + 1} بدلاً من ${year}؟`;
+    } else if (year > today.getFullYear() + 15) {
+        warning = `تاريخ الانتهاء (${fixed}) بعيد جداً (أكثر من 15 سنة) — تأكد من صحة السنة.`;
+    }
+    return { value: fixed, warning };
+}
+
+/**
+ * فارق التكلفة فوق سعر البيع الذي يُعتبر خطأ إدخال شبه مؤكد (دينار).
+ * تجاوزه يعني غالباً أن سعر الباكيت أُدخل دون قسمته على عدد الأشرطة.
+ */
+const COST_OVER_PRICE_GAP = 500;
+
 interface InventoryItem {
     id: string;
     drugId?: string;
@@ -44,14 +81,19 @@ interface InventoryItem {
     reorderLevel: number;
     expiryDate?: string;
     isQuickSale?: boolean;
+    scientificName?: string;
 }
 
 const TABS: { key: TabKey; label: string }[] = [
     { key: 'all',          label: 'الكل' },
     { key: 'low-stock',    label: 'نواقص' },
-    { key: 'expiring',     label: 'نفاد' },
+    { key: 'out',          label: 'نافد' },
     { key: 'near-expiry',  label: 'قارب الانتهاء' },
+    { key: 'expired',      label: 'منتهية' },
 ];
+
+const TAB_KEYS = TABS.map(t => t.key);
+const isTabKey = (v: unknown): v is TabKey => typeof v === 'string' && (TAB_KEYS as string[]).includes(v);
 
 const SORTS: { key: SortKey; label: string; icon: any }[] = [
     { key: 'name',     label: 'الاسم',     icon: 'text-outline' },
@@ -65,34 +107,15 @@ function getDaysToExpiry(expiryDate?: string): number | null {
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
-/** Compact Arabic number abbreviation for large money figures. */
-function abbrNum(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}م`;
-    if (n >= 1_000)     return `${Math.round(n / 1_000)} ألف`;
-    return Math.round(n).toLocaleString('en-US');
-}
-
 export default function InventoryScreen() {
     const { isDarkMode } = useTheme();
     const { isAdmin, branchId: authBranchId } = useAuth();
     const { triggerSync } = useSyncStatus();
     const C = managerPalette(isDarkMode);
 
-    // Outlined card matching the manager identity — light surface, soft tinted border.
-    const card = (accent: string) => ({
-        backgroundColor: C.card,
-        borderRadius: Radius.sm,
-        borderWidth: 1.5,
-        borderColor: `${accent}33`,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 } as const,
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        elevation: 2,
-    });
-
     const [items, setItems]               = useState<InventoryItem[]>([]);
     const [search, setSearch]             = useState('');
+    const searchRef                       = useRef<TextInput>(null);
     const [activeTab, setActiveTab]       = useState<TabKey>('all');
     const [sortKey, setSortKey]           = useState<SortKey>('name');
     const [sortAsc, setSortAsc]           = useState(true);
@@ -119,6 +142,8 @@ export default function InventoryScreen() {
     const [isQuickSale, setIsQuickSale]           = useState(false);
     const [quickSaleState, setQuickSaleState]     = useState<Record<string, boolean>>({});
     const [togglingQuickSale, setTogglingQuickSale] = useState<string | null>(null);
+    const [showAddChooser, setShowAddChooser]     = useState(false);
+    const [manualBarcode, setManualBarcode]       = useState('');
 
     // Supplier picker state (shared across all modals)
     const [suppliers, setSuppliers]               = useState<Array<{ id: string; name: string }>>([]);
@@ -198,6 +223,17 @@ export default function InventoryScreen() {
 
     useEffect(() => { fetchInventory(); }, [fetchInventory]);
 
+    // "إدخال يدوي" in the scanner hands the search field back to this screen;
+    // focus only sticks once the screen transition has finished.
+    useFocusEffect(useCallback(() => {
+        let task: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+        let active = true;
+        consumeManualEntry('inventory').then(wanted => {
+            if (wanted && active) task = InteractionManager.runAfterInteractions(() => searchRef.current?.focus());
+        });
+        return () => { active = false; task?.cancel(); };
+    }, []));
+
     const handleQuickSaleToggle = async (drugId: string) => {
         if (togglingQuickSale === drugId) return;
         setTogglingQuickSale(drugId);
@@ -249,6 +285,15 @@ export default function InventoryScreen() {
         }
     }, [params.scannedBarcode]);
 
+    useEffect(() => {
+        if (isTabKey(params.tab)) setActiveTab(params.tab);
+    }, [params.tab]);
+
+    useEffect(() => {
+        const initialSearch = typeof params.search === 'string' ? params.search : '';
+        if (initialSearch && initialSearch !== search) setSearch(initialSearch);
+    }, [params.search]);
+
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         triggerSync('inventory');
@@ -256,10 +301,24 @@ export default function InventoryScreen() {
         fetchInventory();
     }, [fetchInventory, triggerSync]);
 
-    // Shared save guard: blocks a zero quantity, then warns (soft) when the
-    // packet price is under 125 IQD, then warns when strips-per-packet looks
-    // like the TOTAL strip count, before running the actual save callback.
-    const guardAndSave = (proceed: () => void) => {
+    // Runs soft-warning confirms one after another; any "إلغاء" aborts the save.
+    const runConfirmChain = (checks: Array<{ title: string; message: string }>, done: () => void) => {
+        if (checks.length === 0) { done(); return; }
+        const [first, ...rest] = checks;
+        Alert.alert(first.title, first.message, [
+            { text: 'إلغاء وتصحيح', style: 'cancel' },
+            { text: 'متابعة على أي حال', onPress: () => runConfirmChain(rest, done) },
+        ]);
+    };
+
+    // Shared save guard: blocks a zero quantity, then chains soft confirms for
+    // suspicious entries (cheap packet, strips-count typo, strip/packet price
+    // confusion, wrong expiry year) before running the actual save callback.
+    // `proceed` receives the year-corrected expiry date ("27" → "2027").
+    const guardAndSave = (
+        proceed: (fixedExpiry: string) => void,
+        opts?: { sellPrice?: number | null; currentPrice?: number | null },
+    ) => {
         const qty = parseInt(formData.quantity) || 0;
         if (qty <= 0) {
             Alert.alert('لا يمكن الحفظ', 'الكمية يجب أن تكون أكبر من صفر.');
@@ -267,34 +326,71 @@ export default function InventoryScreen() {
         }
         const pkt = parseFloat(packetPrice) || 0;
         const strips = Math.max(1, parseInt(stripsPerPacket) || 1);
-        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
-        const confirmStrips = () => {
-            if (pkt > 0 && (strips > 20 || (qty > 10 && strips >= qty))) {
-                Alert.alert(
-                    'تنبيه: عدد الأشرطة في الباكيت',
-                    `عدد الأشرطة في الباكيت (${strips}) يبدو غير صحيح — هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
-                    `سعر التكلفة للشريط سيُحسب: ${pkt} ÷ ${strips} = ${(pkt / strips).toLocaleString('en', { maximumFractionDigits: 2 })} د.ع. هل أنت متأكد من المتابعة؟`,
-                    [
-                        { text: 'إلغاء', style: 'cancel' },
-                        { text: 'متابعة', onPress: () => proceed() },
-                    ],
-                );
-                return;
-            }
-            proceed();
-        };
+        const stripCost = pkt > 0 ? pkt / strips : 0;
+        const checks: Array<{ title: string; message: string }> = [];
+
+        // سعر الباكيت أقل من 125 دينار = غالباً خطأ إدخال
         if (pkt < 125) {
-            Alert.alert(
-                'تحذير: سعر الباكيت منخفض',
-                `سعر الباكيت (${pkt.toLocaleString('en-US')} د.ع) أقل من 125 دينار. هل تريد المتابعة؟`,
-                [
-                    { text: 'إلغاء', style: 'cancel' },
-                    { text: 'متابعة', onPress: () => confirmStrips() },
-                ],
-            );
-            return;
+            checks.push({
+                title: 'تحذير: سعر الباكيت منخفض',
+                message: `سعر الباكيت (${pkt.toLocaleString('en-US')} د.ع) أقل من 125 دينار — تأكد أنه سعر الباكيت الصحيح.`,
+            });
         }
-        confirmStrips();
+        // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+        if (pkt > 0 && (strips > 20 || (qty > 10 && strips >= qty))) {
+            checks.push({
+                title: 'تنبيه: عدد الأشرطة في الباكيت',
+                message:
+                    `عدد الأشرطة في الباكيت (${strips}) يبدو غير صحيح — هذا الحقل يعني عدد الأشرطة داخل الباكيت الواحد، وليس إجمالي الأشرطة المستلمة (الكمية المدخلة: ${qty}).\n` +
+                    `سعر التكلفة للشريط سيُحسب: ${pkt} ÷ ${strips} = ${stripCost.toLocaleString('en', { maximumFractionDigits: 2 })} د.ع.`,
+            });
+        }
+        // البيع أقل من أو يساوي الشراء = غالباً خطأ إدخال
+        const sell = opts?.sellPrice ?? null;
+        if (sell != null && sell > 0 && stripCost > 0 && sell <= stripCost) {
+            checks.push({
+                title: 'سعر البيع أقل من التكلفة',
+                message: `سعر بيع الشريط (${sell.toLocaleString('en', { maximumFractionDigits: 2 })} د.ع) أقل من أو يساوي تكلفته (${stripCost.toLocaleString('en', { maximumFractionDigits: 2 })} د.ع).`,
+            });
+        }
+        // البيع أكثر من ضعف الشراء = ربما أُدخل سعر الباكيت بدلاً من الشريط
+        if (sell != null && stripCost > 0 && sell > 2 * stripCost) {
+            checks.push({
+                title: 'سعر البيع مرتفع جداً',
+                message:
+                    `سعر بيع الشريط (${sell.toLocaleString('en', { maximumFractionDigits: 2 })} د.ع) أكثر من ضعف تكلفته (${stripCost.toLocaleString('en', { maximumFractionDigits: 2 })} د.ع).\n` +
+                    `تأكد أنك أدخلت سعر الشريط وليس سعر الباكيت.`,
+            });
+        }
+        // التكلفة للشريط أعلى من سعر البيع الحالي = غالباً أُدخل سعر الباكيت بدون قسمة
+        const cur = opts?.currentPrice ?? null;
+        if (cur != null && cur > 0 && stripCost > 0 && stripCost >= cur) {
+            const gap = stripCost - cur;
+            const bigGap = gap >= COST_OVER_PRICE_GAP;
+            const fmtCost = stripCost.toLocaleString('en', { maximumFractionDigits: 2 });
+            const fmtPrice = cur.toLocaleString('en');
+            const fmtGap = gap.toLocaleString('en', { maximumFractionDigits: 2 });
+            checks.push({
+                title: bigGap
+                    ? `التكلفة أعلى من سعر البيع بأكثر من ${COST_OVER_PRICE_GAP} دينار`
+                    : 'التكلفة أعلى من سعر البيع',
+                message:
+                    (bigGap
+                        ? `سعر التكلفة للشريط (${fmtCost} د.ع) أعلى من سعر البيع الحالي للشريط (${fmtPrice} د.ع) بفارق ${fmtGap} د.ع.\n`
+                        : `سعر التكلفة للشريط (${fmtCost} د.ع) أعلى من أو يساوي سعر البيع الحالي للشريط (${fmtPrice} د.ع).\n`) +
+                    `غالباً أُدخل سعر الباكيت دون تحديد عدد الأشرطة الصحيح.`,
+            });
+        }
+        // تصحيح سنة الصلاحية (27 → 2027) والتحذير من التواريخ المنتهية/البعيدة
+        const expiryFix = checkExpiry(formData.expiryDate);
+        if (expiryFix.value && expiryFix.value !== formData.expiryDate) {
+            setFormData(f => ({ ...f, expiryDate: expiryFix.value }));
+        }
+        if (expiryFix.warning) {
+            checks.push({ title: 'تحقق من تاريخ الانتهاء', message: expiryFix.warning });
+        }
+
+        runConfirmChain(checks, () => proceed(expiryFix.value || formData.expiryDate));
     };
 
     // Modal handlers (preserved)
@@ -302,14 +398,14 @@ export default function InventoryScreen() {
         if (!formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء كافة الحقول الأساسية'); return;
         }
-        guardAndSave(async () => {
+        guardAndSave(async (fixedExpiry) => {
             setModalLoading(true);
             try {
                 await apiService.addBatch({
                     inventoryId: showBatchModal.id,
                     quantity: parseInt(formData.quantity) || 0,
                     costPrice: computedStripCost,
-                    expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                    expiryDate: fixedExpiry + 'T00:00:00.000Z',
                     supplierId: selectedSupplierId || null,
                 });
                 setShowBatchModal(null);
@@ -318,14 +414,14 @@ export default function InventoryScreen() {
                 fetchInventory();
             } catch { Alert.alert('خطأ', 'فشل إضافة الجرعة'); }
             finally { setModalLoading(false); }
-        });
+        }, { currentPrice: Number(showBatchModal?.price) || null });
     };
 
     const handleAddToBranch = () => {
         if (!formData.price || !formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء كافة الحقول الأساسية'); return;
         }
-        guardAndSave(async () => {
+        guardAndSave(async (fixedExpiry) => {
             setModalLoading(true);
             try {
                 await apiService.addToBranch({
@@ -335,7 +431,7 @@ export default function InventoryScreen() {
                     minStock: parseInt(formData.minStock) || 5,
                     maxStock: parseInt(formData.maxStock) || 100,
                     quantity: parseInt(formData.quantity) || 0,
-                    expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                    expiryDate: fixedExpiry + 'T00:00:00.000Z',
                     supplierId: selectedSupplierId || null,
                 });
                 setShowBranchModal(null);
@@ -344,14 +440,14 @@ export default function InventoryScreen() {
                 fetchInventory();
             } catch { Alert.alert('خطأ', 'فشل إضافة الدواء للفرع'); }
             finally { setModalLoading(false); }
-        });
+        }, { sellPrice: parseFloat(formData.price) || 0 });
     };
 
     const handleCreateDrug = () => {
         if (!formData.tradeName || !formData.price || !formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء الحقول الأساسية'); return;
         }
-        guardAndSave(async () => {
+        guardAndSave(async (fixedExpiry) => {
             setModalLoading(true);
             try {
                 await apiService.createQuickDrug({
@@ -363,7 +459,7 @@ export default function InventoryScreen() {
                     minStock: parseInt(formData.minStock) || 5, maxStock: parseInt(formData.maxStock) || 100,
                     batchNumber: formData.batchNumber || '',
                     quantity: parseInt(formData.quantity) || 0,
-                    expiryDate: formData.expiryDate + 'T00:00:00.000Z',
+                    expiryDate: fixedExpiry + 'T00:00:00.000Z',
                     supplierId: selectedSupplierId || null,
                     isQuickSale,
                 });
@@ -374,7 +470,7 @@ export default function InventoryScreen() {
                 fetchInventory();
             } catch { Alert.alert('خطأ', 'فشل تسجيل الدواء الجديد'); }
             finally { setModalLoading(false); }
-        });
+        }, { sellPrice: parseFloat(formData.price) || 0 });
     };
 
     // Total inventory value at sale price (Σ quantity × price).
@@ -384,8 +480,9 @@ export default function InventoryScreen() {
     const counts = useMemo(() => ({
         all:            items.length,
         'low-stock':    items.filter(i => i.quantity > 0 && i.quantity <= i.reorderLevel).length,
-        expiring:       items.filter(i => i.quantity === 0).length,
+        out:            items.filter(i => i.quantity <= 0).length,
         'near-expiry':  items.filter(i => { const d = getDaysToExpiry(i.expiryDate); return d !== null && d >= 0 && d < 120; }).length,
+        expired:        items.filter(i => { const d = getDaysToExpiry(i.expiryDate); return d !== null && d < 0; }).length,
     }), [items]);
 
     // ── Collator instance — created once, 10-100× faster than localeCompare('ar') ──
@@ -402,8 +499,9 @@ export default function InventoryScreen() {
         return items.filter(i => {
             if (q && !i.drugName.toLowerCase().includes(q) && !(i.barcode?.includes(search) ?? false)) return false;
             if (activeTab === 'low-stock')   return i.quantity > 0 && i.quantity <= i.reorderLevel;
-            if (activeTab === 'expiring')    return i.quantity === 0;
+            if (activeTab === 'out')         return i.quantity <= 0;
             if (activeTab === 'near-expiry') { const d = expiryCache.get(i.id)!; return d !== 9999 && d >= 0 && d < 120; }
+            if (activeTab === 'expired')     { const d = expiryCache.get(i.id)!; return d !== 9999 && d < 0; }
             return true;
         });
     }, [items, search, activeTab, expiryCache]);
@@ -425,18 +523,15 @@ export default function InventoryScreen() {
         return () => task.cancel();
     }, [filtered, sortKey, sortAsc, collator, expiryCache]);
 
-    // ── Item card ──────────────────────────────────────────────────────────────
+    // ── Item card (shared by both shells — navigation-map §7) ──────────────────
     const renderItem = ({ item }: { item: InventoryItem }) => {
         const days        = getDaysToExpiry(item.expiryDate);
         const isOut       = item.quantity === 0;
         const isLow       = !isOut && item.quantity <= item.reorderLevel;
+        // Status colours: red = out, orange = low, green = healthy.
         const stockColor  = isOut ? C.danger : isLow ? C.warning : C.success;
-        const stockBg     = isOut ? C.dangerBg : isLow ? C.warningBg : C.successBg;
+        const stockTone: 'danger' | 'warning' | 'success' = isOut ? 'danger' : isLow ? 'warning' : 'success';
         const stockLabel  = isOut ? 'نفاد' : isLow ? 'منخفض' : 'جيد';
-        const stockVariant: 'danger' | 'warning' | 'success' = isOut ? 'danger' : isLow ? 'warning' : 'success';
-
-        const expiryUrgent   = days !== null && days <= 7;
-        const expiryWarning  = days !== null && days > 7 && days <= 30;
 
         const maxVisual   = Math.max(item.reorderLevel * 3, item.quantity, 1);
         const progress    = Math.min(item.quantity / maxVisual, 1);
@@ -445,119 +540,93 @@ export default function InventoryScreen() {
         const isQuick     = item.drugId ? (quickSaleState[item.drugId] ?? false) : false;
 
         return (
-            <View style={{ ...card(stockColor), marginBottom: 10, padding: 13 }}>
-                {/* ── Row 1: name + restock + stock chip ── */}
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <View style={{ flex: 1, paddingLeft: 10 }}>
-                        <Text
-                            style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }}
-                            numberOfLines={1}
-                        >
+            <View style={{ backgroundColor: C.card, borderRadius: Radius.card, borderWidth: 1, borderColor: C.border, marginBottom: 12, padding: 16, gap: 12 }}>
+                {/* Name / scientific name / barcode + status */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 16.5, textAlign: 'right' }} numberOfLines={2}>
                             {item.drugName}
                         </Text>
-                        {item.barcode && (
-                            <Text style={{ color: C.mutedForeground, fontSize: 11, textAlign: 'right', marginTop: 2 }}>
-                                {item.barcode}
-                            </Text>
-                        )}
+                        {item.scientificName ? (
+                            <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>{item.scientificName}</Text>
+                        ) : null}
+                        {item.barcode ? (
+                            <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right', marginTop: 2, writingDirection: 'ltr' }}>{item.barcode}</Text>
+                        ) : null}
                     </View>
-                    {/* Stock chip */}
-                    <View style={{ backgroundColor: stockBg, borderRadius: Radius.xs, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center' }}>
-                        <Text style={{ color: stockColor, fontSize: 12, fontWeight: '800' }}>
-                            {item.quantity}
-                        </Text>
-                        <Text style={{ color: stockColor, fontSize: 10, fontWeight: '600', opacity: 0.85 }}>
-                            {stockLabel}
-                        </Text>
+                    <StatusBadge label={stockLabel} tone={stockTone} />
+                </View>
+
+                {/* Stock bar + quantity vs reorder level */}
+                <View style={{ gap: 6 }}>
+                    <View style={{ height: 6, backgroundColor: C.input, borderRadius: 3, overflow: 'hidden', flexDirection: 'row-reverse' }}>
+                        <View style={{ width: `${Math.round(progress * 100)}%`, height: '100%', backgroundColor: stockColor, borderRadius: 3 }} />
+                    </View>
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
+                        <Text style={{ color: stockColor, fontSize: 14, fontWeight: '800' }}>{formatNumber(item.quantity)} وحدة</Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13 }}>حد الطلب: {formatNumber(item.reorderLevel)}</Text>
                     </View>
                 </View>
 
-                {/* ── Progress bar ── */}
-                <View style={{ marginBottom: 10 }}>
-                    <View style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
-                        <View style={{
-                            width: `${Math.round(progress * 100)}%`,
-                            height: '100%',
-                            backgroundColor: stockColor,
-                            borderRadius: 3,
-                        }} />
-                    </View>
-                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 4 }}>
-                        <Text style={{ color: stockColor, fontSize: 11, fontWeight: '700' }}>
-                            {item.quantity} وحدة
+                {/* Price + expiry + quick-sale action (matches the inventory design) */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 12 }}>
+                    <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ color: C.primary, fontWeight: '900', fontSize: 19 }}>
+                            {formatNumber(item.price)} <Text style={{ fontSize: 12, fontWeight: '600', color: C.mutedForeground }}>{CURRENCY}</Text>
                         </Text>
-                        <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-                            حد الطلب: {item.reorderLevel}
-                        </Text>
-                    </View>
-                </View>
-
-                {/* ── Bottom row: price + expiry + quick-sale ── */}
-                <View style={{
-                    flexDirection: 'row-reverse', justifyContent: 'space-between',
-                    alignItems: 'center', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 9,
-                }}>
-                    <Text style={{ color: C.primary, fontWeight: '800', fontSize: 14 }}>
-                        {item.price.toLocaleString('en-US')} <Text style={{ fontSize: 11, fontWeight: '600' }}>د.ع</Text>
-                    </Text>
-
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                        {/* Expiry badge — only if ≤ 30 days */}
                         {days !== null && days <= 30 && (
-                            <View style={{
-                                backgroundColor: expiryUrgent ? C.dangerBg : C.warningBg,
-                                borderRadius: Radius.xs, paddingHorizontal: 7, paddingVertical: 3,
-                                flexDirection: 'row-reverse', alignItems: 'center', gap: 3,
-                            }}>
-                                <Ionicons
-                                    name="time-outline"
-                                    size={10}
-                                    color={expiryUrgent ? C.danger : C.warning}
-                                />
-                                <Text style={{
-                                    color: expiryUrgent ? C.danger : C.warning,
-                                    fontSize: 11, fontWeight: '700',
-                                }}>
-                                    {days}ي
-                                </Text>
-                            </View>
+                            <StatusBadge
+                                label={days < 0 ? 'منتهي' : `${days} يوم`}
+                                tone={days <= 7 ? 'danger' : 'warning'}
+                                icon="time-outline"
+                            />
                         )}
+                    </View>
 
-                        {/* Quick-sale toggle */}
-                        {item.drugId && (
+                    {item.drugId && (
+                        <>
+                            <View style={{ width: 1, height: 30, backgroundColor: C.border, marginHorizontal: 12 }} />
                             <TouchableOpacity
                                 onPress={() => handleQuickSaleToggle(item.drugId!)}
                                 disabled={isToggling}
-                                style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, opacity: isToggling ? 0.5 : 1 }}
                                 activeOpacity={0.75}
+                                accessibilityRole="switch"
+                                accessibilityState={{ checked: isQuick, busy: isToggling }}
+                                accessibilityLabel="البيع السريع"
+                                style={{
+                                    // On = solid blue, off = plain outline: the two states must not look alike.
+                                    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                    minWidth: 124, opacity: isToggling ? 0.6 : 1,
+                                    borderWidth: 1, borderColor: isQuick ? C.primary : C.border,
+                                    borderRadius: Radius.control,
+                                    paddingHorizontal: 11, paddingVertical: 8,
+                                    backgroundColor: isQuick ? C.primary : C.card,
+                                }}
                             >
-                                <Ionicons
-                                    name="flash"
-                                    size={12}
-                                    color={isQuick ? '#f59e0b' : C.mutedForeground}
-                                />
-                                <View style={{
-                                    width: 34, height: 19, borderRadius: 10,
-                                    backgroundColor: isQuick ? '#f59e0b' : C.border,
-                                    justifyContent: 'center', paddingHorizontal: 2,
-                                }}>
-                                    <View style={{
-                                        width: 15, height: 15, borderRadius: 8, backgroundColor: '#fff',
-                                        alignSelf: isQuick ? 'flex-end' : 'flex-start',
-                                        elevation: 2,
-                                        shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2,
-                                    }} />
-                                </View>
+                                {isToggling ? (
+                                    <ActivityIndicator size="small" color={isQuick ? '#FFFFFF' : C.mutedForeground} />
+                                ) : (
+                                    <>
+                                        <Text style={{ color: isQuick ? '#FFFFFF' : C.mutedForeground, fontSize: 13, fontWeight: isQuick ? '800' : '600' }}>
+                                            {isQuick ? 'في البيع السريع' : 'بيع سريع'}
+                                        </Text>
+                                        <Ionicons
+                                            name={isQuick ? 'checkmark-circle' : 'cart-outline'}
+                                            size={17}
+                                            color={isQuick ? '#FFFFFF' : C.mutedForeground}
+                                        />
+                                    </>
+                                )}
                             </TouchableOpacity>
-                        )}
-                    </View>
+                        </>
+                    )}
                 </View>
             </View>
         );
     };
 
     const inputStyle = {
-        backgroundColor: C.input, borderRadius: 5, borderWidth: 1, borderColor: C.border,
+        backgroundColor: C.input, borderRadius: Radius.control, borderWidth: 1, borderColor: C.border,
         paddingHorizontal: 16, height: 50, marginBottom: 12, fontSize: 16,
         textAlign: 'right' as const, color: C.foreground,
     };
@@ -571,6 +640,13 @@ export default function InventoryScreen() {
     const _pkt = parseFloat(packetPrice) || 0;
     const _strips = Math.max(1, parseInt(stripsPerPacket) || 1);
     const computedStripCost = _pkt > 0 ? _pkt / _strips : 0;
+    // سعر البيع الحالي للشريط — متاح فقط في نموذج «إضافة دفعة»؛ النماذج الأخرى
+    // فيها حقل سعر بيع خاص بها فتغطّيها فحوصات البيع/التكلفة.
+    const _batchSellPrice = showBatchModal ? Number(showBatchModal.price) || 0 : 0;
+    const _costOverPrice =
+        _batchSellPrice > 0 && computedStripCost >= _batchSellPrice
+            ? computedStripCost - _batchSellPrice
+            : null;
 
     // Inline hint under the quantity field: turns red and blocks the save when 0.
     const renderQtyHint = () => {
@@ -604,7 +680,7 @@ export default function InventoryScreen() {
             </View>
             <View style={{
                 flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                backgroundColor: C.primaryMuted, borderRadius: 5, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 12,
+                backgroundColor: C.primaryMuted, borderRadius: Radius.control, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 12,
             }}>
                 <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: '600' }}>سعر التكلفة للشريط</Text>
                 <Text style={{ color: C.primary, fontSize: 14, fontWeight: '800' }}>
@@ -614,7 +690,7 @@ export default function InventoryScreen() {
             {_pkt > 0 && _pkt < 125 ? (
                 <View style={{
                     flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
-                    backgroundColor: C.warningBg, borderRadius: 5, paddingHorizontal: 12, paddingVertical: 9, marginTop: -4, marginBottom: 12,
+                    backgroundColor: C.warningBg, borderRadius: Radius.control, paddingHorizontal: 12, paddingVertical: 9, marginTop: -4, marginBottom: 12,
                 }}>
                     <Ionicons name="warning-outline" size={14} color={C.warning} />
                     <Text style={{ color: C.warning, fontSize: 11, fontWeight: '700', flex: 1, textAlign: 'right' }}>
@@ -625,11 +701,24 @@ export default function InventoryScreen() {
             {_strips > 20 ? (
                 <View style={{
                     flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
-                    backgroundColor: C.warningBg, borderRadius: 5, paddingHorizontal: 12, paddingVertical: 9, marginTop: -4, marginBottom: 12,
+                    backgroundColor: C.warningBg, borderRadius: Radius.control, paddingHorizontal: 12, paddingVertical: 9, marginTop: -4, marginBottom: 12,
                 }}>
                     <Ionicons name="warning-outline" size={14} color={C.warning} />
                     <Text style={{ color: C.warning, fontSize: 11, fontWeight: '700', flex: 1, textAlign: 'right' }}>
                         هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ
+                    </Text>
+                </View>
+            ) : null}
+            {_costOverPrice != null ? (
+                <View style={{
+                    flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+                    backgroundColor: C.dangerBg, borderRadius: Radius.control, paddingHorizontal: 12, paddingVertical: 9, marginTop: -4, marginBottom: 12,
+                }}>
+                    <Ionicons name="warning-outline" size={14} color={C.danger} />
+                    <Text style={{ color: C.danger, fontSize: 11, fontWeight: '700', flex: 1, textAlign: 'right' }}>
+                        {_costOverPrice >= COST_OVER_PRICE_GAP
+                            ? `التكلفة أعلى من سعر البيع (${_batchSellPrice.toLocaleString('en')} د.ع) بفارق ${_costOverPrice.toLocaleString('en', { maximumFractionDigits: 2 })} د.ع — سيظهر تأكيد عند الحفظ`
+                            : `التكلفة أعلى من أو تساوي سعر البيع (${_batchSellPrice.toLocaleString('en')} د.ع) — سيظهر تأكيد عند الحفظ`}
                     </Text>
                 </View>
             ) : null}
@@ -649,10 +738,9 @@ export default function InventoryScreen() {
                 disabled={modalLoading}
                 activeOpacity={0.85}
                 style={{
-                    flex: 2, height: 50, borderRadius: 5, backgroundColor: C.primary,
+                    flex: 2, height: 50, borderRadius: Radius.control, backgroundColor: C.primary,
                     flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8,
                     opacity: modalLoading ? 0.6 : 1,
-                    shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
                 }}
             >
                 {modalLoading ? (
@@ -669,7 +757,7 @@ export default function InventoryScreen() {
                 disabled={modalLoading}
                 activeOpacity={0.7}
                 style={{
-                    flex: 1, height: 50, borderRadius: 5,
+                    flex: 1, height: 50, borderRadius: Radius.control,
                     borderWidth: 1.5, borderColor: C.border,
                     alignItems: 'center', justifyContent: 'center',
                 }}
@@ -679,165 +767,151 @@ export default function InventoryScreen() {
         </View>
     );
 
-    // Secondary controls that scroll WITH the list (branch + offline only).
-    const listHeaderEl = (
-        <View>
-            {/* Branch selector */}
-            {isAdmin && (
-                <BranchSelector
-                    selectedBranchId={selectedBranch}
-                    onSelectBranch={setSelectedBranch}
-                    hideIfSingle
-                    accent={C.primary}
-                    accentMuted={C.primaryMuted}
-                />
-            )}
-
-            {/* Offline banner */}
-            {!isOnline && (
-                <View style={{
-                    flexDirection: 'row-reverse', alignItems: 'center',
-                    backgroundColor: C.dangerBg, borderRadius: Radius.xs,
-                    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10, gap: 6,
-                }}>
-                    <Ionicons name="cloud-offline" size={14} color={C.danger} />
-                    <Text style={{ color: C.danger, fontSize: 12, fontWeight: '700' }}>وضع عدم الاتصال</Text>
-                </View>
-            )}
+    // Offline banner scrolls with the list.
+    const listHeaderEl = !isOnline ? (
+        <View style={{
+            flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
+            backgroundColor: C.warningBg, borderRadius: Radius.card,
+            paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12,
+        }}>
+            <Ionicons name="cloud-offline-outline" size={18} color={C.warning} />
+            <Text style={{ color: C.foreground, fontSize: 13, flex: 1, textAlign: 'right' }}>وضع عدم الاتصال — تُعرض آخر نسخة محفوظة، والإضافة غير متاحة.</Text>
         </View>
-    );
+    ) : null;
+
+    const openManualAdd = () => {
+        if (!isOnline) { Alert.alert('تنبيه', 'يجب أن تكون متصلاً بالإنترنت لإضافة عناصر جديدة.'); return; }
+        if (isAdmin && !selectedBranch) { Alert.alert('اختر الفرع', 'حدد الفرع الذي ستُضاف إليه الكمية قبل إضافة صنف أو دفعة.'); return; }
+        setManualBarcode('');
+        setShowAddChooser(true);
+    };
 
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
+            <ScreenHeader
+                title="المخزون"
+                hideBack
+                action={<HeaderIconButton icon="refresh" onPress={onRefresh} accessibilityLabel="تحديث المخزون" />}
+            />
 
-            {/* ── Pinned header ──────────────────────────────────────────────── */}
-            <View style={{ backgroundColor: C.background, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
+            {/* ── Pinned controls ────────────────────────────────────────────── */}
+            <View style={{ backgroundColor: C.background, paddingHorizontal: 16, paddingBottom: 6, gap: 10 }}>
 
-                {/* Title row */}
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <Text style={{ color: C.foreground, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>
-                        المخزون الدوائي
-                    </Text>
-                    {/* Refresh icon */}
+                {/* Value / count summary */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.card, borderRadius: Radius.card, borderWidth: 1, borderColor: C.border, paddingVertical: 12, paddingHorizontal: 16 }}>
+                    <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13 }}>قيمة المخزون</Text>
+                        <Text style={{ color: C.foreground, fontSize: 19, fontWeight: '900' }}>
+                            {formatNumber(Math.round(totalValue))} <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: '600' }}>{CURRENCY}</Text>
+                        </Text>
+                    </View>
+                    <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: C.border }} />
+                    <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13 }}>الأصناف</Text>
+                        <Text style={{ color: C.foreground, fontSize: 19, fontWeight: '900' }}>{formatNumber(counts.all)}</Text>
+                    </View>
+                </View>
+
+                {/* Search + scan */}
+                <View style={{
+                    flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
+                    backgroundColor: C.card, borderRadius: Radius.control, borderWidth: 1, borderColor: C.border,
+                    paddingRight: 12, paddingLeft: 6,
+                }}>
+                    <Ionicons name="search-outline" size={20} color={C.mutedForeground} />
+                    <TextInput
+                        ref={searchRef}
+                        style={{ flex: 1, color: C.foreground, paddingVertical: 12, textAlign: 'right', fontSize: 15 }}
+                        placeholder="ابحث عن دواء أو باركود"
+                        placeholderTextColor={C.mutedForeground}
+                        value={search}
+                        onChangeText={setSearch}
+                    />
+                    {search.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="مسح البحث">
+                            <Ionicons name="close-circle" size={18} color={C.mutedForeground} />
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity
-                        onPress={onRefresh}
-                        style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.xs, padding: 10 }}
-                        activeOpacity={0.75}
+                        onPress={() => router.push({ pathname: '/scan', params: { from: 'inventory' } })}
+                        accessibilityLabel="مسح باركود"
+                        style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.control, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <Ionicons name="refresh" size={20} color={C.primary} />
+                        <Ionicons name="scan-outline" size={21} color={C.primary} />
                     </TouchableOpacity>
                 </View>
 
-                {/* Compact inventory value summary (pinned, single thin row) */}
-                <View style={{ ...card(C.primary), flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 14, marginBottom: 10 }}>
-                    <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
-                        <Ionicons name="wallet-outline" size={16} color={C.primary} />
-                        <Text style={{ color: C.mutedForeground, fontSize: 11.5, fontWeight: '600' }}>قيمة المخزون</Text>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 2 }}>
-                            <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '900' }}>{abbrNum(totalValue)}</Text>
-                            <Text style={{ color: C.mutedForeground, fontSize: 10, fontWeight: '700' }}>د.ع</Text>
-                        </View>
-                    </View>
-                    <View style={{ width: 1, height: 18, backgroundColor: C.border, marginHorizontal: 12 }} />
-                    <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
-                        <Ionicons name="cube-outline" size={16} color={C.primary} />
-                        <Text style={{ color: C.mutedForeground, fontSize: 11.5, fontWeight: '600' }}>الأصناف</Text>
-                        <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '900' }}>{counts.all.toLocaleString('en-US')}</Text>
-                    </View>
-                </View>
-
-                {/* Search + sort row */}
-                <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
-                    <View style={{
-                        flex: 1,
-                        flexDirection: 'row-reverse', alignItems: 'center',
-                        backgroundColor: C.input, borderRadius: Radius.xs,
-                        borderWidth: 1, borderColor: C.border,
-                        paddingHorizontal: 12, gap: 8,
-                    }}>
-                        <Ionicons name="search" size={18} color={C.mutedForeground} />
-                        <TextInput
-                            style={{ flex: 1, color: C.foreground, paddingVertical: 11, textAlign: 'right', fontSize: 14 }}
-                            placeholder="ابحث عن دواء أو باركود..."
-                            placeholderTextColor={C.mutedForeground}
-                            value={search}
-                            onChangeText={setSearch}
-                        />
-                        {search.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearch('')} hitSlop={8} activeOpacity={0.7}>
-                                <Ionicons name="close-circle" size={18} color={C.mutedForeground} />
-                            </TouchableOpacity>
+                {/* Branch + sort + status tabs */}
+                <View style={{ backgroundColor: C.card, borderRadius: Radius.card, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 10 }}>
+                        {isAdmin ? (
+                            <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} inline />
+                        ) : (
+                            <Text style={{ flex: 1, color: C.mutedForeground, fontSize: 13.5, textAlign: 'right' }}>فرعك الحالي</Text>
                         )}
                         <TouchableOpacity
-                            onPress={() => router.push({ pathname: '/scan', params: { from: 'inventory' } })}
-                            style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.xs, padding: 6 }}
-                            activeOpacity={0.75}
+                            onPress={() => {
+                                setShowSortMenu(true);
+                                sortSheetY.setValue(400);
+                                Animated.spring(sortSheetY, { toValue: 0, useNativeDriver: false, bounciness: 2 }).start();
+                            }}
+                            activeOpacity={0.8}
+                            accessibilityLabel="ترتيب"
+                            style={{ width: 44, height: 44, borderRadius: Radius.control, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}
                         >
-                            <Ionicons name="scan-outline" size={20} color={C.primary} />
+                            <Ionicons name="swap-vertical" size={20} color={C.primary} />
                         </TouchableOpacity>
                     </View>
-                    {/* Sort button — opens the sort menu */}
-                    <TouchableOpacity
-                        onPress={() => {
-                            setShowSortMenu(true);
-                            sortSheetY.setValue(400);
-                            Animated.spring(sortSheetY, { toValue: 0, useNativeDriver: false, bounciness: 2 }).start();
-                        }}
-                        activeOpacity={0.8}
-                        style={{ width: 48, borderRadius: Radius.xs, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={{ flexDirection: 'row-reverse', gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}
+                        style={{ borderTopWidth: 1, borderTopColor: C.border }}
                     >
-                        <Ionicons name="swap-vertical" size={20} color={C.primary} />
-                    </TouchableOpacity>
+                        {TABS.map(t => {
+                            const active = t.key === activeTab;
+                            const count = counts[t.key];
+                            return (
+                                <TouchableOpacity
+                                    key={t.key}
+                                    onPress={() => setActiveTab(t.key)}
+                                    activeOpacity={0.8}
+                                    accessibilityRole="tab"
+                                    accessibilityState={{ selected: active }}
+                                    accessibilityLabel={`${t.label}: ${count}`}
+                                    style={{
+                                        flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+                                        paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.control,
+                                        backgroundColor: active ? C.primary : C.card,
+                                        borderWidth: 1, borderColor: active ? C.primary : C.border,
+                                    }}
+                                >
+                                    <Text style={{ color: active ? '#FFFFFF' : C.foreground, fontSize: 13.5, fontWeight: active ? '800' : '600' }}>
+                                        {t.label}
+                                    </Text>
+                                    {!loading && count > 0 && (
+                                        <View style={{
+                                            minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10,
+                                            backgroundColor: active ? 'rgba(255,255,255,0.22)' : C.input,
+                                            alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            <Text style={{ color: active ? '#FFFFFF' : C.mutedForeground, fontSize: 11, fontWeight: '800' }}>
+                                                {formatNumber(count)}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </ScrollView>
                 </View>
-
-                {/* Tab pills with count badges */}
-                <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
-                    {TABS.map(tab => {
-                        const active = activeTab === tab.key;
-                        const count  = counts[tab.key as keyof typeof counts] ?? 0;
-                        return (
-                            <TouchableOpacity
-                                key={tab.key}
-                                onPress={() => setActiveTab(tab.key)}
-                                activeOpacity={0.8}
-                                style={{
-                                    flex: 1,
-                                    flexDirection: 'row-reverse',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 6,
-                                    paddingVertical: 9,
-                                    borderRadius: 5,
-                                    backgroundColor: active ? C.primary : C.card,
-                                    borderWidth: 1.5,
-                                    borderColor: active ? C.primary : C.border,
-                                }}
-                            >
-                                <Text style={{ color: active ? '#fff' : C.foreground, fontSize: 13, fontWeight: '700' }}>
-                                    {tab.label}
-                                </Text>
-                                {!loading && count > 0 && (
-                                    <View style={{
-                                        backgroundColor: active ? 'rgba(255,255,255,0.25)' : C.primaryMuted,
-                                        borderRadius: 10, minWidth: 20, paddingHorizontal: 5, paddingVertical: 1,
-                                        alignItems: 'center',
-                                    }}>
-                                        <Text style={{ color: active ? '#fff' : C.primary, fontSize: 11, fontWeight: '800' }}>
-                                            {count}
-                                        </Text>
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-
             </View>
 
             {/* ── Drug list ───────────────────────────────────────────────────── */}
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 10 }}>
-                    {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} height={130} radius={5} />)}
+                    {[1, 2, 3, 4].map(i => <Skeleton key={i} height={150} radius={Radius.card} />)}
                 </View>
             ) : (
                 <View style={{ flex: 1 }}>
@@ -846,7 +920,10 @@ export default function InventoryScreen() {
                         keyExtractor={item => item.id}
                         renderItem={renderItem}
                         ListHeaderComponent={listHeaderEl}
-                        contentContainerStyle={{ padding: 16, paddingTop: 12, paddingBottom: 110 }}
+                        // With no rows there is nothing to scroll past the floating
+                        // button, and the 96pt reserve would push the empty state
+                        // off the bottom of a short list area.
+                        contentContainerStyle={{ flexGrow: sorted.length === 0 ? 1 : 0, padding: 16, paddingTop: 10, paddingBottom: sorted.length === 0 ? 16 : 96 }}
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
                         removeClippedSubviews
                         maxToRenderPerBatch={12}
@@ -857,40 +934,85 @@ export default function InventoryScreen() {
                                 <EmptyState
                                     icon="cube-outline"
                                     title="لا توجد عناصر"
+                                    // Centres in whatever room the list has; its
+                                    // 300pt floor would overflow and clip here.
+                                    style={{ minHeight: 0, paddingVertical: 16 }}
                                     subtitle={
                                         search ? 'لا توجد نتائج للبحث' :
                                         activeTab === 'low-stock'   ? 'المخزون بمستويات جيدة' :
                                         activeTab === 'near-expiry' ? 'لا توجد أدوية تقترب من انتهاء الصلاحية' :
-                                        'لا توجد أصناف نفد مخزونها'
+                                        activeTab === 'expired'     ? 'لا توجد أصناف منتهية الصلاحية في المخزون' :
+                                        activeTab === 'out'         ? 'لا توجد أصناف نفد مخزونها' :
+                                        'لا توجد أصناف في هذا الفرع'
                                     }
                                 />
                             ) : null
                         }
                     />
-                    {/* Sorting overlay — fades the list while sort runs */}
                     {isSorting && (
-                        <View style={{
-                            ...StyleSheet.absoluteFillObject,
-                            backgroundColor: isDarkMode ? 'rgba(24,22,20,0.55)' : 'rgba(250,250,248,0.55)',
-                            justifyContent: 'center', alignItems: 'center',
-                        }}>
-                            <View style={{
-                                backgroundColor: C.card, borderRadius: 14,
-                                paddingHorizontal: 28, paddingVertical: 18,
-                                alignItems: 'center', gap: 10,
-                                borderWidth: 1, borderColor: C.border,
-                                shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-                                shadowOpacity: 0.12, shadowRadius: 12, elevation: 8,
-                            }}>
+                        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: `${C.background}AA`, justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ backgroundColor: C.card, borderRadius: Radius.card, paddingHorizontal: 28, paddingVertical: 18, alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.border }}>
                                 <ActivityIndicator size="large" color={C.primary} />
-                                <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '700' }}>
-                                    جاري الترتيب...
-                                </Text>
+                                <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '700' }}>جاري الترتيب...</Text>
                             </View>
                         </View>
                     )}
+
+                    {/* Add item / batch — opens the existing add flow via barcode */}
+                    <TouchableOpacity
+                        onPress={openManualAdd}
+                        activeOpacity={0.9}
+                        accessibilityRole="button"
+                        accessibilityLabel="إضافة صنف أو دفعة"
+                        style={{
+                            position: 'absolute', left: 16, bottom: 16,
+                            flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
+                            backgroundColor: C.primary, borderRadius: Radius.control, paddingHorizontal: 16, paddingVertical: 13,
+                        }}
+                    >
+                        <Ionicons name="add" size={20} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 14.5, fontWeight: '800' }}>إضافة صنف أو دفعة</Text>
+                    </TouchableOpacity>
                 </View>
             )}
+
+            {/* Add chooser: scan or type the barcode, then the existing batch/branch/create flow */}
+            <Modal visible={showAddChooser} transparent animationType="fade" onRequestClose={() => setShowAddChooser(false)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}>
+                    <View style={{ backgroundColor: C.card, borderRadius: Radius.card, padding: 20, gap: 14 }}>
+                        <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '800', textAlign: 'right' }}>إضافة صنف أو دفعة</Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13.5, textAlign: 'right', lineHeight: 20 }}>
+                            امسح باركود العلبة أو أدخله. إن كان الصنف موجوداً تُضاف دفعة جديدة، وإلا يُفتح نموذج تسجيل الصنف.
+                        </Text>
+                        <FormField
+                            label="الباركود"
+                            value={manualBarcode}
+                            onChangeText={setManualBarcode}
+                            keyboardType="number-pad"
+                            placeholder="أدخل الباركود"
+                            style={{ writingDirection: 'ltr' }}
+                        />
+                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                            <AppButton
+                                label="متابعة"
+                                style={{ flex: 1 }}
+                                disabled={!manualBarcode.trim()}
+                                onPress={() => { setShowAddChooser(false); handleScannedProduct(manualBarcode.trim()); }}
+                            />
+                            <AppButton
+                                label="مسح بالكاميرا"
+                                icon="scan-outline"
+                                variant="outline"
+                                style={{ flex: 1 }}
+                                onPress={() => { setShowAddChooser(false); router.push({ pathname: '/scan', params: { from: 'inventory' } }); }}
+                            />
+                        </View>
+                        <TouchableOpacity onPress={() => setShowAddChooser(false)} style={{ alignSelf: 'center', padding: 6 }}>
+                            <Text style={{ color: C.mutedForeground, fontSize: 14, fontWeight: '700' }}>إلغاء</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* ══════════════════════════════════════════════════════════════════
                 MODALS — untouched logic, preserved exactly
@@ -899,10 +1021,10 @@ export default function InventoryScreen() {
             {/* Add Batch Modal */}
             <Modal visible={!!showBatchModal} transparent animationType="slide" onRequestClose={() => setShowBatchModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: Radius.card, borderTopRightRadius: Radius.card, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
                         <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 5, alignSelf: 'center', marginBottom: 16 }} />
                         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                            <View style={{ width: 44, height: 44, borderRadius: 5, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ width: 44, height: 44, borderRadius: Radius.control, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
                                 <Ionicons name="layers-outline" size={22} color={C.primary} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -914,7 +1036,7 @@ export default function InventoryScreen() {
                         <TextInput style={inputStyle} placeholder="الكمية *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
                         {renderQtyHint()}
                         {renderCostCalculator()}
-                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} />
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} onBlur={() => setFormData(f => ({ ...f, expiryDate: checkExpiry(f.expiryDate).value }))} />
                         <TouchableOpacity
                             onPress={() => { setSupplierPickerContext('batch'); setShowSupplierPicker(true); }}
                             style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
@@ -932,10 +1054,10 @@ export default function InventoryScreen() {
             {/* Add to Branch Modal */}
             <Modal visible={!!showBranchModal} transparent animationType="slide" onRequestClose={() => setShowBranchModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: Radius.card, borderTopRightRadius: Radius.card, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
                         <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 5, alignSelf: 'center', marginBottom: 16 }} />
                         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                            <View style={{ width: 44, height: 44, borderRadius: 5, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ width: 44, height: 44, borderRadius: Radius.control, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
                                 <Ionicons name="cube-outline" size={22} color={C.primary} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -944,13 +1066,16 @@ export default function InventoryScreen() {
                             </View>
                         </View>
                         <Text style={sectionLabelStyle}>التسعير والحدود</Text>
-                        <TextInput style={inputStyle} placeholder="سعر البيع" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
+                        <TextInput style={inputStyle} placeholder="سعر بيع الشريط" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
+                        <Text style={{ fontSize: 11, fontWeight: '600', textAlign: 'right', marginTop: -8, marginBottom: 10, color: C.mutedForeground }}>
+                            سعر الشريط الواحد — وليس الباكيت
+                        </Text>
                         <TextInput style={inputStyle} placeholder="حد النواقص" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.minStock} onChangeText={t => setFormData(f => ({ ...f, minStock: t }))} />
                         {renderCostCalculator()}
                         <Text style={sectionLabelStyle}>المخزون الأولي</Text>
                         <TextInput style={inputStyle} placeholder="الكمية" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
                         {renderQtyHint()}
-                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} />
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD)" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} onBlur={() => setFormData(f => ({ ...f, expiryDate: checkExpiry(f.expiryDate).value }))} />
                         <TouchableOpacity
                             onPress={() => { setSupplierPickerContext('branch'); setShowSupplierPicker(true); }}
                             style={[inputStyle, { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }]}
@@ -968,10 +1093,10 @@ export default function InventoryScreen() {
             {/* Create Drug Modal */}
             <Modal visible={!!showCreateModal} transparent animationType="slide" onRequestClose={() => setShowCreateModal(null)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
+                    <ScrollView style={{ backgroundColor: C.card, borderTopLeftRadius: Radius.card, borderTopRightRadius: Radius.card, maxHeight: '90%' }} contentContainerStyle={{ padding: 20 }}>
                         <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 5, alignSelf: 'center', marginBottom: 16 }} />
                         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                            <View style={{ width: 44, height: 44, borderRadius: 5, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ width: 44, height: 44, borderRadius: Radius.control, backgroundColor: C.primaryMuted, justifyContent: 'center', alignItems: 'center' }}>
                                 <Ionicons name="medkit-outline" size={22} color={C.primary} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -983,7 +1108,10 @@ export default function InventoryScreen() {
                         <TextInput style={inputStyle} placeholder="الاسم التجاري *" placeholderTextColor={C.mutedForeground} value={formData.tradeName} onChangeText={t => setFormData(f => ({ ...f, tradeName: t }))} />
                         <TextInput style={inputStyle} placeholder="الاسم العلمي" placeholderTextColor={C.mutedForeground} value={formData.scientificName} onChangeText={t => setFormData(f => ({ ...f, scientificName: t }))} />
                         <Text style={sectionLabelStyle}>التسعير والحدود</Text>
-                        <TextInput style={inputStyle} placeholder="سعر البيع *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
+                        <TextInput style={inputStyle} placeholder="سعر بيع الشريط *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.price} onChangeText={t => setFormData(f => ({ ...f, price: t }))} />
+                        <Text style={{ fontSize: 11, fontWeight: '600', textAlign: 'right', marginTop: -8, marginBottom: 10, color: C.mutedForeground }}>
+                            سعر الشريط الواحد — وليس الباكيت
+                        </Text>
                         <TextInput style={inputStyle} placeholder="حد النواقص" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.minStock} onChangeText={t => setFormData(f => ({ ...f, minStock: t }))} />
                         {renderCostCalculator()}
                         <TouchableOpacity
@@ -998,14 +1126,14 @@ export default function InventoryScreen() {
                         <Text style={sectionLabelStyle}>المخزون الأولي</Text>
                         <TextInput style={inputStyle} placeholder="الكمية *" keyboardType="numeric" placeholderTextColor={C.mutedForeground} value={formData.quantity} onChangeText={t => setFormData(f => ({ ...f, quantity: t }))} />
                         {renderQtyHint()}
-                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} />
+                        <TextInput style={inputStyle} placeholder="تاريخ الصلاحية (YYYY-MM-DD) *" keyboardType="numeric" maxLength={10} placeholderTextColor={C.mutedForeground} value={formData.expiryDate} onChangeText={t => setFormData(f => ({ ...f, expiryDate: formatExpiry(t) }))} onBlur={() => setFormData(f => ({ ...f, expiryDate: checkExpiry(f.expiryDate).value }))} />
                         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, marginVertical: 4 }}>
-                            <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '600' }}>بيع سريع ⚡</Text>
+                            <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '600' }}>البيع السريع</Text>
                             <TouchableOpacity
                                 onPress={() => setIsQuickSale(v => !v)}
                                 style={{
                                     width: 36, height: 20, borderRadius: 10,
-                                    backgroundColor: isQuickSale ? '#f59e0b' : C.border,
+                                    backgroundColor: isQuickSale ? C.primary : C.border,
                                     justifyContent: 'center', paddingHorizontal: 2,
                                 }}
                                 activeOpacity={0.8}
@@ -1025,10 +1153,10 @@ export default function InventoryScreen() {
             {/* Supplier picker modal */}
             <Modal visible={showSupplierPicker} transparent animationType="slide" onRequestClose={() => setShowSupplierPicker(false)}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: 5, borderTopRightRadius: 5, padding: 20, maxHeight: '70%' }}>
+                    <View style={{ backgroundColor: C.card, borderTopLeftRadius: Radius.card, borderTopRightRadius: Radius.card, padding: 20, maxHeight: '70%' }}>
                         <View style={{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
                         <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '700', textAlign: 'right', marginBottom: 12 }}>اختر مورداً</Text>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.input, borderRadius: 5, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, marginBottom: 12, gap: 8 }}>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: C.card, borderRadius: Radius.control, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border, marginBottom: 12, gap: 8 }}>
                             <Ionicons name="search" size={16} color={C.mutedForeground} />
                             <TextInput
                                 style={{ flex: 1, color: C.foreground, paddingVertical: 8, textAlign: 'right', fontSize: 14 }}

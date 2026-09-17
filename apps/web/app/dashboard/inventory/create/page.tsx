@@ -4,6 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import CreateInventoryForm from "@/app/ui/inventory/create-form";
 import { Package } from "lucide-react";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { pharmacyDrugScope } from "@/app/lib/drug-scope";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
@@ -19,7 +20,8 @@ export default async function CreateInventoryPage() {
     });
 
     const drugs = await prisma.globalDrug.findMany({
-        where: { isActive: true },
+        // النطاق: عالمي + أدوية هذه المؤسسة — انظر app/lib/drug-scope.ts.
+        where: { isActive: true, ...pharmacyDrugScope(tenantCtx.organizationId) },
         orderBy: { tradeName: "asc" },
     });
 

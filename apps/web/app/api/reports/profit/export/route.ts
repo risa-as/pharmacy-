@@ -118,7 +118,7 @@ export async function GET(req: Request) {
       : [];
     const branchName = new Map(branches.map((b) => [b.id, b.name]));
 
-    const buffer = buildProfitWorkbook({
+    const buffer = await buildProfitWorkbook({
       orgName: "",
       branchName,
       periodLabel: label,

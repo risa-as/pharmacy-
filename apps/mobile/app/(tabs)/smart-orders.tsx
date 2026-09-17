@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
     View, Text, FlatList, RefreshControl,
     TouchableOpacity, Alert, Modal, ScrollView, TextInput,
-    KeyboardAvoidingView, Platform, ActivityIndicator,
+    KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -10,6 +10,9 @@ import { apiService } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { managerPalette, Radius } from '../../constants/colors';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { usePalette, useReduceMotion, Surface, IconTile, StatusBadge, StatCell, VDivider, SegmentedTabs, AppButton } from '../../components/ui/Kit';
+import { formatNumber } from '../../utils/format';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
@@ -34,12 +37,20 @@ interface CreateOrderItem {
     currentQuantity: number;
 }
 
+interface CreatedOrderSummary {
+    supplierName: string;
+    itemCount: number;
+    criticalCount: number;
+    totalUnits: number;
+    branchName: string | null;
+}
+
 type FilterKey = 'all' | 'critical' | 'low';
 
 const FILTERS: { key: FilterKey; label: string }[] = [
     { key: 'all',      label: 'الكل' },
     { key: 'critical', label: 'عاجل' },
-    { key: 'low',      label: 'مراقبة' },
+    { key: 'low',      label: 'متابعة' },
 ];
 
 function getUrgency(item: SmartOrderItem): 'critical' | 'low' {
@@ -73,6 +84,8 @@ export default function SmartOrdersScreen() {
     const [showSupplierPicker, setShowSupplierPicker] = useState(false);
     const [loadingSuppliers, setLoadingSuppliers]     = useState(false);
     const [submitting, setSubmitting]       = useState(false);
+    const [receiveBranchName, setReceiveBranchName] = useState<string | null>(null);
+    const [createdOrder, setCreatedOrder] = useState<CreatedOrderSummary | null>(null);
 
     // ── Fetch ─────────────────────────────────────────────────────────────────
     const fetchData = useCallback(async () => {
@@ -121,19 +134,42 @@ export default function SmartOrdersScreen() {
         });
     }, []);
 
+    // Selection is kept across the الكل / عاجل / متابعة tabs; «تحديد الكل»
+    // only adds or removes the items of the tab being shown.
+    const allFilteredSelected = filtered.length > 0 && filtered.every(i => selectedIds.has(i.id));
+
     const toggleSelectAll = useCallback(() => {
-        if (selectedIds.size === filtered.length) {
-            setSelectedIds(new Set());
-        } else {
-            setSelectedIds(new Set(filtered.map(i => i.id)));
-        }
-    }, [selectedIds, filtered]);
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (filtered.length > 0 && filtered.every(i => prev.has(i.id))) filtered.forEach(i => next.delete(i.id));
+            else filtered.forEach(i => next.add(i.id));
+            return next;
+        });
+    }, [filtered]);
+
+    // Selected items from every tab, urgent first (same order as the list).
+    const selectedItems = useMemo(() => items
+        .filter(i => selectedIds.has(i.id))
+        .sort((a, b) => {
+            const ua = getUrgency(a) === 'critical' ? 0 : 1;
+            const ub = getUrgency(b) === 'critical' ? 0 : 1;
+            if (ua !== ub) return ua - ub;
+            return (a.daysUntilStockout ?? 999) - (b.daysUntilStockout ?? 999);
+        }), [items, selectedIds]);
+    const selectedCritical = selectedItems.filter(i => getUrgency(i) === 'critical').length;
 
     // ── Create order helpers ──────────────────────────────────────────────────
     const openCreateModal = useCallback((item?: SmartOrderItem) => {
-        const targets = item ? [item] : filtered.filter(i => selectedIds.has(i.id));
+        const targets = item ? [item] : selectedItems;
         if (targets.length === 0) return;
-        const branchId = selectedBranch ?? targets[0]?.branchId ?? authBranchId ?? '';
+        // One purchase order receives into ONE branch — never guess across branches.
+        const branchIds = Array.from(new Set(targets.map(t => t.branchId).filter(Boolean)));
+        if (!selectedBranch && branchIds.length > 1) {
+            Alert.alert('اختر فرع الاستلام', 'الأصناف المحددة تتبع أكثر من فرع. اختر فرعاً واحداً من قائمة الفروع ثم أنشئ الطلب.');
+            return;
+        }
+        const branchId = selectedBranch ?? branchIds[0] ?? authBranchId ?? '';
+        setReceiveBranchName(targets.find(t => t.branchId === branchId)?.branch?.name ?? null);
         setCreateModal({
             items: targets.map(t => ({
                 drugId:          t.drugId,
@@ -154,7 +190,7 @@ export default function SmartOrdersScreen() {
             .then(setSuppliers)
             .catch(() => {})
             .finally(() => setLoadingSuppliers(false));
-    }, [filtered, selectedIds, selectedBranch, authBranchId]);
+    }, [selectedItems, selectedBranch, authBranchId]);
 
     const updateCreateItem = useCallback((idx: number, field: 'quantity' | 'cost', value: string) => {
         setCreateModal(prev => {
@@ -182,272 +218,135 @@ export default function SmartOrdersScreen() {
                     cost:     i.cost,
                 })),
             });
+            setCreatedOrder({
+                supplierName,
+                itemCount: createModal.items.length,
+                criticalCount: createModal.items.filter(i => i.isCritical).length,
+                totalUnits: createModal.items.reduce((s, i) => s + i.quantity, 0),
+                branchName: receiveBranchName,
+            });
             setCreateModal(null);
             setSelectedIds(new Set());
-            Alert.alert(
-                'تم بنجاح ✓',
-                'تم إنشاء طلب الشراء، يمكنك تتبعه في صفحة المشتريات',
-                [
-                    { text: 'حسناً' },
-                    { text: 'عرض الطلبات', onPress: () => router.push('/(tabs)/purchases' as any) },
-                ],
-            );
         } catch {
             Alert.alert('خطأ', 'فشل في إنشاء طلب الشراء، يرجى المحاولة مرة أخرى');
         } finally {
             setSubmitting(false);
         }
-    }, [createModal, supplierId]);
+    }, [createModal, supplierId, supplierName, receiveBranchName]);
 
-    // ── Item card ─────────────────────────────────────────────────────────────
+    // ── Item card (design smart-orders.png) ──────────────────────────────────
     const renderItem = ({ item }: { item: SmartOrderItem }) => {
-        const urgency    = getUrgency(item);
-        const isCritical = urgency === 'critical';
+        const isCritical = getUrgency(item) === 'critical';
         const isSelected = selectedIds.has(item.id);
-        const accentColor = isCritical ? C.danger : C.warning;
-        const accentBg    = isCritical ? C.dangerBg : C.warningBg;
-        const days        = item.daysUntilStockout;
-        const subtitle    = [item.drug?.scientificName, item.branch?.name].filter(Boolean).join('  ·  ');
-        const daysColor   = days === undefined ? C.mutedForeground : days <= 3 ? C.danger : days <= 7 ? C.warning : C.primary;
-        const daysBg      = days === undefined ? C.border : days <= 3 ? C.dangerBg : days <= 7 ? C.warningBg : C.primaryMuted;
+        const tone = isCritical ? 'danger' : 'warning';
+        const accent = isCritical ? C.danger : C.warning;
+        const days = item.daysUntilStockout;
+        // The reason comes from the service's own stock/days figures — no new forecast.
+        const reason = item.currentQuantity === 0
+            ? 'نفد المخزون'
+            : days !== undefined
+                ? (days === 0 ? 'قد ينفد اليوم حسب معدل البيع' : `قد ينفد خلال ${days} يوم حسب معدل البيع`)
+                : 'المخزون عند حد الطلب أو أقل';
 
         return (
-            <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => toggleSelect(item.id)}
-                style={{
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    marginBottom: 12,
-                    borderWidth: isSelected ? 2 : 1.5,
-                    borderColor: isSelected ? accentColor : `${accentColor}40`,
-                    padding: 14,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 8,
-                    elevation: isSelected ? 2 : 1,
-                }}
-            >
-                {/* ── Header: checkbox + name/subtitle + urgency pill ── */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                    {/* Checkbox */}
-                    <View style={{
-                        width: 22, height: 22, borderRadius: Radius.xs,
-                        borderWidth: 2, borderColor: isSelected ? accentColor : C.border,
-                        backgroundColor: isSelected ? accentColor : 'transparent',
-                        justifyContent: 'center', alignItems: 'center', flexShrink: 0,
-                    }}>
-                        {isSelected && <Ionicons name="checkmark" size={13} color="#fff" />}
-                    </View>
-
-                    {/* Drug info */}
+            <View style={{ backgroundColor: C.card, borderRadius: Radius.card, borderWidth: isSelected ? 1.5 : 1, borderColor: isSelected ? C.primary : C.border, marginBottom: 12, overflow: 'hidden' }}>
+                {/* Reason */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: isCritical ? C.dangerBg : C.warningBg, paddingHorizontal: 14, paddingVertical: 10 }}>
+                    <Ionicons name="alert-circle-outline" size={20} color={accent} />
                     <View style={{ flex: 1 }}>
-                        <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={1}>
-                            {item.drug?.tradeName ?? 'دواء غير محدد'}
-                        </Text>
-                        {!!subtitle && (
-                            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>
-                                {subtitle}
-                            </Text>
-                        )}
+                        <Text style={{ color: accent, fontSize: 14, fontWeight: '800', textAlign: 'right' }}>{isCritical ? 'صنف يحتاج طلباً عاجلاً' : 'صنف يحتاج طلباً'}</Text>
+                        <Text style={{ color: C.foreground, fontSize: 12.5, textAlign: 'right', marginTop: 1 }}>{reason}</Text>
                     </View>
-
-                    {/* Urgency pill */}
-                    <View style={{
-                        flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-                        backgroundColor: accentBg, borderRadius: Radius.xs,
-                        paddingHorizontal: 9, paddingVertical: 5, flexShrink: 0,
-                    }}>
-                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accentColor }} />
-                        <Text style={{ color: accentColor, fontSize: 11, fontWeight: '800' }}>
-                            {isCritical ? 'عاجل' : 'مراقبة'}
-                        </Text>
-                    </View>
-                </View>
-
-                {/* ── Reorder flow: current → suggested (one unified panel) ── */}
-                <View style={{
-                    flexDirection: 'row-reverse', alignItems: 'center',
-                    backgroundColor: C.background, borderRadius: Radius.xs,
-                    borderWidth: 1, borderColor: C.border,
-                    paddingVertical: 12, paddingHorizontal: 14, marginBottom: 12,
-                }}>
-                    {/* Current */}
-                    <View style={{ flex: 1, alignItems: 'center' }}>
-                        <Text style={{ color: C.mutedForeground, fontSize: 10.5, fontWeight: '600', marginBottom: 4 }}>
-                            المخزون الحالي
-                        </Text>
-                        <Text style={{ color: accentColor, fontSize: 24, fontWeight: '900' }}>
-                            {item.currentQuantity}
-                        </Text>
-                    </View>
-
-                    {/* Arrow */}
-                    <View style={{
-                        width: 30, height: 30, borderRadius: Radius.xs,
-                        backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center',
-                        marginHorizontal: 6,
-                    }}>
-                        <Ionicons name="arrow-back" size={16} color={C.primary} />
-                    </View>
-
-                    {/* Suggested */}
-                    <View style={{ flex: 1, alignItems: 'center' }}>
-                        <Text style={{ color: C.mutedForeground, fontSize: 10.5, fontWeight: '600', marginBottom: 4 }}>
-                            الكمية المقترحة
-                        </Text>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 3 }}>
-                            <Text style={{ color: C.primary, fontSize: 24, fontWeight: '900' }}>
-                                {item.suggestedReorderQuantity}
-                            </Text>
-                            <Text style={{ color: C.mutedForeground, fontSize: 10, fontWeight: '700' }}>وحدة</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* ── Footer: days + order button ── */}
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                    {days !== undefined ? (
-                        <View style={{
-                            flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
-                            backgroundColor: daysBg, borderRadius: Radius.xs, paddingHorizontal: 9, paddingVertical: 5,
-                        }}>
-                            <Ionicons name="timer-outline" size={12} color={daysColor} />
-                            <Text style={{ fontSize: 12, fontWeight: '700', color: daysColor }}>
-                                {days === 0 ? 'نفاد اليوم' : `${days} يوم للنفاد`}
-                            </Text>
-                        </View>
-                    ) : (
-                        <View />
-                    )}
-
-                    {/* Quick order button */}
                     <TouchableOpacity
-                        onPress={() => openCreateModal(item)}
-                        activeOpacity={0.85}
+                        onPress={() => toggleSelect(item.id)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isSelected }}
+                        accessibilityLabel={`تحديد ${item.drug?.tradeName ?? 'الصنف'}`}
+                        hitSlop={8}
                         style={{
-                            flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
-                            backgroundColor: C.primary, borderRadius: Radius.xs,
-                            paddingHorizontal: 14, paddingVertical: 8,
+                            width: 24, height: 24, borderRadius: Radius.badge, borderWidth: 2,
+                            borderColor: isSelected ? C.primary : C.border, backgroundColor: isSelected ? C.primary : C.card,
+                            alignItems: 'center', justifyContent: 'center',
                         }}
                     >
-                        <Ionicons name="cart-outline" size={15} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 12.5, fontWeight: '800' }}>
-                            إنشاء طلب
-                        </Text>
+                        {isSelected && <Ionicons name="checkmark" size={15} color="#fff" />}
                     </TouchableOpacity>
                 </View>
-            </TouchableOpacity>
+
+                <View style={{ padding: 14, gap: 12 }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 16.5, textAlign: 'right' }} numberOfLines={2}>
+                                {item.drug?.tradeName ?? 'دواء غير محدد'}
+                            </Text>
+                            {!!(item.drug?.scientificName || item.branch?.name) && (
+                                <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }} numberOfLines={1}>
+                                    {[item.drug?.scientificName, item.branch?.name].filter(Boolean).join(' · ')}
+                                </Text>
+                            )}
+                        </View>
+                        <StatusBadge label={isCritical ? 'عاجل' : 'متابعة'} tone={tone} />
+                    </View>
+
+                    <View style={{ flexDirection: 'row-reverse', backgroundColor: C.background, borderRadius: Radius.control, paddingVertical: 12 }}>
+                        <StatCell label="المخزون الحالي" value={formatNumber(item.currentQuantity)} suffix="وحدة" tone={tone} align="center" />
+                        <VDivider />
+                        <StatCell label="الكمية المقترحة" value={formatNumber(item.suggestedReorderQuantity)} suffix="وحدة" tone="primary" align="center" />
+                    </View>
+
+                    <AppButton label="مراجعة وإنشاء الطلب" icon="document-text-outline" compact onPress={() => openCreateModal(item)} />
+                </View>
+            </View>
         );
     };
 
     // ─────────────────────────────────────────────────────────────────────────
     return (
         <View style={{ flex: 1, backgroundColor: C.background }}>
+            <ScreenHeader title="الطلبات الذكية" fallbackHref="/(tabs)/more" />
 
-            {/* ── Header ─────────────────────────────────────────────────── */}
-            <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, backgroundColor: C.background }}>
-
-                {/* Title row */}
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <View>
-                        <Text style={{ color: C.foreground, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>
-                            الطلبات الذكية
+            <View style={{ paddingHorizontal: 16, paddingBottom: 8, gap: 10, backgroundColor: C.background }}>
+                <Surface style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingVertical: 12 }}>
+                    <IconTile icon="list-outline" />
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right' }}>النواقص المتوقعة</Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right', marginTop: 2 }}>
+                            {!loading && items.length > 0
+                                ? `${criticalCount} عاجل · ${lowCount} للمتابعة — حدّد الأصناف ثم راجع الطلب`
+                                : 'حدّد الأصناف والمورد ثم راجع الطلب قبل إنشائه'}
                         </Text>
-                        {!loading && items.length > 0 && (
-                            <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 2 }}>
-                                {criticalCount > 0 ? `${criticalCount} عاجل · ` : ''}{lowCount} للمراقبة
-                            </Text>
-                        )}
                     </View>
-                    <View style={{ backgroundColor: C.warningBg, borderRadius: 5, padding: 10 }}>
-                        <Ionicons name="bulb" size={22} color={C.warning} />
-                    </View>
-                </View>
+                </Surface>
 
-                {/* Branch selector */}
                 {isAdmin && (
-                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle />
+                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle inline label="الفرع" />
                 )}
 
-                {/* ── Filter tabs ─────────────────────────────────────────── */}
                 {!loading && items.length > 0 && (
-                    <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
-                        {FILTERS.map(f => {
-                            const active = filterKey === f.key;
-                            const count  = f.key === 'critical' ? criticalCount
-                                         : f.key === 'low'      ? lowCount
-                                         : items.length;
-                            const fColor = f.key === 'critical' ? C.danger
-                                         : f.key === 'low'      ? C.warning
-                                         : C.primary;
-                            const fBg    = f.key === 'critical' ? C.dangerBg
-                                         : f.key === 'low'      ? C.warningBg
-                                         : C.primaryMuted;
-                            return (
-                                <TouchableOpacity
-                                    key={f.key}
-                                    onPress={() => setFilterKey(f.key)}
-                                    activeOpacity={0.8}
-                                    style={{
-                                        flex: 1, flexDirection: 'row-reverse',
-                                        alignItems: 'center', justifyContent: 'center', gap: 5,
-                                        paddingVertical: 8, borderRadius: 5,
-                                        backgroundColor: active ? fBg : C.card,
-                                        borderWidth: 1.5,
-                                        borderColor: active ? fColor : C.border,
-                                    }}
-                                >
-                                    <Text style={{ color: active ? fColor : C.mutedForeground, fontSize: 13, fontWeight: '700' }}>
-                                        {f.label}
-                                    </Text>
-                                    {count > 0 && (
-                                        <View style={{
-                                            backgroundColor: active ? `${fColor}22` : C.border,
-                                            borderRadius: 10, minWidth: 20,
-                                            paddingHorizontal: 5, paddingVertical: 1, alignItems: 'center',
-                                        }}>
-                                            <Text style={{ color: active ? fColor : C.mutedForeground, fontSize: 11, fontWeight: '800' }}>
-                                                {count}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
+                    <SegmentedTabs
+                        items={FILTERS.map(f => ({
+                            key: f.key,
+                            label: f.label,
+                            count: f.key === 'critical' ? criticalCount : f.key === 'low' ? lowCount : items.length,
+                        }))}
+                        value={filterKey}
+                        onChange={setFilterKey}
+                    />
                 )}
 
-                {/* ── Select all row ───────────────────────────────────────── */}
                 {!loading && filtered.length > 0 && (
-                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <TouchableOpacity
-                            onPress={toggleSelectAll}
-                            activeOpacity={0.75}
-                            style={{
-                                flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
-                                backgroundColor: selectedIds.size > 0 ? C.primaryMuted : 'transparent',
-                                borderRadius: 5, paddingHorizontal: 10, paddingVertical: 5,
-                                borderWidth: 1,
-                                borderColor: selectedIds.size > 0 ? C.primary : C.border,
-                            }}
-                        >
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <TouchableOpacity onPress={toggleSelectAll} activeOpacity={0.75} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
                             <Ionicons
-                                name={selectedIds.size === filtered.length && filtered.length > 0 ? 'checkbox' : 'square-outline'}
-                                size={15}
-                                color={selectedIds.size > 0 ? C.primary : C.mutedForeground}
+                                name={allFilteredSelected ? 'checkbox' : 'square-outline'}
+                                size={18}
+                                color={allFilteredSelected ? C.primary : C.mutedForeground}
                             />
-                            <Text style={{
-                                color: selectedIds.size > 0 ? C.primary : C.mutedForeground,
-                                fontSize: 12, fontWeight: selectedIds.size > 0 ? '700' : '500',
-                            }}>
-                                {selectedIds.size === filtered.length && filtered.length > 0 ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                            <Text style={{ color: allFilteredSelected ? C.primary : C.mutedForeground, fontSize: 13.5, fontWeight: '700' }}>
+                                {allFilteredSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
                             </Text>
                         </TouchableOpacity>
-                        <Text style={{ color: C.mutedForeground, fontSize: 12 }}>
-                            {filtered.length} صنف
-                        </Text>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13 }}>{formatNumber(filtered.length)} صنف</Text>
                     </View>
                 )}
             </View>
@@ -455,85 +354,43 @@ export default function SmartOrdersScreen() {
             {/* ── List ───────────────────────────────────────────────────── */}
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 12 }}>
-                    {[1, 2, 3].map(i => <Skeleton key={i} height={180} radius={5} />)}
+                    {[1, 2, 3].map(i => <Skeleton key={i} height={200} radius={Radius.card} />)}
                 </View>
             ) : (
                 <FlatList
                     data={filtered}
                     keyExtractor={item => item.id}
                     renderItem={renderItem}
-                    contentContainerStyle={{
-                        padding: 16, paddingTop: 6,
-                        paddingBottom: selectedIds.size > 0 ? 130 : 110,
-                    }}
+                    contentContainerStyle={{ flexGrow: filtered.length === 0 ? 1 : 0, padding: 16, paddingTop: 6, paddingBottom: selectedItems.length > 0 ? 130 : 32 }}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
                     ListEmptyComponent={
                         <EmptyState
-                            icon="checkmark-circle"
-                            title="المخزون ممتاز!"
-                            subtitle={
-                                filterKey !== 'all'
-                                    ? 'لا توجد أصناف في هذه الفئة'
-                                    : 'لا توجد أصناف تحتاج إلى إعادة طلب حالياً'
-                            }
+                            icon="checkmark-circle-outline"
+                            title="لا توجد نواقص"
+                            subtitle={filterKey !== 'all' ? 'لا توجد أصناف في هذه الفئة' : 'لا توجد أصناف تحتاج إلى إعادة طلب حالياً'}
                         />
                     }
                 />
             )}
 
             {/* ── Bottom action bar (multi-select) ───────────────────────── */}
-            {selectedIds.size > 0 && (
+            {selectedItems.length > 0 && (
                 <View style={{
                     position: 'absolute', bottom: 12, left: 12, right: 12,
-                    backgroundColor: C.primary, borderRadius: Radius.sm,
-                    padding: 14, flexDirection: 'row-reverse',
-                    alignItems: 'center', justifyContent: 'space-between',
-                    elevation: 8,
-                    shadowColor: C.primary,
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.35, shadowRadius: 12,
+                    backgroundColor: C.card, borderRadius: Radius.card, borderWidth: 1, borderColor: C.primary,
+                    padding: 12, flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
                 }}>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                        <View style={{
-                            backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 5,
-                            width: 28, height: 28, justifyContent: 'center', alignItems: 'center',
-                        }}>
-                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>
-                                {selectedIds.size}
-                            </Text>
-                        </View>
-                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
-                            صنف محدد
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '800', textAlign: 'right' }}>
+                            {formatNumber(selectedItems.length)} صنف محدد
+                        </Text>
+                        {/* Shows that the selection spans tabs */}
+                        <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 1 }}>
+                            {formatNumber(selectedCritical)} عاجل · {formatNumber(selectedItems.length - selectedCritical)} متابعة
                         </Text>
                     </View>
-
-                    <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                        <TouchableOpacity
-                            onPress={() => setSelectedIds(new Set())}
-                            style={{
-                                backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 5,
-                                paddingHorizontal: 12, paddingVertical: 8,
-                            }}
-                            activeOpacity={0.75}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>إلغاء</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={() => openCreateModal()}
-                            style={{
-                                backgroundColor: '#fff', borderRadius: 5,
-                                paddingHorizontal: 14, paddingVertical: 8,
-                                flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-                            }}
-                            activeOpacity={0.85}
-                        >
-                            <Ionicons name="cart" size={14} color={C.primary} />
-                            <Text style={{ color: C.primary, fontSize: 13, fontWeight: '800' }}>
-                                إنشاء الطلبات
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
+                    <AppButton label="إلغاء" variant="outline" compact onPress={() => setSelectedIds(new Set())} />
+                    <AppButton label="مراجعة الطلب" icon="document-text-outline" compact onPress={() => openCreateModal()} />
                 </View>
             )}
 
@@ -548,7 +405,7 @@ export default function SmartOrdersScreen() {
                     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                         <View style={{
                             backgroundColor: C.background,
-                            borderTopLeftRadius: 16, borderTopRightRadius: 16,
+                            borderTopLeftRadius: Radius.card, borderTopRightRadius: Radius.card,
                             maxHeight: '88%',
                         }}>
 
@@ -572,7 +429,7 @@ export default function SmartOrdersScreen() {
                                     <View style={{ paddingHorizontal: 16, paddingVertical: 10 }}>
                                         <View style={{
                                             flexDirection: 'row-reverse', alignItems: 'center',
-                                            backgroundColor: C.input, borderRadius: 5,
+                                            backgroundColor: C.input, borderRadius: Radius.control,
                                             borderWidth: 1, borderColor: C.border,
                                             paddingHorizontal: 12, gap: 8,
                                         }}>
@@ -583,7 +440,7 @@ export default function SmartOrdersScreen() {
                                                 placeholderTextColor={C.mutedForeground}
                                                 value={supplierSearch}
                                                 onChangeText={setSupplierSearch}
-                                                autoFocus
+                                                returnKeyType="search"
                                             />
                                         </View>
                                     </View>
@@ -592,11 +449,15 @@ export default function SmartOrdersScreen() {
                                         data={filteredSuppliers}
                                         keyExtractor={s => s.id}
                                         style={{ maxHeight: 340 }}
+                                        // First tap selects even while the search keyboard is open.
+                                        keyboardShouldPersistTaps="handled"
+                                        keyboardDismissMode="on-drag"
                                         renderItem={({ item: s }) => {
                                             const isActive = supplierId === s.id;
                                             return (
                                                 <TouchableOpacity
                                                     onPress={() => {
+                                                        Keyboard.dismiss();
                                                         setSupplierId(s.id);
                                                         setSupplierName(s.name);
                                                         setShowSupplierPicker(false);
@@ -650,11 +511,11 @@ export default function SmartOrdersScreen() {
                                     }}>
                                         <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                                                <View style={{ backgroundColor: C.primaryMuted, borderRadius: 5, padding: 7 }}>
+                                                <View style={{ backgroundColor: C.primaryMuted, borderRadius: Radius.control, padding: 7 }}>
                                                     <Ionicons name="cart" size={18} color={C.primary} />
                                                 </View>
                                                 <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '900' }}>
-                                                    إنشاء طلب شراء
+                                                    مراجعة طلب الشراء
                                                 </Text>
                                             </View>
                                             <TouchableOpacity
@@ -669,7 +530,7 @@ export default function SmartOrdersScreen() {
                                         {createModal && (
                                             <View style={{ flexDirection: 'row-reverse', gap: 6, marginTop: 10 }}>
                                                 <View style={{
-                                                    backgroundColor: C.primaryMuted, borderRadius: 5,
+                                                    backgroundColor: C.primaryMuted, borderRadius: Radius.control,
                                                     paddingHorizontal: 9, paddingVertical: 4,
                                                     flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
                                                 }}>
@@ -679,7 +540,7 @@ export default function SmartOrdersScreen() {
                                                 </View>
                                                 {createModal.items.filter(i => i.isCritical).length > 0 && (
                                                     <View style={{
-                                                        backgroundColor: C.dangerBg, borderRadius: 5,
+                                                        backgroundColor: C.dangerBg, borderRadius: Radius.control,
                                                         paddingHorizontal: 9, paddingVertical: 4,
                                                         flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
                                                     }}>
@@ -710,7 +571,7 @@ export default function SmartOrdersScreen() {
                                             style={{
                                                 flexDirection: 'row-reverse', alignItems: 'center',
                                                 justifyContent: 'space-between',
-                                                backgroundColor: C.input, borderRadius: 5,
+                                                backgroundColor: C.input, borderRadius: Radius.control,
                                                 borderWidth: 1.5,
                                                 borderColor: supplierId ? C.primary : C.border,
                                                 paddingHorizontal: 13, paddingVertical: 13,
@@ -743,6 +604,12 @@ export default function SmartOrdersScreen() {
                                             )}
                                         </TouchableOpacity>
 
+                                        {/* Receiving branch */}
+                                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.card, borderRadius: Radius.control, borderWidth: 1, borderColor: C.border, paddingHorizontal: 13, paddingVertical: 12, marginBottom: 20 }}>
+                                            <Text style={{ color: C.mutedForeground, fontSize: 13 }}>فرع الاستلام</Text>
+                                            <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '700' }}>{receiveBranchName ?? 'فرعك الحالي'}</Text>
+                                        </View>
+
                                         {/* Items list */}
                                         <Text style={{
                                             color: C.mutedForeground, fontSize: 12, fontWeight: '600',
@@ -751,148 +618,89 @@ export default function SmartOrdersScreen() {
                                             الأصناف ({createModal?.items.length ?? 0})
                                         </Text>
 
-                                        {createModal?.items.map((item, idx) => {
-                                            const accentColor = item.isCritical ? C.danger : C.warning;
-                                            const accentBg    = item.isCritical ? C.dangerBg : C.warningBg;
-                                            return (
-                                                <View
-                                                    key={idx}
-                                                    style={{
-                                                        flexDirection: 'row-reverse',
-                                                        backgroundColor: C.card, borderRadius: 5,
-                                                        borderWidth: 1, borderColor: C.border,
-                                                        overflow: 'hidden', marginBottom: 10,
-                                                    }}
-                                                >
-                                                    {/* Urgency accent bar */}
-                                                    <View style={{ width: 3, backgroundColor: accentColor }} />
-
-                                                    <View style={{ flex: 1, padding: 13 }}>
-                                                        {/* Name + urgency badge */}
-                                                        <View style={{
-                                                            flexDirection: 'row-reverse', justifyContent: 'space-between',
-                                                            alignItems: 'flex-start', marginBottom: 4,
-                                                        }}>
-                                                            <Text style={{
-                                                                color: C.foreground, fontWeight: '800', fontSize: 14,
-                                                                textAlign: 'right', flex: 1,
-                                                            }} numberOfLines={1}>
+                                        <View style={{ gap: 8 }}>
+                                            {createModal?.items.map((item, idx) => {
+                                                const accent = item.isCritical ? C.danger : C.warning;
+                                                const qty = item.quantity;
+                                                return (
+                                                    <View
+                                                        key={item.drugId}
+                                                        style={{
+                                                            flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
+                                                            backgroundColor: C.card, borderRadius: Radius.control,
+                                                            borderWidth: 1, borderColor: qty > 0 ? C.border : C.danger,
+                                                            paddingVertical: 9, paddingRight: 12, paddingLeft: 8,
+                                                        }}
+                                                    >
+                                                        {/* Name + urgency/stock line */}
+                                                        <View style={{ flex: 1, minWidth: 0 }}>
+                                                            <Text style={{ color: C.foreground, fontWeight: '800', fontSize: 14, textAlign: 'right' }} numberOfLines={1}>
                                                                 {item.drugName}
                                                             </Text>
-                                                            <View style={{
-                                                                backgroundColor: accentBg, borderRadius: 5,
-                                                                paddingHorizontal: 7, paddingVertical: 3, marginLeft: 8,
-                                                            }}>
-                                                                <Text style={{ color: accentColor, fontSize: 10, fontWeight: '800' }}>
-                                                                    {item.isCritical ? '⚠ عاجل' : 'مراقبة'}
+                                                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                                                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accent }} />
+                                                                <Text style={{ color: accent, fontSize: 11.5, fontWeight: '700' }}>
+                                                                    {item.isCritical ? 'عاجل' : 'متابعة'}
+                                                                </Text>
+                                                                <Text style={{ color: C.mutedForeground, fontSize: 11.5 }}>
+                                                                    · المتوفر {formatNumber(item.currentQuantity)}
                                                                 </Text>
                                                             </View>
                                                         </View>
 
-                                                        {/* Current stock info */}
-                                                        <Text style={{
-                                                            color: C.mutedForeground, fontSize: 11,
-                                                            textAlign: 'right', marginBottom: 12,
+                                                        {/* Quantity only — the price is set when the goods are received */}
+                                                        <View style={{
+                                                            flexDirection: 'row-reverse', alignItems: 'center',
+                                                            backgroundColor: C.input, borderRadius: Radius.control,
+                                                            borderWidth: 1, borderColor: C.border, height: 38,
                                                         }}>
-                                                            المخزون الحالي:{' '}
-                                                            <Text style={{ color: accentColor, fontWeight: '700' }}>
-                                                                {item.currentQuantity}
-                                                            </Text>
-                                                        </Text>
-
-                                                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                                                            {/* Quantity */}
-                                                            <View style={{ flex: 1 }}>
-                                                                <Text style={{
-                                                                    color: C.mutedForeground, fontSize: 11,
-                                                                    textAlign: 'center', marginBottom: 5,
-                                                                }}>
-                                                                    الكمية
-                                                                </Text>
-                                                                <TextInput
-                                                                    style={{
-                                                                        backgroundColor: C.input, borderRadius: 5,
-                                                                        borderWidth: 1, borderColor: C.border,
-                                                                        paddingHorizontal: 8, paddingVertical: 10,
-                                                                        color: C.foreground, textAlign: 'center',
-                                                                        fontSize: 18, fontWeight: '900',
-                                                                    }}
-                                                                    keyboardType="numeric"
-                                                                    value={item.quantity > 0 ? String(item.quantity) : ''}
-                                                                    placeholder="0"
-                                                                    placeholderTextColor={C.mutedForeground}
-                                                                    onChangeText={v => updateCreateItem(idx, 'quantity', v)}
-                                                                />
-                                                            </View>
-                                                            {/* Cost */}
-                                                            <View style={{ flex: 1.7 }}>
-                                                                <Text style={{
-                                                                    color: C.mutedForeground, fontSize: 11,
-                                                                    textAlign: 'center', marginBottom: 5,
-                                                                }}>
-                                                                    سعر الوحدة (د.ع)
-                                                                </Text>
-                                                                <TextInput
-                                                                    style={{
-                                                                        backgroundColor: C.input, borderRadius: 5,
-                                                                        borderWidth: 1, borderColor: C.border,
-                                                                        paddingHorizontal: 8, paddingVertical: 10,
-                                                                        color: C.foreground, textAlign: 'center',
-                                                                        fontSize: 18, fontWeight: '900',
-                                                                    }}
-                                                                    keyboardType="numeric"
-                                                                    value={item.cost > 0 ? String(item.cost) : ''}
-                                                                    placeholder="0"
-                                                                    placeholderTextColor={C.mutedForeground}
-                                                                    onChangeText={v => updateCreateItem(idx, 'cost', v)}
-                                                                />
-                                                            </View>
+                                                            <TouchableOpacity
+                                                                onPress={() => updateCreateItem(idx, 'quantity', String(qty + 1))}
+                                                                hitSlop={4}
+                                                                accessibilityLabel={`زيادة كمية ${item.drugName}`}
+                                                                style={{ width: 34, height: '100%', alignItems: 'center', justifyContent: 'center' }}
+                                                            >
+                                                                <Ionicons name="add" size={18} color={C.primary} />
+                                                            </TouchableOpacity>
+                                                            <TextInput
+                                                                style={{
+                                                                    width: 48, height: '100%', paddingVertical: 0,
+                                                                    color: C.foreground, textAlign: 'center', fontSize: 15, fontWeight: '800',
+                                                                    borderLeftWidth: 1, borderRightWidth: 1, borderColor: C.border,
+                                                                }}
+                                                                keyboardType="number-pad"
+                                                                value={qty > 0 ? String(qty) : ''}
+                                                                placeholder="0"
+                                                                placeholderTextColor={C.mutedForeground}
+                                                                onChangeText={v => updateCreateItem(idx, 'quantity', v.replace(/[^0-9]/g, ''))}
+                                                                accessibilityLabel={`كمية ${item.drugName}`}
+                                                                selectTextOnFocus
+                                                            />
+                                                            <TouchableOpacity
+                                                                onPress={() => updateCreateItem(idx, 'quantity', String(Math.max(0, qty - 1)))}
+                                                                disabled={qty <= 0}
+                                                                hitSlop={4}
+                                                                accessibilityLabel={`إنقاص كمية ${item.drugName}`}
+                                                                style={{ width: 34, height: '100%', alignItems: 'center', justifyContent: 'center', opacity: qty <= 0 ? 0.35 : 1 }}
+                                                            >
+                                                                <Ionicons name="remove" size={18} color={C.primary} />
+                                                            </TouchableOpacity>
                                                         </View>
-
-                                                        {/* Line total */}
-                                                        {item.cost > 0 && item.quantity > 0 && (
-                                                            <View style={{
-                                                                flexDirection: 'row-reverse', justifyContent: 'flex-end',
-                                                                alignItems: 'center', gap: 4, marginTop: 9,
-                                                                paddingTop: 9, borderTopWidth: 1, borderTopColor: C.border,
-                                                            }}>
-                                                                <Text style={{ color: C.mutedForeground, fontSize: 11 }}>إجمالي الصنف:</Text>
-                                                                <Text style={{ color: C.success, fontWeight: '800', fontSize: 13 }}>
-                                                                    {(item.quantity * item.cost).toLocaleString('en-US')} د.ع
-                                                                </Text>
-                                                            </View>
-                                                        )}
                                                     </View>
-                                                </View>
-                                            );
-                                        })}
-                                    </ScrollView>
-
-                                    {/* Grand total */}
-                                    {createModal && createModal.items.some(i => i.cost > 0) && (
-                                        <View style={{
-                                            flexDirection: 'row-reverse', justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            paddingHorizontal: 16, paddingVertical: 12,
-                                            borderTopWidth: 1, borderTopColor: C.border,
-                                            backgroundColor: C.card,
-                                        }}>
-                                            <Text style={{ color: C.mutedForeground, fontSize: 13 }}>الإجمالي التقديري</Text>
-                                            <Text style={{ color: C.foreground, fontWeight: '900', fontSize: 17 }}>
-                                                {createModal.items
-                                                    .reduce((s, i) => s + i.quantity * i.cost, 0)
-                                                    .toLocaleString('en-US')}{' '}
-                                                <Text style={{ fontSize: 12, fontWeight: '500', color: C.mutedForeground }}>د.ع</Text>
-                                            </Text>
+                                                );
+                                            })}
                                         </View>
-                                    )}
+                                        <Text style={{ color: C.mutedForeground, fontSize: 11.5, textAlign: 'right', marginTop: 10 }}>
+                                            السعر يُحدَّد عند استلام البضاعة من المورد.
+                                        </Text>
+                                    </ScrollView>
 
                                     {/* Actions */}
                                     <View style={{
                                         flexDirection: 'row-reverse', gap: 10,
                                         padding: 16,
                                         paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-                                        borderTopWidth: createModal && createModal.items.some(i => i.cost > 0) ? 0 : 1,
+                                        borderTopWidth: 1,
                                         borderTopColor: C.border,
                                     }}>
                                         <TouchableOpacity
@@ -900,7 +708,7 @@ export default function SmartOrdersScreen() {
                                             disabled={submitting}
                                             style={{
                                                 flex: 1, backgroundColor: C.card,
-                                                borderRadius: 5, borderWidth: 1, borderColor: C.border,
+                                                borderRadius: Radius.control, borderWidth: 1, borderColor: C.border,
                                                 paddingVertical: 13, alignItems: 'center',
                                                 opacity: submitting ? 0.5 : 1,
                                             }}
@@ -915,7 +723,7 @@ export default function SmartOrdersScreen() {
                                             style={{
                                                 flex: 2,
                                                 backgroundColor: supplierId && !submitting ? C.primary : C.border,
-                                                borderRadius: 5, paddingVertical: 13,
+                                                borderRadius: Radius.control, paddingVertical: 13,
                                                 flexDirection: 'row-reverse',
                                                 justifyContent: 'center', alignItems: 'center', gap: 7,
                                             }}
@@ -937,6 +745,98 @@ export default function SmartOrdersScreen() {
                 </View>
             </Modal>
 
+            <OrderCreatedModal
+                order={createdOrder}
+                onClose={() => setCreatedOrder(null)}
+                onViewOrders={() => {
+                    setCreatedOrder(null);
+                    router.push('/(tabs)/purchases' as any);
+                }}
+            />
         </View>
+    );
+}
+
+/**
+ * Success after creating a purchase order: what was ordered, from whom, where it
+ * will be received, and the next step (prices are entered at receipt).
+ */
+function OrderCreatedModal({ order, onClose, onViewOrders }: {
+    order: CreatedOrderSummary | null; onClose: () => void; onViewOrders: () => void;
+}) {
+    const C = usePalette();
+    const reduceMotion = useReduceMotion();
+    const scale = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        if (!order || reduceMotion) return;
+        scale.setValue(0.6);
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 10 }).start();
+    }, [order, reduceMotion, scale]);
+
+    const row = (label: string, value: React.ReactNode) => (
+        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 9 }}>
+            <Text style={{ color: C.mutedForeground, fontSize: 13.5 }}>{label}</Text>
+            {typeof value === 'string'
+                ? <Text style={{ flexShrink: 1, color: C.foreground, fontSize: 14, fontWeight: '800', textAlign: 'left' }} numberOfLines={1}>{value}</Text>
+                : value}
+        </View>
+    );
+    const divider = <View style={{ height: 1, backgroundColor: C.border }} />;
+
+    return (
+        <Modal visible={!!order} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'center', paddingHorizontal: 22 }}>
+                {order && (
+                    <View style={{ backgroundColor: C.card, borderRadius: Radius.card, padding: 20, gap: 16, maxWidth: 420, width: '100%', alignSelf: 'center' }}>
+                        {/* Header */}
+                        <View style={{ alignItems: 'center', gap: 10 }}>
+                            <Animated.View style={{
+                                width: 64, height: 64, borderRadius: 32, backgroundColor: C.successBg,
+                                alignItems: 'center', justifyContent: 'center', transform: [{ scale }],
+                            }}>
+                                <Ionicons name="checkmark" size={34} color={C.success} />
+                            </Animated.View>
+                            <View style={{ alignItems: 'center', gap: 4 }}>
+                                <Text style={{ color: C.foreground, fontSize: 19, fontWeight: '900', textAlign: 'center' }}>تم إنشاء طلب الشراء</Text>
+                                <Text style={{ color: C.mutedForeground, fontSize: 13.5, textAlign: 'center' }}>الطلب بانتظار الاستلام، ويمكنك متابعته من صفحة المشتريات.</Text>
+                            </View>
+                        </View>
+
+                        {/* Summary */}
+                        <View style={{ backgroundColor: C.background, borderRadius: Radius.control, paddingHorizontal: 14, paddingVertical: 2 }}>
+                            {row('المورد', order.supplierName || '—')}
+                            {divider}
+                            {row('الأصناف', (
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                                    <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '800' }}>
+                                        {formatNumber(order.itemCount)} صنف · {formatNumber(order.totalUnits)} وحدة
+                                    </Text>
+                                    {order.criticalCount > 0 && <StatusBadge label={`${formatNumber(order.criticalCount)} عاجل`} tone="danger" />}
+                                </View>
+                            ))}
+                            {divider}
+                            {row('فرع الاستلام', order.branchName ?? 'فرعك الحالي')}
+                            {divider}
+                            {row('الحالة', <StatusBadge label="قيد الانتظار" tone="warning" />)}
+                        </View>
+
+                        {/* Next step */}
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                            <Ionicons name="information-circle-outline" size={18} color={C.primary} />
+                            <Text style={{ flex: 1, color: C.mutedForeground, fontSize: 12.5, textAlign: 'right' }}>
+                                أدخل أسعار الشراء عند استلام البضاعة من المورد.
+                            </Text>
+                        </View>
+
+                        {/* Actions — side by side */}
+                        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                            <AppButton label="عرض الطلبات" icon="list-outline" onPress={onViewOrders} style={{ flex: 1.3 }} />
+                            <AppButton label="حسناً" variant="outline" onPress={onClose} style={{ flex: 1 }} />
+                        </View>
+                    </View>
+                )}
+            </View>
+        </Modal>
     );
 }

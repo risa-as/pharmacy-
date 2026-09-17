@@ -10,7 +10,8 @@ export const metadata: Metadata = {
     title: 'تسوية الجرد | Faramace',
 };
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const session = await auth();
     const branchId = session?.user?.branchId;
 

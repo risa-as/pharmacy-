@@ -26,11 +26,12 @@ function GrowthBadge({ value }: { value: number }) {
     );
 }
 
-export default async function AnalyticsPage({
-    searchParams,
-}: {
-    searchParams?: { branch?: string };
-}) {
+export default async function AnalyticsPage(
+    props: {
+        searchParams?: Promise<{ branch?: string }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, tenantWhere, organizationId, user } = tenantCtx;

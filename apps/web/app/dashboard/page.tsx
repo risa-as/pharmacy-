@@ -105,7 +105,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
     ] = await Promise.all([
         prisma.branch.count({ where: orgWhere }),
         prisma.user.count({ where: orgBranchWhere }),
-        prisma.globalDrug.count({ where: { OR: [{ organizationId: null }, { organizationId }] } }),
+        prisma.globalDrug.count({ where: { OR: [{ organizationId: null, warehouseId: null }, { organizationId }] } }),
         prisma.inventory.count({ where: orgBranchWhere }),
         prisma.patient.count({ where: { branch: { organizationId } } }),
         prisma.supplier.count({ where: { organizationId } }),
@@ -330,7 +330,7 @@ async function getEmployeeData(branchId?: string, userId?: string) {
     };
 
     const [drugCount, inventoryCount, todaySales, todayReturns, expiringCount, alerts] = await Promise.all([
-        prisma.globalDrug.count(),
+        prisma.globalDrug.count({ where: { warehouseId: null } }),
         prisma.inventory.count({ where: branchWhere }),
         prisma.sale.aggregate({
             _sum: { total: true }, _count: true,
@@ -637,64 +637,132 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                         <Clock className="w-3.5 h-3.5" /> ملخص اليوم
                     </p>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                            <GlassKpiCard
-                                title="مبيعات اليوم"
-                                value={`${fmt(d.today.revenue)} د.ع`}
-                                icon={<ShoppingCart className="w-5 h-5" />}
-                                sub={`${d.today.salesCount} فاتورة`}
-                                href="/dashboard/sales"
-                            />
-                            <GlassKpiCard
-                                title="مشتريات اليوم"
-                                value={`${fmt(d.today.purchases)} د.ع`}
-                                icon={<Receipt className="w-5 h-5" />}
-                                sub={`${d.today.purchasesCount} فاتورة شراء`}
-                                href="/dashboard/purchases"
-                            />
-                            <GlassKpiCard
-                                title="مصروفات اليوم"
-                                value={`${fmt(d.today.expenses)} د.ع`}
-                                icon={<Banknote className="w-5 h-5" />}
-                                sub="مصروفات تشغيلية"
-                                href="/dashboard/expenses"
-                            />
-                            <GlassKpiCard
-                                title="صافي اليوم"
-                                value={`${fmt(d.today.net)} د.ع`}
-                                icon={<TrendingUp className="w-5 h-5" />}
-                                sub="بعد المصروفات والمرتجعات"
-                                href="/dashboard/reports/profit"
-                            />
-                        </div>
+                        <GlassKpiCard
+                            title="مبيعات اليوم"
+                            value={`${fmt(d.today.revenue)} د.ع`}
+                            icon={<ShoppingCart className="w-5 h-5" />}
+                            sub={`${d.today.salesCount} فاتورة`}
+                            href="/dashboard/sales"
+                        />
+                        <GlassKpiCard
+                            title="مشتريات اليوم"
+                            value={`${fmt(d.today.purchases)} د.ع`}
+                            icon={<Receipt className="w-5 h-5" />}
+                            sub={`${d.today.purchasesCount} فاتورة شراء`}
+                            href="/dashboard/purchases"
+                        />
+                        <GlassKpiCard
+                            title="مصروفات اليوم"
+                            value={`${fmt(d.today.expenses)} د.ع`}
+                            icon={<Banknote className="w-5 h-5" />}
+                            sub="مصروفات تشغيلية"
+                            href="/dashboard/expenses"
+                        />
+                        <GlassKpiCard
+                            title="صافي اليوم"
+                            value={`${fmt(d.today.net)} د.ع`}
+                            icon={<TrendingUp className="w-5 h-5" />}
+                            sub="بعد المصروفات والمرتجعات"
+                            href="/dashboard/reports/profit"
+                        />
+                    </div>
                 </div>
 
-                {/* ── هذا الشهر ── */}
-                <div className="glass-card rounded-xl p-5">
-                    <h2 className="font-bold text-foreground mb-4 flex items-center gap-2 text-sm">
-                        <BarChart3 className="w-4 h-4 text-primary" /> ملخص الشهر الحالي
-                    </h2>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        {[
-                            { label: 'إجمالي المبيعات', value: d.month.revenue, sub: `${d.month.salesCount} فاتورة`, icon: ShoppingCart, color: 'text-primary bg-primary/10', href: '/dashboard/reports/sales' },
-                            { label: 'إجمالي المشتريات', value: d.month.purchases, sub: `${d.month.purchasesCount} فاتورة`, icon: Receipt, color: 'text-info bg-info/10', href: '/dashboard/purchases' },
-                            { label: 'إجمالي المصروفات', value: d.month.expenses, sub: 'هذا الشهر', icon: Banknote, color: 'text-warning bg-warning/10', href: '/dashboard/expenses' },
-                            { label: 'صافي الربح', value: d.month.net, sub: 'بعد الخصومات', icon: TrendingUp, color: d.month.net >= 0 ? 'text-success bg-success/10' : 'text-destructive bg-destructive/10', href: '/dashboard/reports/profit' },
-                        ].map((item: any) => {
-                            const Icon = item.icon;
-                            return (
-                                <Link key={item.label} href={item.href}
-                                    className="flex flex-col gap-2 p-3 rounded-xl bg-muted/40 hover:bg-accent transition-colors group">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.color}`}>
-                                        <Icon className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <div className="text-sm font-bold tabular-nums text-foreground">{fmt(item.value)} <span className="text-xs font-normal text-muted-foreground">د.ع</span></div>
-                                        <div className="text-xs text-muted-foreground">{item.label}</div>
-                                        <div className="text-xs text-muted-foreground opacity-70">{item.sub}</div>
-                                    </div>
-                                </Link>
-                            );
-                        })}
+                {/* ── هذا الشهر — بطاقات مستقلة بتصميم خاص بها: شريط لوني على
+                    حافة البداية، شارة أيقونة، رقم كبير، ثم سطر سفلي مفصول يحمل
+                    النسبة من المبيعات (مشتقة من نفس الأرقام، بلا استعلام جديد). ── */}
+                <div>
+                    <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
+                        <BarChart3 className="w-3.5 h-3.5" /> ملخص الشهر الحالي
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        {(() => {
+                            const rev = d.month.revenue;
+                            const positive = d.month.net >= 0;
+                            const share = (n: number) =>
+                                rev > 0 ? `${Math.round((n / rev) * 100)}٪ من المبيعات` : null;
+                            const cards: any[] = [
+                                {
+                                    label: "إجمالي المبيعات",
+                                    value: d.month.revenue,
+                                    sub: `${d.month.salesCount} فاتورة`,
+                                    icon: ShoppingCart,
+                                    href: "/dashboard/reports/sales",
+                                    bar: "bg-primary",
+                                    chip: "bg-primary/10 text-primary",
+                                },
+                                {
+                                    label: "إجمالي المشتريات",
+                                    value: d.month.purchases,
+                                    sub: `${d.month.purchasesCount} فاتورة`,
+                                    icon: Receipt,
+                                    href: "/dashboard/purchases",
+                                    bar: "bg-info",
+                                    chip: "bg-info/10 text-info",
+                                    badge: share(d.month.purchases),
+                                    badgeTone: "bg-info/10 text-info",
+                                },
+                                {
+                                    label: "إجمالي المصروفات",
+                                    value: d.month.expenses,
+                                    sub: "هذا الشهر",
+                                    icon: Banknote,
+                                    href: "/dashboard/expenses",
+                                    bar: "bg-warning",
+                                    chip: "bg-warning/10 text-warning",
+                                    badge: share(d.month.expenses),
+                                    badgeTone: "bg-warning/10 text-warning",
+                                },
+                                {
+                                    label: "صافي الربح",
+                                    value: d.month.net,
+                                    sub: "بعد الخصومات",
+                                    icon: TrendingUp,
+                                    href: "/dashboard/reports/profit",
+                                    bar: positive ? "bg-success" : "bg-destructive",
+                                    chip: positive
+                                        ? "bg-success/10 text-success"
+                                        : "bg-destructive/10 text-destructive",
+                                    valueTone: positive ? "text-success" : "text-destructive",
+                                    badge: rev > 0 ? `هامش ${Math.round((d.month.net / rev) * 100)}٪` : null,
+                                    badgeTone: positive
+                                        ? "bg-success/10 text-success"
+                                        : "bg-destructive/10 text-destructive",
+                                },
+                            ];
+                            return cards.map((c) => {
+                                const Icon = c.icon;
+                                return (
+                                    <Link
+                                        key={c.label}
+                                        href={c.href}
+                                        className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                                    >
+                                        <span className={`absolute inset-y-0 start-0 w-1 ${c.bar}`} aria-hidden="true" />
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-medium text-muted-foreground">{c.label}</p>
+                                                <p className={`mt-2 truncate text-2xl font-bold tabular-nums ${c.valueTone || "text-foreground"}`}>
+                                                    {fmt(c.value)}{" "}
+                                                    <span className="text-sm font-normal text-muted-foreground">د.ع</span>
+                                                </p>
+                                            </div>
+                                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${c.chip}`}>
+                                                <Icon className="h-5 w-5" />
+                                            </div>
+                                        </div>
+                                        <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                                            <span className="truncate text-xs text-muted-foreground">{c.sub}</span>
+                                            {c.badge && (
+                                                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${c.badgeTone}`}>
+                                                    {c.badge}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </Link>
+                                );
+                            });
+                        })()}
                     </div>
                 </div>
 

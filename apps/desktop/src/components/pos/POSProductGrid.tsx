@@ -31,7 +31,7 @@ interface Props {
   selectedPatient: Patient | null;
   currentTime: Date;
   user: any;
-  searchInputRef: RefObject<HTMLInputElement>;
+  searchInputRef: RefObject<HTMLInputElement | null>;
   onSearchChange: (v: string) => void;
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onAddToCart: (product: Product) => void;
@@ -137,9 +137,19 @@ export default function POSProductGrid({
       {/* الهيدر */}
       <div className="bg-card/90 backdrop-blur-md px-3 py-2 flex justify-between items-center shadow-sm border-b border-border z-10">
         <div className="flex items-center gap-2">
+          <div className="w-9 h-9 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center shadow-md shadow-primary/20">
+            <LayoutGrid className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h1 className="text-sm font-black text-foreground tracking-tight leading-tight">نقطة البيع</h1>
+            <p className="text-muted-foreground text-[10px]">
+              {products.length} منتج • {cart.reduce((a, c) => a + c.quantity, 0)} في السلة
+            </p>
+          </div>
+          <div className="w-px h-6 bg-border mx-1"></div>
           <button
             onClick={onToggleShift}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold transition-all shadow-sm ${
+            className={`flex items-center gap-1.5 h-9 px-2.5 rounded-lg font-bold transition-all shadow-sm ${
               isShiftOpen
                 ? "bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30"
                 : "bg-success/10 text-success hover:bg-success/20 border border-success/30"
@@ -166,7 +176,7 @@ export default function POSProductGrid({
           {isShiftOpen && (
             <button
               onClick={onOpenCashDrop}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-warning/10 text-warning hover:bg-warning/20 border border-warning/30 rounded-lg font-bold transition-all shadow-sm"
+              className="flex items-center gap-1.5 h-9 px-2.5 bg-warning/10 text-warning hover:bg-warning/20 border border-warning/30 rounded-lg font-bold transition-all shadow-sm"
               title="سحب أو إيداع نقدي في درج الصندوق"
             >
               <Banknote className="w-4 h-4" />
@@ -176,7 +186,7 @@ export default function POSProductGrid({
 
           <button
             onClick={onOpenReturn}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 rounded-lg font-bold transition-all shadow-sm"
+            className="flex items-center gap-1.5 h-9 px-2.5 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 rounded-lg font-bold transition-all shadow-sm"
             title="إرجاع بضاعة (F9)"
           >
             <Undo2 className="w-4 h-4" />
@@ -188,7 +198,7 @@ export default function POSProductGrid({
 
           <button
             onClick={onOpenHeld}
-            className="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 rounded-lg font-bold transition-all shadow-sm"
+            className="relative flex items-center gap-1.5 h-9 px-2.5 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 rounded-lg font-bold transition-all shadow-sm"
             title="الفواتير المعلّقة (F11)"
           >
             <PauseCircle className="w-4 h-4" />
@@ -203,20 +213,10 @@ export default function POSProductGrid({
             )}
           </button>
 
-          <div className="w-px h-6 bg-border mx-1"></div>
-          <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center shadow-md shadow-primary/20">
-            <LayoutGrid className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <h1 className="text-sm font-black text-foreground tracking-tight leading-tight">نقطة البيع</h1>
-            <p className="text-muted-foreground text-[10px]">
-              {products.length} منتج • {cart.reduce((a, c) => a + c.quantity, 0)} في السلة
-            </p>
-          </div>
           <button
             onClick={onToggleGrid}
             title={showGrid ? "إخفاء الكروت" : "إظهار الكروت"}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+            className={`flex items-center gap-1 h-9 px-2 rounded-lg text-[10px] font-bold border transition-all ${
               showGrid
                 ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20"
                 : "bg-muted text-muted-foreground border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30"
@@ -230,7 +230,7 @@ export default function POSProductGrid({
           <SyncHealthDashboard />
           <button
             onClick={onOpenPatient}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+            className={`flex items-center gap-1.5 h-9 px-2.5 rounded-lg text-xs font-bold transition-all border ${
               selectedPatient
                 ? "bg-primary/10 text-primary border-primary/30 shadow-sm"
                 : "bg-background text-muted-foreground border-border hover:bg-muted hover:border-border"
@@ -269,7 +269,7 @@ export default function POSProductGrid({
           </button>
           <button
             onClick={onSync}
-            className="p-1.5 bg-background border border-border hover:bg-primary/10 hover:border-primary/30 rounded-lg transition-all text-muted-foreground hover:text-primary"
+            className="h-9 w-9 flex items-center justify-center bg-background border border-border hover:bg-primary/10 hover:border-primary/30 rounded-lg transition-all text-muted-foreground hover:text-primary"
             title="مزامنة"
           >
             <Database className="w-3.5 h-3.5" />

@@ -18,7 +18,7 @@ import TestimonialCard from '../components/testimonial-card';
 import CounterAnimation from '../components/counter-animation';
 import CTAButton from '../components/cta-button';
 
-const FAQAccordion = dynamic(() => import('../components/faq-accordion'), { ssr: false });
+const FAQAccordion = dynamic(() => import('../components/faq-accordion'));
 
 export default function Home() {
   return (

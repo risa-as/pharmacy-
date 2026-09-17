@@ -5,7 +5,8 @@ import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { logAudit } from "@/app/lib/audit";
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
@@ -42,7 +43,8 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     }
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
@@ -86,7 +88,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
@@ -117,12 +120,31 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         });
         const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 
+        // Last purchase price per drug in the receiving branch (newest paid batch,
+        // else the stock cost) — suggested when prices are confirmed at receipt.
+        const [lastBatches, inventories] = await Promise.all([
+            prisma.batch.findMany({
+                where: { costPrice: { gt: 0 }, inventory: { branchId: purchase.branchId, drugId: { in: drugIds } } },
+                orderBy: { createdAt: 'desc' },
+                distinct: ['inventoryId'],
+                select: { costPrice: true, inventory: { select: { drugId: true } } },
+            }),
+            prisma.inventory.findMany({
+                where: { branchId: purchase.branchId, drugId: { in: drugIds } },
+                select: { drugId: true, cost: true },
+            }),
+        ]);
+        const lastCostByDrug = new Map<string, number>();
+        for (const inv of inventories) if (inv.cost > 0) lastCostByDrug.set(inv.drugId, inv.cost);
+        for (const b of lastBatches) lastCostByDrug.set(b.inventory.drugId, b.costPrice);
+
         const itemsWithNames = purchase.items.map((item: any) => {
             const drug = drugMap.get(item.drugId);
             return {
                 ...item,
                 drugName: drug?.tradeName || 'Unknown',
-                scientificName: drug?.scientificName
+                scientificName: drug?.scientificName,
+                lastCost: lastCostByDrug.get(item.drugId) ?? null,
             };
         });
 

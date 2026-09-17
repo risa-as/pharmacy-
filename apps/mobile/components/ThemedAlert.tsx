@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Alert as RNAlert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { Colors } from '../constants/colors';
+import { Colors, Radius } from '../constants/colors';
 
 export interface ThemedAlertButton {
     text?: string;
@@ -40,9 +40,8 @@ const _origAlert = RNAlert.alert.bind(RNAlert);
     }
 };
 
-const PRIMARY = '#0F7575';
-const DANGER = '#dc2626';
-const WARN = '#d97706';
+/** Two buttons sit side by side; three or more stack. */
+const SIDE_BY_SIDE = 2;
 
 /**
  * Mount once at the app root (inside ThemeProvider). Renders the branded modal
@@ -80,15 +79,17 @@ export default function ThemedAlertHost() {
     const titleStr = config?.title ?? '';
     const isDestructive = buttons.some((b) => b.style === 'destructive');
     const isError = /خطأ|فشل|تعذّر|تعذر|تحذير|تنبيه/.test(titleStr);
+    const isSuccess = /تم |نجاح|بنجاح/.test(titleStr);
     const cancelButton = rawButtons.find((b) => b.style === 'cancel');
 
-    const accent = isDestructive ? DANGER : isError ? WARN : PRIMARY;
-    const iconName = isDestructive ? 'alert-circle' : isError ? 'warning' : 'information-circle';
-    const iconBg = isDestructive
-        ? 'rgba(220,38,38,0.12)'
-        : isError
-            ? 'rgba(217,119,6,0.12)'
-            : 'rgba(15,117,117,0.12)';
+    // Colours come from the app palette (constants/colors), like every other screen.
+    const accent = isDestructive ? C.danger : isError ? C.warning : isSuccess ? C.success : C.primary;
+    const iconBg = isDestructive ? C.dangerBg : isError ? C.warningBg : isSuccess ? C.successBg : C.primaryMuted;
+    const iconName = isDestructive ? 'alert-circle-outline'
+        : isError ? 'warning-outline'
+            : isSuccess ? 'checkmark-circle-outline'
+                : 'information-circle-outline';
+    const inRow = buttons.length === SIDE_BY_SIDE;
 
     return (
         <Modal
@@ -99,9 +100,9 @@ export default function ThemedAlertHost() {
             onRequestClose={() => runButton(cancelButton)}
         >
             <View style={styles.overlay}>
-                <View style={[styles.card, { backgroundColor: C.card }]}>
+                <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
                     <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
-                        <Ionicons name={iconName as any} size={34} color={accent} />
+                        <Ionicons name={iconName as any} size={32} color={accent} />
                     </View>
 
                     {!!config?.title && (
@@ -111,33 +112,30 @@ export default function ThemedAlertHost() {
                         <Text style={[styles.message, { color: C.mutedForeground }]}>{config.message}</Text>
                     )}
 
-                    <View style={styles.actions}>
+                    <View style={[styles.actions, inRow && styles.actionsRow]}>
                         {buttons.map((btn, i) => {
                             const variant = btn.style ?? 'default';
-                            if (variant === 'cancel') {
-                                return (
-                                    <TouchableOpacity
-                                        key={i}
-                                        onPress={() => runButton(btn)}
-                                        activeOpacity={0.7}
-                                        style={[styles.btn, styles.btnGhost, { borderColor: C.border }]}
-                                    >
-                                        <Text style={[styles.btnText, { color: C.mutedForeground }]}>
-                                            {btn.text ?? 'إلغاء'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            }
-                            const bg = variant === 'destructive' ? DANGER : PRIMARY;
+                            const isCancel = variant === 'cancel';
+                            const fill = variant === 'destructive' ? C.danger : C.primary;
                             return (
                                 <TouchableOpacity
                                     key={i}
                                     onPress={() => runButton(btn)}
-                                    activeOpacity={0.85}
-                                    style={[styles.btn, { backgroundColor: bg }]}
+                                    activeOpacity={isCancel ? 0.7 : 0.85}
+                                    accessibilityRole="button"
+                                    style={[
+                                        styles.btn,
+                                        inRow && styles.btnInRow,
+                                        isCancel
+                                            ? { backgroundColor: C.card, borderWidth: 1, borderColor: C.border }
+                                            : { backgroundColor: fill, borderWidth: 1, borderColor: fill },
+                                    ]}
                                 >
-                                    <Text style={[styles.btnText, styles.btnTextFilled]}>
-                                        {btn.text ?? 'حسناً'}
+                                    <Text
+                                        numberOfLines={1}
+                                        style={[styles.btnText, { color: isCancel ? C.mutedForeground : '#FFFFFF' }]}
+                                    >
+                                        {btn.text ?? (isCancel ? 'إلغاء' : 'حسناً')}
                                     </Text>
                                 </TouchableOpacity>
                             );
@@ -160,28 +158,30 @@ const styles = StyleSheet.create({
     card: {
         width: '100%',
         maxWidth: 380,
-        borderRadius: 5,
-        padding: 24,
+        borderRadius: Radius.card,
+        borderWidth: 1,
+        padding: 20,
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.25,
-        shadowRadius: 24,
-        elevation: 16,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 6,
     },
     iconWrap: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+        width: 64,
+        height: 64,
+        borderRadius: 32,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 14,
     },
-    title: { fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 8 },
-    message: { fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 22 },
+    title: { fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 6 },
+    message: { fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 18 },
     actions: { width: '100%', gap: 10 },
-    btn: { width: '100%', height: 50, borderRadius: 5, justifyContent: 'center', alignItems: 'center' },
-    btnGhost: { backgroundColor: 'transparent', borderWidth: 1.5 },
-    btnText: { fontSize: 15, fontWeight: '700' },
-    btnTextFilled: { color: '#fff', fontWeight: '800' },
+    // Two buttons share one line: the main action on the right (RTL).
+    actionsRow: { flexDirection: 'row-reverse' },
+    btn: { width: '100%', height: 46, borderRadius: Radius.control, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+    btnInRow: { width: undefined, flex: 1 },
+    btnText: { fontSize: 15, fontWeight: '800' },
 });

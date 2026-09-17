@@ -12,11 +12,12 @@ import Link from "next/link";
 
 const PAGE_SIZE = 1000;
 
-export default async function BatchesPage({
-  searchParams,
-}: {
-  searchParams?: { branch?: string; query?: string; page?: string };
-}) {
+export default async function BatchesPage(
+  props: {
+    searchParams?: Promise<{ branch?: string; query?: string; page?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) redirect("/login");
   const { tenantBranchWhere } = tenantCtx;

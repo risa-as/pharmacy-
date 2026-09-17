@@ -49,7 +49,9 @@ export default function POSLayout({ user }: { user: any }) {
     const [showShiftRequiredModal, setShowShiftRequiredModal] = useState(false);
     const [showShiftClosedNotice, setShowShiftClosedNotice] = useState(false);
     const [showCreditConfirm, setShowCreditConfirm] = useState(false);
-    const [isProcessingSale, setIsProcessingSale] = useState(false);
+    // Payment method currently being processed (null = none) — lets the cart
+    // show the wait spinner only on the button that was actually pressed.
+    const [processingMethod, setProcessingMethod] = useState<string | null>(null);
     const [startingCashAmount, setStartingCashAmount] = useState("");
     const [actualCashAmount, setActualCashAmount] = useState("");
     const [shiftSummary, setShiftSummary] = useState<ShiftSummary | null>(null);
@@ -415,7 +417,7 @@ export default function POSLayout({ user }: { user: any }) {
     // ─── Payment Handlers ────────────────────────────────────────────────────
     const handlePayment = async (paymentMethod: string = "CASH") => {
         if (!window.ipcRenderer) return;
-        if (isProcessingSale) return;
+        if (processingMethod) return;
         if (!isShiftOpen) { setShowShiftRequiredModal(true); return; }
 
         const isCredit = paymentMethod === "CREDIT";
@@ -445,7 +447,7 @@ export default function POSLayout({ user }: { user: any }) {
     const executeSale = async (paymentMethod: string) => {
         const isCredit = paymentMethod === "CREDIT";
         const hasPriceOverride = cart.some(item => item.originalPrice !== undefined);
-        setIsProcessingSale(true);
+        setProcessingMethod(paymentMethod);
         let result: any;
         try {
             result = await ipcInvoke('process-sale', {
@@ -454,7 +456,7 @@ export default function POSLayout({ user }: { user: any }) {
                 pointsRedeemed: pointsToRedeem, paymentMethod, hasPriceOverride
             });
         } finally {
-            setIsProcessingSale(false);
+            setProcessingMethod(null);
         }
 
         if (result.success) {
@@ -797,7 +799,7 @@ export default function POSLayout({ user }: { user: any }) {
                 onDiscountChange={setManualDiscount}
                 onLoyaltyToggle={() => setIsRedeemingLoyalty(v => !v)}
                 onPayment={handlePayment}
-                isProcessingSale={isProcessingSale}
+                processingMethod={processingMethod}
             />
 
             <ShiftModals

@@ -15,11 +15,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getPurchasesBySupplier } from "@/app/lib/actions/purchases";
 
-export default async function SupplierPurchasesPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function SupplierPurchasesPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) redirect("/login");
 

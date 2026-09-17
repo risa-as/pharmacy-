@@ -1,6 +1,6 @@
 "use client";
+import { useActionState } from "react";
 
-import { useFormState } from "react-dom";
 import Link from "next/link";
 import { Button } from "@faramace/ui";
 import { ArrowRight } from "lucide-react";
@@ -15,7 +15,7 @@ interface EditUserFormProps {
 export default function EditUserForm({ user, branches }: EditUserFormProps) {
     const initialState = { message: null, errors: {} };
     const updateUserWithId = updateUser.bind(null, user.id);
-    const [state, dispatch] = useFormState(updateUserWithId, initialState as any);
+    const [state, dispatch] = useActionState(updateUserWithId, initialState as any);
 
     return (
         <form action={dispatch} className="space-y-6">

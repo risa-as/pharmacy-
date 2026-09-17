@@ -124,7 +124,8 @@ interface Props {
     onDiscountChange: (v: number) => void;
     onLoyaltyToggle: () => void;
     onPayment: (method: string) => void;
-    isProcessingSale: boolean;
+    /** Payment method currently being processed (null = none). */
+    processingMethod: string | null;
 }
 
 export default function POSCart({
@@ -133,7 +134,7 @@ export default function POSCart({
     subTotal, finalTotal, loyaltyDiscountVal, pointsToRedeem,
     loyaltyMinRedemption, maxPointsForBill,
     onUpdateQuantity, onRemoveFromCart, onSetItemQuantity, onSetItemPrice, onClearCart, onHold,
-    onDiscountToggle, onDiscountChange, onLoyaltyToggle, onPayment, isProcessingSale,
+    onDiscountToggle, onDiscountChange, onLoyaltyToggle, onPayment, processingMethod,
 }: Props) {
     const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
     const maxPct = companySettings?.maxDiscountPercent ?? 10;
@@ -402,31 +403,31 @@ export default function POSCart({
                 <div className="flex gap-2">
                     <button
                         className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-success py-2.5 px-3 font-bold text-white text-sm shadow-md shadow-success/25 transition-all hover:bg-success/90 hover:shadow-success/40 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed relative"
-                        disabled={cart.length === 0 || isProcessingSale}
+                        disabled={cart.length === 0 || processingMethod !== null}
                         onClick={() => onPayment("CASH")}
                         title="دفع نقدي (F4)"
                     >
-                        {isProcessingSale ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Banknote className="w-4 h-4 shrink-0" />}
+                        {processingMethod === "CASH" ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Banknote className="w-4 h-4 shrink-0" />}
                         <span>نقدي</span>
                         <span className="absolute top-1 left-1 bg-white/20 text-[9px] px-1 py-0.5 rounded font-mono leading-none">F4</span>
                     </button>
                     <button
                         className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 px-3 font-bold text-white text-sm shadow-md shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-primary/40 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed relative"
-                        disabled={cart.length === 0 || isProcessingSale}
+                        disabled={cart.length === 0 || processingMethod !== null}
                         onClick={() => onPayment("CARD")}
                         title="دفع بالبطاقة (F5)"
                     >
-                        {isProcessingSale ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Building2 className="w-4 h-4 shrink-0" />}
+                        {processingMethod === "CARD" ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Building2 className="w-4 h-4 shrink-0" />}
                         <span>بطاقة</span>
                         <span className="absolute top-1 left-1 bg-white/20 text-[9px] px-1 py-0.5 rounded font-mono leading-none">F5</span>
                     </button>
                     <button
                         className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-warning py-2.5 px-3 font-bold text-white text-sm shadow-md shadow-warning/25 transition-all hover:bg-warning/90 hover:shadow-warning/40 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed relative"
-                        disabled={cart.length === 0 || isProcessingSale}
+                        disabled={cart.length === 0 || processingMethod !== null}
                         onClick={() => onPayment("CREDIT")}
                         title="بيع بالآجل (F6)"
                     >
-                        {isProcessingSale ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <CreditCard className="w-4 h-4 shrink-0" />}
+                        {processingMethod === "CREDIT" ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <CreditCard className="w-4 h-4 shrink-0" />}
                         <span>آجل</span>
                         <span className="absolute top-1 left-1 bg-white/20 text-[9px] px-1 py-0.5 rounded font-mono leading-none">F6</span>
                     </button>

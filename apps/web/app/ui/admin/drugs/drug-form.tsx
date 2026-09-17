@@ -1,7 +1,7 @@
 "use client";
+import { useActionState } from "react";
 
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { createGlobalDrug, updateGlobalDrug } from "@/app/lib/actions/drug";
 import { SubmitButton } from "@/app/ui/submit-button";
 
@@ -27,7 +27,7 @@ export default function AdminDrugForm({ mode, drug, cancelHref }: Props) {
         ? updateGlobalDrug.bind(null, drug.id)
         : createGlobalDrug;
 
-    const [state, dispatch] = useFormState(action, initialState);
+    const [state, dispatch] = useActionState(action, initialState);
 
     return (
         <form action={dispatch} className="space-y-5">

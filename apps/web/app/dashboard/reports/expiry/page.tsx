@@ -18,11 +18,12 @@ import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import ExpiryPeriodFilter from "@/app/ui/reports/expiry-period-filter";
 
-export default async function ExpiryReportPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function ExpiryReportPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const branchId =
     typeof searchParams.branch === "string" ? searchParams.branch : undefined;
   const totalDays =

@@ -5,7 +5,8 @@ import { getPatientById } from "@/app/lib/actions/patient";
 import Link from "next/link";
 import { ArrowRight, Users } from "lucide-react";
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const patient = await getPatientById(params.id);
 
     if (!patient) {

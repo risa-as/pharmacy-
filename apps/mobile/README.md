@@ -60,10 +60,13 @@ apps/mobile/
 
 ## 🔗 ربط API
 
-غيّر عنوان الخادم في `services/api.ts`:
+عنوان الخادم ثابت في البناء ولا يمكن تغييره من داخل التطبيق:
 
-```typescript
-const API_BASE_URL = 'http://YOUR_SERVER_IP:3000/api';
+- نسخ التوزيع: `EXPO_PUBLIC_API_URL` في `eas.json` (حالياً `https://app.faramace.com/api`).
+- التطوير المحلي: في `.env`، ثم أعد تشغيل Metro بـ `pnpm start --clear`.
+
+```bash
+EXPO_PUBLIC_API_URL=http://YOUR_SERVER_IP:3000/api
 ```
 
 ## 📦 بناء التطبيق

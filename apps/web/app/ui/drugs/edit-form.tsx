@@ -1,8 +1,8 @@
 "use client";
+import { useActionState } from "react";
 
 import Link from "next/link";
 import { SubmitButton } from "@/app/ui/submit-button";
-import { useFormState } from "react-dom";
 import { updateDrug } from "@/app/lib/actions/drug";
 
 interface Drug {
@@ -17,7 +17,7 @@ interface Drug {
 export default function EditForm({ drug }: { drug: Drug }) {
     const initialState: any = { message: "", errors: {} };
     const updateDrugWithId = updateDrug.bind(null, drug.id);
-    const [state, dispatch] = useFormState(updateDrugWithId, initialState);
+    const [state, dispatch] = useActionState(updateDrugWithId, initialState);
 
     return (
         <form action={dispatch}>

@@ -29,7 +29,10 @@ function createPrismaClient(): PrismaClient {
                     msg.includes("Connection reset") ||
                     msg.includes("10054");  // Windows: connection forcibly closed
 
-                if (isRetryable && attempt < MAX_RETRIES - 1) {
+                // A lost response does not prove a write was rolled back. Replaying
+                // create/increment may duplicate money or stock; retry reads only.
+                const safeRead = ['findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate', 'groupBy'].includes(params.action);
+                if (isRetryable && safeRead && !params.runInTransaction && attempt < MAX_RETRIES - 1) {
                     const delay = DELAYS_MS[attempt];
                     console.warn(`[Prisma] Retrying (${code ?? "conn"}) attempt ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`);
                     await new Promise((r) => setTimeout(r, delay));

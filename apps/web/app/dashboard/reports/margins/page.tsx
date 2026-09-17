@@ -19,11 +19,12 @@ import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 
-export default async function MarginsReportPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function MarginsReportPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const sortBy =
     typeof searchParams.sort === "string" ? searchParams.sort : "margin_asc";
   const branchId =

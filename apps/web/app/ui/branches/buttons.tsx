@@ -20,7 +20,7 @@ export function DeleteBranch({ id }: { id: string }) {
     const deleteBranchWithId = deleteBranch.bind(null, id);
 
     return (
-        <form action={deleteBranchWithId}>
+        <form>
             <DeleteButton action={deleteBranchWithId} description="الفرع" />
         </form>
     );

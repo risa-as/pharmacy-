@@ -4,10 +4,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 
-export async function GET(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
@@ -18,6 +16,8 @@ export async function GET(
                 sales: {
                     orderBy: { createdAt: 'desc' },
                     take: 10,
+                    // The purchase history labels each invoice cash / card / credit.
+                    include: { payment: { select: { method: true } } },
                 },
                 prescriptions: {
                     orderBy: { createdAt: 'desc' },
@@ -42,10 +42,8 @@ export async function GET(
     }
 }
 
-export async function PATCH(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
@@ -79,10 +77,8 @@ export async function PATCH(
     }
 }
 
-export async function DELETE(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function DELETE(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;

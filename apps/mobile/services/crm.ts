@@ -14,7 +14,7 @@ export interface Patient {
 
 export const crmService = {
     async getPatients(query: string = '') {
-        return request<any>(`/patients?query=${query}`);
+        return request<any>(`/patients?query=${encodeURIComponent(query)}`);
     },
 
     async getPatient(id: string) {

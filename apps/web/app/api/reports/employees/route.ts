@@ -69,7 +69,8 @@ export async function GET(req: Request) {
 
         const users = await prisma.user.findMany({
             where: { id: { in: userIds } },
-            select: { id: true, name: true, role: true }
+            // branch name: shown beside the role in the mobile report
+            select: { id: true, name: true, role: true, branch: { select: { name: true } } }
         });
 
         // 4. Combine Data
@@ -88,6 +89,7 @@ export async function GET(req: Request) {
                 id: user.id,
                 name: user.name,
                 role: user.role,
+                branchName: user.branch?.name ?? null,
                 totalSales,
                 transactionCount,
                 averageBasket: transactionCount > 0 ? totalSales / transactionCount : 0,

@@ -67,6 +67,9 @@ export async function createExpense(data: { amount: number, category: string, de
     }
 }
 
+/** Categories booked by the system itself — see SYSTEM_CATEGORIES in /api/expenses/[id]. */
+const SYSTEM_EXPENSE_CATEGORIES = ['مشتريات بضاعة', 'نواقص وتوالف الجرد', 'إتلاف مخزون'];
+
 export async function updateExpense(
     id: string,
     data: { amount: number; category: string; description?: string; date?: Date },
@@ -85,16 +88,22 @@ export async function updateExpense(
         // Verify the expense exists and belongs to this tenant's scope (no cross-tenant edits)
         const existing = await prisma.expense.findUnique({
             where: { id },
-            select: { branchId: true, branch: { select: { organizationId: true } } },
+            select: { branchId: true, category: true, branch: { select: { organizationId: true } } },
         });
         if (!existing) return { success: false, error: 'المصروف غير موجود.' };
 
-        const inScope = user.branchId
-            ? existing.branchId === user.branchId
-            : organizationId
-            ? existing.branch?.organizationId === organizationId
-            : false;
+        const inScope = user.role === 'SUPER_ADMIN'
+            ? true
+            : user.branchId
+                ? existing.branchId === user.branchId
+                : organizationId
+                    ? existing.branch?.organizationId === organizationId
+                    : false;
         if (!inScope) return { success: false, error: 'لا يمكنك تعديل هذا المصروف.' };
+
+        if (SYSTEM_EXPENSE_CATEGORIES.includes(existing.category)) {
+            return { success: false, error: 'هذا المصروف مسجَّل تلقائياً من عملية أخرى، ولا يمكن تعديله من هنا.' };
+        }
 
         const expense = await prisma.expense.update({
             where: { id },
@@ -124,20 +133,44 @@ export async function updateExpense(
 
 export async function deleteExpense(id: string) {
     const tenantCtx = await getTenantContext();
+    // Deleting used to run with no auth, permission or scope check at all: any
+    // caller who knew an id could delete another organisation's expense.
+    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    if (!tenantCtx.userPermissions.canCreateExpense) return { success: false, error: 'ليس لديك صلاحية لحذف المصروفات.' };
+
+    const { user, organizationId } = tenantCtx;
     try {
-        const expense = await prisma.expense.findUnique({ where: { id }, select: { category: true, amount: true, branchId: true } });
-        await prisma.expense.delete({ where: { id } });
-        if (!(tenantCtx instanceof NextResponse)) {
-            await logAudit({
-                userId: tenantCtx.user.id,
-                userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
-                action: 'DELETE',
-                entity: 'EXPENSE',
-                entityId: id,
-                details: JSON.stringify({ category: expense?.category, amount: expense?.amount }),
-                branchId: expense?.branchId ?? undefined,
-            });
+        const expense = await prisma.expense.findUnique({
+            where: { id },
+            select: { category: true, amount: true, branchId: true, branch: { select: { organizationId: true } } },
+        });
+        if (!expense) return { success: false, error: 'المصروف غير موجود.' };
+
+        const inScope = user.role === 'SUPER_ADMIN'
+            ? true
+            : user.branchId
+                ? expense.branchId === user.branchId
+                : organizationId
+                    ? expense.branch?.organizationId === organizationId
+                    : false;
+        if (!inScope) return { success: false, error: 'لا يمكنك حذف هذا المصروف.' };
+
+        // Expenses the system books from another record (purchase, stocktake,
+        // damaged stock) must be corrected at their source, not deleted here.
+        if (SYSTEM_EXPENSE_CATEGORIES.includes(expense.category)) {
+            return { success: false, error: 'هذا المصروف مسجَّل تلقائياً من عملية أخرى، ولا يمكن حذفه من هنا.' };
         }
+
+        await prisma.expense.delete({ where: { id } });
+        await logAudit({
+            userId: user.id,
+            userName: user.name ?? user.email ?? 'Unknown',
+            action: 'DELETE',
+            entity: 'EXPENSE',
+            entityId: id,
+            details: JSON.stringify({ category: expense.category, amount: expense.amount }),
+            branchId: expense.branchId ?? undefined,
+        });
         revalidatePath('/dashboard/expenses');
         return { success: true };
     } catch (error) {

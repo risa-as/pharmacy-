@@ -20,7 +20,7 @@ export function DeleteUser({ id }: { id: string }) {
     const deleteUserWithId = deleteUser.bind(null, id);
 
     return (
-        <form action={deleteUserWithId}>
+        <form>
             <DeleteButton action={deleteUserWithId} description="المستخدم" />
         </form>
     );

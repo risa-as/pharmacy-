@@ -38,7 +38,7 @@ export async function sendAndPersistNotification({
         if (userIds.length === 0 && branchId) {
             // Notify all users in the branch
             const branchUsers = await prisma.user.findMany({
-                where: { branchId },
+                where: { branchId, isActive: true },
                 select: { id: true },
             });
             userIds = branchUsers.map((u: any) => u.id);
@@ -62,6 +62,7 @@ export async function sendAndPersistNotification({
         const users = await prisma.user.findMany({
             where: {
                 id: { in: userIds },
+                isActive: true,
                 pushEnabled: true,
                 expoPushToken: { not: null },
             },
@@ -90,14 +91,16 @@ export async function sendAndPersistNotification({
 
         for (const chunk of chunks) {
             try {
-                await fetch('https://exp.host/--/api/v2/push/send', {
+                const response = await fetch('https://exp.host/--/api/v2/push/send', {
                     method: 'POST',
+                    signal: AbortSignal.timeout(5000),
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(chunk),
                 });
+                if (!response.ok) console.error('[NotificationTriggers] Expo push rejected:', response.status);
             } catch (err) {
                 console.error('[NotificationTriggers] Expo push chunk failed:', err);
             }
@@ -105,5 +108,46 @@ export async function sendAndPersistNotification({
     } catch (error) {
         // Non-fatal: log but never throw — notification failure must not break business flows
         console.error('[NotificationTriggers] sendAndPersistNotification failed:', error);
+    }
+}
+
+/**
+ * يُعلِم كل حساب نشط تابع لمذخر محدد. تُستخدَم هذه الدالة لرحلة طلبات
+ * المذاخر كي لا تعتمد المسارات التجارية على معرفة حساب المالك أو الموظفين
+ * واحداً واحداً. فشل الإشعار لا يجب أن يتراجع معه الطلب أو الفاتورة.
+ */
+export async function notifyWarehouseUsers({
+    warehouseId,
+    title,
+    body,
+    data,
+}: {
+    warehouseId: string;
+    title: string;
+    body: string;
+    data?: Record<string, unknown>;
+}): Promise<void> {
+    try {
+        const users = await prisma.user.findMany({
+            where: {
+                warehouseId,
+                role: 'WAREHOUSE',
+                isActive: true,
+            },
+            select: { id: true },
+        });
+
+        if (users.length === 0) return;
+
+        await sendAndPersistNotification({
+            type: 'SYSTEM',
+            title,
+            body,
+            targetUserIds: users.map((user) => user.id),
+            data: { kind: 'WAREHOUSE_ORDER', ...(data ?? {}) },
+        });
+    } catch (error) {
+        // الإشعار غير حاسم تجارياً؛ لا نسمح لفشله بإفساد انتقال حالة صحيح.
+        console.error('[NotificationTriggers] notifyWarehouseUsers failed:', error);
     }
 }

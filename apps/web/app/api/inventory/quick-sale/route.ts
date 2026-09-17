@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { pharmacyDrugScope } from '@/app/lib/drug-scope';
 import { validateSyncUser, isBranchInSyncScope } from '@/app/lib/sync-auth';
 
 // GET /api/inventory/quick-sale?branchId=X
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
 
         // Fetch quick-sale drugs with their inventory for this branch
         const drugs = await prisma.globalDrug.findMany({
-            where: { isQuickSale: true, isActive: true },
+            where: { isQuickSale: true, isActive: true, ...pharmacyDrugScope(tenantCtx.organizationId) },
             include: {
                 inventories: {
                     where: {

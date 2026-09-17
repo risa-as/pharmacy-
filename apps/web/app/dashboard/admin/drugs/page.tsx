@@ -1,11 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import Link from "next/link";
-import { PlusIcon, Pencil, Globe, CheckCircle2, XCircle, ChevronLeft, ChevronRight, PackageSearch, Activity, FileSpreadsheet, Building2 } from "lucide-react";
+import { PlusIcon, Pencil, Globe, CheckCircle2, XCircle, ChevronLeft, ChevronRight, PackageSearch, Activity, FileSpreadsheet, Building2, Warehouse as WarehouseIcon } from "lucide-react";
 import { prisma } from "@/app/lib/prisma";
 import { DeleteDrug } from "@/app/ui/drugs/buttons";
 import GlobalDrugSearch from "@/app/ui/drugs/global-search";
-import GlobalizePanel, { type CustomDrugOrg } from "@/app/ui/drugs/globalize-panel";
+import GlobalizePanel, { type CustomDrugOrg, type CustomDrugWarehouse } from "@/app/ui/drugs/globalize-panel";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -41,7 +41,12 @@ function StatChip({ icon, label, value, tone }: { icon: React.ReactNode; label: 
  * (organizationId = null); with one it is that organisation's private drugs,
  * rendered through the exact same table so both read identically.
  */
-async function getGlobalDrugs(query: string, currentPage: number, orgId: string | null) {
+async function getGlobalDrugs(
+    query: string,
+    currentPage: number,
+    orgId: string | null,
+    warehouseId: string | null,
+) {
     const searchFilter = query ? {
         OR: [
             { tradeName: { contains: query, mode: 'insensitive' as const } },
@@ -50,7 +55,12 @@ async function getGlobalDrugs(query: string, currentPage: number, orgId: string 
         ],
     } : {};
 
-    const scope = { organizationId: orgId };
+    // ميزة نطاق المذخر: النطاق ثنائي الآن. عرض مذخر بعينه = warehouseId؛ وعرض
+    // الكتالوج العالمي (لا مؤسسة ولا مذخر) يجب أن يستثني صفوف المذاخر صراحةً،
+    // وإلا ظهرت أدوية لم تُرقَّ بعد داخل قاعدة الأدوية العالمية.
+    const scope = warehouseId
+        ? { warehouseId }
+        : { organizationId: orgId, warehouseId: null };
     const where = { AND: [scope, searchFilter] };
 
     const [drugs, total, totalCatalog, activeCount] = await Promise.all([
@@ -73,7 +83,7 @@ async function getGlobalDrugs(query: string, currentPage: number, orgId: string 
 async function getOrgsWithCustomDrugs(): Promise<CustomDrugOrg[]> {
     const grouped = await prisma.globalDrug.groupBy({
         by: ['organizationId'],
-        where: { NOT: { organizationId: null } },
+        where: { NOT: { organizationId: null }, warehouseId: null },
         _count: { _all: true },
     });
     if (grouped.length === 0) return [];
@@ -94,20 +104,57 @@ async function getOrgsWithCustomDrugs(): Promise<CustomDrugOrg[]> {
         .sort((a: CustomDrugOrg, b: CustomDrugOrg) => b.count - a.count);
 }
 
-export default async function AdminDrugsPage({
-    searchParams,
-}: {
-    searchParams?: { query?: string; page?: string; org?: string };
-}) {
+/** نظيرها للمذاخر: مذاخر تحمل أدوية لم تُرقَّ بعد إلى الكتالوج العالمي. */
+async function getWarehousesWithCustomDrugs(): Promise<CustomDrugWarehouse[]> {
+    const grouped = await prisma.globalDrug.groupBy({
+        by: ['warehouseId'],
+        where: { NOT: { warehouseId: null } },
+        _count: { _all: true },
+    });
+    if (grouped.length === 0) return [];
+
+    const ids = grouped.map((g: any) => g.warehouseId).filter(Boolean) as string[];
+    const warehouses = await prisma.warehouse.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true },
+    });
+    const nameOf = new Map(warehouses.map((w: any) => [w.id, w.name]));
+
+    return grouped
+        .map((g: any) => ({
+            id: g.warehouseId as string,
+            name: nameOf.get(g.warehouseId) ?? 'مذخر محذوف',
+            count: g._count._all,
+        }))
+        .sort((a: CustomDrugWarehouse, b: CustomDrugWarehouse) => b.count - a.count);
+}
+
+export default async function AdminDrugsPage(
+    props: {
+        searchParams?: Promise<{ query?: string; page?: string; org?: string; warehouse?: string }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const query = searchParams?.query || "";
     const currentPage = Number(searchParams?.page) || 1;
     const orgId = searchParams?.org || "";
+    const warehouseId = searchParams?.warehouse || "";
 
-    const [{ drugs, total, totalCatalog, activeCount }, customOrgs, viewingOrg] = await Promise.all([
-        getGlobalDrugs(query, currentPage, orgId || null),
+    const [
+        { drugs, total, totalCatalog, activeCount },
+        customOrgs,
+        customWarehouses,
+        viewingOrg,
+        viewingWarehouse,
+    ] = await Promise.all([
+        getGlobalDrugs(query, currentPage, orgId || null, warehouseId || null),
         getOrgsWithCustomDrugs(),
+        getWarehousesWithCustomDrugs(),
         orgId
             ? prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true } })
+            : Promise.resolve(null),
+        warehouseId
+            ? prisma.warehouse.findUnique({ where: { id: warehouseId }, select: { id: true, name: true } })
             : Promise.resolve(null),
     ]);
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
@@ -116,31 +163,40 @@ export default async function AdminDrugsPage({
     const pageHref = (p: number) =>
         `/dashboard/admin/drugs?page=${p}`
         + (query ? `&query=${encodeURIComponent(query)}` : '')
-        + (orgId ? `&org=${encodeURIComponent(orgId)}` : '');
+        + (orgId ? `&org=${encodeURIComponent(orgId)}` : '')
+        + (warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : '');
+
+    // عرض مذخر يشترك مع عرض مؤسسة في كل شيء إلا الأيقونة والنص — فيُوحَّدان في
+    // متغيّر واحد كي لا يتفرّع الـJSX أدناه مرتين على نفس السؤال.
+    const viewingTenant = viewingOrg ?? viewingWarehouse;
 
     return (
         <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>
             {/* Header */}
             <div className="flex w-full flex-wrap items-start justify-between gap-4 mb-5">
                 <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ${viewingOrg ? 'bg-amber-500/10' : 'bg-blue-500/10'}`}>
-                        {viewingOrg
-                            ? <Building2 className="w-6 h-6 text-amber-600" />
-                            : <Globe className="w-6 h-6 text-blue-500" />}
+                    <div className={`flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ${viewingTenant ? 'bg-amber-500/10' : 'bg-blue-500/10'}`}>
+                        {viewingWarehouse
+                            ? <WarehouseIcon className="w-6 h-6 text-amber-600" />
+                            : viewingOrg
+                                ? <Building2 className="w-6 h-6 text-amber-600" />
+                                : <Globe className="w-6 h-6 text-blue-500" />}
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold font-cairo text-foreground">
-                            {viewingOrg ? `أدوية ${viewingOrg.name} الخاصة` : 'قاعدة الأدوية العالمية'}
+                            {viewingTenant ? `أدوية ${viewingTenant.name} الخاصة` : 'قاعدة الأدوية العالمية'}
                         </h1>
                         <p className="text-sm text-muted-foreground mt-1">
-                            {viewingOrg
-                                ? 'أدوية أضافتها هذه المؤسسة لنفسها — مرئية لها فقط حتى يتم تحويلها إلى الكتالوج العام.'
-                                : 'الكتالوج المشترك بين جميع المؤسسات — للقراءة فقط لدى العملاء.'}
+                            {viewingWarehouse
+                                ? 'أدوية أضافها هذا المذخر ولا توجد في الكتالوج العالمي — داخلية عنده، ولا تظهر للصيدليات في كتالوجه حتى ترقيتها.'
+                                : viewingOrg
+                                    ? 'أدوية أضافتها هذه المؤسسة لنفسها — مرئية لها فقط حتى يتم تحويلها إلى الكتالوج العام.'
+                                    : 'الكتالوج المشترك بين جميع المؤسسات — للقراءة فقط لدى العملاء.'}
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {viewingOrg && (
+                    {viewingTenant && (
                         <Link
                             href="/dashboard/admin/drugs"
                             className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border bg-card hover:bg-muted text-foreground transition-colors"
@@ -169,17 +225,22 @@ export default async function AdminDrugsPage({
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
                 <StatChip
-                    icon={viewingOrg ? <Building2 className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
-                    label={viewingOrg ? 'إجمالي أدوية المؤسسة الخاصة' : 'إجمالي الأدوية العالمية'}
+                    icon={viewingWarehouse ? <WarehouseIcon className="h-5 w-5" /> : viewingOrg ? <Building2 className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
+                    label={viewingWarehouse ? 'إجمالي أدوية المذخر الخاصة' : viewingOrg ? 'إجمالي أدوية المؤسسة الخاصة' : 'إجمالي الأدوية العالمية'}
                     value={totalCatalog}
-                    tone={viewingOrg ? 'bg-amber-500/10 text-amber-600' : 'bg-blue-500/10 text-blue-500'}
+                    tone={viewingTenant ? 'bg-amber-500/10 text-amber-600' : 'bg-blue-500/10 text-blue-500'}
                 />
                 <StatChip icon={<CheckCircle2 className="h-5 w-5" />} label="أدوية نشطة" value={activeCount} tone="bg-success/10 text-success" />
                 <StatChip icon={<XCircle className="h-5 w-5" />} label="غير نشطة" value={inactiveCount} tone="bg-destructive/10 text-destructive" />
             </div>
 
             {/* Promote a tenant's private drugs into the shared catalogue */}
-            <GlobalizePanel orgs={customOrgs} activeOrgId={orgId || null} />
+            <GlobalizePanel
+                orgs={customOrgs}
+                warehouses={customWarehouses}
+                activeOrgId={orgId || null}
+                activeWarehouseId={warehouseId || null}
+            />
 
             {/* Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">

@@ -2,7 +2,7 @@
 // Shared by the export API route so the downloaded file matches the on-screen
 // figures (revenue net of discount, COGS from recorded SaleItem.cost, returns
 // netted out of both revenue and COGS).
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 export type WbSaleItem = {
   quantity: number;
@@ -56,14 +56,14 @@ const returnCOGSOf = (ret: WbReturn) => {
   return cogs;
 };
 
-export function buildProfitWorkbook(opts: {
+export async function buildProfitWorkbook(opts: {
   orgName: string;
   branchName: Map<string, string>;
   periodLabel: string;
   sales: WbSale[];
   returns: WbReturn[];
   expenses: WbExpense[];
-}): Buffer {
+}): Promise<Buffer> {
   const { branchName, periodLabel, sales, returns, expenses } = opts;
   const bn = (id: string) => branchName.get(id) ?? id;
 
@@ -218,16 +218,17 @@ export function buildProfitWorkbook(opts: {
   ];
 
   // ── Assemble workbook ──────────────────────────────────────────────────────
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
   const addSheet = (name: string, rows: Record<string, string | number>[], emptyMsg: string) => {
-    const ws =
-      rows.length > 0
-        ? XLSX.utils.json_to_sheet(rows)
-        : XLSX.utils.aoa_to_sheet([[emptyMsg]]);
+    const ws = wb.addWorksheet(name, { views: [{ rightToLeft: true }] });
     if (rows.length > 0) {
-      ws["!cols"] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 14) }));
+      const headers = Object.keys(rows[0]);
+      ws.addRow(headers);
+      ws.addRows(rows.map((row) => headers.map((header) => row[header])));
+      ws.columns.forEach((column, index) => { column.width = Math.max(headers[index].length + 2, 14); });
+    } else {
+      ws.addRow([emptyMsg]);
     }
-    XLSX.utils.book_append_sheet(wb, ws, name);
   };
 
   addSheet("الملخص النهائي", summaryRows as any, "");
@@ -237,5 +238,5 @@ export function buildProfitWorkbook(opts: {
   addSheet("المرتجعات", returnRows, "لا توجد مرتجعات");
   addSheet("المصروفات", expenseRows, "لا توجد مصروفات");
 
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }

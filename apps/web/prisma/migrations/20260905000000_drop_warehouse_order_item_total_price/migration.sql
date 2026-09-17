@@ -1,0 +1,35 @@
+-- ============================================================================
+-- STATUS: NOT YET APPLIED. This is the ONLY outstanding migration.
+--
+-- Verified 2026-09-05 via `npx prisma migrate status`: 20 migrations found,
+-- 19 applied, and this file is the single one still pending. The earlier
+-- backlog (the 6 pre-existing migrations plus the two warehouse migrations
+-- 20260903000000 and 20260904000000) has ALREADY been applied — the database
+-- schema is otherwise up to date. There is no prerequisite work to resolve
+-- first; apply this with:
+--
+--     npx prisma migrate deploy
+--
+-- Hand-written rather than generated via `prisma migrate dev`, because that
+-- command must never be run against this repo's .env DATABASE_URL — it points
+-- at the LIVE production database (6 customer organizations, 10,217 sales).
+--
+-- WHAT THIS DOES
+--   Drops WarehouseOrderItem.totalPrice. No code path ever wrote it: order
+--   creation (app/api/warehouses/orders/route.ts) sets only drugId, quantity,
+--   unitPrice and requestedPrice; the quote route sets only status,
+--   quotedPrice, quotedQuantity and note. Every row would therefore carry the
+--   column's `0` default forever while looking like an authoritative line
+--   total. All money in this feature is computed on read via effectiveLine()
+--   in app/lib/warehouse-quote.ts, deliberately the single source of truth —
+--   a second, stale stored total is precisely the class of bug behind the
+--   earlier OUT_OF_STOCK billing error, so the column is dropped, not filled.
+--
+-- SAFETY
+--   SELECT COUNT(*) FROM "WarehouseOrderItem";  ->  0 rows
+--   (verified 2026-09-05 by read-only psql against the live database).
+--   The column has never held data, so the drop is lossless and irreversible
+--   only in the trivial sense — there is nothing to lose.
+-- ============================================================================
+
+ALTER TABLE "WarehouseOrderItem" DROP COLUMN "totalPrice";

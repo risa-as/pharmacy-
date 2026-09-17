@@ -13,7 +13,8 @@ import CancelPurchaseButton from './components/cancel-button';
 
 import PrintHeader from '@/app/ui/components/print-header';
 
-export default async function PurchaseDetailsPage({ params }: { params: { id: string } }) {
+export default async function PurchaseDetailsPage(props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const purchase = await getPurchaseDetails(params.id);
 
     if (!purchase) {

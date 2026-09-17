@@ -37,6 +37,15 @@ model Organization {
   aiUsageLogs             AiUsageLog[]
   prescriptionScanLogs    PrescriptionScanLog[]
   invoiceCounter     InvoiceCounter?
+  // Phase 2 (الحسابات والعملاء) من نظام المذاخر B2B: هذه المنظمة كصيدلية تتعامل
+  // مع مذاخر — علاقة تجارية واحدة لكل (مذخر، منظمة) + فواتيرها الواردة منها.
+  warehouseCustomers WarehouseCustomer[]
+  warehouseInvoices  WarehouseInvoice[]
+  // المندوبون (مذاخر B2B): مبيعات ميدانية حيث كانت هذه المنظمة هي الصيدلية
+  // المشترية على منصّتنا (WarehouseFieldSale.organizationId اختياري — قد يكون
+  // العميل خارج المنصّة، انظر تعليق النموذج).
+  warehouseFieldSales WarehouseFieldSale[]
+  supplierLinkRequests SupplierLinkRequest[]
 
   plan               SubscriptionPlan? @relation(fields: [planId], references: [id])
 }
@@ -82,13 +91,21 @@ model User {
   expoPushToken String? // Expo push token for notifications
   pushEnabled   Boolean     @default(true)
   isActive      Boolean     @default(true) // Soft-disable a departed employee without deleting (preserves sales/shift FKs)
+  // المرحلة 1 من ميزة المذاخر: حساب مذخر لا ينتمي لأي Organization أو Branch.
+  warehouseId       String?
+  warehouseUserType WarehouseUserType?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   branch        Branch?     @relation(fields: [branchId], references: [id])
+  warehouse     Warehouse?  @relation(fields: [warehouseId], references: [id])
   sales         Sale[]
   shifts        Shift[]
   stocktakes    Stocktake[]
   notifications Notification[]
+  // المندوبون (مذاخر B2B): حساب دخول اختياري لمندوب — انظر WarehouseRep.userId.
+  warehouseRep  WarehouseRep?
+
+  @@index([warehouseId])
 }
 
 model Shift {
@@ -168,13 +185,27 @@ model GlobalDrug {
   marketplaceListings  MarketplaceListing[]
   patientAppOrderItems PatientAppOrderItem[]
   demandForecasts      DemandForecast[]
+  warehouseCatalogItems WarehouseCatalogItem[]
 
   organizationId       String?
   organization         Organization? @relation("OrganizationCustomDrugs", fields: [organizationId], references: [id])
 
+  // ميزة نطاق المذخر: الصف قد يكون خاصاً بمذخر بعينه بنفس فلسفة organizationId
+  // أعلاه. النطاق صار ثنائياً: (null,null) = الكتالوج العالمي المشترك،
+  // (orgId,null) = خاص بمؤسسة، (null,warehouseId) = خاص بمذخر. الترقية إلى
+  // العالمي = تصفير حقل النطاق فقط، فتبقى كل المفاتيح الأجنبية سليمة —
+  // انظر globalizeWarehouseDrugs في app/lib/actions/drugs-globalize.ts.
+  warehouseId          String?
+  warehouse            Warehouse? @relation("WarehouseCustomDrugs", fields: [warehouseId], references: [id])
+
   @@unique([barcode, organizationId])
+  // قيد منفصل عن الذي فوقه بقصد: Postgres يعتبر NULL مميزاً، فلو أُدمج
+  // warehouseId في نفس الثلاثية لصار صفوف المؤسسات تحمل NULL في الثلاثية
+  // فتفقد حمايتها الحالية بصمت. القيد أدناه يُفعَّل فقط حين warehouseId غير null.
+  @@unique([barcode, warehouseId])
   @@index([tradeName])
   @@index([barcode])
+  @@index([warehouseId])
 }
 
 model Inventory {
@@ -354,6 +385,45 @@ model Supplier {
   purchases Purchase[]
   payments  SupplierPayment[]
   batches   Batch[]
+  // المرحلة 2 من ميزة المذاخر: المورد المرآة لمذخر على المنصة (يُنشأ تلقائياً عند أول طلب معتمد — التقرير §4.1-ب).
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+  linkRequests SupplierLinkRequest[]
+
+  @@unique([organizationId, warehouseId])
+}
+
+// طلب ربط مورد محلي بمذخر: ترفعه المؤسسة من صفحة الموردين ويعتمده مدير المنصة.
+// الربط نفسه يبقى صلاحية SUPER_ADMIN حصراً (admin/warehouses/[id]/supplier-links)
+// لأنه يوجّه فواتير مذخر إلى سجل محاسبي؛ هذا الجدول يسجّل الطلب والقرار فقط.
+model SupplierLinkRequest {
+  id             String    @id @default(uuid())
+  organizationId String
+  supplierId     String
+  warehouseId    String
+  /// PENDING | APPROVED | REJECTED | CANCELLED
+  status         String    @default("PENDING")
+  /// = supplierId طالما الطلب معلّق ثم NULL عند الحسم. قيد فريد عادي (NULL مميز في
+  /// Postgres) يمنع طلبين معلّقين لنفس المورد بلا فهرس جزئي لا يعرفه Prisma.
+  pendingKey      String?   @unique
+  note            String?
+  requestedById   String
+  requestedByName String?
+  decidedById     String?
+  decidedByName   String?
+  decisionNote    String?
+  decidedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier     Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  warehouse    Warehouse    @relation(fields: [warehouseId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([organizationId, status])
+  @@index([warehouseId])
+  @@index([supplierId])
 }
 
 model Purchase {
@@ -527,6 +597,23 @@ enum Role {
   SUPER_ADMIN
   PHARMACIST
   CASHIER
+  WAREHOUSE
+}
+
+// المرحلة 1 من ميزة المذاخر (B2B): نوع مستخدم المذخر — مالك أو موظف.
+enum WarehouseUserType {
+  OWNER
+  STAFF
+  // المرحلة 3 (الأدوار والصلاحيات): STAFF أعلاه أصبح دوراً قديماً (DEPRECATED)
+  // — لا يُسند بعد الآن لحساب جديد ولا تعرضه واجهة app/warehouse/users كخيار
+  // قابل للاختيار؛ أُبقي عليه في التعداد فقط لأن Postgres لا يستطيع حذف قيمة
+  // enum قد تشير إليها صفوف موجودة فعلاً بلا إعادة كتابة الجدول بالكامل. وقت
+  // التشغيل الفعلي، app/lib/warehouse-permissions.ts يعامل أي صف STAFF قديم
+  // كمرادف تام لـ SALES (نفس مصفوفة الصلاحيات الافتراضية بالضبط).
+  MANAGER
+  SALES
+  INVENTORY
+  ACCOUNTANT
 }
 
 enum PrescriptionStatus {
@@ -775,6 +862,28 @@ model Warehouse {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   orders        WarehouseOrder[]
+  users         User[]
+  // المرحلة 2 من ميزة المذاخر: كتالوج المذخر والموردون المرآة.
+  catalogItems      WarehouseCatalogItem[]
+  mirroredSuppliers Supplier[]
+  supplierLinkRequests SupplierLinkRequest[]
+  // Phase 2 (الحسابات والعملاء) من نظام المذاخر B2B: العلاقات التجارية والفواتير
+  // والدفعات على جانب المذخر — انظر تعليق WarehouseCustomer أدناه.
+  customers WarehouseCustomer[]
+  invoices  WarehouseInvoice[]
+  payments  WarehousePayment[]
+  // مشتريات المذخر وذممه الدائنة (اتجاه معاكس لـ invoices/payments أعلاه) —
+  // انظر تعليق WarehouseSupplier أدناه.
+  suppliers        WarehouseSupplier[]
+  purchases        WarehousePurchase[]
+  supplierPayments WarehouseSupplierPayment[]
+  // المندوبون (مذاخر B2B): تتبّع بضاعة السيارة، الفواتير الميدانية، والتحصيل —
+  // انظر تعليق WarehouseRep أدناه.
+  reps           WarehouseRep[]
+  fieldSales     WarehouseFieldSale[]
+  repCollections WarehouseRepCollection[]
+  // ميزة نطاق المذخر: أدوية أضافها هذا المذخر ولم تُرقَّ بعد إلى الكتالوج العالمي.
+  customDrugs    GlobalDrug[] @relation("WarehouseCustomDrugs")
 }
 
 model WarehouseOrder {
@@ -782,7 +891,9 @@ model WarehouseOrder {
   warehouseId  String
   branchId     String
   orderNumber  String?              @unique
-  status       WarehouseOrderStatus @default(PENDING)
+  // Client-generated key makes retries of the same create operation harmless.
+  idempotencyKey String?            @unique
+  status       WarehouseOrderStatus @default(DRAFT)
   totalAmount  Float                @default(0)
   notes        String?
   expectedDate DateTime?
@@ -792,6 +903,7 @@ model WarehouseOrder {
   warehouse Warehouse            @relation(fields: [warehouseId], references: [id])
   branch    Branch               @relation(fields: [branchId], references: [id])
   items     WarehouseOrderItem[]
+  events    WarehouseOrderEvent[]
 }
 
 model WarehouseOrderItem {
@@ -800,18 +912,445 @@ model WarehouseOrderItem {
   drugId           String
   quantity         Int
   unitPrice        Float  @default(0)
-  totalPrice       Float  @default(0)
+
+  // المرحلة 2 من ميزة المذاخر: تفاصيل تفاوض المذخر لكل صنف.
+  requestedPrice Float?
+  quotedPrice    Float?
+  quotedQuantity Int?
+  status         WarehouseOrderItemStatus @default(REQUESTED)
+  note           String?
+
+  // ميزة البونص: الوحدات المجانية المعتمَدة فعلياً لهذا السطر — قد تُقترَح
+  // ابتداءً من WarehouseCatalogItem.bonusThreshold/bonusQuantity أعلاه لكن
+  // هذا الحقل هو مصدر الحقيقة الوحيد المستخدَم في الخصم/الفوترة/الهامش (انظر
+  // effectiveLine في app/lib/warehouse-quote.ts: البونص لا يدخل حساب السعر أو
+  // الإجمالي إطلاقاً — إيراده صفر دوماً — لكن يدخل خصم المخزون والتكلفة كاملاً).
+  bonusQuantity Int @default(0)
 
   warehouseOrder WarehouseOrder @relation(fields: [warehouseOrderId], references: [id], onDelete: Cascade)
   drug           GlobalDrug     @relation(fields: [drugId], references: [id])
 }
 
 enum WarehouseOrderStatus {
-  PENDING
-  CONFIRMED
+  DRAFT
+  SENT
+  UNDER_REVIEW
+  QUOTED
+  APPROVED
+  REJECTED
   SHIPPED
   DELIVERED
   CANCELLED
+}
+
+// المرحلة 2 من ميزة المذاخر: حالة الصنف داخل طلب المذخر.
+enum WarehouseOrderItemStatus {
+  REQUESTED
+  AVAILABLE
+  PARTIAL
+  OUT_OF_STOCK
+}
+
+// المرحلة 1 من ميزة تتبّع المخزون (Pass A): اتجاه حركة المخزون — انظر WarehouseStockMove.
+// ميزة المندوبين: REP_TRANSFER تُمثّل تحميل بضاعة من مخزون المذخر الرئيسي إلى
+// سيارة مندوب (WarehouseRepStock) — صرف من مخزون المذخر تماماً كـ SHIPMENT،
+// لكن الوجهة مندوب لا صيدلية. انظر تعليق ALTER TYPE في هجرة هذه الميزة لسبب
+// أمان إضافة قيمة enum على PG 12+ داخل معاملة.
+enum WarehouseStockMoveType {
+  RECEIPT
+  SHIPMENT
+  ADJUSTMENT
+  DAMAGE
+  RETURN
+  REP_TRANSFER
+}
+
+// المرحلة 2 من ميزة المذاخر: كتالوج أدوية المذخر — المطابقة عبر المستأجرين تتم على barcode
+// (الخيار أ-1 من التقرير §4.1-أ) لأن GlobalDrug يوجد بعدة صفوف لنفس الدواء (عالمي + خاص لكل منظمة).
+model WarehouseCatalogItem {
+  id              String     @id @default(uuid())
+  warehouseId     String
+  drugId          String
+  barcode         String
+  price           Float
+  isAvailable     Boolean    @default(true)
+  lastPriceUpdate DateTime   @updatedAt
+  // المرحلة 1 من ميزة تتبّع المخزون (Pass A): مرآة حقول Inventory.minStock/cost —
+  // WarehouseCatalogItem هو معادل Inventory عند المذخر، فلا يُنشأ جدول مخزون منفصل.
+  // isAvailable يبقى بمعناه الحالي كمفتاح "أعرض هذا الصنف" (قرار التاجر)؛ التوفر
+  // الفعلي = isAvailable && كمية قابلة للبيع > 0 — انظر deriveAvailability في
+  // app/lib/warehouse-stock.ts (تُطبَّق في المرحلة ب على مسارات الـ API/الواجهة).
+  minStock  Int   @default(0) // حد إعادة الطلب
+  costPrice Float @default(0) // كلفة الشراء — أساس احتساب هامش الربح
+
+  // ميزة البونص: قاعدة بونص قياسية اختيارية لهذا الصنف («اشترِ bonusThreshold
+  // خذ bonusQuantity مجاناً») — انظر app/lib/warehouse-bonus.ts (computeBonusUnits)
+  // للقاعدة الحسابية الوحيدة. 0 في أي منهما يعني "لا قاعدة بونص" (لا 0 مجاني
+  // لكل وحدة). هذه القاعدة **تقترح** فقط قيمة أولية عند تسعير طلب — القيمة
+  // المعتمدة فعلياً تُخزَّن على WarehouseOrderItem.bonusQuantity أدناه، لأن
+  // المذخر يفاوض حالة بحالة وقد يمنح بونصاً مختلفاً عن قاعدته المعلنة.
+  bonusThreshold Int @default(0) // اشترِ هذا العدد…
+  bonusQuantity  Int @default(0) // …واحصل على هذا العدد مجاناً
+
+  warehouse Warehouse  @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  drug      GlobalDrug @relation(fields: [drugId], references: [id])
+  batches   WarehouseBatch[]
+  moves     WarehouseStockMove[]
+  // المرحلة 5 (الصقل التجاري): أسعار شرائح لكل صنف — انظر تعليق WarehouseCatalogPrice أدناه.
+  tierPrices WarehouseCatalogPrice[]
+  // مشتريات المذخر وذممه الدائنة: بنود فواتير الشراء التي أنشأت دفعات لهذا الصنف.
+  purchaseItems WarehousePurchaseItem[]
+  // المندوبون (مذاخر B2B): بنود مبيعات ميدانية باعت هذا الصنف من مخزون مندوب.
+  fieldSaleItems WarehouseFieldSaleItem[]
+
+  @@unique([warehouseId, barcode])
+  @@index([barcode])
+  @@index([drugId])
+}
+
+// المرحلة 5 (الصقل التجاري): سعر صنف لشريحة تسعير محددة (يطابق
+// WarehouseCustomer.priceTier نصاً — لا enum مشترك، فالشريحة نص حر يضبطه
+// المذخر). resolveTierPrice() في app/lib/warehouse-pricing.ts هي القاعدة
+// النقية الوحيدة التي تقرر أي سعر يُعرَض؛ صف بسعر <= 0 يُعامَل كخطأ إدخال
+// ويُتجاهَل هناك (يسقط رجوعاً لسعر القائمة)، فلا يُحذَف من هذا الجدول تلقائياً.
+model WarehouseCatalogPrice {
+  id            String   @id @default(uuid())
+  catalogItemId String
+  tier          String // "GOLD" / "SILVER" ... مطابق لـ WarehouseCustomer.priceTier
+  price         Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  catalogItem WarehouseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@unique([catalogItemId, tier])
+  @@index([catalogItemId])
+}
+
+// المرحلة 1 من ميزة تتبّع المخزون (Pass A): معادل Batch عند المذخر — نفس أسماء
+// الحقول بالضبط (batchNumber, expiryDate, quantity, initialQuantity, costPrice)
+// كي يُقرأ النظامان بنفس المنطق؛ supplierId (Batch) → supplierName نصي حر هنا
+// لأن المذخر لا يملك جدول Supplier لموردّيه (الشركات الدوائية التي يشتري منها).
+model WarehouseBatch {
+  id              String   @id @default(uuid())
+  catalogItemId   String
+  batchNumber     String
+  expiryDate      DateTime
+  quantity        Int
+  // الكمية الأصلية عند الاستلام؛ quantity تُنقَص عند الشحن/التلف/التعديل، فالمستهلَك
+  // = initialQuantity - quantity (مطابق لتعليق Batch.initialQuantity في Inventory).
+  initialQuantity Int      @default(0)
+  costPrice       Float    @default(0)
+  supplierName    String?
+  // مشتريات المذخر وذممه الدائنة: يتتبّع الدفعة إلى سطر فاتورة الشراء التي
+  // أنشأتها، حين وُجدت — String? خام بلا @relation عمداً، بنفس انضباط
+  // WarehouseStockMove.orderId أعلاه (فصل وحدة تتبّع المخزون عن وحدة
+  // المشتريات، وتجنّب فرض قيد FK/cascade على جدول إنتاجي حي لحقل تتبّعي
+  // بحت). دفعات مسار الاستلام اليدوي (stock/receipt) تبقى بلا قيمة هنا
+  // (null) وتحتفظ بـ supplierName النصي الحر كما كانت دائماً.
+  purchaseItemId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  catalogItem WarehouseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  moves       WarehouseStockMove[]
+  // المندوبون (مذاخر B2B): أرصدة مندوبين حُمِّلوا من هذه الدفعة، وبنود مبيعات
+  // ميدانية بيعت منها — انظر WarehouseRepStock / WarehouseFieldSaleItem.
+  repStock       WarehouseRepStock[]
+  fieldSaleItems WarehouseFieldSaleItem[]
+
+  @@index([catalogItemId])
+  @@index([catalogItemId, expiryDate])
+  @@index([expiryDate, quantity])
+}
+
+// المرحلة 1 من ميزة تتبّع المخزون (Pass A): سجل تدقيق حركات المخزون — الصيدلية لا
+// تملك مكافئاً لهذا، لكن المذخر يحتاجه للجرد وفض النزاعات مع الصيدليات. quantity
+// دائماً موجبة؛ type يحمل الاتجاه (RECEIPT/RETURN تزيد، SHIPMENT/DAMAGE تنقص،
+// ADJUSTMENT تصحيح جرد بأي اتجاه). orderId مقصود أن يبقى حقلاً نصياً بلا علاقة FK
+// إلى WarehouseOrder (بلا @relation) لتجنّب إقران وحدة تتبّع المخزون بوحدة الطلبات
+// — حركة SHIPMENT تُنشأ من مسار اعتماد/شحن الطلب، لكن هذا الملف لا يجب أن يعتمد
+// على نموذج WarehouseOrder أو يفرض قيد حذف/تحديث متبادلاً معه.
+model WarehouseStockMove {
+  id            String                 @id @default(uuid())
+  catalogItemId String
+  batchId       String?
+  type          WarehouseStockMoveType
+  quantity      Int
+  reason        String?
+  actorName     String?
+  orderId       String?
+  createdAt     DateTime               @default(now())
+
+  catalogItem WarehouseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  batch       WarehouseBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([catalogItemId, createdAt])
+}
+
+// المرحلة 2 من ميزة المذاخر: سجل أحداث الطلب — أساس صفحة متابعة الحالة (Timeline).
+model WarehouseOrderEvent {
+  id        String   @id @default(uuid())
+  orderId   String
+  actorType String
+  actorName String?
+  type      String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  order WarehouseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+// ==========================================================================
+// Phase 2 من نظام المذاخر B2B — الحسابات والعملاء
+// ==========================================================================
+// المشكلة: المذخر لا يرى ماله إطلاقاً. الديون تُتبَّع في SupplierPayment
+// العائد للصيدلية (supplierId → Supplier → Organization)، فتعرف الصيدلية ما
+// تدين به للمذخر، بينما لا يملك المذخر أي نموذج مالي خاص به — لا يعرف من
+// يدين له ولا بكم. الثلاثة نماذج التالية تسدّ هذه الفجوة على جانب المذخر
+// حصراً، بلا أي مساس بـ SupplierPayment أو استبدال له.
+
+// العلاقة التجارية بين مذخر وصيدلية: حدّ ائتمان (0 = بلا حد)، مهلة سداد
+// بالأيام (0 = نقدي/بلا مهلة)، شريحة تسعير، وحظر. تُنشأ تلقائياً عند أول طلب
+// يُعتمد (نفس نمط المورد المرآة في warehouse-purchase-bridge.ts — قيد تفرّد +
+// معالجة P2002 عند التسابق) كي تتوفر شروط افتراضية من أول تعامل.
+model WarehouseCustomer {
+  id              String   @id @default(uuid())
+  warehouseId     String
+  organizationId  String
+  creditLimit     Float    @default(0) // 0 = بلا حد ائتماني
+  paymentTermDays Int      @default(0) // 0 = نقدي / بلا مهلة سداد
+  priceTier       String?
+  isBlocked       Boolean  @default(false)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  warehouse    Warehouse    @relation(fields: [warehouseId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([warehouseId, organizationId])
+  @@index([warehouseId])
+  @@index([organizationId])
+}
+
+// فاتورة تُصدَر تلقائياً عند اعتماد الصيدلية للعرض (QUOTED → APPROVED)، داخل
+// نفس معاملة إنشاء فاتورة الشراء المسودة (Purchase) في
+// app/api/warehouses/orders/[id]/route.ts. total مُشتق حصراً من نفس
+// effectiveLine()/plan.total المستخدَم هناك — لا يُعاد حسابه بقاعدة مختلفة،
+// فلا يتفرّق الجانبان مالياً كما حدث سابقاً بين مسار العرض ومسار الاعتماد
+// (انظر تعليق effectiveLine في warehouse-quote.ts). orderId فريد: فاتورة
+// واحدة فقط لكل طلب مذخر — اعتماد الطلب مرتين (سباق أو خطأ) لا يجب أن يُنشئ
+// فاتورة ثانية.
+model WarehouseInvoice {
+  id             String                 @id @default(uuid())
+  warehouseId    String
+  organizationId String
+  orderId        String                 @unique
+  invoiceNumber  String                 @unique
+  total          Float
+  paidAmount     Float                  @default(0)
+  status         WarehouseInvoiceStatus @default(UNPAID)
+  issuedAt       DateTime               @default(now())
+  dueAt          DateTime?
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  warehouse    Warehouse          @relation(fields: [warehouseId], references: [id])
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  payments     WarehousePayment[]
+
+  @@index([warehouseId, status])
+  @@index([organizationId])
+  @@index([dueAt])
+}
+
+enum WarehouseInvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+// دفعة مُستلَمة على فاتورة مذخر. applyPayment() في app/lib/warehouse-accounts.ts
+// يحسب paidAmount/status الجديدين بشكل نقي؛ الكتابة الفعلية على WarehouseInvoice
+// تتم بتحديث ذري مشروط (compare-and-swap على paidAmount الحالي كما هو في WHERE)
+// داخل معاملة واحدة مع إنشاء هذا السطر — نفس انضباط
+// app/api/warehouse-portal/stock/adjust/route.ts ضد الدفعات المتزامنة.
+model WarehousePayment {
+  id          String   @id @default(uuid())
+  // Required client-generated key; unique across all invoices to prevent a
+  // retried payment POST from creating a second financial entry.
+  idempotencyKey String? @unique
+  invoiceId   String
+  warehouseId String
+  amount      Float
+  method      String   @default("CASH")
+  reference   String?
+  notes       String?
+  receivedAt  DateTime @default(now())
+  actorName   String?
+  createdAt   DateTime @default(now())
+
+  invoice   WarehouseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+
+  @@index([invoiceId])
+  @@index([warehouseId, receivedAt])
+}
+
+// ==========================================================================
+// مشتريات المذخر وذممه الدائنة (Warehouse Purchases & Payables)
+// ==========================================================================
+// كل ما سبق (WarehouseInvoice/WarehousePayment) يتتبّع ما يُدين به على
+// المذخر (الذمم المدينة). هذا القسم هو الاتجاه المعاكس تماماً: ما يدين به
+// المذخر نفسه لموردّيه (شركات الأدوية) — الذمم الدائنة. المورّد كان حتى الآن
+// حقلاً نصياً حراً (WarehouseBatch.supplierName)، بلا كيان ولا فاتورة شراء
+// خلفه، فلا كلفة شراء حقيقية موثَّقة ولا معرفة بما يُستحَق سداده لأي مورّد.
+// applyPayment/computeInvoiceStatus/agingBucket/computeDueDate/
+// summarizeReceivables في app/lib/warehouse-accounts.ts تُعاد استخدامها هنا
+// حرفياً (الرياضيات نفسها بالاتجاه المعاكس) — لا نسخة موازية منها.
+
+// الشركة الدوائية التي يشتري منها المذخر — معادل WarehouseCustomer بالاتجاه
+// المعاكس، لكن بلا Organization خلفها (المورّد ليس بالضرورة عميلاً مسجَّلاً
+// في هذا النظام، فهو نص/كيان محلي بحت لهذا المذخر).
+model WarehouseSupplier {
+  id            String   @id @default(uuid())
+  warehouseId   String
+  name          String
+  phone         String?
+  contactPerson String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  warehouse Warehouse           @relation(fields: [warehouseId], references: [id])
+  purchases WarehousePurchase[]
+
+  @@unique([warehouseId, name])
+  @@index([warehouseId])
+}
+
+// فاتورة شراء واردة من مورّد. total يُحسَب دائماً على الخادم من بنودها
+// (WarehousePurchaseItem) — لا يُقبَل من جسم الطلب مباشرة، تماماً كما
+// WarehouseInvoice.total يُشتق من effectiveLine()/plan.total ولا يُكتب حراً.
+// status يعيد استخدام WarehouseInvoiceStatus القائم (نفس التعداد بالضبط)
+// بدل تعداد مواز، لأن applyPayment/computeInvoiceStatus في
+// warehouse-accounts.ts نقيّتان تماماً من اتجاه العلاقة (تُدخِلان
+// {total, paidAmount} فقط) فتصلحان هنا بلا أي تعديل.
+model WarehousePurchase {
+  id            String                 @id @default(uuid())
+  warehouseId   String
+  supplierId    String
+  invoiceNumber String // رقم فاتورة المورّد — ليس فريداً عالمياً، فقد يتكرر بين موردين مختلفين
+  total         Float
+  paidAmount    Float                  @default(0)
+  status        WarehouseInvoiceStatus @default(UNPAID)
+  issuedAt      DateTime               @default(now())
+  dueAt         DateTime?
+  notes         String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  warehouse Warehouse                  @relation(fields: [warehouseId], references: [id])
+  supplier  WarehouseSupplier          @relation(fields: [supplierId], references: [id])
+  items     WarehousePurchaseItem[]
+  payments  WarehouseSupplierPayment[]
+
+  @@unique([warehouseId, supplierId, invoiceNumber])
+  @@index([warehouseId, status])
+  @@index([dueAt])
+}
+
+// سطر واحد في فاتورة شراء — ينشئ WarehouseBatch واحداً بالضبط عند إنشاء
+// الفاتورة (POST /api/warehouse-portal/purchases). bonusQuantity هي الوحدات
+// المجانية التي حصل عليها المذخر من المورّد على هذا السطر تحديداً: تدخل كمية
+// المخزون الفعلية (quantity + bonusQuantity تصل كلها كوحدات إلى المخزن)، لكن
+// total الفاتورة يحسب quantity × unitCost فقط — البونص مجاني حقاً، لا يُدفَع
+// ثمنه مهما دخل المخزون. انظر computePurchaseTotal/purchaseStockUnits في
+// app/lib/warehouse-purchases.ts للقاعدة الحسابية الوحيدة لكلا الرقمين.
+model WarehousePurchaseItem {
+  id            String   @id @default(uuid())
+  purchaseId    String
+  catalogItemId String
+  batchNumber   String
+  expiryDate    DateTime
+  quantity      Int // الكمية المدفوعة الثمن فقط — تدخل حساب total
+  unitCost      Float
+  bonusQuantity Int      @default(0) // وحدات مجانية إضافية من المورّد — تدخل المخزون فقط، لا total
+
+  purchase    WarehousePurchase    @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  catalogItem WarehouseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([catalogItemId])
+}
+
+// دفعة سداد صادرة من المذخر لمورّد على فاتورة شراء — الاتجاه المعاكس تماماً
+// لـ WarehousePayment. نفس انضباط الكتابة الذرية المشروطة (compare-and-swap
+// على paidAmount) في POST /api/warehouse-portal/purchases/[id]/payments،
+// المطابق حرفياً لـ POST /api/warehouse-portal/invoices/[id]/payments.
+model WarehouseSupplierPayment {
+  id          String   @id @default(uuid())
+  purchaseId  String
+  warehouseId String
+  amount      Float
+  method      String   @default("CASH")
+  reference   String?
+  notes       String?
+  paidAt      DateTime @default(now())
+  actorName   String?
+  createdAt   DateTime @default(now())
+
+  purchase  WarehousePurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  warehouse Warehouse         @relation(fields: [warehouseId], references: [id])
+
+  @@index([purchaseId])
+  @@index([warehouseId, paidAt])
+}
+
+// ==========================================================================
+// Phase 5 من نظام المذاخر B2B — الصقل التجاري: إرجاعات/إشعارات دائن
+// ==========================================================================
+// الصيدلية تطلب إرجاع صنف من طلب مُسلَّم/قيد التسليم؛ المذخر يقبل أو يرفض.
+// warehouseId/orderId/organizationId أعمدة نصية بلا @relation عمداً — نفس
+// انضباط WarehouseStockMove.orderId أعلاه (فصل وحدة الإرجاعات عن أي قيد
+// حذف/تحديث متبادل مع Warehouse/WarehouseOrder/Organization). totalAmount
+// ودرجات unitPrice تُشتق دائماً من effectiveLine() على الخادم عند الإنشاء —
+// لا تُقبَل من جسم الطلب مباشرة (وإلا حدّدت الصيدلية قيمة إشعارها الدائن).
+model WarehouseReturn {
+  id             String   @id @default(uuid())
+  warehouseId    String
+  orderId        String
+  organizationId String
+  reason         String?
+  totalAmount    Float    @default(0)
+  status         String   @default("PENDING") // PENDING | ACCEPTED | REJECTED
+  actorName      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items WarehouseReturnItem[]
+
+  @@index([warehouseId, status])
+  @@index([orderId])
+}
+
+model WarehouseReturnItem {
+  id        String @id @default(uuid())
+  returnId  String
+  drugId    String
+  barcode   String
+  quantity  Int
+  unitPrice Float
+
+  returnRecord WarehouseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@index([returnId])
 }
 
 // =======================
@@ -1144,4 +1683,144 @@ model PrescriptionScanLog {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([branchId, createdAt])
+}
+
+// ==========================================================================
+// المندوبون (Field Sales Reps) — مذاخر B2B
+// ==========================================================================
+// المشكلة: نظامنا يفترض نموذج بيع واحد — صيدلية على منصّتنا ترسل طلباً
+// والمذخر يرد عليه (WarehouseOrder/WarehouseInvoice أعلاه). لكن مذاخر الأدوية
+// العراقية تبيع بالدرجة الأولى عبر مندوبين ميدانيين يحملون بضاعة في سياراتهم
+// ويزورون صيدليات — أغلبها ليست على منصّتنا إطلاقاً. بدون هذا القسم، لا يمكن
+// للمذخر خدمة عملائه خارج المنصّة على الإطلاق.
+//
+// البنية: WarehouseRepStock هي "بضاعة السيارة" — رصيد مندوب من دفعة معيّنة،
+// مُحمَّل من مخزون المذخر الرئيسي (WarehouseBatch) عبر حركة REP_TRANSFER.
+// WarehouseFieldSale/WarehouseFieldSaleItem تُطابقان WarehouseInvoice بلا طلب
+// خلفهما (لا WarehouseOrder — البيع الميداني فوري بلا تفاوض/تسعير مسبق)؛
+// customerName نصي حر إلزامي دائماً (المندوب يكتب اسم الصيدلية كما يعرفها)،
+// وorganizationId اختياري فقط حين تكون تلك الصيدلية فعلاً على منصّتنا.
+// WarehouseRepCollection تحصيل نقدي من المندوب — قد يُطبَّق على فاتورة ميدانية
+// محدَّدة (عبر applyPayment/computeInvoiceStatus من warehouse-accounts.ts،
+// بلا نسخة موازية) أو يُسجَّل كتحصيل غير مخصَّص لفاتورة بعينها.
+//
+// العمولة (SALES/PROFIT/COLLECTION) منطق نقي بالكامل في app/lib/warehouse-reps.ts
+// — لا يُخزَّن هنا أي رقم عمولة محسوب، فقط مدخلات الحساب (commissionBasis/Rate).
+
+enum CommissionBasis {
+  SALES // نسبة من إجمالي المبيعات
+  PROFIT // نسبة من الربح (سعر - كلفة) × الكمية
+  COLLECTION // نسبة من النقد المحصَّل فعلاً — الأهم تجارياً لأنها تربط الأجر بالتحصيل الفعلي لا مجرد تسجيل الدين
+}
+
+// المندوب — قد يملك حساب دخول اختياري (userId، دور WAREHOUSE) لتسجيل مبيعاته
+// وتحصيلاته بنفسه عبر البوابة، أو يبقى بلا حساب ويُدار بالكامل من طرف المالك/المدير.
+model WarehouseRep {
+  id              String          @id @default(uuid())
+  warehouseId     String
+  userId          String?         @unique
+  name            String
+  phone           String?
+  commissionBasis CommissionBasis @default(SALES)
+  commissionRate  Float           @default(0) // نسبة مئوية؛ <= 0 يعني "لا عمولة مُعدَّة" (انظر computeCommission)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  warehouse   Warehouse                @relation(fields: [warehouseId], references: [id])
+  user        User?                    @relation(fields: [userId], references: [id])
+  stock       WarehouseRepStock[]
+  fieldSales  WarehouseFieldSale[]
+  collections WarehouseRepCollection[]
+
+  @@index([warehouseId, isActive])
+}
+
+// بضاعة السيارة — رصيد مندوب من دفعة معيّنة، مُحمَّل من WarehouseBatch عبر
+// حركة REP_TRANSFER. مفتاح تفرّد (repId, batchId) واحد: تحميل إضافي لنفس
+// المندوب من نفس الدفعة يزيد الكمية على نفس الصف، لا يُنشئ صفاً موازياً.
+model WarehouseRepStock {
+  id        String   @id @default(uuid())
+  repId     String
+  batchId   String
+  quantity  Int
+  updatedAt DateTime @updatedAt
+
+  rep   WarehouseRep   @relation(fields: [repId], references: [id], onDelete: Cascade)
+  batch WarehouseBatch @relation(fields: [batchId], references: [id])
+
+  @@unique([repId, batchId])
+  @@index([repId])
+}
+
+// فاتورة بيع ميدانية — تُطابق WarehouseInvoice بلا WarehouseOrder خلفها (بيع
+// فوري بلا تفاوض مسبق). customerName نصي حر إلزامي دائماً؛ organizationId
+// اختياري فقط حين تكون الصيدلية فعلاً على منصّتنا (WarehouseCustomer/Organization).
+// total محسوب دائماً من البنود على الخادم — لا يُقبَل من جسم الطلب مباشرة.
+model WarehouseFieldSale {
+  id             String                 @id @default(uuid())
+  warehouseId    String
+  repId          String
+  organizationId String?
+  customerName   String
+  invoiceNumber  String                 @unique
+  total          Float
+  paidAmount     Float                  @default(0)
+  status         WarehouseInvoiceStatus @default(UNPAID)
+  soldAt         DateTime               @default(now())
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  warehouse    Warehouse                @relation(fields: [warehouseId], references: [id])
+  rep          WarehouseRep             @relation(fields: [repId], references: [id])
+  organization Organization?            @relation(fields: [organizationId], references: [id])
+  items        WarehouseFieldSaleItem[]
+  collections  WarehouseRepCollection[]
+
+  @@index([warehouseId, status])
+  @@index([repId, soldAt])
+}
+
+// سطر بيع ميداني — يخصم من WarehouseRepStock (بضاعة المندوب) حصراً، لا من
+// مخزون المذخر الرئيسي مباشرة. unitCost لقطة كلفة الدفعة وقت البيع (لازمة
+// لعمولة الربح لاحقاً — تغيّر كلفة الكتالوج بعدها لا يُعيد كتابة التاريخ).
+// bonusQuantity تخصم مخزوناً بلا إيراد — نفس قاعدة WarehouseOrderItem.bonusQuantity
+// (انظر computeFieldSaleProfit في app/lib/warehouse-reps.ts).
+model WarehouseFieldSaleItem {
+  id            String @id @default(uuid())
+  fieldSaleId   String
+  batchId       String
+  catalogItemId String
+  quantity      Int
+  bonusQuantity Int    @default(0)
+  unitPrice     Float
+  unitCost      Float
+
+  fieldSale   WarehouseFieldSale   @relation(fields: [fieldSaleId], references: [id], onDelete: Cascade)
+  batch       WarehouseBatch       @relation(fields: [batchId], references: [id])
+  catalogItem WarehouseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@index([fieldSaleId])
+}
+
+// تحصيل نقدي من المندوب — إن حُدِّد fieldSaleId يُطبَّق على تلك الفاتورة
+// الميدانية تحديداً (عبر applyPayment/computeInvoiceStatus من
+// warehouse-accounts.ts، بلا نسخة موازية)؛ وإلا فهو تحصيل غير مخصَّص لفاتورة
+// بعينها (دفعة على الحساب العام للمندوب لدى المذخر).
+model WarehouseRepCollection {
+  id          String   @id @default(uuid())
+  repId       String
+  warehouseId String
+  fieldSaleId String?
+  amount      Float
+  notes       String?
+  collectedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  rep       WarehouseRep        @relation(fields: [repId], references: [id])
+  warehouse Warehouse           @relation(fields: [warehouseId], references: [id])
+  fieldSale WarehouseFieldSale? @relation(fields: [fieldSaleId], references: [id])
+
+  @@index([repId, collectedAt])
 }

@@ -1,0 +1,1264 @@
+{
+  "exportedAt": "2026-08-02T07:52:17.828Z",
+  "organizationId": "930a071a-c933-413c-90dc-1356a8182a2f",
+  "organizationName": "دار التفاؤل",
+  "note": "To undo: set organizationId back to organizationId for exactly these ids.",
+  "count": 179,
+  "ids": [
+    "27d3c291-63ca-4512-8a3c-9c68ef97472c",
+    "28edfe28-f051-4566-a56e-60fe27732539",
+    "d78e8e86-d640-483b-bb5c-aefc9774dfd4",
+    "756d14ac-5c50-420f-bbe3-7f9b9ee0401d",
+    "88e6916c-042e-42cc-9728-fe443127cb86",
+    "6c0b3c35-9f50-43ba-9b6b-bdd9ba011f61",
+    "890dac27-52ce-42e9-84e3-8901e3dd7dc9",
+    "9db5ee50-a1a1-4a80-af0f-15904f4deb2b",
+    "72767cbc-447d-4069-ba4b-21f6587783c0",
+    "e8aafd5b-8624-4c29-bae6-92546ec9bb6d",
+    "73ef5425-ff24-4247-8d4f-a62cf6526c72",
+    "66850f2f-66f7-4a79-9299-5f501aa9f6d0",
+    "87c6eba7-0fe2-4225-925b-9993e0f75127",
+    "5d6c0b93-37af-440a-8eee-cbb5a87dfb46",
+    "8ddc5fc6-0a37-45bf-8b8c-53e9842e15ff",
+    "f0067ac0-ea3d-4dcf-82d2-e67df8665888",
+    "311eda06-47ae-48fd-9ea3-57b133ab903d",
+    "c7cfb6b1-dcc8-4a5c-bb31-26ae1e8c97d8",
+    "3083ff09-1ef3-4ca9-b3ff-937f60327357",
+    "31db5236-c5a8-4b68-871d-149d0396d8c5",
+    "f427a0bb-58b8-4b0d-885f-083a4db14894",
+    "4267de0c-2dcb-4658-8a0a-9d6a15b633a0",
+    "028a0398-2219-4c71-ae60-896b77f04541",
+    "e06e3994-5e85-4891-94b2-c26e1f554ead",
+    "01712c2a-9dd0-4ea4-9803-d77c09aaad5a",
+    "55778597-2411-4c5a-a368-51e82b10497e",
+    "ae858196-d99c-4682-a46e-38b918e3ac88",
+    "663f1f94-b724-4b1d-99bd-6bd9bef1f301",
+    "0eb2b15a-867c-4232-953e-da173e44acca",
+    "7a56ac9a-93d0-40aa-8d78-08d53c7a3a3d",
+    "3b30c9fe-2d52-4418-8fbd-1f5d3fb35fd3",
+    "e6e6ab07-1cce-4e55-ac9a-a03029e67dcd",
+    "02e37fb3-280d-446a-972c-839cdc71d627",
+    "b139b946-1738-4ccf-b453-b4a7a5510f0a",
+    "b709e33b-a929-48db-a730-467ade1d4d0a",
+    "d4330dcf-b0a5-4a25-9c60-3853ba2f9596",
+    "5a4bd5c0-dae7-4f0b-9950-b0dcd1eea288",
+    "7d699789-f07a-4911-aaef-0fc3aa7ad31f",
+    "95b1afe2-6569-408e-84b0-5ea3563928c2",
+    "47f7848a-e9ee-4138-a51f-26e6d9bd83f9",
+    "3b04d2e5-152b-4a11-b9da-702af8e66c50",
+    "e833a006-ff1c-4605-83cd-c923674b6cf6",
+    "b8726b12-c4de-48ef-bf46-a74a08a9b2b3",
+    "af3b0da8-8005-4d02-827c-96ae6cc386b6",
+    "ef3e810f-bfc8-409d-9d15-3729ae2d9b92",
+    "3fa26ecc-4e1b-4687-9f1c-5f923af91e76",
+    "0af4b14c-8c19-4dfc-b9de-245c1bbbf439",
+    "74c1c72c-bf8b-4bb3-85ed-6f21e6c201a9",
+    "62808a48-95b0-470f-8e9b-6b04b2f0227d",
+    "84625990-9ca6-44f3-9dfe-eea872cf4743",
+    "d15d54c4-5079-4a98-9b0f-60d3d4ff4c42",
+    "66acc65f-cdd6-457e-a3db-3c51cf9b7db8",
+    "fd6dfbbb-0710-49ad-887b-5ae271e68692",
+    "193c7993-a7bc-4604-8d79-179b00d349d0",
+    "fa218631-5174-4cbf-ab61-8956e9d33063",
+    "68f3bbe4-b730-4259-8dbb-0d420c55612a",
+    "8b821655-ae5d-4706-85e6-6a0ea88e9159",
+    "f6413a08-d0a1-43a6-bcb0-1b5f543e7913",
+    "77277b07-a463-4eb8-9bca-21683afd3dd9",
+    "1f4396ae-5712-4ded-822c-6b30b4996fa8",
+    "f8ac5034-4d40-4e1b-8dca-5d56453052f6",
+    "d4e5bcf9-c85f-4a95-9ba7-800207494c8c",
+    "5c8063f9-c4c8-4f68-a592-5c0a9830a8f8",
+    "206812c3-bdaa-465a-856f-22e37c746fa7",
+    "843fbfea-a7c6-49d0-b6eb-26bbad4107dc",
+    "23e575d1-9f17-4b19-b2a5-a9c170de8c02",
+    "cac93860-140b-4534-b848-c6c1263dba02",
+    "38c56ba1-85dd-429c-8750-3a4aaddea33e",
+    "812d315a-5460-4472-b0df-f82ae53882cf",
+    "83d907c0-38d6-414f-86d6-baa72313517b",
+    "f44da437-36fe-4c28-9cc9-629576d7798f",
+    "1c5940df-6343-42f4-b921-f5c3b5018147",
+    "64283bd2-d4ac-4e73-8f62-21236199d880",
+    "c8f01e3b-60c0-499c-827e-7695d220df8c",
+    "0dba95a1-7574-4c26-93ce-4dc5cd7eff22",
+    "ab17e49a-3313-44de-8bfa-e249892fd6ac",
+    "02e4a4f4-93e1-4e5c-a4d2-14c2ba76a541",
+    "a8d9f457-45e8-4589-9acb-cc2a037c733c",
+    "be9be1ee-b5cf-4eb6-b119-e41d42f1fc78",
+    "1887c5b8-1c88-4058-9f2e-e13f84da4af4",
+    "d94f4389-26c1-40ef-99da-1b4ba8a7d1d5",
+    "91ab48a0-919c-4c5a-99bd-3e88d298ac6a",
+    "5bee2e62-98ff-47f8-b94c-883c0855441f",
+    "bf718480-8d4f-433c-a4a3-2c664ff9bf8a",
+    "e2bb7d8c-ab38-46c5-88a6-ceffa9024aa6",
+    "9371bc4b-bd8c-438e-820f-c72ab8b86c38",
+    "9d881b33-be65-4eb8-8139-773b617746b8",
+    "3f818f90-2599-4cd4-9b6a-6a6169cf69ce",
+    "99498f74-a797-4a1f-aeb6-e41092082b2f",
+    "90d6f9a5-7828-4a70-9fb2-ca3fd37194f7",
+    "c998147a-0e5b-4879-b5da-0bcafdbddf22",
+    "17edbffe-5da5-48cc-99ca-ae7a18c56c8b",
+    "8e3f55b8-4b6c-4728-8dd7-5847b2d1df4b",
+    "0578a139-43c0-4fce-a34b-8f62a3cc0a06",
+    "78358e0c-3638-4a9e-aa63-439c4e352481",
+    "6cf71238-6d31-48d8-9dfc-1b12500cf2fa",
+    "ad723463-960a-4b09-bac9-6663d1ab57eb",
+    "ac43b94f-e320-4db8-ae3a-73e550bdd830",
+    "9f27b144-ac7b-4378-812e-3163d92b422e",
+    "383668f6-b86a-436c-b36c-62a2542a2cd1",
+    "c744671b-6002-4b45-8cfa-0ef314602c25",
+    "a422099e-723b-4dea-a2a0-486b4027233d",
+    "d4d4c195-f1ed-45cf-87de-0be3fc051dfb",
+    "30ddb5ec-1f81-4502-8f1e-9f53902d8168",
+    "8d6f30ac-2402-4aa6-a975-90ed076e41af",
+    "301895ef-b5cc-4cb5-b0b1-c1b325311949",
+    "97c5bc7f-4878-4322-b641-1b2d06fe14c6",
+    "a4b5ccc4-a5d7-4344-a600-285d6d4bc5dc",
+    "952e6f85-dc8c-4a5e-ba27-085a63a964ce",
+    "2bc3d11e-067e-4337-8d3f-ce4107bf9ded",
+    "23608834-66de-489d-bb6a-8b11ff198b6c",
+    "2d70fcb8-25c6-4c76-9709-105b4cbb2ff3",
+    "f8b89ca8-d106-4534-a814-d79e8e664918",
+    "555bfe7e-b517-4871-af20-3ba12aebf153",
+    "d795ee98-679e-4b26-bef5-5b08b8b55e51",
+    "a8df2538-857a-4b81-9ac9-faca74a135ec",
+    "afdd145b-5856-4a1e-af78-2232a6aeb346",
+    "3dacbbc7-3a7c-434b-98e4-94df3bd14869",
+    "a270e38f-d231-49b2-bdd5-0bfafcbfc8d5",
+    "1851b0f7-016b-4759-842d-f441b2e0d610",
+    "f8e83ba0-99c0-476c-9e88-50b08f036dd0",
+    "dd28b246-a4e4-4dcd-8cd7-ae0707c5557e",
+    "356d1042-ef65-4115-97ed-9a378d42daeb",
+    "94284218-ebac-45e4-b915-6960a2274a6b",
+    "d54ec47c-343f-44a6-bdf4-6294c2f8eb1e",
+    "dcadc850-bd17-46cd-9353-3aa43626249e",
+    "ec98a976-d672-4be8-bc9e-bc4340f4aeb6",
+    "14209d02-03df-49a6-a9ee-8569068a8853",
+    "90f247e1-f459-4868-ab26-0bac6b4fe82e",
+    "febd0a9e-1df1-4291-afff-886b2f15767f",
+    "9f466e8c-f760-49f5-a15e-a5a8b5cefa30",
+    "4588609d-0036-4d3f-b5a9-dd55f2d9faf2",
+    "407862e4-b067-4b67-b337-16bf82997018",
+    "df49275d-f864-4be3-8ffd-40df92b20234",
+    "d9d6dcb7-450e-4fee-8909-9deb7bdbdc94",
+    "0fda824e-5cb8-4ace-86fb-25e7cb2206e3",
+    "44554398-f978-4b92-bba6-152c69c85d87",
+    "c0b1ac30-59fa-43c9-b6d0-ad585cfff369",
+    "cc16bb1c-fa16-4e6b-b4a3-4ca7f4e6f110",
+    "74d2cd7c-83e4-4780-b8af-1b6f88765d61",
+    "fa1e97c2-e5ee-4a4e-b2b6-dd05ea11b32a",
+    "9c55d75f-714c-40d7-a08f-bc62568f94b7",
+    "c32fc553-086a-449e-a58e-e6d125603acb",
+    "2b2d6bf5-8559-4b67-8b44-3712e162c7d4",
+    "da81823f-f2ca-47fa-937d-d87475dc5d24",
+    "48ba35c9-dc1a-4eb3-88ba-342abd3289e7",
+    "b457782b-6d6a-47f0-a09a-cf6f4d0f20bc",
+    "eaabb8d1-60cb-481a-97c6-759adba1c57e",
+    "60c5ed26-19b1-43d8-b27b-c985f3fe5055",
+    "0a2c6a4e-1976-481c-b8b6-60c6aa942261",
+    "c536c511-2b19-4bc0-a793-6f7e4eb51a2e",
+    "65186e43-9291-405e-a263-d2481dc325b9",
+    "5d1a606f-d64d-4869-9c40-6f9941118cf5",
+    "d4fc1b25-18e3-4368-9625-6bc90e6d9b81",
+    "80bc6226-533e-413c-97db-fe3db9e2c526",
+    "e8fbb694-a4d2-415a-b676-d3d6e715c55b",
+    "1d05fc66-729c-4814-8078-dd446056252e",
+    "76350bdd-0eb8-4777-9161-3c1170fd21ef",
+    "5bca87ac-b6bf-43cf-b017-2a992fde1994",
+    "20f0883a-3b70-4172-86b1-0d2b6c48eba8",
+    "8b6d11c4-49f8-4606-8907-76b383b25aa3",
+    "8da7076d-89f2-4553-ba54-3ed75735e7b3",
+    "f9412bfb-1c7d-43c9-bfc0-dc3da4e8caef",
+    "6aae4662-8936-4f3d-851f-a4747c162e23",
+    "a02f2ebb-d478-4092-8543-50747d9bb1d9",
+    "0f02f9d0-edbb-4fe3-b1ed-3fab7c4a571c",
+    "a831f7ad-3a68-4038-9b16-ffc47ccdb8fc",
+    "a1e63237-fe20-45ee-ae70-7121a343b704",
+    "99307c59-e6dc-4b01-a88a-0e6c1d50b8e7",
+    "ca48987e-4850-45a0-a093-78f6ce582f14",
+    "ee7e0b49-85f2-4dbf-8f4a-2973699105dc",
+    "301bf307-91a1-4ae4-b19b-cdc351ca158a",
+    "3be29567-997e-4017-8c4d-25ad8511e3c4",
+    "d371621b-8dd8-4c72-a675-ab15806eafe6",
+    "38bbc9f9-f033-441b-9885-0ed53e87dc5a",
+    "932eff91-0fae-4d32-97fc-b612f2b05bbb",
+    "59118a1b-5bbd-48a9-a145-468b8360bd9b",
+    "957ec3b4-59c0-49ec-9c08-c4b924562e2a",
+    "65424275-78da-4642-a5ea-02a111cd5bb0"
+  ],
+  "rows": [
+    {
+      "id": "27d3c291-63ca-4512-8a3c-9c68ef97472c",
+      "barcode": "6223014770217",
+      "tradeName": " Flopadex ",
+      "scientificName": "."
+    },
+    {
+      "id": "28edfe28-f051-4566-a56e-60fe27732539",
+      "barcode": "فوط مانع تعرق",
+      "tradeName": "0",
+      "scientificName": "0"
+    },
+    {
+      "id": "d78e8e86-d640-483b-bb5c-aefc9774dfd4",
+      "barcode": "8901175060627",
+      "tradeName": "ALZYL 500MG",
+      "scientificName": "0"
+    },
+    {
+      "id": "756d14ac-5c50-420f-bbe3-7f9b9ee0401d",
+      "barcode": "Aldosam",
+      "tradeName": "Aldosam 250mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "88e6916c-042e-42cc-9728-fe443127cb86",
+      "barcode": "6957855102790",
+      "tradeName": "Amoxillin-500mg vial ",
+      "scientificName": "."
+    },
+    {
+      "id": "6c0b3c35-9f50-43ba-9b6b-bdd9ba011f61",
+      "barcode": "6251151001802",
+      "tradeName": "Apisal 0.9%",
+      "scientificName": "."
+    },
+    {
+      "id": "890dac27-52ce-42e9-84e3-8901e3dd7dc9",
+      "barcode": "3582910068969",
+      "tradeName": "Aprovasc 300/10mg",
+      "scientificName": "."
+    },
+    {
+      "id": "9db5ee50-a1a1-4a80-af0f-15904f4deb2b",
+      "barcode": "9644488555563",
+      "tradeName": "Aswarfocen ointment",
+      "scientificName": "."
+    },
+    {
+      "id": "72767cbc-447d-4069-ba4b-21f6587783c0",
+      "barcode": "6291103730701",
+      "tradeName": "Atorlip 40mg",
+      "scientificName": "."
+    },
+    {
+      "id": "e8aafd5b-8624-4c29-bae6-92546ec9bb6d",
+      "barcode": "4031571077845",
+      "tradeName": "Axaban-Denk 5mg",
+      "scientificName": "."
+    },
+    {
+      "id": "73ef5425-ff24-4247-8d4f-a62cf6526c72",
+      "barcode": "BERNY SACHET",
+      "tradeName": "BERNY SACHET",
+      "scientificName": "."
+    },
+    {
+      "id": "66850f2f-66f7-4a79-9299-5f501aa9f6d0",
+      "barcode": "733739014184",
+      "tradeName": "Berberine  glucose support NOW",
+      "scientificName": "."
+    },
+    {
+      "id": "87c6eba7-0fe2-4225-925b-9993e0f75127",
+      "barcode": "5056129104544",
+      "tradeName": "Berberine Hcl 500mg",
+      "scientificName": "."
+    },
+    {
+      "id": "5d6c0b93-37af-440a-8eee-cbb5a87dfb46",
+      "barcode": "6251600002336",
+      "tradeName": "Biodal 50.000iu",
+      "scientificName": "."
+    },
+    {
+      "id": "8ddc5fc6-0a37-45bf-8b8c-53e9842e15ff",
+      "barcode": "3401399694127",
+      "tradeName": "Bioderma  hydrabio H2O 250ml",
+      "scientificName": "."
+    },
+    {
+      "id": "f0067ac0-ea3d-4dcf-82d2-e67df8665888",
+      "barcode": "3701129812068",
+      "tradeName": "Bioderma Sensibio H2O 250ml",
+      "scientificName": "."
+    },
+    {
+      "id": "311eda06-47ae-48fd-9ea3-57b133ab903d",
+      "barcode": "8005500200143",
+      "tradeName": "Bonto delay condom",
+      "scientificName": "."
+    },
+    {
+      "id": "c7cfb6b1-dcc8-4a5c-bb31-26ae1e8c97d8",
+      "barcode": "8902399008167",
+      "tradeName": "Bruzolin adult drop",
+      "scientificName": "."
+    },
+    {
+      "id": "3083ff09-1ef3-4ca9-b3ff-937f60327357",
+      "barcode": "8902399005319",
+      "tradeName": "Bruzolin child drop",
+      "scientificName": "."
+    },
+    {
+      "id": "31db5236-c5a8-4b68-871d-149d0396d8c5",
+      "barcode": "250280110512013",
+      "tradeName": "Captopril 25-kindi",
+      "scientificName": "."
+    },
+    {
+      "id": "f427a0bb-58b8-4b0d-885f-083a4db14894",
+      "barcode": "*SDI-01EOO003*",
+      "tradeName": "Captosam",
+      "scientificName": "."
+    },
+    {
+      "id": "4267de0c-2dcb-4658-8a0a-9d6a15b633a0",
+      "barcode": "9556564080732",
+      "tradeName": "Carex classic extra lube",
+      "scientificName": "."
+    },
+    {
+      "id": "028a0398-2219-4c71-ae60-896b77f04541",
+      "barcode": "9556564883531",
+      "tradeName": "Carex flavours condom",
+      "scientificName": "."
+    },
+    {
+      "id": "e06e3994-5e85-4891-94b2-c26e1f554ead",
+      "barcode": "9780201379884",
+      "tradeName": "Cefuroxa-500mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "01712c2a-9dd0-4ea4-9803-d77c09aaad5a",
+      "barcode": "6291100080977",
+      "tradeName": "Cetralon syr",
+      "scientificName": "."
+    },
+    {
+      "id": "55778597-2411-4c5a-a368-51e82b10497e",
+      "barcode": "8964003537203",
+      "tradeName": "Cipesta 500mg",
+      "scientificName": "."
+    },
+    {
+      "id": "ae858196-d99c-4682-a46e-38b918e3ac88",
+      "barcode": "6251107241016",
+      "tradeName": "Clavodar 1g tab ",
+      "scientificName": "."
+    },
+    {
+      "id": "663f1f94-b724-4b1d-99bd-6bd9bef1f301",
+      "barcode": "4031571067068",
+      "tradeName": "Clopi-Denk 75mg",
+      "scientificName": "0"
+    },
+    {
+      "id": "0eb2b15a-867c-4232-953e-da173e44acca",
+      "barcode": "8718951350885",
+      "tradeName": "Colgate charcoal toothpaste",
+      "scientificName": "."
+    },
+    {
+      "id": "7a56ac9a-93d0-40aa-8d78-08d53c7a3a3d",
+      "barcode": "8718951291010",
+      "tradeName": "Colgate max fresh toothpaste blue",
+      "scientificName": "."
+    },
+    {
+      "id": "3b30c9fe-2d52-4418-8fbd-1f5d3fb35fd3",
+      "barcode": "8718951289987",
+      "tradeName": "Colgate max fresh toothpaste red",
+      "scientificName": "."
+    },
+    {
+      "id": "e6e6ab07-1cce-4e55-ac9a-a03029e67dcd",
+      "barcode": "6920354824845",
+      "tradeName": "Colgate max white toothpaste",
+      "scientificName": "."
+    },
+    {
+      "id": "02e37fb3-280d-446a-972c-839cdc71d627",
+      "barcode": "6920354812859",
+      "tradeName": "Colgate معجون اسنان اطفال",
+      "scientificName": "."
+    },
+    {
+      "id": "b139b946-1738-4ccf-b453-b4a7a5510f0a",
+      "barcode": "97dc5bf7a50cc717542777fe32c67e89f3172ca1c1e61a4e00427ea4b5a3c5f719e36f434794a10d",
+      "tradeName": "Coversyl plus 10/2.5",
+      "scientificName": "."
+    },
+    {
+      "id": "b709e33b-a929-48db-a730-467ade1d4d0a",
+      "barcode": "811079030146",
+      "tradeName": "Cranberry with vit c tab",
+      "scientificName": "."
+    },
+    {
+      "id": "d4330dcf-b0a5-4a25-9c60-3853ba2f9596",
+      "barcode": "6980100520049",
+      "tradeName": "Dental floss",
+      "scientificName": "."
+    },
+    {
+      "id": "5a4bd5c0-dae7-4f0b-9950-b0dcd1eea288",
+      "barcode": "5065013748146",
+      "tradeName": "Deslora 5mg",
+      "scientificName": "."
+    },
+    {
+      "id": "7d699789-f07a-4911-aaef-0fc3aa7ad31f",
+      "barcode": "4031571061608",
+      "tradeName": "Deslora-Denk 5mg",
+      "scientificName": "."
+    },
+    {
+      "id": "95b1afe2-6569-408e-84b0-5ea3563928c2",
+      "barcode": "6251910000046",
+      "tradeName": "Diabeten mg",
+      "scientificName": "."
+    },
+    {
+      "id": "47f7848a-e9ee-4138-a51f-26e6d9bd83f9",
+      "barcode": "Dibase 300.000IU",
+      "tradeName": "Dibase 300.000iu",
+      "scientificName": "."
+    },
+    {
+      "id": "3b04d2e5-152b-4a11-b9da-702af8e66c50",
+      "barcode": "6291100089062",
+      "tradeName": "Dora syr",
+      "scientificName": "."
+    },
+    {
+      "id": "e833a006-ff1c-4605-83cd-c923674b6cf6",
+      "barcode": "6251875002475",
+      "tradeName": "Dorzilol drop",
+      "scientificName": "."
+    },
+    {
+      "id": "b8726b12-c4de-48ef-bf46-a74a08a9b2b3",
+      "barcode": "8999999594381",
+      "tradeName": "Dove anti-perspirant",
+      "scientificName": "."
+    },
+    {
+      "id": "af3b0da8-8005-4d02-827c-96ae6cc386b6",
+      "barcode": "8699527150101",
+      "tradeName": "Duloxx tab",
+      "scientificName": "."
+    },
+    {
+      "id": "ef3e810f-bfc8-409d-9d15-3729ae2d9b92",
+      "barcode": "6251870085039",
+      "tradeName": "Edrak 10mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "3fa26ecc-4e1b-4687-9f1c-5f923af91e76",
+      "barcode": "Elica Oint",
+      "tradeName": "Elica oint",
+      "scientificName": "."
+    },
+    {
+      "id": "0af4b14c-8c19-4dfc-b9de-245c1bbbf439",
+      "barcode": "6251875001041",
+      "tradeName": "Esopraz 40mg ",
+      "scientificName": "."
+    },
+    {
+      "id": "74c1c72c-bf8b-4bb3-85ed-6f21e6c201a9",
+      "barcode": "8699525094315",
+      "tradeName": "FLEOXILEVO 500MG",
+      "scientificName": "."
+    },
+    {
+      "id": "62808a48-95b0-470f-8e9b-6b04b2f0227d",
+      "barcode": "flamozeen-d",
+      "tradeName": "Flamozeen-D cream",
+      "scientificName": "."
+    },
+    {
+      "id": "84625990-9ca6-44f3-9dfe-eea872cf4743",
+      "barcode": "6927236610008",
+      "tradeName": "Fresh up خيط اسنان",
+      "scientificName": "."
+    },
+    {
+      "id": "d15d54c4-5079-4a98-9b0f-60d3d4ff4c42",
+      "barcode": "964202103283",
+      "tradeName": "Fucidec acid",
+      "scientificName": "."
+    },
+    {
+      "id": "66acc65f-cdd6-457e-a3db-3c51cf9b7db8",
+      "barcode": "430470201202016",
+      "tradeName": "Fugedene cram",
+      "scientificName": "."
+    },
+    {
+      "id": "fd6dfbbb-0710-49ad-887b-5ae271e68692",
+      "barcode": "8906113384513",
+      "tradeName": "GAVDILAN 10MG",
+      "scientificName": "0"
+    },
+    {
+      "id": "193c7993-a7bc-4604-8d79-179b00d349d0",
+      "barcode": "3600541729711",
+      "tradeName": "Garnier micellar water",
+      "scientificName": "."
+    },
+    {
+      "id": "fa218631-5174-4cbf-ab61-8956e9d33063",
+      "barcode": "8699525759832",
+      "tradeName": "Gentamisin 80/2ml amp",
+      "scientificName": "."
+    },
+    {
+      "id": "68f3bbe4-b730-4259-8dbb-0d420c55612a",
+      "barcode": "5310090014012",
+      "tradeName": "Ginkolex plus",
+      "scientificName": "."
+    },
+    {
+      "id": "8b821655-ae5d-4706-85e6-6a0ea88e9159",
+      "barcode": "4262422540236",
+      "tradeName": "Gluvecta M 50\\850",
+      "scientificName": "0"
+    },
+    {
+      "id": "f6413a08-d0a1-43a6-bcb0-1b5f543e7913",
+      "barcode": "705632983195",
+      "tradeName": "HEMOHEAL PLUS",
+      "scientificName": "0"
+    },
+    {
+      "id": "77277b07-a463-4eb8-9bca-21683afd3dd9",
+      "barcode": "Ivf-C inj",
+      "tradeName": "IVF-C inj",
+      "scientificName": "."
+    },
+    {
+      "id": "1f4396ae-5712-4ded-822c-6b30b4996fa8",
+      "barcode": "6291100087372",
+      "tradeName": "Ivy-Calm syr",
+      "scientificName": "."
+    },
+    {
+      "id": "f8ac5034-4d40-4e1b-8dca-5d56453052f6",
+      "barcode": "Kerto amp",
+      "tradeName": "Kerto amp",
+      "scientificName": "."
+    },
+    {
+      "id": "d4e5bcf9-c85f-4a95-9ba7-800207494c8c",
+      "barcode": "8850002807440",
+      "tradeName": "Kodomo بودرة اطفال عطر",
+      "scientificName": "."
+    },
+    {
+      "id": "5c8063f9-c4c8-4f68-a592-5c0a9830a8f8",
+      "barcode": "604776737810",
+      "tradeName": "L-Carnitine 1000mg AMS",
+      "scientificName": "."
+    },
+    {
+      "id": "206812c3-bdaa-465a-856f-22e37c746fa7",
+      "barcode": "8901111060407",
+      "tradeName": "LASTAVIN AM PLUS 160\\5\\25",
+      "scientificName": "0"
+    },
+    {
+      "id": "843fbfea-a7c6-49d0-b6eb-26bbad4107dc",
+      "barcode": "6211127351812",
+      "tradeName": "LEVOTREX 500MG",
+      "scientificName": "0"
+    },
+    {
+      "id": "23e575d1-9f17-4b19-b2a5-a9c170de8c02",
+      "barcode": "4010439201431",
+      "tradeName": "Lacalut sensitive toothpaste",
+      "scientificName": "."
+    },
+    {
+      "id": "cac93860-140b-4534-b848-c6c1263dba02",
+      "barcode": "3400930186749",
+      "tradeName": "LacoNex nasal spray",
+      "scientificName": "."
+    },
+    {
+      "id": "38c56ba1-85dd-429c-8750-3a4aaddea33e",
+      "barcode": "3574661177120",
+      "tradeName": "Listerine cool mint mouthwash",
+      "scientificName": "."
+    },
+    {
+      "id": "812d315a-5460-4472-b0df-f82ae53882cf",
+      "barcode": "3574661177144",
+      "tradeName": "Listerine fresh burst mouthwash",
+      "scientificName": "."
+    },
+    {
+      "id": "83d907c0-38d6-414f-86d6-baa72313517b",
+      "barcode": "3574661303925",
+      "tradeName": "Listerine total carw",
+      "scientificName": "."
+    },
+    {
+      "id": "f44da437-36fe-4c28-9cc9-629576d7798f",
+      "barcode": "6946357144766",
+      "tradeName": "Lotus فرشة اسنان سيت",
+      "scientificName": "."
+    },
+    {
+      "id": "1c5940df-6343-42f4-b921-f5c3b5018147",
+      "barcode": "8901175032686",
+      "tradeName": "M-kast 5",
+      "scientificName": "."
+    },
+    {
+      "id": "64283bd2-d4ac-4e73-8f62-21236199d880",
+      "barcode": "Metforal 500mg",
+      "tradeName": "Metforal 500mg",
+      "scientificName": "."
+    },
+    {
+      "id": "c8f01e3b-60c0-499c-827e-7695d220df8c",
+      "barcode": "6251107424754",
+      "tradeName": "Mixif 400mg cap",
+      "scientificName": "."
+    },
+    {
+      "id": "0dba95a1-7574-4c26-93ce-4dc5cd7eff22",
+      "barcode": "6118000042044",
+      "tradeName": "Mobic 15mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "ab17e49a-3313-44de-8bfa-e249892fd6ac",
+      "barcode": "311845171054",
+      "tradeName": "NAC 500mg",
+      "scientificName": "."
+    },
+    {
+      "id": "02e4a4f4-93e1-4e5c-a4d2-14c2ba76a541",
+      "barcode": "6291103841704",
+      "tradeName": "Nabixium 20mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "a8d9f457-45e8-4589-9acb-cc2a037c733c",
+      "barcode": "3800501091135",
+      "tradeName": "Nefopam Vitapure",
+      "scientificName": "."
+    },
+    {
+      "id": "be9be1ee-b5cf-4eb6-b119-e41d42f1fc78",
+      "barcode": "NORVASC 5MG",
+      "tradeName": "Norvasc 5mg tab",
+      "scientificName": "0"
+    },
+    {
+      "id": "1887c5b8-1c88-4058-9f2e-e13f84da4af4",
+      "barcode": "9351089000308",
+      "tradeName": "Nose strip",
+      "scientificName": "."
+    },
+    {
+      "id": "d94f4389-26c1-40ef-99da-1b4ba8a7d1d5",
+      "barcode": "4260108283071",
+      "tradeName": "Olanzapine TAD 5mg",
+      "scientificName": "."
+    },
+    {
+      "id": "91ab48a0-919c-4c5a-99bd-3e88d298ac6a",
+      "barcode": "b2835662cb0f89c3a040602c45f4d72a18984c203bec51b40aac058b36e03a87632be048edb43af3",
+      "tradeName": "Olmetec plus 40\\25mg",
+      "scientificName": "0"
+    },
+    {
+      "id": "5bee2e62-98ff-47f8-b94c-883c0855441f",
+      "barcode": "9633e3b439e6392eae4d81064f4bb7b9fec023aeacca9b4d73898ed68a69302c02308c4c72e075d2",
+      "tradeName": "Omeprazol Azevedos 40mg vial",
+      "scientificName": "."
+    },
+    {
+      "id": "bf718480-8d4f-433c-a4a3-2c664ff9bf8a",
+      "barcode": "8699514086079",
+      "tradeName": "Onceair 4mg",
+      "scientificName": "."
+    },
+    {
+      "id": "e2bb7d8c-ab38-46c5-88a6-ceffa9024aa6",
+      "barcode": "6946357125741",
+      "tradeName": "Oral cleaning kit",
+      "scientificName": "."
+    },
+    {
+      "id": "9371bc4b-bd8c-438e-820f-c72ab8b86c38",
+      "barcode": "6251106800191",
+      "tradeName": "Orotix 120mg",
+      "scientificName": "0"
+    },
+    {
+      "id": "9d881b33-be65-4eb8-8139-773b617746b8",
+      "barcode": "6251144020865",
+      "tradeName": "PROGESTA SUPP",
+      "scientificName": "0"
+    },
+    {
+      "id": "3f818f90-2599-4cd4-9b6a-6a6169cf69ce",
+      "barcode": "8901111014110",
+      "tradeName": "Pacroma cream",
+      "scientificName": "."
+    },
+    {
+      "id": "99498f74-a797-4a1f-aeb6-e41092082b2f",
+      "barcode": "a8ea734e8b9e1996ff26dc985fbe0882c864c12e626032a3d064837b1797a7f7c899c0083d404b98",
+      "tradeName": "Panadol Sinus",
+      "scientificName": "0"
+    },
+    {
+      "id": "90d6f9a5-7828-4a70-9fb2-ca3fd37194f7",
+      "barcode": "6921875050522",
+      "tradeName": "Paracetamol  500/5ml amp",
+      "scientificName": "."
+    },
+    {
+      "id": "c998147a-0e5b-4879-b5da-0bcafdbddf22",
+      "barcode": "Paracetamol 1000mg tab",
+      "tradeName": "Paracetamol 1000mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "17edbffe-5da5-48cc-99ca-ae7a18c56c8b",
+      "barcode": "6251875004370",
+      "tradeName": "Pio-Vit D3 50.000",
+      "scientificName": "."
+    },
+    {
+      "id": "8e3f55b8-4b6c-4728-8dd7-5847b2d1df4b",
+      "barcode": "8699578703455",
+      "tradeName": "Piyeloseptyl syp ",
+      "scientificName": "."
+    },
+    {
+      "id": "0578a139-43c0-4fce-a34b-8f62a3cc0a06",
+      "barcode": "6223003812348",
+      "tradeName": "Polo TM 10cm بلاستر",
+      "scientificName": "."
+    },
+    {
+      "id": "78358e0c-3638-4a9e-aa63-439c4e352481",
+      "barcode": "8690506430672",
+      "tradeName": "Povidone solution",
+      "scientificName": "."
+    },
+    {
+      "id": "6cf71238-6d31-48d8-9dfc-1b12500cf2fa",
+      "barcode": "MPI-PROF",
+      "tradeName": "ProfePain",
+      "scientificName": "."
+    },
+    {
+      "id": "ad723463-960a-4b09-bac9-6663d1ab57eb",
+      "barcode": "6251870048119",
+      "tradeName": "Quel 100mg",
+      "scientificName": "."
+    },
+    {
+      "id": "ac43b94f-e320-4db8-ae3a-73e550bdd830",
+      "barcode": "6251870048218",
+      "tradeName": "Quel 200mg",
+      "scientificName": "."
+    },
+    {
+      "id": "9f27b144-ac7b-4378-812e-3163d92b422e",
+      "barcode": "5310090005997",
+      "tradeName": "Repoxol 500+500mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "383668f6-b86a-436c-b36c-62a2542a2cd1",
+      "barcode": "5944728005952",
+      "tradeName": "Retinarom cap",
+      "scientificName": "."
+    },
+    {
+      "id": "c744671b-6002-4b45-8cfa-0ef314602c25",
+      "barcode": "5060565107397",
+      "tradeName": "Revuele prebiotics foam cleanser",
+      "scientificName": "."
+    },
+    {
+      "id": "a422099e-723b-4dea-a2a0-486b4027233d",
+      "barcode": "6291100083237",
+      "tradeName": "Risek 40mg vial",
+      "scientificName": "."
+    },
+    {
+      "id": "d4d4c195-f1ed-45cf-87de-0be3fc051dfb",
+      "barcode": "8699514540014",
+      "tradeName": "Risonel 0.05% nasal",
+      "scientificName": "0"
+    },
+    {
+      "id": "30ddb5ec-1f81-4502-8f1e-9f53902d8168",
+      "barcode": "4103040902788",
+      "tradeName": "Sebamed anti-hairloss shampoo",
+      "scientificName": "."
+    },
+    {
+      "id": "8d6f30ac-2402-4aa6-a975-90ed076e41af",
+      "barcode": "087614020679",
+      "tradeName": "Selenium 200mcg ",
+      "scientificName": "0"
+    },
+    {
+      "id": "301895ef-b5cc-4cb5-b0b1-c1b325311949",
+      "barcode": "5206892100148",
+      "tradeName": "Sinomarin adult mini spray",
+      "scientificName": "."
+    },
+    {
+      "id": "97c5bc7f-4878-4322-b641-1b2d06fe14c6",
+      "barcode": "300651432299",
+      "tradeName": "Systan Ultra UD",
+      "scientificName": "."
+    },
+    {
+      "id": "a4b5ccc4-a5d7-4344-a600-285d6d4bc5dc",
+      "barcode": "6285147004898",
+      "tradeName": "Toprazole 40mg",
+      "scientificName": "."
+    },
+    {
+      "id": "952e6f85-dc8c-4a5e-ba27-085a63a964ce",
+      "barcode": "6012546267124",
+      "tradeName": "TureTrip لاصق مسمار قدم",
+      "scientificName": "."
+    },
+    {
+      "id": "2bc3d11e-067e-4337-8d3f-ce4107bf9ded",
+      "barcode": "6221068000229",
+      "tradeName": "Tussilar",
+      "scientificName": "."
+    },
+    {
+      "id": "23608834-66de-489d-bb6a-8b11ff198b6c",
+      "barcode": "8055515902587",
+      "tradeName": "URO 3",
+      "scientificName": "0"
+    },
+    {
+      "id": "2d70fcb8-25c6-4c76-9709-105b4cbb2ff3",
+      "barcode": "6251875000747",
+      "tradeName": "Valsart 80mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "f8b89ca8-d106-4534-a814-d79e8e664918",
+      "barcode": "6251875001836",
+      "tradeName": "Valsart plus 160\\12.5",
+      "scientificName": "."
+    },
+    {
+      "id": "555bfe7e-b517-4871-af20-3ba12aebf153",
+      "barcode": "205003140207020",
+      "tradeName": "Vitamin C kindi 500mg",
+      "scientificName": "."
+    },
+    {
+      "id": "d795ee98-679e-4b26-bef5-5b08b8b55e51",
+      "barcode": "852510005668",
+      "tradeName": "Vitamin C vita ground 500mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "a8df2538-857a-4b81-9ac9-faca74a135ec",
+      "barcode": "4260297475943",
+      "tradeName": "Vitan drop",
+      "scientificName": "."
+    },
+    {
+      "id": "afdd145b-5856-4a1e-af78-2232a6aeb346",
+      "barcode": "4a62af60a909c04e30ab65b2c1776db30bb99ed89421ea73561800e5cfa9a8a6e0971bed1ffa7780",
+      "tradeName": "Voxin vial 1g",
+      "scientificName": "."
+    },
+    {
+      "id": "3dacbbc7-3a7c-434b-98e4-94df3bd14869",
+      "barcode": "5021265254255",
+      "tradeName": "Wellbaby drop",
+      "scientificName": "."
+    },
+    {
+      "id": "a270e38f-d231-49b2-bdd5-0bfafcbfc8d5",
+      "barcode": "https://qrs.ly/4tfqmq6",
+      "tradeName": "Yenikid syr",
+      "scientificName": "."
+    },
+    {
+      "id": "1851b0f7-016b-4759-842d-f441b2e0d610",
+      "barcode": "6f998f38dc55607adabb12a2018e9b05375ad1f02c0ff0447c94acc3433a9bcab8e75d96d9fc965d",
+      "tradeName": "Yenikid syr",
+      "scientificName": "0"
+    },
+    {
+      "id": "f8e83ba0-99c0-476c-9e88-50b08f036dd0",
+      "barcode": "9178714970887",
+      "tradeName": "Zithro-med 500mg",
+      "scientificName": "."
+    },
+    {
+      "id": "dd28b246-a4e4-4dcd-8cd7-ae0707c5557e",
+      "barcode": "Acretin 0.025%",
+      "tradeName": "acretin 0.025 cream ",
+      "scientificName": "0"
+    },
+    {
+      "id": "356d1042-ef65-4115-97ed-9a378d42daeb",
+      "barcode": "4006000017358",
+      "tradeName": "anti-pigment eucerin ",
+      "scientificName": "0"
+    },
+    {
+      "id": "94284218-ebac-45e4-b915-6960a2274a6b",
+      "barcode": "6251857706889",
+      "tradeName": "aspitect tab",
+      "scientificName": "0"
+    },
+    {
+      "id": "d54ec47c-343f-44a6-bdf4-6294c2f8eb1e",
+      "barcode": "8683229235754",
+      "tradeName": "avoferro plus tab",
+      "scientificName": "0"
+    },
+    {
+      "id": "dcadc850-bd17-46cd-9353-3aa43626249e",
+      "barcode": "8429979432933",
+      "tradeName": "azelac ru ",
+      "scientificName": "0"
+    },
+    {
+      "id": "ec98a976-d672-4be8-bc9e-bc4340f4aeb6",
+      "barcode": "5cc844e27d7e42076a29d1d0096f842e4b66dfdc104ece6327ec05490d84e77fe446f488cde6711e",
+      "tradeName": "ceftriaxone 1g ldp im ",
+      "scientificName": "0"
+    },
+    {
+      "id": "14209d02-03df-49a6-a9ee-8569068a8853",
+      "barcode": "6291109120988",
+      "tradeName": "centrum adult",
+      "scientificName": "0"
+    },
+    {
+      "id": "90f247e1-f459-4868-ab26-0bac6b4fe82e",
+      "barcode": "2f6a5c2267bf018c23296c58f2da1bd22cc1c193a7391d89ddb2d47b4a77375ba61a69ae44578cf7",
+      "tradeName": "claritine 10mg tab",
+      "scientificName": "0"
+    },
+    {
+      "id": "febd0a9e-1df1-4291-afff-886b2f15767f",
+      "barcode": "clinical thermometer",
+      "tradeName": "clinical thermometer",
+      "scientificName": "0"
+    },
+    {
+      "id": "9f466e8c-f760-49f5-a15e-a5a8b5cefa30",
+      "barcode": "8901138713799",
+      "tradeName": "cyctone syrp",
+      "scientificName": "0"
+    },
+    {
+      "id": "4588609d-0036-4d3f-b5a9-dd55f2d9faf2",
+      "barcode": "3760245850330",
+      "tradeName": "dIAMENIL V 50\\1000",
+      "scientificName": "."
+    },
+    {
+      "id": "407862e4-b067-4b67-b337-16bf82997018",
+      "barcode": "6251107131010",
+      "tradeName": "declogfesic 50mg",
+      "scientificName": "0"
+    },
+    {
+      "id": "df49275d-f864-4be3-8ffd-40df92b20234",
+      "barcode": "4014009357030",
+      "tradeName": "delay spray",
+      "scientificName": "0"
+    },
+    {
+      "id": "d9d6dcb7-450e-4fee-8909-9deb7bdbdc94",
+      "barcode": "4014009356903",
+      "tradeName": "delay spray",
+      "scientificName": "0"
+    },
+    {
+      "id": "0fda824e-5cb8-4ace-86fb-25e7cb2206e3",
+      "barcode": "5060829020202",
+      "tradeName": "dolo-wise 1000mg ",
+      "scientificName": "0"
+    },
+    {
+      "id": "44554398-f978-4b92-bba6-152c69c85d87",
+      "barcode": "5904016012819",
+      "tradeName": "doxycyclinum 100mg",
+      "scientificName": "0"
+    },
+    {
+      "id": "c0b1ac30-59fa-43c9-b6d0-ad585cfff369",
+      "barcode": "4260393340626",
+      "tradeName": "early pregnancy test",
+      "scientificName": "0"
+    },
+    {
+      "id": "cc16bb1c-fa16-4e6b-b4a3-4ca7f4e6f110",
+      "barcode": "6291103841438",
+      "tradeName": "empazin 25mg",
+      "scientificName": "0"
+    },
+    {
+      "id": "74d2cd7c-83e4-4780-b8af-1b6f88765d61",
+      "barcode": "6291103841469",
+      "tradeName": "empazin-m 1000\\12.5",
+      "scientificName": "0"
+    },
+    {
+      "id": "fa1e97c2-e5ee-4a4e-b2b6-dd05ea11b32a",
+      "barcode": "6291103841452",
+      "tradeName": "empazin-m 850\\12.5",
+      "scientificName": "0"
+    },
+    {
+      "id": "9c55d75f-714c-40d7-a08f-bc62568f94b7",
+      "barcode": "6221163003989",
+      "tradeName": "fucidel cream",
+      "scientificName": "0"
+    },
+    {
+      "id": "c32fc553-086a-449e-a58e-e6d125603acb",
+      "barcode": "8680131201099",
+      "tradeName": "gigles large",
+      "scientificName": "0"
+    },
+    {
+      "id": "2b2d6bf5-8559-4b67-8b44-3712e162c7d4",
+      "barcode": "e8d5860a9195cd3f66399170e9d72c9e03281b2f3dde638200c3405f1f111e7ab945700545952b47",
+      "tradeName": "hyfresh gel ",
+      "scientificName": "0"
+    },
+    {
+      "id": "da81823f-f2ca-47fa-937d-d87475dc5d24",
+      "barcode": "8470002043961",
+      "tradeName": "isdin cicapost ",
+      "scientificName": "0"
+    },
+    {
+      "id": "48ba35c9-dc1a-4eb3-88ba-342abd3289e7",
+      "barcode": "9647803651858",
+      "tradeName": "itooth",
+      "scientificName": "."
+    },
+    {
+      "id": "b457782b-6d6a-47f0-a09a-cf6f4d0f20bc",
+      "barcode": "ketess sachet",
+      "tradeName": "ketess sachet ",
+      "scientificName": "0"
+    },
+    {
+      "id": "eaabb8d1-60cb-481a-97c6-759adba1c57e",
+      "barcode": "6928649840211",
+      "tradeName": "kodomo baby wipes",
+      "scientificName": "."
+    },
+    {
+      "id": "60c5ed26-19b1-43d8-b27b-c985f3fe5055",
+      "barcode": "lamifen cream",
+      "tradeName": "lamifen cream ",
+      "scientificName": "0"
+    },
+    {
+      "id": "0a2c6a4e-1976-481c-b8b6-60c6aa942261",
+      "barcode": "9178714970870",
+      "tradeName": "levo-mid 500mg tab",
+      "scientificName": "."
+    },
+    {
+      "id": "c536c511-2b19-4bc0-a793-6f7e4eb51a2e",
+      "barcode": "8719244901708",
+      "tradeName": "maddoflox tab ",
+      "scientificName": "0"
+    },
+    {
+      "id": "65186e43-9291-405e-a263-d2481dc325b9",
+      "barcode": "3401572288297",
+      "tradeName": "micellar water bioderma oily/combination skin",
+      "scientificName": "."
+    },
+    {
+      "id": "5d1a606f-d64d-4869-9c40-6f9941118cf5",
+      "barcode": "nEUROBION AMP",
+      "tradeName": "nEUROBION AMP",
+      "scientificName": "."
+    },
+    {
+      "id": "d4fc1b25-18e3-4368-9625-6bc90e6d9b81",
+      "barcode": "087614018546",
+      "tradeName": "nac  swason ",
+      "scientificName": "0"
+    },
+    {
+      "id": "80bc6226-533e-413c-97db-fe3db9e2c526",
+      "barcode": "d742d6f11fdb14dd1201595666e9e6f3944f8642586869deb5a8188dd4be0ea2430981f9aa60a676",
+      "tradeName": "nasonex spray ",
+      "scientificName": "0"
+    },
+    {
+      "id": "e8fbb694-a4d2-415a-b676-d3d6e715c55b",
+      "barcode": "42164104",
+      "tradeName": "nivea cream معدني ",
+      "scientificName": "0"
+    },
+    {
+      "id": "1d05fc66-729c-4814-8078-dd446056252e",
+      "barcode": "010628509400024021000000079373881729063010F250671",
+      "tradeName": "olmetec 40\\25",
+      "scientificName": "0"
+    },
+    {
+      "id": "76350bdd-0eb8-4777-9161-3c1170fd21ef",
+      "barcode": "panadol cold&flu الاصفر",
+      "tradeName": "panadol cold&flu الاصفر",
+      "scientificName": "0"
+    },
+    {
+      "id": "5bca87ac-b6bf-43cf-b017-2a992fde1994",
+      "barcode": "8680923345109",
+      "tradeName": "prebiotic face wash",
+      "scientificName": "0"
+    },
+    {
+      "id": "20f0883a-3b70-4172-86b1-0d2b6c48eba8",
+      "barcode": "procoralan 5mg",
+      "tradeName": "procoralan 5mg",
+      "scientificName": "0"
+    },
+    {
+      "id": "8b6d11c4-49f8-4606-8907-76b383b25aa3",
+      "barcode": "8901175032365",
+      "tradeName": "rofast 20mg ",
+      "scientificName": "0"
+    },
+    {
+      "id": "8da7076d-89f2-4553-ba54-3ed75735e7b3",
+      "barcode": "5206892102425",
+      "tradeName": "sinomarin adult",
+      "scientificName": "0"
+    },
+    {
+      "id": "f9412bfb-1c7d-43c9-bfc0-dc3da4e8caef",
+      "barcode": "8683400273155",
+      "tradeName": "sleep well fine's gummies",
+      "scientificName": "."
+    },
+    {
+      "id": "6aae4662-8936-4f3d-851f-a4747c162e23",
+      "barcode": "6281008515121",
+      "tradeName": "sofy فوط نسائيه",
+      "scientificName": "0"
+    },
+    {
+      "id": "a02f2ebb-d478-4092-8543-50747d9bb1d9",
+      "barcode": "soolan syrp",
+      "tradeName": "soolan syrp",
+      "scientificName": "0"
+    },
+    {
+      "id": "0f02f9d0-edbb-4fe3-b1ed-3fab7c4a571c",
+      "barcode": "5000158107540",
+      "tradeName": "strepsils  hony&lemon ",
+      "scientificName": "0"
+    },
+    {
+      "id": "a831f7ad-3a68-4038-9b16-ffc47ccdb8fc",
+      "barcode": "5000158106130",
+      "tradeName": "strepsils strawberry ",
+      "scientificName": "0"
+    },
+    {
+      "id": "a1e63237-fe20-45ee-ae70-7121a343b704",
+      "barcode": "6221508172011",
+      "tradeName": "synthecortin ampoule ",
+      "scientificName": "0"
+    },
+    {
+      "id": "99307c59-e6dc-4b01-a88a-0e6c1d50b8e7",
+      "barcode": "6213072083169",
+      "tradeName": "trialog jel ",
+      "scientificName": "0"
+    },
+    {
+      "id": "ca48987e-4850-45a0-a093-78f6ce582f14",
+      "barcode": "6223003932909",
+      "tradeName": "urea flex cream ",
+      "scientificName": "0"
+    },
+    {
+      "id": "ee7e0b49-85f2-4dbf-8f4a-2973699105dc",
+      "barcode": "3059944020701",
+      "tradeName": "veet strip",
+      "scientificName": "."
+    },
+    {
+      "id": "301bf307-91a1-4ae4-b19b-cdc351ca158a",
+      "barcode": "Yasmin tab",
+      "tradeName": "yasmin tab ",
+      "scientificName": "."
+    },
+    {
+      "id": "3be29567-997e-4017-8c4d-25ad8511e3c4",
+      "barcode": "6902024050013",
+      "tradeName": "حقنة شرجية صغير",
+      "scientificName": "."
+    },
+    {
+      "id": "d371621b-8dd8-4c72-a675-ab15806eafe6",
+      "barcode": "6902024050037",
+      "tradeName": "حقنة شرجية كبير",
+      "scientificName": "."
+    },
+    {
+      "id": "38bbc9f9-f033-441b-9885-0ed53e87dc5a",
+      "barcode": "6902024050020",
+      "tradeName": "حقنة شرجية وسط",
+      "scientificName": "."
+    },
+    {
+      "id": "932eff91-0fae-4d32-97fc-b612f2b05bbb",
+      "barcode": "6251007012051",
+      "tradeName": "كفوف طبية",
+      "scientificName": "."
+    },
+    {
+      "id": "59118a1b-5bbd-48a9-a145-468b8360bd9b",
+      "barcode": "8809052589714",
+      "tradeName": "لاصق انف ازالة الرؤوس السوداء",
+      "scientificName": "0"
+    },
+    {
+      "id": "957ec3b4-59c0-49ec-9c08-c4b924562e2a",
+      "barcode": "8809052589707",
+      "tradeName": "لاصق انف لازالة الرؤوس السوداء",
+      "scientificName": "0"
+    },
+    {
+      "id": "65424275-78da-4642-a5ea-02a111cd5bb0",
+      "barcode": "8058090019541",
+      "tradeName": "محرار الكتروني ",
+      "scientificName": "0"
+    }
+  ]
+}

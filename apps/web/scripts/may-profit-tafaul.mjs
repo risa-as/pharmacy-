@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -267,19 +267,17 @@ async function main() {
   ];
 
   // ── Write workbook ─────────────────────────────────────────────────────────
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
   const addSheet = (name, rows, fallbackHeader) => {
-    const ws =
-      rows.length > 0
-        ? XLSX.utils.json_to_sheet(rows)
-        : XLSX.utils.aoa_to_sheet([fallbackHeader || ["لا توجد بيانات"]]);
+    const ws = wb.addWorksheet(name, { views: [{ rightToLeft: true }] });
     if (rows.length > 0) {
-      const cols = Object.keys(rows[0]).map((k) => ({
-        wch: Math.max(k.length + 2, 14),
-      }));
-      ws["!cols"] = cols;
+      const headers = Object.keys(rows[0]);
+      ws.addRow(headers);
+      ws.addRows(rows.map((row) => headers.map((header) => row[header])));
+      ws.columns.forEach((column, index) => { column.width = Math.max(headers[index].length + 2, 14); });
+    } else {
+      ws.addRow(fallbackHeader || ["لا توجد بيانات"]);
     }
-    XLSX.utils.book_append_sheet(wb, ws, name);
   };
 
   addSheet("الملخص النهائي", summaryRows);
@@ -291,7 +289,7 @@ async function main() {
 
   let outPath = path.resolve(__dirname, "..", "تقرير-ربح-دار-التفاؤل-مايو-2026.xlsx");
   try {
-    XLSX.writeFile(wb, outPath);
+    await wb.xlsx.writeFile(outPath);
   } catch (e) {
     if (e?.code === "EBUSY" || e?.code === "EPERM") {
       // File is open (e.g. in Excel) — write to a fresh name instead.
@@ -300,7 +298,7 @@ async function main() {
         "..",
         `تقرير-ربح-دار-التفاؤل-مايو-2026-${Date.now()}.xlsx`,
       );
-      XLSX.writeFile(wb, outPath);
+      await wb.xlsx.writeFile(outPath);
     } else {
       throw e;
     }

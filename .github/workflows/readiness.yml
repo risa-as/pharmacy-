@@ -1,0 +1,65 @@
+name: Release readiness
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: readiness
+          POSTGRES_PASSWORD: readiness
+          POSTGRES_DB: faramace_readiness
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U readiness -d faramace_readiness"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://readiness:readiness@127.0.0.1:5432/faramace_readiness
+      TEST_DATABASE_URL: postgresql://readiness:readiness@127.0.0.1:5432/faramace_readiness
+      NEW_DATABASE_URL: postgresql://readiness:readiness@127.0.0.1:5432/faramace_readiness
+      AUTH_SECRET: ci-only-not-a-production-secret-123456789
+      NEXTAUTH_SECRET: ci-only-not-a-production-secret-123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm check:dependencies
+      - run: node --test scripts/check-dependencies.test.mjs
+      - run: node --test scripts/security-compatibility.test.mjs
+      - run: node --test scripts/image-size-security.test.mjs
+      - run: pnpm --filter web exec prisma generate
+      # Frozen, reviewed baseline for NEW databases; old SQL assumed preexisting tables.
+      - run: node scripts/bootstrap-empty-db.mjs
+      - run: pnpm --filter web test
+      - run: pnpm --filter desktop test
+      - run: pnpm --filter web test:integration
+      - run: pnpm --filter web exec tsc --noEmit --incremental false
+      - run: pnpm --filter web exec next build
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm audit:prod
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-audit
+          path: artifacts/audit-prod*.json

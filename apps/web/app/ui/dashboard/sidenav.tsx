@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@faramace/ui";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import {
   LayoutDashboard,
   Package,
@@ -48,9 +48,11 @@ import {
   Loader2,
   Download,
   HardDrive,
+  Warehouse,
 } from "lucide-react";
 
 import { clearSession } from "@/app/lib/actions/auth-actions";
+import { ThemeToggle } from "@/app/ui/theme-toggle";
 import { type UserPermissions } from "@/app/lib/permissions";
 import { getLinkPermission } from "@/app/lib/route-permissions";
 
@@ -86,54 +88,26 @@ const controlTowerSections: NavSection[] = [
     links: [{ name: "نظرة عامة", href: "/dashboard", icon: BarChart3 }],
   },
   {
-    label: "",
+    label: "العملاء",
     links: [
       { name: "المؤسسات", href: "/dashboard/admin/tenants", icon: Building2 },
-    ],
-  },
-  {
-    label: "",
-    links: [
       { name: "الباقات", href: "/dashboard/admin/plans", icon: CreditCard },
+      { name: "المذاخر", href: "/dashboard/admin/warehouses", icon: Warehouse },
     ],
   },
   {
-    label: "",
+    label: "التراخيص",
     links: [
       { name: "التراخيص", href: "/dashboard/admin/licenses", icon: Crown },
-    ],
-  },
-  {
-    label: "",
-    links: [
       { name: "تراخيص الأوف لاين", href: "/dashboard/admin/offline-licenses", icon: HardDrive },
     ],
   },
   {
-    label: "",
+    label: "المنصة",
     links: [
       { name: "معلومات الدفع", href: "/dashboard/admin/payment-info", icon: Landmark },
-    ],
-  },
-  {
-    label: "",
-    links: [
       { name: "إعدادات التنزيل", href: "/dashboard/admin/downloads", icon: Download },
-    ],
-  },
-  {
-    label: "",
-    links: [
-      {
-        name: "قاعدة الأدوية العالمية",
-        href: "/dashboard/admin/drugs",
-        icon: Pill,
-      },
-    ],
-  },
-  {
-    label: "",
-    links: [
+      { name: "قاعدة الأدوية العالمية", href: "/dashboard/admin/drugs", icon: Pill },
       { name: "الإعدادات", href: "/dashboard/settings", icon: SettingsIcon },
     ],
   },
@@ -224,7 +198,12 @@ const sections: NavSection[] = [
           {
             name: "المشتريات",
             href: "/dashboard/purchases",
-            excludeFor: ["/dashboard/purchases/smart-order"],
+            // مسارات تحت /dashboard/purchases لها روابطها المستقلة في الشريط:
+            // «الطلبات الذكية» أدناه و«طلبات المذاخر» في قسم المذاخر.
+            excludeFor: [
+              "/dashboard/purchases/smart-order",
+              "/dashboard/purchases/warehouse-orders",
+            ],
           },
           { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order" },
         ],
@@ -267,6 +246,7 @@ const sections: NavSection[] = [
           {
             name: "الصلاحيات",
             href: "/dashboard/users/permissions",
+            activeFor: ["/dashboard/users/permissions-guide"],
             plan: "pro",
           },
           { name: "إدارة الفروع", href: "/dashboard/branches", plan: "pro" },
@@ -275,9 +255,18 @@ const sections: NavSection[] = [
     ],
   },
 
-  // ─── FUTURE: Bucket 3 — Advanced & B2B ──────────────────────────────────
-  // These sections are commented out for Day-1 MVP. Routes and code remain
-  // intact. Uncomment individual items when the prerequisite conditions are met.
+  // ─── B2B: المذاخر (حية منذ ميزة المذاخر 2026-09-03) ──────────────────────
+  {
+      label: "المذاخر",
+      links: [
+          { name: "طلبات المذاخر", href: "/dashboard/purchases/warehouse-orders", icon: Building2 },
+      ],
+  },
+
+  // ─── FUTURE: Bucket 3 — Advanced & B2B (المتبقي) ─────────────────────────
+  // [المذاخر 2026-09-03] قسم المذاخر أصبح حياً أعلاه — بقية الأقسام شروطها
+  // لم تتحقق بعد (محدّث من «المستودعات العراقية» الأصلية لأن المذاخر الآن
+  // طرف حي داخل المنصة بدل تكامل خارجي). الأقسام الأخرى كما هي:
   //
   // {
   //     label: "التوسع والابتكار",
@@ -310,38 +299,97 @@ const sections: NavSection[] = [
   // ────────────────────────────────────────────────────────────────────────
 ];
 
+/**
+ * Single source of truth for "is this subLink active" — reused for the
+ * group's own active-highlight (render) and for deciding which accordion
+ * groups start/auto-expand (initial state + effect), so there is exactly
+ * one route-matching rule instead of three drifting copies.
+ */
+function isSubLinkActive(
+  subLink: { href: string; activeFor?: string[]; excludeFor?: string[] },
+  pathname: string,
+): boolean {
+  // excludeFor أولاً: كانت تُحترم عند رسم الرابط الفرعي فقط، فكان رأس المجموعة
+  // يُضاء (ويُفتح تلقائياً) لمسار مستثنى — مثلاً «العملاء والتوريد» على صفحة
+  // طلبات المذاخر لأن /dashboard/purchases بادئةٌ لها.
+  if (subLink.excludeFor?.some((p) => pathname.startsWith(p))) return false;
+  // حدّ المسار: `href + "/"` لا startsWith المجرّد، وإلا طابق /dashboard/purchases
+  // مساراً مثل /dashboard/purchases-archive.
+  return (
+    pathname === subLink.href ||
+    pathname.startsWith(subLink.href + "/") ||
+    (subLink.activeFor?.some((p) => pathname.startsWith(p)) ?? false)
+  );
+}
+
+// تسمية عربية لأدوار الصيدلية (ADMIN/SUPER_ADMIN/PHARMACIST/CASHIER) — بحث في
+// app/lib/permissions.ts و route-permissions.ts لم يجد خريطة مُصدَّرة لهذه
+// الأدوار (فقط PERMISSION_LABELS لأسماء الصلاحيات، لا لأسماء الأدوار).
+// ROLE_META في app/dashboard/users/page.tsx يحمل نفس المسميات لكنه محلي غير
+// مُصدَّر داخل صفحة خادم؛ استيراده من هنا (مكوّن عميل) غير مناسب. أُضيفت
+// خريطة محلية صغيرة هنا بنفس التسميات هناك للاتساق البصري عبر التطبيق.
+const ROLE_LABELS_AR: Record<string, string> = {
+  SUPER_ADMIN: "مدير المنصة",
+  ADMIN: "مدير",
+  PHARMACIST: "صيدلي",
+  CASHIER: "كاشير",
+};
+
+/** Names of the (pharmacy-nav) parent links whose subLinks contain the active route. */
+function getActiveSubLinkParents(pathname: string): string[] {
+  const parents: string[] = [];
+  sections.forEach((sec) => {
+    sec.links.forEach((l) => {
+      if (
+        l.subLinks?.some((sub: any) => isSubLinkActive(sub, pathname))
+      ) {
+        parents.push(l.name);
+      }
+    });
+  });
+  return parents;
+}
+
 export default function SideNav({
   settings,
   userPermissions,
   userRole,
+  userEmail,
+  userName,
 }: {
   settings: any;
   userPermissions?: UserPermissions | null;
   userRole?: string;
+  userEmail?: string;
+  userName?: string | null;
 }) {
   const pathname = usePathname() ?? "";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [openAccordions, setOpenAccordions] = useState<string[]>([]);
+  // Initial value: the group(s) already containing the active route start
+  // expanded (mirrors WarehouseSideNav's lazy useState initializer) — avoids
+  // a collapsed-then-expanded flash on first paint.
+  const [openAccordions, setOpenAccordions] = useState<string[]>(() =>
+    getActiveSubLinkParents(pathname),
+  );
   const [signingOut, setSigningOut] = useState(false);
+  // uid disambiguates accordion panel ids: this component is mounted twice
+  // by app/dashboard/layout.tsx (one wrapper per breakpoint), and internally
+  // renders its nav content twice more (desktop rail + mobile drawer) — see
+  // renderNavContent below. idPrefix alone (desktop/mobile) isn't enough to
+  // guarantee document-wide uniqueness across the two outer mounts, so each
+  // mounted instance gets its own SSR-safe uid via useId().
+  const uid = useId();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Auto-open accordion if active route is a child
+  // Auto-open accordion if active route is a child. This must only ever ADD
+  // to the open set — never remove — so it doesn't collapse a group the user
+  // deliberately opened on every navigation.
   useEffect(() => {
-    const activeParents: string[] = [];
-    sections.forEach((sec: any) => {
-      sec.links.forEach((l: any) => {
-        if (
-          l.subLinks &&
-          l.subLinks.some((sub: any) => pathname.startsWith(sub.href))
-        ) {
-          activeParents.push(l.name);
-        }
-      });
-    });
+    const activeParents = getActiveSubLinkParents(pathname);
     if (activeParents.length > 0) {
       setOpenAccordions((prev) =>
         Array.from(new Set([...prev, ...activeParents])),
@@ -414,14 +462,25 @@ export default function SideNav({
   const activeSections =
     userRole === "SUPER_ADMIN" ? controlTowerSections : filteredSections;
 
+  // Identity block (below the logo header) — mirrors WarehouseSideNav's
+  // avatar/name/role/email card. Name takes priority (both as the bold
+  // title and the avatar initial); email is the fallback for both, and is
+  // only rendered a second time beneath the title when it differs from it
+  // (avoids showing the same email twice when no name is on file).
+  const trimmedName = userName?.trim() || "";
+  const identityTitle = trimmedName || userEmail || "المستخدم";
+  const avatarSource = trimmedName || userEmail || "";
+  const avatarInitial = avatarSource ? avatarSource.charAt(0).toUpperCase() : "؟";
+  const roleLabel = userRole ? (ROLE_LABELS_AR[userRole] ?? null) : null;
+
   if (!mounted) {
     return (
       <>
         <div className="md:hidden fixed top-3 right-3 z-50">
           <div className="w-10 h-10 rounded-xl bg-card shadow-md border animate-pulse" />
         </div>
-        <div className="hidden md:flex h-full flex-col px-3 py-4 bg-background border-l border-border/80">
-          <div className="mb-4 h-32 rounded-2xl bg-gradient-to-tr from-primary to-primary/80 animate-pulse" />
+        <div className="hidden md:flex h-full flex-col px-3 py-4 bg-card border-l border-border/80">
+          <div className="mb-4 h-32 rounded-lg bg-primary/10 animate-pulse" />
           <div className="flex grow flex-col space-y-2">
             {Array.from({ length: 8 }).map((_: any, i: any) => (
               <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" />
@@ -432,43 +491,57 @@ export default function SideNav({
     );
   }
 
-  const navContent = (
+  const renderNavContent = (idPrefix: string) => (
     <>
-      {/* Brand Header */}
+      {/* Brand Header — minimal row matching WarehouseSideNav: small square
+          mark + name + muted subtitle, then a divider. The card, top strip and
+          hover-scale are gone on purpose; this is a toolbar, not a banner.
+          settings.logoUrl is kept (the warehouse has no logo concept). */}
       <Link
-        className="mb-4 block rounded-lg overflow-hidden shadow-md shadow-primary/10 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+        className="flex items-center gap-2.5 rounded-lg px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         href="/"
         onClick={() => setMobileOpen(false)}
       >
-        {/* Top gradient strip */}
-        <div className="bg-gradient-to-r from-primary to-primary/80 h-1.5 w-full" />
-
-        {/* Main card body */}
-        <div className="bg-primary/5 border border-primary/10 border-t-0 px-3 py-3 flex items-center gap-3">
-          {/* Logo / Icon */}
-          <div className="shrink-0 h-15 w-15 rounded-md bg-primary flex items-center justify-center shadow-sm">
-            {settings?.logoUrl ? (
-              <img
-                src={settings.logoUrl}
-                alt="Logo"
-                className="h-12 w-12 object-contain rounded-sm"
-              />
-            ) : (
-              <Store className="h-5 w-5 text-primary-foreground" />
-            )}
-          </div>
-
-          {/* Text */}
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-bold text-foreground truncate leading-tight">
-              {settings?.name || "فاراماس"}
-            </p>
-            <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-sm">
-              النظام السحابي لأدارة الصيدليات
-            </span>
-          </div>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
+          {settings?.logoUrl ? (
+            <img src={settings.logoUrl} alt="" className="h-9 w-9 object-contain" />
+          ) : (
+            <Store className="h-4 w-4" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-foreground">
+            {settings?.name || "فاراماس"}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            فاراماس نظام سحابي لإدارة الصيدليات
+          </p>
         </div>
       </Link>
+      <div className="my-3 border-t" />
+
+      {/* Identity block — who is signed in (parity with WarehouseSideNav's
+          avatar/name/role/email card, which the pharmacy side never had). */}
+      <div className="mb-4 flex items-center gap-3 rounded-lg border bg-muted/60 p-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+          {avatarInitial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-bold text-foreground">{identityTitle}</p>
+            {roleLabel && (
+              <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                {roleLabel}
+              </span>
+            )}
+          </div>
+          {userEmail && userEmail !== identityTitle && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground" dir="ltr">
+              {userEmail}
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Navigation */}
       <nav
@@ -479,116 +552,111 @@ export default function SideNav({
           <div key={sIdx} className="mb-2">
             {section.label && (
               <div className="px-3 pt-4 pb-1.5 first:pt-0">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                <span className="text-xs font-semibold text-muted-foreground">
                   {section.label}
                 </span>
               </div>
             )}
             <div className="space-y-1 mt-1">
-              {section.links.map((link: any) => {
+              {section.links.map((link: any, lIdx: number) => {
                 const LinkIcon = link.icon;
-                // Exact match for flat links, startsWith or exact for subLinks
+                // Exact match for flat links, startsWith or exact for subLinks.
+                // جذر اللوحة (/dashboard) تطابقٌ تامٌّ فقط: كل صفحات اللوحة تبدأ بـ
+                // "/dashboard/"، فالمطابقة بالبادئة كانت تُضيء «الرئيسية» (و«نظرة
+                // عامة» للسوبر أدمن) على كل صفحة بجانب الرابط الفعلي.
                 const isExactActive =
                   pathname === link.href ||
-                  (link.href !== "#" && pathname.startsWith(link.href + "/"));
+                  (link.href !== "#" &&
+                    link.href !== "/dashboard" &&
+                    pathname.startsWith(link.href + "/"));
                 const isChildActive =
-                  link.subLinks?.some(
-                    (sub: any) =>
-                      pathname.startsWith(sub.href) ||
-                      sub.activeFor?.some((p: string) =>
-                        pathname.startsWith(p),
-                      ),
+                  link.subLinks?.some((sub: any) =>
+                    isSubLinkActive(sub, pathname),
                   ) || false;
                 const isActive = isExactActive || isChildActive;
                 const isExpanded = openAccordions.includes(link.name);
 
                 if (link.subLinks) {
+                  const panelId = `${uid}-nav-panel-${idPrefix}-${sIdx}-${lIdx}`;
                   return (
                     <div key={link.name} className="flex flex-col space-y-1">
                       <button
+                        type="button"
                         onClick={() => toggleAccordion(link.name)}
+                        aria-expanded={isExpanded}
+                        aria-controls={panelId}
                         className={cn(
                           "flex w-full h-9 items-center justify-between rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
                           {
-                            "bg-primary/10 text-primary shadow-sm":
-                              isActive && !isExpanded,
+                            // التظليل الممتلئ يعني شيئاً واحداً: «هذه هي الصفحة
+                            // الحالية». رأس المجموعة ليس صفحة (href = "#")، فكان
+                            // إضاءته بنفس لون الرابط الفرعي النشط تُظهر كتلتين
+                            // ممتلئتين فوق بعضهما. الآن يكتفي الرأس بإشارة أخفض
+                            // (نصّ كامل التباين + أيقونة ملوّنة) — و isChildActive
+                            // يبقى مستخدماً لفتح الأكورديون تلقائياً فقط.
+                            "bg-primary text-primary-foreground": isExactActive,
                             "text-foreground bg-muted/50":
-                              isExpanded && !isActive,
-                            "bg-primary/10 text-primary":
-                              isExpanded && isActive,
+                              !isExactActive && (isChildActive || isExpanded),
                             "text-muted-foreground hover:bg-muted hover:text-foreground":
                               !isActive && !isExpanded,
                           },
                         )}
                       >
                         <div className="flex items-center gap-2.5">
-                          <LinkIcon className="w-[18px] h-[18px] shrink-0" />
+                          <LinkIcon
+                            className={cn(
+                              "w-[18px] h-[18px] shrink-0",
+                              isChildActive && !isExactActive && "text-primary",
+                            )}
+                          />
                           <span className="truncate">{link.name}</span>
                         </div>
                         <ChevronDown
                           className={cn(
-                            "w-4 h-4 transition-transform duration-200",
+                            "w-4 h-4 transition-transform duration-200 motion-reduce:transition-none",
                             isExpanded && "rotate-180",
                           )}
+                          aria-hidden="true"
                         />
                       </button>
 
                       <div
-                        className={cn(
-                          "grid transition-all duration-200 ease-in-out",
-                          isExpanded
-                            ? "grid-rows-[1fr] opacity-100"
-                            : "grid-rows-[0fr] opacity-0",
-                        )}
+                        id={panelId}
+                        hidden={!isExpanded}
+                        className="space-y-1 pr-9 pl-3 pt-1"
                       >
-                        <div className="overflow-hidden">
-                          <div className="flex flex-col gap-1 pr-9 pl-3 pt-1">
-                            {link.subLinks.map((subLink: any) => {
-                              const isExcluded = subLink.excludeFor?.some(
-                                (p: string) => pathname.startsWith(p),
-                              );
-                              const isSubActive =
-                                !isExcluded &&
-                                (pathname === subLink.href ||
-                                  pathname.startsWith(subLink.href + "/") ||
-                                  subLink.activeFor?.some((p: string) =>
-                                    pathname.startsWith(p),
-                                  ));
-                              return (
-                                <Link
-                                  key={subLink.name}
-                                  href={subLink.href}
-                                  onClick={() => setMobileOpen(false)}
-                                  className={cn(
-                                    "flex h-8 items-center rounded-md px-3 text-[12px] font-semibold transition-all duration-150 relative gap-1",
-                                    {
-                                      "text-primary bg-primary/5": isSubActive,
-                                      "text-muted-foreground hover:text-foreground hover:bg-muted/50":
-                                        !isSubActive,
-                                    },
-                                  )}
-                                >
-                                  {isSubActive && (
-                                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-primary rounded-l-full" />
-                                  )}
-                                  <span className="truncate flex-1">
-                                    {subLink.name}
-                                  </span>
-                                  {subLink.plan === "pro" && (
-                                    <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary font-bold shrink-0">
-                                      <Lock className="w-2.5 h-2.5" /> Pro
-                                    </span>
-                                  )}
-                                  {subLink.plan === "enterprise" && (
-                                    <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-warning/10 text-warning font-bold shrink-0">
-                                      <Lock className="w-2.5 h-2.5" /> Ent
-                                    </span>
-                                  )}
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        </div>
+                        {link.subLinks.map((subLink: any) => {
+                          const isSubActive = isSubLinkActive(subLink, pathname);
+                          return (
+                            <Link
+                              key={subLink.name}
+                              href={subLink.href}
+                              onClick={() => setMobileOpen(false)}
+                              className={cn(
+                                "flex h-8 items-center rounded-md px-3 text-[12px] font-semibold transition-all duration-150 relative gap-1",
+                                {
+                                  "bg-primary text-primary-foreground": isSubActive,
+                                  "text-muted-foreground hover:text-foreground hover:bg-muted/50":
+                                    !isSubActive,
+                                },
+                              )}
+                            >
+                              <span className="truncate flex-1">
+                                {subLink.name}
+                              </span>
+                              {subLink.plan === "pro" && (
+                                <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary font-bold shrink-0">
+                                  <Lock className="w-2.5 h-2.5" /> Pro
+                                </span>
+                              )}
+                              {subLink.plan === "enterprise" && (
+                                <span className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-warning/10 text-warning font-bold shrink-0">
+                                  <Lock className="w-2.5 h-2.5" /> Ent
+                                </span>
+                              )}
+                            </Link>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -602,7 +670,7 @@ export default function SideNav({
                     className={cn(
                       "flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
                       {
-                        "bg-primary/10 text-primary shadow-sm": isActive,
+                        "bg-primary text-primary-foreground": isActive,
                         "text-muted-foreground hover:bg-muted hover:text-foreground":
                           !isActive,
                       },
@@ -619,21 +687,23 @@ export default function SideNav({
         <div className="flex-1" />
       </nav>
 
-      {/* ─── Admin Footer: Settings + Billing (pharmacy ADMINs only) ─── */}
-      {userRole === "ADMIN" && (
-        <div className="px-0.5 mt-1 flex gap-1">
+      {/* ─── Footer: Settings + Billing (pharmacy ADMINs only) + Sign Out —
+          anchored behind a divider, matching WarehouseSideNav's footer. ─── */}
+      <div className="mt-4 space-y-1 border-t px-0.5 pt-4">
+        {userRole === "ADMIN" && (
+          <div className="space-y-1">
           <Link
             href="/dashboard/settings"
             onClick={() => setMobileOpen(false)}
             className={cn(
-              "flex flex-1 h-9 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
+              "flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
               (pathname.startsWith("/dashboard/settings") &&
                 !pathname.startsWith("/dashboard/settings/billing")) ||
                 pathname.startsWith("/dashboard/finance") ||
                 pathname.startsWith("/dashboard/expenses") ||
                 pathname.startsWith("/dashboard/organizations") ||
                 pathname.startsWith("/dashboard/notifications")
-                ? "bg-primary/10 text-primary shadow-sm"
+                ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
@@ -644,28 +714,28 @@ export default function SideNav({
             href="/dashboard/settings/billing"
             onClick={() => setMobileOpen(false)}
             className={cn(
-              "flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
+              "flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
               pathname.startsWith("/dashboard/settings/billing")
-                ? "bg-primary/10 text-primary shadow-sm"
+                ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
             <CreditCard className="w-[18px] h-[18px] shrink-0" />
             <span>اشتراكي</span>
           </Link>
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Sign Out */}
-      <div className="mt-2 px-0.5">
-        <button
-          disabled={signingOut}
+        <div className="flex items-center gap-2 pt-1">
+          <ThemeToggle />
+          <button
+            disabled={signingOut}
           onClick={async () => {
             setSigningOut(true);
             await clearSession();
             window.location.href = '/login';
           }}
-          className="group flex h-9 w-full items-center gap-2.5 rounded-lg bg-destructive/10 px-3 text-[13px] font-bold text-destructive hover:bg-destructive hover:text-white transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+          className="group flex h-9 flex-1 items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {signingOut ? (
             <Loader2 className="w-[18px] h-[18px] shrink-0 animate-spin" />
@@ -675,7 +745,8 @@ export default function SideNav({
           <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
             {signingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
           </span>
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* Powered by */}
@@ -736,18 +807,18 @@ export default function SideNav({
       {/* ═══ Mobile Drawer ═══ */}
       <div
         className={cn(
-          "md:hidden fixed top-0 right-0 z-40 h-full w-72 bg-background shadow-2xl border-l border-border flex flex-col px-3 py-4 transition-transform duration-300 ease-in-out overflow-y-auto",
+          "md:hidden fixed top-0 right-0 z-40 h-full w-72 bg-card shadow-2xl border-l border-border flex flex-col px-3 py-4 transition-transform duration-300 ease-in-out overflow-y-auto",
           mobileOpen ? "translate-x-0" : "translate-x-full",
         )}
         dir="rtl"
       >
         <div className="h-4" />
-        {navContent}
+        {renderNavContent("mobile")}
       </div>
 
       {/* ═══ Desktop Sidebar ═══ */}
-      <div className="hidden md:flex h-full flex-col px-3 py-4 md:px-2 bg-background border-l border-border/80">
-        {navContent}
+      <div className="hidden md:flex h-full flex-col px-3 py-4 md:px-2 bg-card border-l border-border/80">
+        {renderNavContent("desktop")}
       </div>
     </>
   );

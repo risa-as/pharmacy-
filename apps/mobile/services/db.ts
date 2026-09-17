@@ -2,6 +2,24 @@ import * as SQLite from 'expo-sqlite';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
+export interface OfflineSalePayload {
+    // originalPrice is present only on a line whose price the cashier changed;
+    // the server derives the sale's price-override flag from it.
+    items: Array<{ drugId: string; quantity: number; price: number; originalPrice?: number | null }>;
+    totalAmount: number;
+    paymentMethod: 'CASH' | 'CARD' | 'CREDIT';
+    patientId?: string | null;
+    discount?: number;
+    branchId?: string | null;
+}
+
+export interface PendingSale {
+    id: number;
+    createdAt: string;
+    idempotencyKey: string | null;
+    payload: OfflineSalePayload;
+}
+
 let dbPromise: Promise<void> | null = null;
 
 export const dbService = {
@@ -33,6 +51,14 @@ export const dbService = {
                     synced BOOLEAN DEFAULT 0
                 );
             `);
+            // Migration (012): keep the full sale payload + a stable idempotency
+            // key so a queued sale replays with its customer, method and discount,
+            // and a retry of an uncertain request is deduplicated by the server.
+            for (const column of ['payload TEXT', 'idempotencyKey TEXT']) {
+                try {
+                    await db!.execAsync(`ALTER TABLE offline_sales ADD COLUMN ${column};`);
+                } catch { /* column already exists */ }
+            }
             console.log('Database initialized');
         })();
         return dbPromise;
@@ -101,23 +127,31 @@ export const dbService = {
         );
     },
 
-    // Save offline sale
-    async saveOfflineSale(items: any[], totalAmount: number) {
+    // Save offline sale — the complete payload the server expects, plus the
+    // idempotency key generated once for this checkout attempt.
+    async saveOfflineSale(payload: OfflineSalePayload, idempotencyKey: string) {
         if (!db) await this.init();
         await db!.runAsync(
-            `INSERT INTO offline_sales (items, totalAmount, createdAt, synced) VALUES (?, ?, ?, 0)`,
-            [JSON.stringify(items), totalAmount, new Date().toISOString()]
+            `INSERT INTO offline_sales (items, totalAmount, createdAt, synced, payload, idempotencyKey) VALUES (?, ?, ?, 0, ?, ?)`,
+            [JSON.stringify(payload.items), payload.totalAmount, new Date().toISOString(), JSON.stringify(payload), idempotencyKey]
         );
     },
 
-    // Get pending sales
-    async getPendingSales() {
+    // Get pending sales (legacy rows without a payload replay as cash sales)
+    async getPendingSales(): Promise<PendingSale[]> {
         if (!db) await this.init();
         const rows = await db!.getAllAsync(`SELECT * FROM offline_sales WHERE synced = 0`);
-        return rows.map((row: any) => ({
-            ...row,
-            items: JSON.parse(row.items)
-        }));
+        return rows.map((row: any) => {
+            let payload: OfflineSalePayload;
+            try {
+                payload = row.payload
+                    ? JSON.parse(row.payload)
+                    : { items: JSON.parse(row.items), totalAmount: row.totalAmount, paymentMethod: 'CASH' };
+            } catch {
+                payload = { items: [], totalAmount: row.totalAmount ?? 0, paymentMethod: 'CASH' };
+            }
+            return { id: row.id as number, createdAt: row.createdAt as string, idempotencyKey: row.idempotencyKey ?? null, payload };
+        });
     },
 
     // Mark sale as synced (or delete)

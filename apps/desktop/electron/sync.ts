@@ -523,6 +523,41 @@ function BrowsersNotifyFailure() {
     });
 }
 
+export interface SaleReturnCloudPayload {
+    id: string;
+    saleId: string;
+    branchId: string;
+    safeId?: string | null;
+    userId?: string | null;
+    total: number;
+    createdAt: string;
+    notes?: string | null;
+    items: Array<{ drugId: string; quantity: number; price: number }>;
+}
+
+/**
+ * Commit one desktop return on the server before changing local cash/stock.
+ * The sync endpoint re-checks sold and already-returned quantities under the
+ * sale lock, so another device cannot win the same quantity concurrently.
+ */
+export async function pushSaleReturnToCloud(payload: SaleReturnCloudPayload) {
+    const response = await fetchWithRetry(buildApiUrl('/sync/returns'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branchId: payload.branchId, returns: [payload] }),
+    });
+    const result = await response.json() as {
+        syncedIds?: string[];
+        conflicts?: Array<{ id: string; message?: string }>;
+    };
+    const conflict = result.conflicts?.find(item => item.id === payload.id);
+    if (conflict) return { success: false, error: conflict.message || 'تعارض في كمية الإرجاع.' };
+    if (!result.syncedIds?.includes(payload.id)) {
+        return { success: false, error: 'لم يؤكد الخادم تسجيل المرتجع.' };
+    }
+    return { success: true };
+}
+
 export async function syncSaleReturns() {
     const taskName = "saleReturns";
     if (!beginSyncTask(taskName)) return;
@@ -571,7 +606,10 @@ export async function syncSaleReturns() {
             body: JSON.stringify({ branchId, returns: returnsPayload })
         });
 
-        const result = await response.json() as { syncedIds?: string[] };
+        const result = await response.json() as {
+            syncedIds?: string[];
+            conflicts?: Array<{ id: string; message?: string }>;
+        };
         const syncedIds = result.syncedIds;
 
         if (syncedIds && syncedIds.length > 0) {
@@ -580,6 +618,30 @@ export async function syncSaleReturns() {
                 data: { synced: true }
             });
             console.log(`[Sync] Sale returns sync completed. Marked ${syncedIds.length} return(s) as synced.`);
+        }
+
+        // A conflict means another device already returned the available
+        // quantity. Park it in the desktop review queue instead of retrying
+        // the same rejected return forever.
+        const conflicts = result.conflicts ?? [];
+        for (const conflict of conflicts) {
+            const localReturn = unsyncedReturns.find((ret: any) => ret.id === conflict.id);
+            if (!localReturn) continue;
+            await prisma.syncFailure.create({
+                data: {
+                    entityType: 'SALE_RETURN',
+                    entityId: localReturn.id,
+                    payload: JSON.stringify(localReturn),
+                    errorMessage: conflict.message || 'تعارض في كمية الإرجاع: تم إرجاع الكمية من جهاز آخر.',
+                },
+            });
+            // Stop the automatic retry loop; the original local return remains
+            // available in the failure queue for an explicit review/retry.
+            await prisma.saleReturn.update({ where: { id: localReturn.id }, data: { synced: true } });
+        }
+        if (conflicts.length > 0) {
+            BrowsersNotifyFailure();
+            console.warn(`[Sync] ${conflicts.length} sale return(s) require review due to server conflicts.`);
         }
 
     } catch (error: any) {
@@ -2194,6 +2256,33 @@ export async function pushUpdateInventoryToCloud(data: {
  * Returns the number on success, or null when offline / on any failure — callers
  * must fall back to a local number in that case.
  */
+/**
+ * Invoice-number prefetch cache: one number is allocated in the background
+ * (after each sale / at startup) and persisted in the store, so checkout can
+ * consume it instantly instead of waiting a network round-trip. Persisting it
+ * means an unused number survives app restarts and is used by the next sale —
+ * sequence gaps only occur if the device never sells again.
+ */
+export function takeCachedInvoiceNumber(): string | null {
+    const cached = String(store.get('nextInvoiceNumber') || '');
+    if (!cached) return null;
+    store.set('nextInvoiceNumber', '');
+    return cached;
+}
+
+export async function prefetchInvoiceNumber(): Promise<void> {
+    try {
+        if (store.get('nextInvoiceNumber')) return; // already have one banked
+        const n = await allocateInvoiceNumber();
+        if (n != null) {
+            store.set('nextInvoiceNumber', String(n));
+            console.log(`[Sale] Prefetched next invoice number: ${n}`);
+        }
+    } catch {
+        // Purely opportunistic — checkout falls back to inline allocation.
+    }
+}
+
 export async function allocateInvoiceNumber(): Promise<number | null> {
     if (!isOnline) return null;
     // Direct fetch with a short timeout and NO retries: allocating a number must

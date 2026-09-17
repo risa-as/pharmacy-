@@ -1,12 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authService, MobileSessionLimitError, SessionInvalidError, User } from '../services/auth';
 import { registerSessionExpiredHandler } from '../services/api';
+import { AppShell, canSwitchBranch, getShell } from '../utils/roles';
 
 interface AuthContextType {
     user: User | null;
     role: string | null;
+    /** ADMIN / MANAGER — may switch branches. */
     isAdmin: boolean;
     isPharmacist: boolean;
+    /** Which tab bar + home the user sees (see utils/roles). */
+    shell: AppShell;
+    isPharmacistShell: boolean;
     branchId: string | null;
     isLoading: boolean;
     refreshUser: () => Promise<void>;
@@ -17,6 +22,8 @@ const AuthContext = createContext<AuthContextType>({
     role: null,
     isAdmin: false,
     isPharmacist: false,
+    shell: 'manager',
+    isPharmacistShell: false,
     branchId: null,
     isLoading: true,
     refreshUser: async () => {},
@@ -89,12 +96,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const role = user?.role ?? null;
     const roleUpper = role?.toUpperCase() ?? null;
-    const isAdmin = roleUpper === 'ADMIN' || roleUpper === 'MANAGER';
+    const isAdmin = canSwitchBranch(role);
     const isPharmacist = roleUpper === 'PHARMACIST';
+    const shell = getShell(role);
+    const isPharmacistShell = shell === 'pharmacist';
     const branchId = user?.branchId ?? null;
 
     return (
-        <AuthContext.Provider value={{ user, role, isAdmin, isPharmacist, branchId, isLoading, refreshUser }}>
+        <AuthContext.Provider value={{ user, role, isAdmin, isPharmacist, shell, isPharmacistShell, branchId, isLoading, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );

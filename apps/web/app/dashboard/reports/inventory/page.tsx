@@ -18,11 +18,12 @@ import { NextResponse } from "next/server";
 import { ExportExcelButton } from "@/app/ui/reports/export-buttons";
 import InventoryFilters from "@/app/ui/inventory/inventory-filters";
 
-export default async function InventoryReportPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InventoryReportPage(
+  props: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const branchId =
     typeof searchParams.branch === "string" ? searchParams.branch : undefined;
   const query =

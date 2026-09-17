@@ -1,14 +1,14 @@
 "use client";
+import { useActionState } from "react";
 
 import Link from "next/link";
 import { Button } from "@faramace/ui";
-import { useFormState } from "react-dom";
 import { createOrganization } from "@/app/lib/actions/organization";
 import { SubmitButton } from "@/app/ui/submit-button";
 
 export default function Form() {
     const initialState: any = { message: "", errors: {} };
-    const [state, dispatch] = useFormState(createOrganization, initialState);
+    const [state, dispatch] = useActionState(createOrganization, initialState);
 
     return (
         <form action={dispatch} className="font-cairo">

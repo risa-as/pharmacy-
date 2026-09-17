@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Upload, FileSpreadsheet, CheckCircle, AlertTriangle, Loader2, Download, ArrowRight, Globe } from "lucide-react";
-import * as XLSX from "xlsx";
+import { downloadWorkbook, readFirstSheetRows } from "@/app/lib/exceljs-browser";
 
 interface ImportRow {
     tradeName: string;
@@ -43,10 +43,13 @@ function rowFrom(get: (...k: string[]) => string): ImportRow | null {
     };
 }
 
-function parseExcel(buffer: ArrayBuffer): ImportRow[] {
-    const wb = XLSX.read(buffer, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const json: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+async function parseExcel(buffer: ArrayBuffer): Promise<ImportRow[]> {
+    const matrix = await readFirstSheetRows(buffer);
+    if (matrix.length < 2) return [];
+    const headers = matrix[0].map((value) => String(value ?? "").trim());
+    const json = matrix.slice(1).filter((row) => row.some((value) => value != null && String(value).trim() !== "")).map((values) =>
+        Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]))
+    ) as Record<string, unknown>[];
     return json.map((raw) => {
         const row: Record<string, string> = {};
         for (const k of Object.keys(raw)) row[k.toLowerCase().trim()] = String(raw[k]).trim();
@@ -81,12 +84,18 @@ export default function AdminDrugImportPage() {
     const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (/\.xls$/i.test(file.name)) {
+            setRows([]);
+            setFileName("");
+            setResult({ success: false, imported: 0, updated: 0, errors: ["صيغة .xls القديمة غير مدعومة؛ احفظ الملف بصيغة .xlsx أو CSV."], total: 0 });
+            return;
+        }
         setFileName(file.name);
         setResult(null);
-        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+        const isExcel = /\.xlsx$/i.test(file.name);
         const reader = new FileReader();
         if (isExcel) {
-            reader.onload = (ev) => setRows(parseExcel(ev.target?.result as ArrayBuffer));
+            reader.onload = async (ev) => setRows(await parseExcel(ev.target?.result as ArrayBuffer));
             reader.readAsArrayBuffer(file);
         } else {
             reader.onload = (ev) => setRows(parseCSV(ev.target?.result as string));
@@ -110,16 +119,13 @@ export default function AdminDrugImportPage() {
         setLoading(false);
     };
 
-    const downloadTemplate = () => {
+    const downloadTemplate = async () => {
         const data = [
             ["الاسم التجاري", "الباركود", "الاسم العلمي", "المصدر"],
             ["أموكسيسيلين 500", "6281001210019", "Amoxicillin", "الحكمة"],
             ["باراسيتامول 500", "6281001210020", "Paracetamol", "سامراء"],
         ];
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "أدوية عالمية");
-        XLSX.writeFile(wb, "global_drugs_template.xlsx");
+        await downloadWorkbook("global_drugs_template.xlsx", [{ name: "أدوية عالمية", rows: data }]);
     };
 
     const validCount = rows.filter((r) => r.barcode).length;
@@ -169,9 +175,9 @@ export default function AdminDrugImportPage() {
                     {fileName || "انقر لاختيار ملف CSV أو Excel"}
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
-                    يدعم .xlsx و .xls و .csv — استخدم النموذج أعلاه كمرجع
+                    يدعم .xlsx و .csv — استخدم النموذج أعلاه كمرجع
                 </p>
-                <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls" className="hidden" onChange={handleFile} />
+                <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx" className="hidden" onChange={handleFile} />
             </div>
 
             {/* معاينة */}

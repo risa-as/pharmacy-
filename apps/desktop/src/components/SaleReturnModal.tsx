@@ -1,6 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { X, Undo2, AlertCircle, Search, Hash, Pill } from "lucide-react";
 import { showAlert, showConfirm } from "../lib/dialog";
+
+/** Unique id for one return attempt; falls back if randomUUID is unavailable (non-secure context). */
+function newReturnId(): string {
+    try {
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    } catch { /* fall through */ }
+    return `ret-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
 
 interface SaleReturnModalProps {
     isOpen: boolean;
@@ -17,6 +25,14 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
     const [notes, setNotes] = useState("");
     const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
     const [errorMsg, setErrorMsg] = useState("");
+    // One id per return attempt on the selected invoice. It becomes the
+    // SaleReturn id, so submitting the same attempt twice records it once.
+    const [returnId, setReturnId] = useState<string>(() => newReturnId());
+    const submittingRef = useRef(false);
+
+    useEffect(() => {
+        setReturnId(newReturnId());
+    }, [sale?.id]);
 
     const returnedItems = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -104,6 +120,26 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
             setErrorMsg("يرجى تحديد عنصر واحد على الأقل للإرجاع");
             return;
         }
+        // Guards a second Enter/click while the connection check or confirm
+        // dialog is pending.
+        if (submittingRef.current) return;
+        submittingRef.current = true;
+
+        // Returns refund money and must be committed by the server before the
+        // desktop changes local cash/stock, preventing cross-device duplicates.
+        try {
+            // @ts-ignore
+            const online = await window.ipcRenderer.invoke('get-connection-status');
+            if (!online) {
+                setErrorMsg("لا يمكن تنفيذ الإرجاع أثناء عدم الاتصال بالخادم. أعد الاتصال ثم حاول مرة أخرى.");
+                submittingRef.current = false;
+                return;
+            }
+        } catch {
+            setErrorMsg("تعذّر التحقق من الاتصال بالخادم. حاول مرة أخرى.");
+            submittingRef.current = false;
+            return;
+        }
 
         const ok = await showConfirm({
             variant: "warning",
@@ -111,7 +147,7 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
             message: `هل أنت متأكد من إرجاع بضاعة بقيمة ${totalReturnAmount.toLocaleString()} د.ع؟`,
             actionLabel: "تأكيد الإرجاع",
         });
-        if (!ok) return;
+        if (!ok) { submittingRef.current = false; return; }
 
         setIsLoading(true);
         setErrorMsg("");
@@ -130,6 +166,7 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
 
             // @ts-ignore
             const res = await window.ipcRenderer.invoke('return-sale', {
+                returnId,
                 saleId: sale.id,
                 items: itemsToReturn,
                 notes,
@@ -138,7 +175,12 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
             });
 
             if (res.success) {
-                void showAlert({ variant: "success", title: "تم الإرجاع بنجاح", autoCloseMs: 2000 });
+                void showAlert({
+                    variant: "success",
+                    title: res.duplicate ? "تم تسجيل هذا الإرجاع مسبقاً" : "تم الإرجاع بنجاح",
+                    autoCloseMs: 2000,
+                });
+                setReturnId(newReturnId());
                 setReturnQuantities({});
                 setNotes("");
                 setSale(null);
@@ -151,6 +193,7 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
         } catch (error: any) {
             setErrorMsg(error.message || "حدث خطأ غير متوقع");
         } finally {
+            submittingRef.current = false;
             setIsLoading(false);
         }
     };

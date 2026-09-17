@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState} from "react";
 import Link from "next/link";
-import { useFormState } from "react-dom";
 import { updateInsuranceCompany } from "@/app/lib/actions/insurance";
 import { Building2, ArrowRight } from "lucide-react";
 import { SubmitButton } from "@/app/ui/submit-button";
@@ -19,7 +18,7 @@ interface InsuranceCompany {
 export default function EditForm({ company }: { company: InsuranceCompany }) {
     const initialState: any = { message: "", errors: {} };
     const updateInsuranceWithId = updateInsuranceCompany.bind(null, company.id);
-    const [state, dispatch] = useFormState(updateInsuranceWithId, initialState);
+    const [state, dispatch] = useActionState(updateInsuranceWithId, initialState);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

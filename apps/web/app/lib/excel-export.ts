@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 interface ExcelColumn {
     header: string;   // Arabic column header
@@ -15,7 +15,7 @@ interface ExcelColumn {
  * @param filename - Filename without extension
  * @param sheetName - Optional sheet name (defaults to "Sheet1")
  */
-export function exportToExcel(
+export async function exportToExcel(
     data: Record<string, any>[],
     columns: ExcelColumn[],
     filename: string,
@@ -34,29 +34,22 @@ export function exportToExcel(
         })
     );
 
-    // Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-
-    // Set column widths
-    ws['!cols'] = columns.map((col: any) => ({
-        wch: col.width || Math.max(col.header.length * 2, 12)
-    }));
-
-    // Set RTL
-    ws['!dir'] = 'rtl' as any;
-
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
-    // Download
-    XLSX.writeFile(wb, `${filename}.xlsx`);
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(sheetName);
+    ws.views = [{ rightToLeft: true }];
+    ws.addRows([headers, ...rows]);
+    ws.columns = columns.map((col: any) => ({ header: col.header, key: col.key, width: col.width || Math.max(col.header.length * 2, 12) }));
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a'); link.href = url; link.download = `${filename}.xlsx`; link.click();
+    URL.revokeObjectURL(url);
 }
 
 /**
  * Export data with multiple sheets
  */
-export function exportToExcelMultiSheet(
+export async function exportToExcelMultiSheet(
     sheets: {
         name: string;
         data: Record<string, any>[];
@@ -64,7 +57,7 @@ export function exportToExcelMultiSheet(
     }[],
     filename: string
 ) {
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
 
     for (const sheet of sheets) {
         const headers = sheet.columns.map((c: any) => c.header);
@@ -78,14 +71,15 @@ export function exportToExcelMultiSheet(
             })
         );
 
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-        ws['!cols'] = sheet.columns.map((col: any) => ({
-            wch: col.width || Math.max(col.header.length * 2, 12)
-        }));
-        ws['!dir'] = 'rtl' as any;
-
-        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+        const ws = wb.addWorksheet(sheet.name);
+        ws.views = [{ rightToLeft: true }];
+        ws.addRows([headers, ...rows]);
+        ws.columns = sheet.columns.map((col: any) => ({ header: col.header, key: col.key, width: col.width || Math.max(col.header.length * 2, 12) }));
     }
 
-    XLSX.writeFile(wb, `${filename}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a'); link.href = url; link.download = `${filename}.xlsx`; link.click();
+    URL.revokeObjectURL(url);
 }

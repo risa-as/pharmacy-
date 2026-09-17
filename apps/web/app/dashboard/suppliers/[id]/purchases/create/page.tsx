@@ -9,7 +9,8 @@ import { prisma } from '@/app/lib/prisma';
 import { getDrugsForPurchase, generateInvoiceNumber } from '@/app/lib/actions/purchases';
 import PurchaseForm from '@/app/ui/suppliers/purchase-form';
 
-export default async function CreatePurchasePage({ params }: { params: { id: string } }) {
+export default async function CreatePurchasePage(props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
 

@@ -62,12 +62,13 @@ export const syncService = {
                     console.log(`Found ${pendingSales.length} pending sales to sync`);
                     for (const sale of pendingSales) {
                         try {
-                            // sale.items is already parsed by getPendingSales
-                            await apiService.createSale({
-                                items: sale.items,
-                                totalAmount: sale.totalAmount
-                            });
-                            // If successful, delete from local DB
+                            // Replay the full payload with the key minted at checkout,
+                            // so a sale whose first request did reach the server is
+                            // acknowledged as a duplicate instead of recorded twice.
+                            await apiService.createSale(
+                                sale.payload,
+                                sale.idempotencyKey ?? `offline-${sale.id}-${sale.createdAt}`,
+                            );
                             await dbService.deleteOfflineSale(sale.id);
                             console.log(`Synced sale ${sale.id}`);
                         } catch (error) {

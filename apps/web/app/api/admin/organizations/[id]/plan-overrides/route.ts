@@ -8,10 +8,8 @@ export const dynamic = 'force-dynamic';
  * PATCH /api/admin/organizations/[id]/plan-overrides
  * SUPER_ADMIN only — set per-org overrides for plan limits.
  */
-export async function PATCH(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const session = await auth();
         const role = (session?.user as any)?.role;
@@ -55,10 +53,8 @@ export async function PATCH(
  * GET /api/admin/organizations/[id]/plan-overrides
  * SUPER_ADMIN only — fetch current plan details for an org.
  */
-export async function GET(
-    _req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
         const session = await auth();
         const role = (session?.user as any)?.role;

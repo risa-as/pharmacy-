@@ -17,11 +17,13 @@ const TYPE_LABELS: Record<string, string> = {
     'ADD-BATCH':        'إضافة دفعة',
     'CREATE-DRUG':      'إضافة دواء',
     'SALE':             'عملية بيع',
+    'SALE_RETURN':      'مرتجع بيع',
     'DEBT_PAYMENT':     'سداد دين',
 };
 
 function simplifyError(raw: string): string {
     const e = raw.toLowerCase();
+    if (e.includes('المتاح') || e.includes('تعارض') || e.includes('أرجع') || e.includes('أُرجع')) return raw;
     if (e.includes('fetch') || e.includes('network') || e.includes('abort') || e.includes('timeout') || e.includes('retries'))
         return 'انقطع الاتصال أثناء الإرسال';
     if (e.includes('not found') || e.includes('404'))

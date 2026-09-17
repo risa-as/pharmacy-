@@ -4,11 +4,12 @@ import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
 import { notFound } from 'next/navigation';
 
-export default async function ReturnInvoicePage({
-    params
-}: {
-    params: { id: string }
-}) {
+export default async function ReturnInvoicePage(
+    props: {
+        params: Promise<{ id: string }>
+    }
+) {
+    const params = await props.params;
     const session = await auth();
 
     const returnData = await prisma.saleReturn.findUnique({

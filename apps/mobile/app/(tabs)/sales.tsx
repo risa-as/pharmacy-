@@ -1,2391 +1,650 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
-  TextInput,
-  Alert,
-  Modal,
-  ActivityIndicator,
-  Platform,
-  ScrollView,
-  KeyboardAvoidingView,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
-import * as Haptics from "expo-haptics";
-import { apiService } from "../../services/api";
-import { dbService } from "../../services/db";
-import { syncService } from "../../services/sync";
-import { printerService } from "../../services/printer";
-import { useTheme } from "../../context/ThemeContext";
-import { useAuth } from "../../context/AuthContext";
-import { managerPalette, Radius } from "../../constants/colors";
+    View, Text, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator,
+    ScrollView, KeyboardAvoidingView, Platform, InteractionManager,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useLocalSearchParams, useFocusEffect, Href } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { apiService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { useCheckout, CartItem, PaymentMethod } from '../../context/CheckoutContext';
+import { Radius } from '../../constants/colors';
+import { usePalette, Surface, AppButton, PressableCard, LinkLabel } from '../../components/ui/Kit';
+import { PatientPickerModal } from '../../components/PatientPickerModal';
+import { SafetyWarnings, LoyaltyPanel, Stepper } from '../../components/checkout/CheckoutParts';
+import { CheckoutSheet } from '../../components/checkout/CheckoutSheet';
+import { formatNumber, CURRENCY, initials } from '../../utils/format';
+import { consumeManualEntry } from '../../utils/manual-entry';
 
-interface CartItem {
-  id: string;
-  tradeName?: string;
-  name: string;
-  price: number;
-  quantity: number;
-  stock?: number;
-  scientificName?: string;
+type DrugResult = { id: string; name: string; tradeName: string; scientificName: string; barcode?: string; price: number; quantity: number };
+
+// ── Payment button ────────────────────────────────────────────────────────────
+/** Checkout button carrying its method's colour (cash green, card blue, credit orange). */
+function PayButton({ label, icon, color, flex, disabled, onPress }: {
+    label: string; icon: React.ComponentProps<typeof Ionicons>['name'];
+    color: string; flex: number; disabled?: boolean; onPress: () => void;
+}) {
+    const C = usePalette();
+    return (
+        <TouchableOpacity
+            onPress={onPress}
+            disabled={disabled}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !!disabled }}
+            style={{
+                flex,
+                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6,
+                paddingVertical: 11, paddingHorizontal: 8,
+                borderRadius: Radius.control, borderWidth: 1,
+                backgroundColor: disabled ? C.input : color,
+                borderColor: disabled ? C.border : color,
+            }}
+        >
+            <Ionicons name={icon} size={17} color={disabled ? C.mutedForeground : '#fff'} />
+            <Text style={{ color: disabled ? C.mutedForeground : '#fff', fontSize: 15, fontWeight: '800' }}>{label}</Text>
+        </TouchableOpacity>
+    );
 }
 
-interface Patient {
-  id: string;
-  name: string;
-  phone: string;
-  balance?: number;
-}
-
-// ── Cart Row ────────────────────────────────────────────────────────────────────
-const CartItemRow = React.memo(
-  ({
-    item,
-    C,
-    onUpdateQuantity,
-    onRemove,
-  }: {
-    item: CartItem;
-    C: ReturnType<typeof managerPalette>;
-    onUpdateQuantity: (id: string, change: number) => void;
+// ── Cart line ─────────────────────────────────────────────────────────────────
+/**
+ * Editable cart card, matching the desktop POS: the quantity and the unit price
+ * are both tappable and typed in place. An overridden price keeps the list
+ * price visible (struck through) and tints the card, so nobody sells at a
+ * changed price without seeing it.
+ */
+const CartLine = React.memo(({ item, flagged, onChange, onRemove, onSetQuantity, onSetPrice }: {
+    item: CartItem; flagged: boolean;
+    onChange: (id: string, delta: number) => void;
     onRemove: (id: string) => void;
-  }) => (
-    <View
-      style={{
-        backgroundColor: C.card,
-        borderRadius: Radius.sm,
-        borderWidth: 1.5,
-        borderColor: `${C.primary}33`,
-        marginBottom: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        flexDirection: "row-reverse",
-        alignItems: "center",
-        gap: 8,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
-        elevation: 1,
-      }}
-    >
-      {/* Icon */}
-      <View
-        style={{
-          width: 34, height: 34, borderRadius: Radius.xs,
-          backgroundColor: C.primaryMuted,
-          justifyContent: "center", alignItems: "center", flexShrink: 0,
-        }}
-      >
-        <Ionicons name="medical" size={16} color={C.primary} />
-      </View>
+    onSetQuantity: (id: string, quantity: number) => void;
+    onSetPrice: (id: string, price: number) => void;
+}) => {
+    const C = usePalette();
+    const [editing, setEditing] = useState<'price' | 'qty' | null>(null);
+    // Free-text while typing: a strictly controlled number field freezes the
+    // moment the user clears it to retype.
+    const [draft, setDraft] = useState('');
+    const overridden = item.originalPrice !== undefined;
 
-      {/* Name + price */}
-      <View style={{ flex: 1 }}>
-        <Text
-          style={{ color: C.foreground, fontWeight: "700", fontSize: 13, textAlign: "right" }}
-          numberOfLines={1}
-        >
-          {item.tradeName ?? item.name}
-        </Text>
-        <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 6, marginTop: 1 }}>
-          <Text style={{ color: C.mutedForeground, fontSize: 11 }}>
-            {item.price.toLocaleString("en-US")} د.ع
-          </Text>
-          {item.stock !== undefined && item.stock <= 5 && (
-            <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 2 }}>
-              <Ionicons name="warning-outline" size={9} color={C.warning} />
-              <Text style={{ color: C.warning, fontSize: 9, fontWeight: "700" }}>{item.stock}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Qty controls */}
-      <View
-        style={{
-          flexDirection: "row", alignItems: "center",
-          backgroundColor: C.input, borderRadius: Radius.xs,
-          borderWidth: 1, borderColor: C.border, overflow: "hidden",
-        }}
-      >
-        <TouchableOpacity onPress={() => onUpdateQuantity(item.id, -1)} style={{ paddingVertical: 5, paddingHorizontal: 9 }}>
-          <Ionicons name="remove" size={15} color={C.danger} />
-        </TouchableOpacity>
-        <Text style={{ color: C.foreground, fontWeight: "800", minWidth: 24, textAlign: "center", fontSize: 14 }}>
-          {item.quantity}
-        </Text>
-        <TouchableOpacity onPress={() => onUpdateQuantity(item.id, 1)} style={{ paddingVertical: 5, paddingHorizontal: 9 }}>
-          <Ionicons name="add" size={15} color={C.success} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Line total + remove */}
-      <View style={{ alignItems: "flex-end", gap: 3, minWidth: 50 }}>
-        <Text style={{ color: C.foreground, fontWeight: "900", fontSize: 13 }}>
-          {(item.price * item.quantity).toLocaleString("en-US")}
-        </Text>
-        <TouchableOpacity onPress={() => onRemove(item.id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Ionicons name="trash-outline" size={14} color={C.danger} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  ),
-);
-
-// ── Main screen ─────────────────────────────────────────────────────────────────
-export default function SalesScreen() {
-  const { isDarkMode } = useTheme();
-  const { branchId } = useAuth();
-  const C = managerPalette(isDarkMode);
-  const params = useLocalSearchParams();
-
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [barcode, setBarcode] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const [interactions, setInteractions] = useState<
-    Array<{
-      drug1: string;
-      drug2: string;
-      severity: string;
-      description: string;
-    }>
-  >([]);
-  const [allergyWarnings, setAllergyWarnings] = useState<string[]>([]);
-
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [showPatientModal, setShowPatientModal] = useState(false);
-  const [patientQuery, setPatientQuery] = useState("");
-  const [patientResults, setPatientResults] = useState<Patient[]>([]);
-  const [searchingPatient, setSearchingPatient] = useState(false);
-
-  const [manualDiscount, setManualDiscount] = useState(0);
-  const [manualDiscountInput, setManualDiscountInput] = useState("");
-  const [showDiscountModal, setShowDiscountModal] = useState(false);
-  const [successInfo, setSuccessInfo] = useState<{ cart: CartItem[]; total: number } | null>(null);
-  const [confirmMethod, setConfirmMethod] = useState<"CASH" | "CREDIT" | null>(null);
-  const [showNeedPatient, setShowNeedPatient] = useState(false);
-  const [loyaltySettings, setLoyaltySettings] = useState<{
-    loyaltyEnabled: boolean;
-    loyaltyPointsPerDinar: number;
-    loyaltyRedemptionValue: number;
-    loyaltyMinRedemption: number;
-  } | null>(null);
-  const [loyaltyAccount, setLoyaltyAccount] = useState<{
-    totalPoints: number;
-    tier: string;
-  } | null>(null);
-  const [pointsToRedeem, setPointsToRedeem] = useState(0);
-
-  const [recentItems, setRecentItems] = useState<CartItem[]>([]);
-  const [loadingRecentId, setLoadingRecentId] = useState<string | null>(null);
-
-  // Name search
-  const [nameResults, setNameResults] = useState<any[]>([]);
-  const [searchingName, setSearchingName] = useState(false);
-  const [notFoundMsg, setNotFoundMsg] = useState<string | null>(null);
-  const notFoundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    apiService
-      .getLoyaltySettings()
-      .then(setLoyaltySettings)
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    setLoyaltyAccount(null);
-    setPointsToRedeem(0);
-    if (!selectedPatient) return;
-    apiService
-      .getLoyaltyAccount(selectedPatient.id)
-      .then(setLoyaltyAccount)
-      .catch(() => {});
-  }, [selectedPatient]);
-
-  useEffect(() => {
-    if (params.scannedBarcode) {
-      handleBarcodeAdd(params.scannedBarcode as string);
-      router.setParams({ scannedBarcode: "" });
-    }
-  }, [params.scannedBarcode]);
-
-  // قراءة الأدوية المحددة من شاشة تحليل الوصفة وإضافتها للسلة
-  useEffect(() => {
-    const processPrescriptionDrugs = async () => {
-      try {
-        const raw = await AsyncStorage.getItem('pendingPrescriptionDrugs');
-        if (!raw) return;
-        await AsyncStorage.removeItem('pendingPrescriptionDrugs');
-        const drugNames: string[] = JSON.parse(raw);
-        if (!Array.isArray(drugNames) || drugNames.length === 0) return;
-        // نضيف كل دواء بشكل متسلسل
-        for (const name of drugNames) {
-          await handleBarcodeAdd(name);
-        }
-      } catch {
-        // نتجاهل الأخطاء هنا لكي لا تؤثر على تجربة المستخدم
-      }
+    const startEdit = (field: 'price' | 'qty') => {
+        setDraft(String(field === 'price' ? item.price : item.quantity));
+        setEditing(field);
     };
-    void processPrescriptionDrugs();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-
-  useEffect(() => {
-    if (patientQuery.length < 2) {
-      setPatientResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      setSearchingPatient(true);
-      try {
-        const results = await apiService.searchPatients(patientQuery);
-        setPatientResults(results ?? []);
-      } finally {
-        setSearchingPatient(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [patientQuery]);
-
-  // Live name search while typing (only when input has letters)
-  useEffect(() => {
-    const hasLetters = /[a-zA-Z؀-ۿ]/.test(barcode);
-    if (!hasLetters || barcode.trim().length < 2) {
-      setNameResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      setSearchingName(true);
-      try {
-        const results = await apiService.searchDrugByName(
-          barcode.trim(),
-          branchId ?? undefined,
-        );
-        setNameResults(results);
-      } finally {
-        setSearchingName(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [barcode, branchId]);
-
-  const showNotFound = useCallback((msg: string) => {
-    if (notFoundTimer.current) clearTimeout(notFoundTimer.current);
-    setNotFoundMsg(msg);
-    notFoundTimer.current = setTimeout(() => setNotFoundMsg(null), 3500);
-  }, []);
-
-  const addToCart = useCallback(
-    (drug: any) => {
-      setCart((prev) => {
-        const existing = prev.find((i) => i.id === drug.id);
-        if (existing) {
-          if (
-            drug.quantity !== undefined &&
-            existing.quantity >= drug.quantity
-          ) {
-            Alert.alert("تنبيه", `الكمية المتوفرة فقط ${drug.quantity}`);
-            return prev;
-          }
-          return prev.map((i) =>
-            i.id === drug.id ? { ...i, quantity: i.quantity + 1 } : i,
-          );
-        }
-        if (drug.quantity !== undefined && drug.quantity <= 0) {
-          Alert.alert("نفاد المخزون", "هذا الدواء غير متوفر حالياً في المخزون");
-          return prev;
-        }
-        return [
-          ...prev,
-          {
-            id: drug.id,
-            name: drug.name,
-            tradeName: drug.tradeName,
-            price: drug.price,
-            quantity: 1,
-            stock: drug.quantity,
-            scientificName: drug.scientificName,
-          },
-        ];
-      });
-      const allNames = cart
-        .map((i) => i.scientificName ?? i.name)
-        .concat(drug.scientificName ?? drug.name);
-      if (allNames.length > 1) {
-        apiService
-          .checkPharmacovigilance(allNames, selectedPatient?.id)
-          .then((result) => {
-            if (result?.interactions) setInteractions(result.interactions);
-            if (result?.allergyWarnings)
-              setAllergyWarnings(result.allergyWarnings);
-          })
-          .catch(() => {});
-      }
-    },
-    [cart, selectedPatient],
-  );
-
-  const handleBarcodeAdd = useCallback(
-    async (code: string) => {
-      const trimmed = code.trim();
-      if (!trimmed) return;
-
-      const isBarcode = /^[\d\-]+$/.test(trimmed); // digits only → treat as barcode
-
-      setLoading(true);
-      setNameResults([]);
-      try {
-        if (isBarcode) {
-          // Barcode lookup
-          const drug = await apiService.getDrugByBarcode(
-            trimmed,
-            branchId ?? undefined,
-          );
-          if (!drug) {
-            showNotFound("لم يُعثر على باركود مطابق في المخزون");
-            return;
-          }
-          addToCart(drug);
-          setBarcode("");
-        } else {
-          // Name search
-          setSearchingName(true);
-          const results = await apiService.searchDrugByName(
-            trimmed,
-            branchId ?? undefined,
-          );
-          setSearchingName(false);
-          if (results.length === 0) {
-            showNotFound(`لا يوجد دواء باسم "${trimmed}" في المخزون`);
-            return;
-          }
-          if (results.length === 1) {
-            // Single match → add directly
-            addToCart(results[0]);
-            setBarcode("");
-          } else {
-            // Multiple matches → show dropdown for user to pick
-            setNameResults(results);
-          }
-        }
-      } finally {
-        setLoading(false);
-        setSearchingName(false);
-      }
-    },
-    [branchId, addToCart, showNotFound],
-  );
-
-  const handleSelectNameResult = useCallback(
-    (drug: any) => {
-      addToCart(drug);
-      setNameResults([]);
-      setBarcode("");
-    },
-    [addToCart],
-  );
-
-  // When returning from the barcode scanner (which uses router.back to keep this
-  // screen — and its cart — mounted), pick up the handed-off code and add it.
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      (async () => {
-        try {
-          const code = await AsyncStorage.getItem("pendingScanBarcode");
-          if (code && active) {
-            await AsyncStorage.removeItem("pendingScanBarcode");
-            handleBarcodeAdd(code);
-          }
-        } catch {
-          /* ignore */
-        }
-      })();
-      return () => {
-        active = false;
-      };
-    }, [handleBarcodeAdd]),
-  );
-
-  // Cleanup timer on unmount
-  useEffect(
-    () => () => {
-      if (notFoundTimer.current) clearTimeout(notFoundTimer.current);
-    },
-    [],
-  );
-
-  const handleRecentItemPress = useCallback(
-    async (item: CartItem) => {
-      if (loadingRecentId === item.id) return;
-      setLoadingRecentId(item.id);
-      try {
-        const currentStock = await apiService.getDrugCurrentStock(
-          item.id,
-          branchId ?? undefined,
-        );
-        if (currentStock !== null && currentStock <= 0) {
-          setRecentItems((prev) => prev.filter((r) => r.id !== item.id));
-          Alert.alert("نفاد المخزون", "هذا الدواء غير متوفر حالياً في المخزون");
-          return;
-        }
-        const stockToUse = currentStock ?? Math.max(0, (item.stock ?? 0) - 1);
-        if (stockToUse <= 0) {
-          setRecentItems((prev) => prev.filter((r) => r.id !== item.id));
-          Alert.alert("نفاد المخزون", "هذا الدواء غير متوفر حالياً في المخزون");
-          return;
-        }
-        addToCart({ ...item, quantity: stockToUse });
-      } finally {
-        setLoadingRecentId(null);
-      }
-    },
-    [branchId, addToCart, loadingRecentId],
-  );
-
-  const removeFromCart = useCallback((id: string) => {
-    setCart((prev) => prev.filter((i) => i.id !== id));
-  }, []);
-
-  const updateQuantity = useCallback((id: string, change: number) => {
-    setCart((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        const next = item.quantity + change;
-        if (next <= 0) return item;
-        if (item.stock !== undefined && next > item.stock) {
-          Alert.alert("تنبيه", `الكمية المتوفرة فقط ${item.stock}`);
-          return item;
-        }
-        return { ...item, quantity: next };
-      }),
-    );
-  }, []);
-
-  const subTotal = useMemo(
-    () => cart.reduce((acc, i) => acc + i.price * i.quantity, 0),
-    [cart],
-  );
-  const itemCount = useMemo(
-    () => cart.reduce((acc, i) => acc + i.quantity, 0),
-    [cart],
-  );
-
-  const redemptionValue = loyaltySettings?.loyaltyRedemptionValue ?? 2.5;
-  const minRedemption = loyaltySettings?.loyaltyMinRedemption ?? 500;
-  const loyaltyDiscount = Math.floor(pointsToRedeem * redemptionValue);
-  const totalDiscount = manualDiscount + loyaltyDiscount;
-  const total = Math.max(0, subTotal - totalDiscount);
-
-  const resetCart = useCallback(() => {
-    setCart([]);
-    setSelectedPatient(null);
-    setInteractions([]);
-    setAllergyWarnings([]);
-    setManualDiscount(0);
-    setManualDiscountInput("");
-    setPointsToRedeem(0);
-    setLoyaltyAccount(null);
-    setNameResults([]);
-    setNotFoundMsg(null);
-    setBarcode("");
-  }, []);
-
-  const handleCheckout = useCallback(
-    (method: "CASH" | "CREDIT") => {
-      if (cart.length === 0) {
-        Alert.alert("تنبيه", "السلة فارغة");
-        return;
-      }
-      if (method === "CREDIT" && !selectedPatient) {
-        setShowNeedPatient(true);
-        return;
-      }
-      setConfirmMethod(method);
-    },
-    [cart, selectedPatient, total, totalDiscount],
-  );
-
-  const processSale = async (method: "CASH" | "CREDIT") => {
-    setLoading(true);
-    if (pointsToRedeem > 0 && selectedPatient) {
-      try {
-        await apiService.redeemLoyaltyPoints(
-          selectedPatient.id,
-          pointsToRedeem,
-        );
-      } catch {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Alert.alert("خطأ", "فشل استبدال نقاط الولاء. تحقق من الاتصال.");
-        setLoading(false);
-        return;
-      }
-    }
-    const saleData = {
-      items: cart.map((i) => ({
-        drugId: i.id,
-        quantity: i.quantity,
-        price: i.price,
-      })),
-      totalAmount: total,
-      patientId: selectedPatient?.id,
-      paymentMethod: method,
-      discount: totalDiscount,
-      branchId: branchId ?? undefined,
+    const commit = () => {
+        const value = Number(draft.replace(/[^\d.]/g, ''));
+        if (editing === 'price') onSetPrice(item.id, value);
+        else if (editing === 'qty') onSetQuantity(item.id, value);
+        setEditing(null);
     };
-    if (method === "CREDIT") {
-      const online = await syncService.isOnline();
-      if (!online) {
-        Alert.alert("تنبيه", "البيع الآجل غير متاح بدون اتصال");
-        setLoading(false);
-        return;
-      }
-      try {
-        await apiService.createSale(saleData);
-        void Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success,
-        );
-        const creditCartSnapshot = [...cart];
-        const creditTotalSnapshot = total;
-        setRecentItems((prev) => {
-          const soldMap = new Map(
-            creditCartSnapshot.map((i) => [i.id, i.quantity]),
-          );
-          const updatedPrev = prev
-            .map((r) => {
-              const soldQty = soldMap.get(r.id) ?? 0;
-              return { ...r, stock: Math.max(0, (r.stock ?? 0) - soldQty) };
-            })
-            .filter((r) => (r.stock ?? 0) > 0);
-          const newItems = creditCartSnapshot
-            .map((i) => ({
-              ...i,
-              stock: Math.max(0, (i.stock ?? 0) - i.quantity),
-              quantity: 1,
-            }))
-            .filter((i) => (i.stock ?? 0) > 0)
-            .slice(0, 5);
-          const seen = new Set<string>();
-          return [...newItems, ...updatedPrev]
-            .filter((i) => {
-              if (seen.has(i.id)) return false;
-              seen.add(i.id);
-              return true;
-            })
-            .slice(0, 5);
-        });
-        resetCart();
-        setSuccessInfo({ cart: creditCartSnapshot, total: creditTotalSnapshot });
-      } catch {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Alert.alert(
-          "خطأ",
-          "فشل إتمام البيع الآجل. تحقق من الاتصال وحاول مجدداً.",
-        );
-      }
-      setLoading(false);
-      return;
-    }
-    try {
-      await dbService.saveOfflineSale(saleData.items, saleData.totalAmount);
-    } catch {
-      if (pointsToRedeem > 0 && selectedPatient) {
-        const raw = await AsyncStorage.getItem("pendingLoyaltyRollbacks").catch(
-          () => null,
-        );
-        const queue: { patientId: string; points: number; ts: number }[] = raw
-          ? JSON.parse(raw)
-          : [];
-        queue.push({
-          patientId: selectedPatient.id,
-          points: pointsToRedeem,
-          ts: Date.now(),
-        });
-        await AsyncStorage.setItem(
-          "pendingLoyaltyRollbacks",
-          JSON.stringify(queue),
-        ).catch(() => {});
-        Alert.alert(
-          "خطأ",
-          "تعذر حفظ عملية البيع. تم تسجيل خصم النقاط — يرجى التواصل مع المشرف لاستعادتها.",
-        );
-      } else {
-        Alert.alert("خطأ", "تعذر حفظ عملية البيع محلياً");
-      }
-      setLoading(false);
-      return;
-    }
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const cartSnapshot = [...cart];
-    const patientSnapshot = selectedPatient;
-    const finalSnapshot = total;
-    setRecentItems((prev) => {
-      const soldMap = new Map(cartSnapshot.map((i) => [i.id, i.quantity]));
-      const updatedPrev = prev
-        .map((r) => {
-          const soldQty = soldMap.get(r.id) ?? 0;
-          return { ...r, stock: Math.max(0, (r.stock ?? 0) - soldQty) };
-        })
-        .filter((r) => (r.stock ?? 0) > 0);
-      const newItems = cartSnapshot
-        .map((i) => ({
-          ...i,
-          stock: Math.max(0, (i.stock ?? 0) - i.quantity),
-          quantity: 1,
-        }))
-        .filter((i) => (i.stock ?? 0) > 0)
-        .slice(0, 5);
-      const seen = new Set<string>();
-      return [...newItems, ...updatedPrev]
-        .filter((i) => {
-          if (seen.has(i.id)) return false;
-          seen.add(i.id);
-          return true;
-        })
-        .slice(0, 5);
-    });
-    resetCart();
-    setLoading(false);
-    setSuccessInfo({ cart: cartSnapshot, total: finalSnapshot });
-    void syncService.syncData();
-    if (
-      patientSnapshot &&
-      loyaltySettings?.loyaltyEnabled &&
-      finalSnapshot > 0
-    ) {
-      try {
-        await apiService.earnLoyaltyPoints(
-          patientSnapshot.id,
-          null,
-          finalSnapshot,
-        );
-      } catch {
-        try {
-          const raw = await AsyncStorage.getItem("pendingLoyaltyEarns");
-          const queue: { patientId: string; amount: number; ts: number }[] = raw
-            ? JSON.parse(raw)
-            : [];
-          queue.push({
-            patientId: patientSnapshot.id,
-            amount: finalSnapshot,
-            ts: Date.now(),
-          });
-          await AsyncStorage.setItem(
-            "pendingLoyaltyEarns",
-            JSON.stringify(queue),
-          );
-        } catch {
-          console.warn("[Sales] Failed to queue pending loyalty earn");
-        }
-      }
-    }
-  };
 
-  const printReceipt = async (
-    receiptCart: typeof cart,
-    receiptTotal: number,
-  ) => {
-    const printer = await printerService.getSavedPrinter();
-    if (!printer) {
-      Alert.alert("تنبيه", "لا توجد طابعة متصلة", [
-        { text: "إلغاء", style: "cancel" },
-        { text: "إعداد الطابعة", onPress: () => router.push("/printer-settings" as any) },
-      ]);
-      return;
-    }
-    await printerService.printReceipt(
-      "Faramace Pharmacy",
-      receiptCart.map((i) => ({
-        name: i.tradeName ?? i.name,
-        quantity: i.quantity,
-        price: i.price,
-      })),
-      receiptTotal,
-    );
-  };
+    const editorStyle = {
+        minWidth: 74, color: C.foreground, fontSize: 15, fontWeight: '800' as const, textAlign: 'center' as const,
+        paddingVertical: 4, paddingHorizontal: 8,
+        borderWidth: 1, borderColor: C.primary, borderRadius: Radius.control, backgroundColor: C.primaryMuted,
+    };
 
-  // ── Render ────────────────────────────────────────────────────────────────────
-  return (
-    <View style={{ flex: 1, backgroundColor: C.background }}>
-      {/* ── Header bar ──────────────────────────────────────────────────── */}
-      <View
-        style={{
-          backgroundColor: C.card,
-          borderBottomWidth: 1,
-          borderBottomColor: C.border,
-          paddingHorizontal: 14,
-          paddingTop: Platform.OS === "ios" ? 8 : 4,
-          paddingBottom: 12,
-          gap: 10,
-        }}
-      >
-        {/* Title + patient + scan */}
-        <View
-          style={{ flexDirection: "row-reverse", alignItems: "center", gap: 8 }}
-        >
-          <Text
-            style={{
-              color: C.foreground,
-              fontSize: 17,
-              fontWeight: "900",
-              flex: 1,
-              textAlign: "right",
-            }}
-          >
-            نقطة البيع
-          </Text>
-
-          {/* Patient picker */}
-          <TouchableOpacity
-            onPress={() => setShowPatientModal(true)}
-            activeOpacity={0.8}
-            style={{
-              flexDirection: "row-reverse",
-              alignItems: "center",
-              gap: 5,
-              backgroundColor: selectedPatient ? C.primaryMuted : C.input,
-              borderRadius: Radius.sm,
-              paddingHorizontal: 10,
-              paddingVertical: 7,
-              borderWidth: 1,
-              borderColor: selectedPatient ? `${C.primary}40` : C.border,
-              maxWidth: 180,
-            }}
-          >
-            <View
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: Radius.sm,
-                backgroundColor: selectedPatient ? C.primary : C.border,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Ionicons
-                name={selectedPatient ? "person" : "person-add-outline"}
-                size={11}
-                color={selectedPatient ? "#fff" : C.mutedForeground}
-              />
-            </View>
-            <Text
-              style={{
-                color: selectedPatient ? C.primary : C.mutedForeground,
-                fontSize: 12,
-                fontWeight: "600",
-              }}
-              numberOfLines={1}
-            >
-              {selectedPatient ? selectedPatient.name : "بدون عميل"}
-            </Text>
-            {selectedPatient && (
-              <TouchableOpacity
-                onPress={() => {
-                  setSelectedPatient(null);
-                  setLoyaltyAccount(null);
-                  setPointsToRedeem(0);
-                }}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
-                <Ionicons name="close-circle" size={13} color={C.primary} />
-              </TouchableOpacity>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Barcode / name search */}
-        <View style={{ flexDirection: "row-reverse", gap: 8 }}>
-          <View
-            style={{
-              flex: 1,
-              flexDirection: "row-reverse",
-              alignItems: "center",
-              backgroundColor: C.input,
-              borderRadius: Radius.sm,
-              borderWidth: 1,
-              borderColor: notFoundMsg
-                ? C.danger
-                : nameResults.length > 0
-                  ? C.primary
-                  : C.border,
-              paddingHorizontal: 12,
-              gap: 8,
-            }}
-          >
-            <Ionicons
-              name="barcode-outline"
-              size={17}
-              color={notFoundMsg ? C.danger : C.mutedForeground}
-            />
-            <TextInput
-              style={{
-                flex: 1,
-                color: C.foreground,
-                paddingVertical: 10,
-                textAlign: "right",
-                fontSize: 14,
-              }}
-              placeholder="باركود أو اسم الدواء..."
-              placeholderTextColor={C.mutedForeground}
-              value={barcode}
-              onChangeText={(v) => {
-                setBarcode(v);
-                setNotFoundMsg(null);
-              }}
-              onSubmitEditing={() => handleBarcodeAdd(barcode)}
-              returnKeyType="search"
-            />
-            {loading || searchingName ? (
-              <ActivityIndicator size="small" color={C.primary} />
-            ) : (
-              barcode.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => {
-                    setBarcode("");
-                    setNameResults([]);
-                    setNotFoundMsg(null);
-                  }}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <Ionicons
-                    name="close-circle"
-                    size={16}
-                    color={C.mutedForeground}
-                  />
-                </TouchableOpacity>
-              )
-            )}
-          </View>
-          {/* Scan button */}
-          <TouchableOpacity
-            onPress={() =>
-              router.push({ pathname: "/scan", params: { from: "sales" } } as any)
-            }
-            activeOpacity={0.8}
-            style={{
-              width: 44,
-              borderRadius: Radius.xs,
-              backgroundColor: C.primary,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <Ionicons name="scan" size={19} color="#fff" />
-          </TouchableOpacity>
-          {/* Search / add button */}
-          <TouchableOpacity
-            onPress={() => handleBarcodeAdd(barcode)}
-            activeOpacity={0.8}
-            style={{
-              width: 44,
-              borderRadius: Radius.xs,
-              backgroundColor: C.success,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <Ionicons name="search" size={19} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Not found inline message */}
-        {notFoundMsg && (
-          <View
-            style={{
-              flexDirection: "row-reverse",
-              alignItems: "center",
-              gap: 8,
-              backgroundColor: C.dangerBg,
-              borderRadius: Radius.sm,
-              borderWidth: 1,
-              borderColor: `${C.danger}40`,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-            }}
-          >
-            <View
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: Radius.sm,
-                backgroundColor: `${C.danger}20`,
-                justifyContent: "center",
-                alignItems: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Ionicons name="search-outline" size={14} color={C.danger} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  color: C.danger,
-                  fontWeight: "700",
-                  fontSize: 13,
-                  textAlign: "right",
-                }}
-              >
-                غير موجود
-              </Text>
-              <Text
-                style={{
-                  color: C.danger,
-                  fontSize: 11,
-                  textAlign: "right",
-                  marginTop: 1,
-                  opacity: 0.85,
-                }}
-              >
-                {notFoundMsg}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setNotFoundMsg(null)}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="close-outline" size={16} color={C.danger} />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Name search dropdown results */}
-        {nameResults.length > 1 && (
-          <View
-            style={{
-              backgroundColor: C.card,
-              borderRadius: Radius.sm,
-              borderWidth: 1,
-              borderColor: C.primary,
-              overflow: "hidden",
-              maxHeight: 220,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row-reverse",
-                alignItems: "center",
-                gap: 6,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                backgroundColor: C.primaryMuted,
-                borderBottomWidth: 1,
-                borderBottomColor: C.border,
-              }}
-            >
-              <Ionicons name="list-outline" size={13} color={C.primary} />
-              <Text
-                style={{ color: C.primary, fontSize: 11, fontWeight: "700" }}
-              >
-                {nameResults.length} نتيجة — اختر دواءً
-              </Text>
-            </View>
-            <ScrollView bounces={false} keyboardShouldPersistTaps="handled">
-              {nameResults.map((drug, i) => (
-                <TouchableOpacity
-                  key={drug.id}
-                  onPress={() => handleSelectNameResult(drug)}
-                  activeOpacity={0.75}
-                  style={{
-                    flexDirection: "row-reverse",
-                    alignItems: "center",
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    gap: 10,
-                    borderBottomWidth: i < nameResults.length - 1 ? 1 : 0,
-                    borderBottomColor: C.border,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: Radius.sm,
-                      backgroundColor: C.primaryMuted,
-                      justifyContent: "center",
-                      alignItems: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Ionicons
-                      name="medical-outline"
-                      size={15}
-                      color={C.primary}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        color: C.foreground,
-                        fontWeight: "700",
-                        fontSize: 13,
-                        textAlign: "right",
-                      }}
-                      numberOfLines={1}
-                    >
-                      {drug.tradeName}
-                    </Text>
-                    {drug.scientificName ? (
-                      <Text
-                        style={{
-                          color: C.mutedForeground,
-                          fontSize: 11,
-                          textAlign: "right",
-                          marginTop: 1,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {drug.scientificName}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
-                    <Text
-                      style={{
-                        color: C.success,
-                        fontWeight: "700",
-                        fontSize: 13,
-                      }}
-                    >
-                      {drug.price.toLocaleString("en-US")} د.ع
-                    </Text>
-                    <Text
-                      style={{
-                        color: drug.quantity > 0 ? C.mutedForeground : C.danger,
-                        fontSize: 10,
-                        marginTop: 1,
-                      }}
-                    >
-                      {drug.quantity > 0
-                        ? `متبقي ${drug.quantity}`
-                        : "نفد المخزون"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-      </View>
-
-      {/* ── Warnings (allergy / interaction) ────────────────────────────── */}
-      {(allergyWarnings.length > 0 || interactions.length > 0) && (
-        <View style={{ paddingHorizontal: 14, paddingTop: 10, gap: 8 }}>
-          {allergyWarnings.length > 0 && (
-            <View
-              style={{
-                backgroundColor: C.dangerBg,
-                borderRadius: Radius.sm,
-                borderWidth: 1,
-                borderColor: `${C.danger}40`,
-                padding: 12,
-                flexDirection: "row-reverse",
-                gap: 10,
-                alignItems: "flex-start",
-                overflow: "hidden",
-              }}
-            >
-              <View
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: 4,
-                  backgroundColor: C.danger,
-                }}
-              />
-              <View
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: Radius.sm,
-                  backgroundColor: `${C.danger}20`,
-                  justifyContent: "center",
-                  alignItems: "center",
-                  marginRight: 4,
-                }}
-              >
-                <Ionicons name="warning" size={17} color={C.danger} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: C.danger,
-                    fontWeight: "800",
-                    textAlign: "right",
-                    fontSize: 13,
-                  }}
-                >
-                  تحذير حساسية!
-                </Text>
-                <Text
-                  style={{
-                    color: C.danger,
-                    fontSize: 11,
-                    textAlign: "right",
-                    marginTop: 2,
-                    lineHeight: 16,
-                  }}
-                >
-                  {allergyWarnings.join("، ")}
-                </Text>
-              </View>
-            </View>
-          )}
-          {interactions.map((ix, i) => {
-            const isHigh = ix.severity === "HIGH";
-            const color = isHigh ? C.danger : C.warning;
-            const bg = isHigh ? C.dangerBg : C.warningBg;
-            return (
-              <View
-                key={i}
-                style={{
-                  backgroundColor: bg,
-                  borderRadius: Radius.sm,
-                  borderWidth: 1,
-                  borderColor: `${color}40`,
-                  padding: 12,
-                  flexDirection: "row-reverse",
-                  gap: 10,
-                  alignItems: "flex-start",
-                  overflow: "hidden",
-                }}
-              >
-                <View
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: 4,
-                    backgroundColor: color,
-                  }}
-                />
-                <View
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: Radius.sm,
-                    backgroundColor: `${color}20`,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    marginRight: 4,
-                  }}
-                >
-                  <Ionicons name="warning" size={17} color={color} />
-                </View>
+    return (
+        <Surface style={{ gap: 12, borderColor: overridden ? C.warning : C.border, backgroundColor: overridden ? C.warningBg : C.card }}>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }}>
                 <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      color,
-                      fontWeight: "800",
-                      textAlign: "right",
-                      fontSize: 13,
-                    }}
-                  >
-                    تفاعل دوائي ({isHigh ? "خطير" : "متوسط"})
-                  </Text>
-                  <Text
-                    style={{
-                      color,
-                      fontSize: 11,
-                      textAlign: "right",
-                      marginTop: 2,
-                      lineHeight: 16,
-                    }}
-                  >
-                    {ix.drug1} + {ix.drug2} — {ix.description}
-                  </Text>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                        {flagged && <Ionicons name="warning-outline" size={16} color={C.warning} />}
+                        <Text style={{ color: C.foreground, fontSize: 16, fontWeight: '800', textAlign: 'right', flexShrink: 1 }} numberOfLines={2}>
+                            {item.tradeName ?? item.name}
+                        </Text>
+                        {overridden && (
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: Radius.badge, backgroundColor: C.card, borderWidth: 1, borderColor: C.warning }}>
+                                <Ionicons name="pencil" size={10} color={C.warning} />
+                                <Text style={{ color: C.warning, fontSize: 10.5, fontWeight: '800' }}>سعر معدّل</Text>
+                            </View>
+                        )}
+                    </View>
+                    {item.stock !== undefined && item.stock <= 5 && (
+                        <Text style={{ color: C.warning, fontSize: 12, textAlign: 'right', marginTop: 2 }}>المتوفر {formatNumber(item.stock)}</Text>
+                    )}
                 </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      {/* ── Quick-add recent chips ───────────────────────────────────────── */}
-      {recentItems.length > 0 && cart.length === 0 && (
-        <View style={{ paddingHorizontal: 14, paddingTop: 12 }}>
-          <Text
-            style={{
-              color: C.mutedForeground,
-              fontSize: 11,
-              fontWeight: "700",
-              textAlign: "right",
-              marginBottom: 8,
-              letterSpacing: 0.5,
-            }}
-          >
-            آخر المبيعات
-          </Text>
-          <View
-            style={{ flexDirection: "row-reverse", gap: 8, flexWrap: "wrap" }}
-          >
-            {recentItems.map((item) => {
-              const isLoadingThis = loadingRecentId === item.id;
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => handleRecentItemPress(item)}
-                  disabled={loadingRecentId !== null}
-                  activeOpacity={0.75}
-                  style={{
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    borderWidth: 1,
-                    borderColor: C.border,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    opacity: isLoadingThis ? 0.5 : 1,
-                    flexDirection: "row-reverse",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  {isLoadingThis ? (
-                    <ActivityIndicator size="small" color={C.primary} />
-                  ) : (
-                    <Ionicons
-                      name="add-circle-outline"
-                      size={13}
-                      color={C.primary}
+                <TouchableOpacity onPress={() => onRemove(item.id)} hitSlop={10} accessibilityLabel={`حذف ${item.tradeName ?? item.name}`}>
+                    <Ionicons name="trash-outline" size={20} color={C.mutedForeground} />
+                </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ color: C.mutedForeground, fontSize: 12 }}>سعر الوحدة</Text>
+                    {editing === 'price' ? (
+                        <TextInput
+                            value={draft}
+                            onChangeText={setDraft}
+                            onBlur={commit}
+                            onSubmitEditing={commit}
+                            keyboardType="numeric"
+                            returnKeyType="done"
+                            autoFocus
+                            selectTextOnFocus
+                            accessibilityLabel="سعر الوحدة"
+                            style={editorStyle}
+                        />
+                    ) : (
+                        <TouchableOpacity
+                            onPress={() => startEdit('price')}
+                            hitSlop={6}
+                            accessibilityRole="button"
+                            accessibilityLabel={`تعديل سعر ${item.tradeName ?? item.name}`}
+                            style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}
+                        >
+                            {overridden && (
+                                <Text style={{ color: C.mutedForeground, fontSize: 12, textDecorationLine: 'line-through' }}>
+                                    {formatNumber(item.originalPrice!)}
+                                </Text>
+                            )}
+                            <Text style={{ color: overridden ? C.warning : C.foreground, fontSize: 15, fontWeight: '700' }}>
+                                {formatNumber(item.price)} {CURRENCY}
+                            </Text>
+                            <Ionicons name="pencil-outline" size={13} color={overridden ? C.warning : C.mutedForeground} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+                {editing === 'qty' ? (
+                    <TextInput
+                        value={draft}
+                        onChangeText={setDraft}
+                        onBlur={commit}
+                        onSubmitEditing={commit}
+                        keyboardType="number-pad"
+                        returnKeyType="done"
+                        autoFocus
+                        selectTextOnFocus
+                        accessibilityLabel="الكمية"
+                        style={editorStyle}
                     />
-                  )}
-                  <View>
-                    <Text
-                      style={{
-                        color: C.foreground,
-                        fontSize: 12,
-                        fontWeight: "700",
-                      }}
-                      numberOfLines={1}
-                    >
-                      {item.tradeName ?? item.name}
-                    </Text>
-                    <Text
-                      style={{ color: C.success, fontSize: 10, marginTop: 1 }}
-                    >
-                      {item.price.toLocaleString("en-US")} د.ع
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
-
-      {/* ── Cart header (count + clear) ──────────────────────────────────── */}
-      {cart.length > 0 && (
-        <View
-          style={{
-            flexDirection: "row-reverse",
-            justifyContent: "space-between",
-            alignItems: "center",
-            paddingHorizontal: 14,
-            paddingTop: 12,
-            paddingBottom: 4,
-          }}
-        >
-          <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: "800", letterSpacing: 0.3 }}>
-            السلة · {itemCount} صنف
-          </Text>
-          <TouchableOpacity
-            onPress={() =>
-              Alert.alert("إفراغ السلة", "هل تريد إزالة كل الأصناف من السلة؟", [
-                { text: "إلغاء", style: "cancel" },
-                { text: "إفراغ", style: "destructive", onPress: resetCart },
-              ])
-            }
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{ flexDirection: "row-reverse", alignItems: "center", gap: 4 }}
-          >
-            <Ionicons name="trash-outline" size={13} color={C.danger} />
-            <Text style={{ color: C.danger, fontSize: 12, fontWeight: "700" }}>إفراغ السلة</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── Cart list ────────────────────────────────────────────────────── */}
-      <FlatList
-        data={cart}
-        renderItem={({ item }) => (
-          <CartItemRow
-            item={item}
-            C={C}
-            onUpdateQuantity={updateQuantity}
-            onRemove={removeFromCart}
-          />
-        )}
-        keyExtractor={(item) => item.id}
-        style={{ flex: 1 }}
-        contentContainerStyle={cart.length === 0 ? { flex: 1 } : { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 8 }}
-        ListEmptyComponent={
-          <View
-            style={{
-              flex: 1,
-              justifyContent: "center",
-              alignItems: "center",
-              paddingVertical: 48,
-              gap: 12,
-            }}
-          >
-            <View
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: Radius.sm,
-                backgroundColor: C.input,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Ionicons
-                name="cart-outline"
-                size={36}
-                color={C.mutedForeground}
-              />
-            </View>
-            <View style={{ alignItems: "center", gap: 4 }}>
-              <Text
-                style={{ color: C.foreground, fontWeight: "700", fontSize: 16 }}
-              >
-                السلة فارغة
-              </Text>
-              <Text style={{ color: C.mutedForeground, fontSize: 13 }}>
-                امسح باركود المنتج أو أدخل اسمه
-              </Text>
-            </View>
-          </View>
-        }
-      />
-
-      {/* ── Footer ───────────────────────────────────────────────────────── */}
-      <View
-        style={{
-          backgroundColor: C.card,
-          borderTopWidth: 1,
-          borderTopColor: C.border,
-          padding: 14,
-          paddingBottom: Platform.OS === "ios" ? 28 : 14,
-          gap: 10,
-        }}
-      >
-        {/* Loyalty row */}
-        {cart.length > 0 &&
-          selectedPatient &&
-          loyaltySettings?.loyaltyEnabled &&
-          loyaltyAccount && (
-            <View
-              style={{
-                backgroundColor: C.primaryMuted,
-                borderRadius: Radius.sm,
-                borderWidth: 1,
-                borderColor: `${C.primary}30`,
-                padding: 12,
-                gap: 8,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row-reverse",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row-reverse",
-                    alignItems: "center",
-                    gap: 5,
-                  }}
-                >
-                  <Ionicons name="star" size={13} color={C.primary} />
-                  <Text
-                    style={{
-                      color: C.primary,
-                      fontWeight: "700",
-                      fontSize: 12,
-                    }}
-                  >
-                    {loyaltyAccount.tier === "GOLD"
-                      ? "ذهبي"
-                      : loyaltyAccount.tier === "SILVER"
-                        ? "فضي"
-                        : "برونزي"}
-                  </Text>
-                </View>
-                <Text
-                  style={{ color: C.primary, fontSize: 12, fontWeight: "700" }}
-                >
-                  {loyaltyAccount.totalPoints.toLocaleString()} نقطة
-                </Text>
-              </View>
-              <View
-                style={{
-                  flexDirection: "row-reverse",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() => setPointsToRedeem((p) => Math.max(0, p - 100))}
-                  style={{
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    padding: 6,
-                    borderWidth: 1,
-                    borderColor: C.border,
-                  }}
-                >
-                  <Ionicons name="remove" size={14} color={C.danger} />
-                </TouchableOpacity>
-                <View style={{ flex: 1, alignItems: "center" }}>
-                  <Text
-                    style={{
-                      color: C.primary,
-                      fontWeight: "800",
-                      fontSize: 13,
-                    }}
-                  >
-                    {pointsToRedeem} نقطة
-                  </Text>
-                  {pointsToRedeem > 0 && (
-                    <Text
-                      style={{ color: C.success, fontSize: 11, marginTop: 2 }}
-                    >
-                      خصم {loyaltyDiscount.toLocaleString()} د.ع
-                    </Text>
-                  )}
-                </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    const maxByBalance =
-                      Math.floor(loyaltyAccount.totalPoints / 100) * 100;
-                    const maxByBill =
-                      Math.floor(
-                        Math.max(0, subTotal - manualDiscount) /
-                          redemptionValue /
-                          100,
-                      ) * 100;
-                    const cap = Math.min(maxByBalance, maxByBill);
-                    setPointsToRedeem((p) => Math.min(p + 100, cap));
-                  }}
-                  style={{
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    padding: 6,
-                    borderWidth: 1,
-                    borderColor: C.border,
-                  }}
-                >
-                  <Ionicons name="add" size={14} color={C.success} />
-                </TouchableOpacity>
-              </View>
-              {loyaltyAccount.totalPoints < minRedemption && (
-                <Text
-                  style={{
-                    color: C.mutedForeground,
-                    fontSize: 10,
-                    textAlign: "center",
-                  }}
-                >
-                  الحد الأدنى للاستبدال {minRedemption} نقطة
-                </Text>
-              )}
-            </View>
-          )}
-
-        {/* Total + item count */}
-        <View
-          style={{
-            flexDirection: "row-reverse",
-            justifyContent: "space-between",
-            alignItems: "center",
-            backgroundColor: C.primaryMuted,
-            borderRadius: Radius.sm,
-            borderWidth: 1.5,
-            borderColor: `${C.primary}33`,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-          }}
-        >
-          <View>
-            {totalDiscount > 0 ? (
-              <>
-                <Text
-                  style={{
-                    color: C.mutedForeground,
-                    fontSize: 11,
-                    textDecorationLine: "line-through",
-                    textAlign: "right",
-                  }}
-                >
-                  {subTotal.toLocaleString("en-US")} د.ع
-                </Text>
-                <Text
-                  style={{
-                    color: C.foreground,
-                    fontSize: 22,
-                    fontWeight: "900",
-                    textAlign: "right",
-                  }}
-                >
-                  {total.toLocaleString("en-US")}{" "}
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "600",
-                      color: C.mutedForeground,
-                    }}
-                  >
-                    د.ع
-                  </Text>
-                </Text>
-                <Text
-                  style={{ color: C.success, fontSize: 11, textAlign: "right" }}
-                >
-                  وفرت {totalDiscount.toLocaleString("en-US")} د.ع
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text
-                  style={{
-                    color: C.mutedForeground,
-                    fontSize: 11,
-                    textAlign: "right",
-                  }}
-                >
-                  المجموع الكلي
-                </Text>
-                <Text
-                  style={{
-                    color: C.foreground,
-                    fontSize: 24,
-                    fontWeight: "900",
-                    textAlign: "right",
-                  }}
-                >
-                  {total.toLocaleString("en-US")}{" "}
-                  <Text
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "600",
-                      color: C.mutedForeground,
-                    }}
-                  >
-                    د.ع
-                  </Text>
-                </Text>
-              </>
-            )}
-          </View>
-          {itemCount > 0 && (
-            <View
-              style={{
-                backgroundColor: C.primaryMuted,
-                borderRadius: Radius.sm,
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-              }}
-            >
-              <Text
-                style={{ color: C.primary, fontWeight: "700", fontSize: 13 }}
-              >
-                {itemCount} صنف
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Checkout buttons */}
-        <View style={{ flexDirection: "row-reverse", gap: 10 }}>
-          {/* Discount button → opens the discount modal */}
-          {cart.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setShowDiscountModal(true)}
-              activeOpacity={0.85}
-              style={{
-                flexDirection: "row-reverse",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 5,
-                paddingHorizontal: 14,
-                borderRadius: Radius.sm,
-                backgroundColor: manualDiscount > 0 ? C.warningBg : C.input,
-                borderWidth: 1.5,
-                borderColor: manualDiscount > 0 ? `${C.warning}50` : C.border,
-              }}
-            >
-              <Ionicons
-                name="pricetag-outline"
-                size={18}
-                color={manualDiscount > 0 ? C.warning : C.mutedForeground}
-              />
-              {manualDiscount > 0 && (
-                <Text style={{ color: C.warning, fontWeight: "800", fontSize: 12 }}>
-                  {manualDiscount.toLocaleString("en-US")}
-                </Text>
-              )}
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => handleCheckout("CREDIT")}
-            disabled={cart.length === 0 || loading}
-            activeOpacity={0.8}
-            style={{
-              flex: 1,
-              flexDirection: "row-reverse",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: 6,
-              backgroundColor: cart.length === 0 ? C.border : C.warning,
-              borderRadius: Radius.sm,
-              paddingVertical: 14,
-              opacity: cart.length === 0 ? 0.5 : 1,
-            }}
-          >
-            <Ionicons
-              name="time-outline"
-              size={18}
-              color={cart.length === 0 ? "#000000" : "#fff"}
-            />
-            <Text
-              style={{
-                color: cart.length === 0 ? "#000000" : "#fff",
-                fontWeight: "800",
-                fontSize: 15,
-              }}
-            >
-              آجل
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => handleCheckout("CASH")}
-            disabled={cart.length === 0 || loading}
-            activeOpacity={0.8}
-            style={{
-              flex: 2,
-              flexDirection: "row-reverse",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: 6,
-              backgroundColor: cart.length === 0 ? C.border : C.success,
-              borderRadius: Radius.sm,
-              paddingVertical: 14,
-              opacity: cart.length === 0 ? 0.5 : 1,
-            }}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons
-                  name="cash-outline"
-                  size={18}
-                  color={cart.length === 0 ? "#000000" : "#fff"}
-                />
-                <Text
-                  style={{
-                    color: cart.length === 0 ? "#000000" : "#fff",
-                    fontWeight: "800",
-                    fontSize: 15,
-                  }}
-                >
-                  نقدي
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ── Patient Modal ─────────────────────────────────────────────────── */}
-      <Modal
-        visible={showPatientModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowPatientModal(false)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "flex-end",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: C.card,
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              padding: 20,
-              maxHeight: "72%",
-            }}
-          >
-            {/* Drag handle */}
-            <View
-              style={{
-                width: 36,
-                height: 4,
-                backgroundColor: C.border,
-                borderRadius: 2,
-                alignSelf: "center",
-                marginBottom: 16,
-              }}
-            />
-
-            <Text
-              style={{
-                color: C.foreground,
-                fontSize: 16,
-                fontWeight: "800",
-                textAlign: "right",
-                marginBottom: 14,
-              }}
-            >
-              بحث عن عميل
-            </Text>
-
-            {/* Search input */}
-            <View
-              style={{
-                flexDirection: "row-reverse",
-                alignItems: "center",
-                backgroundColor: C.input,
-                borderRadius: Radius.sm,
-                borderWidth: 1,
-                borderColor: C.border,
-                paddingHorizontal: 12,
-                marginBottom: 14,
-                gap: 8,
-              }}
-            >
-              <Ionicons
-                name="search-outline"
-                size={17}
-                color={C.mutedForeground}
-              />
-              <TextInput
-                style={{
-                  flex: 1,
-                  color: C.foreground,
-                  paddingVertical: 11,
-                  textAlign: "right",
-                  fontSize: 14,
-                }}
-                placeholder="الاسم أو رقم الهاتف..."
-                placeholderTextColor={C.mutedForeground}
-                value={patientQuery}
-                onChangeText={setPatientQuery}
-                autoFocus
-              />
-              {searchingPatient && (
-                <ActivityIndicator size="small" color={C.primary} />
-              )}
-            </View>
-
-            {/* Results */}
-            {patientResults.map((p, i) => (
-              <TouchableOpacity
-                key={p.id}
-                onPress={() => {
-                  setSelectedPatient(p);
-                  setShowPatientModal(false);
-                  setPatientQuery("");
-                }}
-                activeOpacity={0.75}
-                style={{
-                  flexDirection: "row-reverse",
-                  alignItems: "center",
-                  paddingVertical: 12,
-                  gap: 12,
-                  borderBottomWidth: i < patientResults.length - 1 ? 1 : 0,
-                  borderBottomColor: C.border,
-                }}
-              >
-                <View
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: Radius.sm,
-                    backgroundColor: C.primaryMuted,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: C.primary,
-                      fontSize: 13,
-                      fontWeight: "900",
-                    }}
-                  >
-                    {p.name.trim().charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      color: C.foreground,
-                      fontWeight: "700",
-                      textAlign: "right",
-                      fontSize: 14,
-                    }}
-                  >
-                    {p.name}
-                  </Text>
-                  <Text
-                    style={{
-                      color: C.mutedForeground,
-                      fontSize: 12,
-                      textAlign: "right",
-                      marginTop: 1,
-                    }}
-                  >
-                    {p.phone}
-                  </Text>
-                </View>
-                {p.balance !== undefined && p.balance > 0 && (
-                  <View
-                    style={{
-                      backgroundColor: C.dangerBg,
-                      borderRadius: Radius.sm,
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: C.danger,
-                        fontSize: 11,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {p.balance.toLocaleString("en-US")} د.ع
-                    </Text>
-                  </View>
+                ) : (
+                    <Stepper
+                        value={item.quantity}
+                        onMinus={() => onChange(item.id, -1)}
+                        onPlus={() => onChange(item.id, 1)}
+                        onValuePress={() => startEdit('qty')}
+                        minusDisabled={item.quantity <= 1}
+                        plusDisabled={item.stock !== undefined && item.quantity >= item.stock}
+                    />
                 )}
-              </TouchableOpacity>
-            ))}
-
-            {/* Close button */}
-            <TouchableOpacity
-              onPress={() => setShowPatientModal(false)}
-              activeOpacity={0.75}
-              style={{
-                flexDirection: "row-reverse",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 6,
-                backgroundColor: C.input,
-                borderRadius: Radius.sm,
-                paddingVertical: 12,
-                marginTop: 14,
-                borderWidth: 1,
-                borderColor: C.border,
-              }}
-            >
-              <Ionicons
-                name="close-outline"
-                size={18}
-                color={C.mutedForeground}
-              />
-              <Text
-                style={{ color: C.foreground, fontWeight: "600", fontSize: 14 }}
-              >
-                إغلاق
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Discount Modal ──────────────────────────────────────────────── */}
-      <Modal
-        visible={showDiscountModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDiscountModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => setShowDiscountModal(false)}
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              justifyContent: "center",
-              padding: 24,
-            }}
-          >
-            <TouchableOpacity
-              activeOpacity={1}
-              style={{
-                backgroundColor: C.card,
-                borderRadius: Radius.sm,
-                padding: 20,
-                gap: 14,
-              }}
-            >
-              {/* Header */}
-              <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: Radius.xs,
-                    backgroundColor: C.warningBg,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Ionicons name="pricetag" size={20} color={C.warning} />
+                <View style={{ alignItems: 'flex-start' }}>
+                    <Text style={{ color: C.mutedForeground, fontSize: 12 }}>المجموع</Text>
+                    <Text style={{ color: C.foreground, fontSize: 17, fontWeight: '900' }}>{formatNumber(item.price * item.quantity)} {CURRENCY}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: C.foreground, fontSize: 16, fontWeight: "800", textAlign: "right" }}>
-                    خصم يدوي
-                  </Text>
-                  <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: "right", marginTop: 1 }}>
-                    أدخل مبلغ الخصم بالدينار
-                  </Text>
-                </View>
-              </View>
-
-              {/* Amount input */}
-              <View
-                style={{
-                  flexDirection: "row-reverse",
-                  alignItems: "center",
-                  backgroundColor: C.input,
-                  borderRadius: Radius.xs,
-                  borderWidth: 1.5,
-                  borderColor: C.warning,
-                  paddingHorizontal: 14,
-                  gap: 6,
-                }}
-              >
-                <TextInput
-                  style={{
-                    flex: 1,
-                    color: C.foreground,
-                    paddingVertical: 13,
-                    textAlign: "right",
-                    fontSize: 20,
-                    fontWeight: "800",
-                  }}
-                  placeholder="0"
-                  placeholderTextColor={C.mutedForeground}
-                  keyboardType="numeric"
-                  value={manualDiscountInput}
-                  onChangeText={(v) => {
-                    setManualDiscountInput(v);
-                    const n = parseFloat(v) || 0;
-                    setManualDiscount(Math.min(n, subTotal));
-                  }}
-                  autoFocus
-                />
-                <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: "700" }}>
-                  د.ع
-                </Text>
-              </View>
-
-              {/* Subtotal hint */}
-              <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: "right" }}>
-                الإجمالي الفرعي: {subTotal.toLocaleString("en-US")} د.ع
-              </Text>
-
-              {/* Actions */}
-              <View style={{ flexDirection: "row-reverse", gap: 10 }}>
-                <TouchableOpacity
-                  onPress={() => setShowDiscountModal(false)}
-                  activeOpacity={0.85}
-                  style={{
-                    flex: 2,
-                    flexDirection: "row-reverse",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    gap: 6,
-                    backgroundColor: C.primary,
-                    borderRadius: Radius.sm,
-                    paddingVertical: 13,
-                  }}
-                >
-                  <Ionicons name="checkmark-outline" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "800", fontSize: 14 }}>تطبيق</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    setManualDiscount(0);
-                    setManualDiscountInput("");
-                    setShowDiscountModal(false);
-                  }}
-                  activeOpacity={0.75}
-                  style={{
-                    flex: 1,
-                    flexDirection: "row-reverse",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    gap: 6,
-                    backgroundColor: C.card,
-                    borderRadius: Radius.sm,
-                    paddingVertical: 13,
-                    borderWidth: 1,
-                    borderColor: C.border,
-                  }}
-                >
-                  <Ionicons name="close-outline" size={18} color={C.mutedForeground} />
-                  <Text style={{ color: C.foreground, fontWeight: "600", fontSize: 14 }}>مسح</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── Sale success modal ──────────────────────────────────────────── */}
-      <Modal
-        visible={successInfo !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSuccessInfo(null)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            padding: 28,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: C.card,
-              borderRadius: Radius.sm,
-              padding: 24,
-              alignItems: "center",
-            }}
-          >
-            {/* Success icon */}
-            <View
-              style={{
-                width: 66,
-                height: 66,
-                borderRadius: 33,
-                backgroundColor: C.successBg,
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 14,
-              }}
-            >
-              <Ionicons name="checkmark-circle" size={42} color={C.success} />
             </View>
+        </Surface>
+    );
+});
 
-            <Text style={{ color: C.foreground, fontSize: 18, fontWeight: "900", marginBottom: 4 }}>
-              تمت العملية بنجاح
-            </Text>
-            <Text style={{ color: C.mutedForeground, fontSize: 13, marginBottom: 12 }}>
-              تم تسجيل عملية البيع
-            </Text>
+// ── Main screen ───────────────────────────────────────────────────────────────
+export default function SalesScreen() {
+    const C = usePalette();
+    const insets = useSafeAreaInsets();
+    const { branchId, user } = useAuth();
+    const params = useLocalSearchParams();
+    const checkout = useCheckout();
+    const {
+        cart, patient, subTotal, totalDiscount, total, itemCount, manualDiscount, interactions,
+        addDrug, updateQuantity, setItemQuantity, setItemPrice, removeItem, setPatient, setMethod, setManualDiscount, resetCheckout,
+        recentItems, dropRecent,
+    } = checkout;
 
-            {/* Total */}
-            <View style={{ flexDirection: "row-reverse", alignItems: "baseline", gap: 4, marginBottom: 20 }}>
-              <Text style={{ color: C.primary, fontSize: 24, fontWeight: "900" }}>
-                {(successInfo?.total ?? 0).toLocaleString("en-US")}
-              </Text>
-              <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: "700" }}>د.ع</Text>
-            </View>
+    const searchRef = useRef<TextInput>(null);
+    const focusTask = useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
+    const [query, setQuery] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [nameResults, setNameResults] = useState<DrugResult[]>([]);
+    const [searchingName, setSearchingName] = useState(false);
+    const [notFoundMsg, setNotFoundMsg] = useState<string | null>(null);
+    const [searchFocused, setSearchFocused] = useState(false);
+    const notFoundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [showPatientPicker, setShowPatientPicker] = useState(false);
+    const [showCheckout, setShowCheckout] = useState(false);
+    const [showDiscount, setShowDiscount] = useState(false);
+    const [discountInput, setDiscountInput] = useState('');
+    const [loadingRecentId, setLoadingRecentId] = useState<string | null>(null);
 
-            {/* Buttons in one row */}
-            <View style={{ flexDirection: "row-reverse", gap: 10, width: "100%" }}>
-              <TouchableOpacity
-                onPress={() => {
-                  const info = successInfo;
-                  setSuccessInfo(null);
-                  if (info) printReceipt(info.cart, info.total);
-                }}
-                activeOpacity={0.85}
-                style={{
-                  flex: 1,
-                  flexDirection: "row-reverse",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 7,
-                  backgroundColor: C.primary,
-                  borderRadius: Radius.sm,
-                  paddingVertical: 13,
-                }}
-              >
-                <Ionicons name="print-outline" size={18} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>طباعة</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setSuccessInfo(null)}
-                activeOpacity={0.8}
-                style={{
-                  flex: 1,
-                  flexDirection: "row-reverse",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 6,
-                  backgroundColor: C.card,
-                  borderRadius: Radius.sm,
-                  paddingVertical: 13,
-                  borderWidth: 1.5,
-                  borderColor: C.border,
-                }}
-              >
-                <Ionicons name="checkmark-outline" size={18} color={C.foreground} />
-                <Text style={{ color: C.foreground, fontWeight: "700", fontSize: 15 }}>موافق</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+    const showNotFound = useCallback((msg: string) => {
+        if (notFoundTimer.current) clearTimeout(notFoundTimer.current);
+        setNotFoundMsg(msg);
+        notFoundTimer.current = setTimeout(() => setNotFoundMsg(null), 3500);
+    }, []);
+    useEffect(() => () => { if (notFoundTimer.current) clearTimeout(notFoundTimer.current); }, []);
 
-      {/* ── Checkout confirm modal ──────────────────────────────────────── */}
-      <Modal
-        visible={confirmMethod !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmMethod(null)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            padding: 28,
-          }}
-        >
-          <View style={{ backgroundColor: C.card, borderRadius: Radius.sm, padding: 22 }}>
+    // Live name search while typing letters.
+    useEffect(() => {
+        const hasLetters = /[a-zA-Z؀-ۿ]/.test(query);
+        if (!hasLetters || query.trim().length < 2) { setNameResults([]); return; }
+        let active = true;
+        const timer = setTimeout(async () => {
+            setSearchingName(true);
+            try {
+                const results = await apiService.searchDrugByName(query.trim(), branchId ?? undefined);
+                if (active) setNameResults(results);
+            } finally {
+                if (active) setSearchingName(false);
+            }
+        }, 300);
+        return () => { active = false; clearTimeout(timer); };
+    }, [query, branchId]);
+
+    const handleLookup = useCallback(async (code: string) => {
+        const trimmed = code.trim();
+        if (!trimmed) return;
+        const isBarcode = /^[\d-]+$/.test(trimmed);
+        setLoading(true);
+        setNameResults([]);
+        try {
+            if (isBarcode) {
+                const drug = await apiService.getDrugByBarcode(trimmed, branchId ?? undefined);
+                if (!drug) { showNotFound('لم يُعثر على باركود مطابق في المخزون'); return; }
+                if (addDrug(drug)) setQuery('');
+            } else {
+                const results = await apiService.searchDrugByName(trimmed, branchId ?? undefined);
+                if (results.length === 0) { showNotFound(`لا يوجد دواء باسم "${trimmed}" في المخزون`); return; }
+                if (results.length === 1) { if (addDrug(results[0])) setQuery(''); }
+                else setNameResults(results);
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [branchId, addDrug, showNotFound]);
+
+    // Barcode handed over by the scanner via route params.
+    useEffect(() => {
+        if (params.scannedBarcode) {
+            void handleLookup(params.scannedBarcode as string);
+            router.setParams({ scannedBarcode: '' });
+        }
+    }, [params.scannedBarcode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Scanner returning with router.back() + prescription results → add to cart.
+    useFocusEffect(
+        useCallback(() => {
+            let active = true;
+            (async () => {
+                try {
+                    const code = await AsyncStorage.getItem('pendingScanBarcode');
+                    if (code && active) {
+                        await AsyncStorage.removeItem('pendingScanBarcode');
+                        await handleLookup(code);
+                    }
+                    // "إدخال يدوي" in the scanner: open the keyboard on the search
+                    // field. Focus only sticks once the screen transition is done.
+                    if (await consumeManualEntry('sales')) {
+                        if (active) focusTask.current = InteractionManager.runAfterInteractions(() => searchRef.current?.focus());
+                    }
+                    const raw = await AsyncStorage.getItem('pendingPrescriptionDrugs');
+                    if (raw && active) {
+                        await AsyncStorage.removeItem('pendingPrescriptionDrugs');
+                        const names: unknown = JSON.parse(raw);
+                        if (Array.isArray(names)) {
+                            for (const name of names) if (typeof name === 'string') await handleLookup(name);
+                        }
+                    }
+                } catch { /* ignore hand-off errors */ }
+            })();
+            return () => { active = false; focusTask.current?.cancel(); };
+        }, [handleLookup]),
+    );
+
+    const handleRecent = useCallback(async (item: CartItem) => {
+        if (loadingRecentId) return;
+        setLoadingRecentId(item.id);
+        try {
+            const current = await apiService.getDrugCurrentStock(item.id, branchId ?? undefined);
+            const stock = current ?? item.stock ?? 0;
+            if (stock <= 0) {
+                dropRecent(item.id);
+                Alert.alert('نفاد المخزون', 'هذا الدواء غير متوفر حالياً في المخزون');
+                return;
+            }
+            addDrug({ ...item, quantity: stock });
+        } finally {
+            setLoadingRecentId(null);
+        }
+    }, [branchId, addDrug, dropRecent, loadingRecentId]);
+
+    const goToReview = (m: PaymentMethod) => {
+        if (cart.length === 0) { Alert.alert('تنبيه', 'السلة فارغة'); return; }
+        setMethod(m);
+        setShowCheckout(true);
+    };
+
+    const flaggedNames = new Set(interactions.flatMap(ix => [ix.drug1, ix.drug2].map(n => n.toLowerCase())));
+    const isFlagged = (i: CartItem) =>
+        flaggedNames.has((i.scientificName ?? '').toLowerCase()) || flaggedNames.has((i.name ?? '').toLowerCase());
+
+    return (
+        <View style={{ flex: 1, backgroundColor: C.background }}>
             {/* Header */}
-            <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <View
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: Radius.xs,
-                  backgroundColor: confirmMethod === "CASH" ? C.successBg : C.warningBg,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons
-                  name={confirmMethod === "CASH" ? "cash-outline" : "time-outline"}
-                  size={22}
-                  color={confirmMethod === "CASH" ? C.success : C.warning}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: C.foreground, fontSize: 17, fontWeight: "800", textAlign: "right" }}>
-                  تأكيد البيع
-                </Text>
-                <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: "right", marginTop: 1 }}>
-                  طريقة الدفع: {confirmMethod === "CASH" ? "نقدي" : "آجل"}
-                </Text>
-              </View>
+            <View style={{ paddingTop: insets.top + 10, paddingHorizontal: 16, paddingBottom: 8, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                <Text style={{ flex: 1, color: C.foreground, fontSize: 24, fontWeight: '900', textAlign: 'right' }}>نقطة البيع</Text>
+                <TouchableOpacity
+                    onPress={() => router.push('/(tabs)/more' as Href)}
+                    accessibilityLabel="المزيد والحساب"
+                    style={{ width: 46, height: 46, borderRadius: Radius.card, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{initials(user?.name, 1) || '؟'}</Text>
+                </TouchableOpacity>
             </View>
 
-            {/* Summary */}
-            <View
-              style={{
-                backgroundColor: C.background,
-                borderRadius: Radius.xs,
-                borderWidth: 1,
-                borderColor: C.border,
-                padding: 14,
-                gap: 9,
-                marginBottom: 18,
-              }}
+            <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, gap: 12 }}
+                keyboardShouldPersistTaps="handled"
             >
-              {totalDiscount > 0 && (
-                <>
-                  <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
-                    <Text style={{ color: C.mutedForeground, fontSize: 13 }}>المجموع الفرعي</Text>
-                    <Text style={{ color: C.foreground, fontSize: 13, fontWeight: "600" }}>
-                      {subTotal.toLocaleString("en-US")} د.ع
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
-                    <Text style={{ color: C.mutedForeground, fontSize: 13 }}>الخصم</Text>
-                    <Text style={{ color: C.success, fontSize: 13, fontWeight: "700" }}>
-                      − {totalDiscount.toLocaleString("en-US")} د.ع
-                    </Text>
-                  </View>
-                  <View style={{ height: 1, backgroundColor: C.border }} />
-                </>
-              )}
-              <View style={{ flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" }}>
-                <Text style={{ color: C.foreground, fontSize: 14, fontWeight: "800" }}>الإجمالي</Text>
-                <View style={{ flexDirection: "row-reverse", alignItems: "baseline", gap: 4 }}>
-                  <Text style={{ color: C.primary, fontSize: 20, fontWeight: "900" }}>
-                    {total.toLocaleString("en-US")}
-                  </Text>
-                  <Text style={{ color: C.mutedForeground, fontSize: 12, fontWeight: "700" }}>د.ع</Text>
+                {/* Customer — one compact line; the whole row opens the picker. */}
+                <PressableCard
+                    onPress={() => setShowPatientPicker(true)}
+                    padded={false}
+                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 12 }}
+                    accessibilityLabel={patient ? `العميل ${patient.name}` : 'اختيار عميل'}
+                    accessibilityHint="يفتح قائمة العملاء"
+                >
+                    <View style={{
+                        width: 30, height: 30, borderRadius: Radius.control,
+                        backgroundColor: patient ? C.primaryMuted : C.input,
+                        alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        <Ionicons name={patient ? 'person' : 'person-outline'} size={16} color={patient ? C.primary : C.mutedForeground} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text
+                            style={{
+                                color: patient ? C.foreground : C.mutedForeground,
+                                fontSize: 15, fontWeight: patient ? '800' : '600', textAlign: 'right',
+                            }}
+                            numberOfLines={1}
+                        >
+                            {patient ? patient.name : 'بدون عميل'}
+                        </Text>
+                    </View>
+                    {patient ? (
+                        <TouchableOpacity onPress={() => setPatient(null)} hitSlop={10} accessibilityLabel="إزالة العميل">
+                            <Ionicons name="close-circle" size={18} color={C.mutedForeground} />
+                        </TouchableOpacity>
+                    ) : null}
+                    <LinkLabel
+                        label={patient ? 'تغيير' : 'اختيار'}
+                        style={{ color: C.primary, fontSize: 13.5, fontWeight: '700' }}
+                        chevronSize={13}
+                    />
+                </PressableCard>
+
+                {/* Search + scan — one 44pt line; the border carries the state. */}
+                <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                    <View style={{
+                        flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingHorizontal: 10,
+                        backgroundColor: C.card, borderRadius: Radius.control, borderWidth: 1,
+                        // Colour-only state change: a thicker border would shift the row by a point.
+                        borderColor: notFoundMsg ? C.danger : searchFocused || nameResults.length > 0 ? C.primary : C.border,
+                    }}>
+                        <Ionicons
+                            name="search-outline"
+                            size={18}
+                            color={notFoundMsg ? C.danger : searchFocused || query.length > 0 ? C.primary : C.mutedForeground}
+                        />
+                        <TextInput
+                            ref={searchRef}
+                            value={query}
+                            onChangeText={(v) => { setQuery(v); setNotFoundMsg(null); }}
+                            onSubmitEditing={() => handleLookup(query)}
+                            onFocus={() => setSearchFocused(true)}
+                            onBlur={() => setSearchFocused(false)}
+                            returnKeyType="search"
+                            placeholder="ابحث باسم الدواء أو الباركود"
+                            placeholderTextColor={C.mutedForeground}
+                            style={{ flex: 1, color: C.foreground, paddingVertical: 10, textAlign: 'right', fontSize: 15 }}
+                        />
+                        {loading || searchingName ? (
+                            <ActivityIndicator size="small" color={C.primary} />
+                        ) : query.length > 0 ? (
+                            <TouchableOpacity onPress={() => { setQuery(''); setNameResults([]); setNotFoundMsg(null); }} hitSlop={10} accessibilityLabel="مسح البحث">
+                                <Ionicons name="close-circle" size={17} color={C.mutedForeground} />
+                            </TouchableOpacity>
+                        ) : null}
+                    </View>
+                    <TouchableOpacity
+                        onPress={() => router.push({ pathname: '/scan', params: { from: 'sales' } })}
+                        activeOpacity={0.85}
+                        accessibilityLabel="مسح باركود"
+                        style={{ width: 44, borderRadius: Radius.control, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        <Ionicons name="scan-outline" size={21} color="#fff" />
+                    </TouchableOpacity>
                 </View>
-              </View>
-              {selectedPatient && (
-                <>
-                  <View style={{ height: 1, backgroundColor: C.border }} />
-                  <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
-                    <Text style={{ color: C.mutedForeground, fontSize: 13 }}>العميل</Text>
-                    <Text style={{ color: C.foreground, fontSize: 13, fontWeight: "700" }} numberOfLines={1}>
-                      {selectedPatient.name}
-                    </Text>
-                  </View>
-                </>
-              )}
+
+                {notFoundMsg && (
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, padding: 12, backgroundColor: C.dangerBg, borderRadius: Radius.card }}>
+                        <Ionicons name="search-outline" size={18} color={C.danger} />
+                        <Text style={{ flex: 1, color: C.danger, fontSize: 13, textAlign: 'right' }}>{notFoundMsg}</Text>
+                    </View>
+                )}
+
+                {nameResults.length > 1 && (
+                    <Surface padded={false} style={{ overflow: 'hidden', borderColor: C.primary }}>
+                        <Text style={{ color: C.primary, fontSize: 12.5, fontWeight: '700', textAlign: 'right', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: C.primaryMuted }}>
+                            {nameResults.length} نتيجة — اختر دواءً
+                        </Text>
+                        {nameResults.slice(0, 8).map((drug, i) => (
+                            <TouchableOpacity
+                                key={drug.id}
+                                onPress={() => { if (addDrug(drug)) { setQuery(''); setNameResults([]); } }}
+                                activeOpacity={0.75}
+                                style={{
+                                    flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11,
+                                    borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.border,
+                                }}
+                            >
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: C.foreground, fontSize: 14.5, fontWeight: '700', textAlign: 'right' }} numberOfLines={1}>{drug.tradeName}</Text>
+                                    {drug.scientificName ? <Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right' }} numberOfLines={1}>{drug.scientificName}</Text> : null}
+                                </View>
+                                <View style={{ alignItems: 'flex-start' }}>
+                                    <Text style={{ color: C.foreground, fontSize: 14, fontWeight: '700' }}>{formatNumber(drug.price)} {CURRENCY}</Text>
+                                    <Text style={{ color: drug.quantity > 0 ? C.mutedForeground : C.danger, fontSize: 12 }}>
+                                        {drug.quantity > 0 ? `المتوفر ${formatNumber(drug.quantity)}` : 'نفد المخزون'}
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </Surface>
+                )}
+
+                {/* Recent chips on an empty cart */}
+                {cart.length === 0 && recentItems.length > 0 && (
+                    <View style={{ gap: 8 }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: '700', textAlign: 'right' }}>آخر المبيعات</Text>
+                        <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+                            {recentItems.map(item => (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    onPress={() => handleRecent(item)}
+                                    disabled={loadingRecentId !== null}
+                                    style={{
+                                        flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8,
+                                        backgroundColor: C.card, borderRadius: Radius.control, borderWidth: 1, borderColor: C.border,
+                                        opacity: loadingRecentId === item.id ? 0.5 : 1,
+                                    }}
+                                >
+                                    {loadingRecentId === item.id
+                                        ? <ActivityIndicator size="small" color={C.primary} />
+                                        : <Ionicons name="add-circle-outline" size={16} color={C.primary} />}
+                                    <Text style={{ color: C.foreground, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>{item.tradeName ?? item.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                )}
+
+                {/* Cart */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                    <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '900' }}>السلة ({itemCount})</Text>
+                    {cart.length > 0 && (
+                        <TouchableOpacity
+                            onPress={() => Alert.alert('إفراغ السلة', 'هل تريد إزالة كل الأصناف والعميل من السلة؟', [
+                                { text: 'إلغاء', style: 'cancel' },
+                                { text: 'إفراغ', style: 'destructive', onPress: resetCheckout },
+                            ])}
+                            hitSlop={8}
+                        >
+                            <Text style={{ color: C.danger, fontSize: 13, fontWeight: '700' }}>إفراغ السلة</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                <SafetyWarnings compact />
+
+                {cart.map(item => (
+                    <CartLine
+                        key={item.id}
+                        item={item}
+                        flagged={isFlagged(item)}
+                        onChange={updateQuantity}
+                        onRemove={removeItem}
+                        onSetQuantity={setItemQuantity}
+                        onSetPrice={setItemPrice}
+                    />
+                ))}
+
+                <TouchableOpacity
+                    onPress={() => searchRef.current?.focus()}
+                    activeOpacity={0.8}
+                    style={{
+                        flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14,
+                        borderRadius: Radius.card, borderWidth: 1, borderStyle: 'dashed', borderColor: C.border, backgroundColor: C.card,
+                    }}
+                >
+                    <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                    <Text style={{ color: C.primary, fontSize: 15, fontWeight: '800' }}>{cart.length === 0 ? 'امسح باركود أو ابحث لإضافة دواء' : 'إضافة دواء'}</Text>
+                </TouchableOpacity>
+
+                <LoyaltyPanel />
+            </ScrollView>
+
+            {/* Sticky summary */}
+            <View style={{ backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, gap: 10 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ color: C.mutedForeground, fontSize: 13 }}>الإجمالي</Text>
+                        <Text style={{ color: C.foreground, fontSize: 26, fontWeight: '900' }}>
+                            {formatNumber(total)} <Text style={{ fontSize: 14, color: C.mutedForeground, fontWeight: '600' }}>{CURRENCY}</Text>
+                        </Text>
+                        {totalDiscount > 0 && (
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                                <Text style={{ color: C.mutedForeground, fontSize: 12, textDecorationLine: 'line-through' }}>
+                                    {formatNumber(subTotal)}
+                                </Text>
+                                <Text style={{ color: C.success, fontSize: 12, fontWeight: '700' }}>
+                                    وفّر {formatNumber(totalDiscount)}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                    {manualDiscount > 0 ? (
+                        // Applied: shows the amount and clears in one tap, instead of
+                        // reopening the dialog only to remove it.
+                        <View style={{
+                            flexDirection: 'row-reverse', alignItems: 'center',
+                            borderRadius: Radius.control, borderWidth: 1, borderColor: C.warning,
+                            backgroundColor: C.warningBg, overflow: 'hidden',
+                        }}>
+                            <TouchableOpacity
+                                onPress={() => { setDiscountInput(String(manualDiscount)); setShowDiscount(true); }}
+                                accessibilityLabel="تعديل الخصم"
+                                style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8 }}
+                            >
+                                <Ionicons name="pricetag" size={15} color={C.warning} />
+                                <Text style={{ color: C.warning, fontSize: 13, fontWeight: '800' }}>{formatNumber(manualDiscount)}</Text>
+                            </TouchableOpacity>
+                            <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: `${C.warning}55` }} />
+                            <TouchableOpacity
+                                onPress={() => setManualDiscount(0)}
+                                accessibilityLabel="إزالة الخصم"
+                                hitSlop={6}
+                                style={{ paddingHorizontal: 9, paddingVertical: 8 }}
+                            >
+                                <Ionicons name="close" size={15} color={C.warning} />
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <TouchableOpacity
+                            onPress={() => { setDiscountInput(''); setShowDiscount(true); }}
+                            disabled={cart.length === 0}
+                            accessibilityLabel="إضافة خصم"
+                            style={{
+                                flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+                                paddingHorizontal: 11, paddingVertical: 8,
+                                borderRadius: Radius.control, borderWidth: 1, borderColor: C.border,
+                                backgroundColor: C.input,
+                                opacity: cart.length === 0 ? 0.5 : 1,
+                            }}
+                        >
+                            <Ionicons name="pricetag-outline" size={15} color={C.mutedForeground} />
+                            <Text style={{ color: C.mutedForeground, fontSize: 13, fontWeight: '700' }}>إضافة خصم</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+                {/* One colour per payment method — the same coding used by the
+                    payment badges and the desktop POS. */}
+                <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                    <PayButton label="نقدي" icon="cash-outline" color={C.success} flex={1.2} disabled={cart.length === 0} onPress={() => goToReview('CASH')} />
+                    <PayButton label="بطاقة" icon="card-outline" color={C.primary} flex={1} disabled={cart.length === 0} onPress={() => goToReview('CARD')} />
+                    <PayButton label="آجل" icon="time-outline" color={C.warning} flex={1} disabled={cart.length === 0} onPress={() => goToReview('CREDIT')} />
+                </View>
             </View>
 
-            {/* Buttons in one row */}
-            <View style={{ flexDirection: "row-reverse", gap: 10 }}>
-              <TouchableOpacity
-                onPress={() => {
-                  const m = confirmMethod;
-                  setConfirmMethod(null);
-                  if (m) processSale(m);
-                }}
-                activeOpacity={0.85}
-                style={{
-                  flex: 2,
-                  flexDirection: "row-reverse",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 7,
-                  backgroundColor: confirmMethod === "CASH" ? C.success : C.warning,
-                  borderRadius: Radius.sm,
-                  paddingVertical: 14,
-                }}
-              >
-                <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>تأكيد البيع</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setConfirmMethod(null)}
-                activeOpacity={0.8}
-                style={{
-                  flex: 1,
-                  flexDirection: "row-reverse",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 6,
-                  backgroundColor: C.card,
-                  borderRadius: Radius.sm,
-                  paddingVertical: 14,
-                  borderWidth: 1.5,
-                  borderColor: C.border,
-                }}
-              >
-                <Ionicons name="close-outline" size={18} color={C.mutedForeground} />
-                <Text style={{ color: C.foreground, fontWeight: "700", fontSize: 15 }}>إلغاء</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+            <PatientPickerModal visible={showPatientPicker} onClose={() => setShowPatientPicker(false)} onSelect={setPatient} />
+
+            {/* Payment review — a sheet over the cart, not a separate screen. */}
+            <CheckoutSheet visible={showCheckout} onClose={() => setShowCheckout(false)} />
+
+            {/* Manual discount */}
+            <Modal visible={showDiscount} transparent animationType="fade" onRequestClose={() => setShowDiscount(false)}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}>
+                        <View style={{ backgroundColor: C.card, borderRadius: Radius.card, padding: 20, gap: 14 }}>
+                            <Text style={{ color: C.foreground, fontSize: 18, fontWeight: '800', textAlign: 'right' }}>خصم يدوي</Text>
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', borderWidth: 1.5, borderColor: C.primary, borderRadius: Radius.control, overflow: 'hidden' }}>
+                                <TextInput
+                                    value={discountInput}
+                                    onChangeText={setDiscountInput}
+                                    keyboardType="numeric"
+                                    autoFocus
+                                    placeholder="0"
+                                    placeholderTextColor={C.mutedForeground}
+                                    style={{ flex: 1, color: C.foreground, fontSize: 22, fontWeight: '800', textAlign: 'right', paddingHorizontal: 14, paddingVertical: 12 }}
+                                />
+                                <View style={{ alignSelf: 'stretch', justifyContent: 'center', paddingHorizontal: 14, backgroundColor: C.input }}>
+                                    <Text style={{ color: C.mutedForeground, fontWeight: '700' }}>{CURRENCY}</Text>
+                                </View>
+                            </View>
+                            <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: 'right' }}>المجموع قبل الخصم: {formatNumber(subTotal)} {CURRENCY}</Text>
+                            <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                                <AppButton
+                                    label="تطبيق"
+                                    style={{ flex: 2 }}
+                                    onPress={() => {
+                                        const n = parseFloat(discountInput.replace(/[^0-9.]/g, '')) || 0;
+                                        setManualDiscount(Math.min(n, subTotal));
+                                        setShowDiscount(false);
+                                    }}
+                                />
+                                <AppButton
+                                    label="إزالة الخصم"
+                                    variant="dangerOutline"
+                                    style={{ flex: 1 }}
+                                    onPress={() => { setManualDiscount(0); setShowDiscount(false); }}
+                                />
+                            </View>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </View>
-      </Modal>
-
-      {/* ── Needs-patient (credit) modal ────────────────────────────────── */}
-      <Modal
-        visible={showNeedPatient}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowNeedPatient(false)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            padding: 28,
-          }}
-        >
-          <View style={{ backgroundColor: C.card, borderRadius: Radius.sm, padding: 22 }}>
-            {/* Header */}
-            <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 12, marginBottom: 10 }}>
-              <View
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: Radius.xs,
-                  backgroundColor: C.warningBg,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons name="person-add-outline" size={22} color={C.warning} />
-              </View>
-              <Text style={{ flex: 1, color: C.foreground, fontSize: 17, fontWeight: "800", textAlign: "right" }}>
-                يجب اختيار عميل
-              </Text>
-            </View>
-
-            <Text style={{ color: C.mutedForeground, fontSize: 13, textAlign: "right", lineHeight: 20, marginBottom: 18 }}>
-              البيع الآجل يتطلّب تحديد العميل المُسجَّل عليه الدين أولاً.
-            </Text>
-
-            {/* Buttons in one row */}
-            <View style={{ flexDirection: "row-reverse", gap: 10 }}>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowNeedPatient(false);
-                  setShowPatientModal(true);
-                }}
-                activeOpacity={0.85}
-                style={{
-                  flex: 2,
-                  flexDirection: "row-reverse",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 7,
-                  backgroundColor: C.primary,
-                  borderRadius: Radius.sm,
-                  paddingVertical: 14,
-                }}
-              >
-                <Ionicons name="person-add" size={18} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>اختيار عميل</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setShowNeedPatient(false)}
-                activeOpacity={0.8}
-                style={{
-                  flex: 1,
-                  flexDirection: "row-reverse",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 6,
-                  backgroundColor: C.card,
-                  borderRadius: Radius.sm,
-                  paddingVertical: 14,
-                  borderWidth: 1.5,
-                  borderColor: C.border,
-                }}
-              >
-                <Ionicons name="close-outline" size={18} color={C.mutedForeground} />
-                <Text style={{ color: C.foreground, fontWeight: "700", fontSize: 15 }}>إلغاء</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
+    );
 }

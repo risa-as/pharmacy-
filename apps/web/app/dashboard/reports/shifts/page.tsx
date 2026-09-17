@@ -82,11 +82,12 @@ function ShiftSummaryCards({ shifts }: { shifts: any[] }) {
     );
 }
 
-export default async function Page({
-    searchParams,
-}: {
-    searchParams?: { query?: string; page?: string; from?: string; to?: string; branch?: string };
-}) {
+export default async function Page(
+    props: {
+        searchParams?: Promise<{ query?: string; page?: string; from?: string; to?: string; branch?: string }>;
+    }
+) {
+    const searchParams = await props.searchParams;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere } = tenantCtx;

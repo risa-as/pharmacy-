@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
+// sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
+// sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
+import { toast } from 'sonner';
 
 export default function StocktakeForm({ stocktakeId, initialData, isCompleted }: { stocktakeId: string, initialData: any[], isCompleted: boolean }) {
     const router = useRouter();

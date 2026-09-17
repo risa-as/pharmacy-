@@ -17,7 +17,8 @@ import EmployeeSalesChart from "./chart";
 import RecentSalesTable from "@/app/ui/dashboard/reports/recent-sales-table";
 
 
-export default async function EmployeeDetailPage({ params }: { params: { id: string } }) {
+export default async function EmployeeDetailPage(props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
     const { tenantBranchWhere, tenantWhere } = tenantCtx;

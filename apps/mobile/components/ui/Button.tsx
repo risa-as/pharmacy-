@@ -11,15 +11,15 @@ interface ButtonProps extends TouchableOpacityProps {
 
 const variantClasses: Record<Variant, { container: string; text: string }> = {
     primary: {
-        container: 'bg-primary items-center justify-center rounded-xl px-5 py-3',
+        container: 'bg-primary items-center justify-center rounded-md px-5 py-3',
         text: 'text-white font-semibold text-base',
     },
     secondary: {
-        container: 'bg-card border border-border items-center justify-center rounded-xl px-5 py-3',
+        container: 'bg-card border border-border items-center justify-center rounded-md px-5 py-3',
         text: 'text-foreground font-semibold text-base',
     },
     ghost: {
-        container: 'items-center justify-center rounded-xl px-5 py-3',
+        container: 'items-center justify-center rounded-md px-5 py-3',
         text: 'text-primary font-semibold text-base',
     },
 };
