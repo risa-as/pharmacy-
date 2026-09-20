@@ -2251,11 +2251,31 @@ ipcMain.handle("get-today-sales", async (_, userId?: string) => {
   }
 });
 
+function resolveInventoryBranchId(user?: { branchId?: unknown }): string {
+  return String(user?.branchId || store.get("branchId") || "").trim();
+}
+
+async function getInventoryRowForBranch(
+  inventoryId: string,
+  branchId: string,
+) {
+  const id = String(inventoryId || "").trim();
+  const effectiveBranchId = String(branchId || "").trim();
+  if (!id || !effectiveBranchId) return null;
+
+  return await prisma.inventory.findFirst({
+    where: {
+      id,
+      branchId: effectiveBranchId,
+      drug: { isActive: true },
+    },
+    include: { drug: true },
+  });
+}
+
 ipcMain.handle("get-inventory-items", async (_, { searchTerm, user }) => {
   try {
-    const effectiveBranchId = String(
-      user?.branchId || store.get("branchId") || "",
-    ).trim();
+    const effectiveBranchId = resolveInventoryBranchId(user);
     if (!effectiveBranchId) {
       console.warn(
         "[Inventory] Branch ID is missing. Returning empty inventory list.",
@@ -2294,13 +2314,23 @@ ipcMain.handle("get-inventory-items", async (_, { searchTerm, user }) => {
       where: whereClause,
       include: {
         drug: true,
-        batches: true,
       },
     });
     return inventory;
   } catch (error) {
     console.error("Error fetching inventory items:", error);
     return [];
+  }
+});
+
+ipcMain.handle("get-inventory-item", async (_, { inventoryId, user }) => {
+  try {
+    const effectiveBranchId = resolveInventoryBranchId(user);
+    if (!effectiveBranchId) return null;
+    return await getInventoryRowForBranch(String(inventoryId || ""), effectiveBranchId);
+  } catch (error) {
+    console.error("Error fetching inventory item:", error);
+    return null;
   }
 });
 
@@ -2372,6 +2402,11 @@ ipcMain.handle("create-global-drug-local", async (_, data) => {
         quantity: parsedQuantity,
         expiryDate: data.expiryDate,
         supplierId: data.supplierId ?? null,
+        // تعبئة الدواء الجديد — تُكتب مؤكّدة عند وصولها إلى create-quick.
+        unitsPerPack:
+          Number.isInteger(Number(data.unitsPerPack)) && Number(data.unitsPerPack) > 0
+            ? Number(data.unitsPerPack)
+            : null,
       });
       void processPendingSyncActions();
     }
@@ -2412,15 +2447,18 @@ ipcMain.handle(
       const parsedMaxStock = parseInt(maxStock, 10) || 100;
       const shouldSkipCloudPush = Boolean(skipCloudPush);
 
+      const effectiveBranchId = String(branchId || store.get("branchId") || "");
+
       const inventory = await prisma.inventory.create({
         data: {
           drugId,
-          branchId,
+          branchId: effectiveBranchId || branchId,
           quantity: parsedQuantity,
           costPrice: parsedCost,
           minStock: parsedMinStock,
           maxStock: parsedMaxStock,
         },
+        include: { drug: true },
       });
 
       if (parsedQuantity > 0) {
@@ -2438,7 +2476,6 @@ ipcMain.handle(
         });
       }
 
-      const effectiveBranchId = String(branchId || store.get("branchId") || "");
       if (effectiveBranchId && !shouldSkipCloudPush) {
         enqueuePendingSyncAction("add-inventory", {
           id: inventory.id,
@@ -2499,6 +2536,7 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
         maxStock: isNaN(updMax) ? 100 : updMax,
         syncPending: true,
       },
+      include: { drug: true },
     });
     console.log(
       "!!! DB: Updated Inventory:",
@@ -2521,7 +2559,11 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
     });
     void processPendingSyncActions();
 
-    return { success: true, pendingSyncCount: getPendingSyncActions().length };
+    return {
+      success: true,
+      inventory: { ...updatedInventory, drug: updatedDrug },
+      pendingSyncCount: getPendingSyncActions().length,
+    };
   } catch (error) {
     console.error("!!! IPC Error updating inventory item:", error);
     return { success: false, error: String(error) };
@@ -2538,6 +2580,7 @@ ipcMain.handle("delete-inventory-item", async (_, id) => {
     if (!existingInventory) {
       return {
         success: true,
+        inventoryId: String(id),
         pendingSyncCount: getPendingSyncActions().length,
       };
     }
@@ -2556,7 +2599,11 @@ ipcMain.handle("delete-inventory-item", async (_, id) => {
     });
     void processPendingSyncActions();
 
-    return { success: true, pendingSyncCount: getPendingSyncActions().length };
+    return {
+      success: true,
+      inventoryId: existingInventory.id,
+      pendingSyncCount: getPendingSyncActions().length,
+    };
   } catch (error) {
     console.error("Error deleting inventory item:", error);
     return { success: false, error: "Failed to delete item" };
@@ -2567,13 +2614,13 @@ ipcMain.handle(
   "add-inventory-batch",
   async (
     _event,
-    { inventoryId, quantity, costPrice, expiryDate, supplierId },
+    { inventoryId, quantity, costPrice, expiryDate, supplierId, unitsPerPack },
   ) => {
     try {
       const qty = parseInt(quantity, 10);
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       const batchNumber = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-      await prisma.$transaction([
+      const [, inventoryRow] = await prisma.$transaction([
         prisma.batch.create({
           data: {
             inventoryId,
@@ -2587,30 +2634,35 @@ ipcMain.handle(
         prisma.inventory.update({
           where: { id: inventoryId },
           data: { quantity: { increment: qty } },
+          include: { drug: true },
         }),
       ]);
 
       // Push batch to cloud
-      const inventory = await prisma.inventory.findUnique({
-        where: { id: inventoryId },
-        select: { id: true, drugId: true, branchId: true },
-      });
-      if (inventory) {
+      if (inventoryRow) {
         enqueuePendingSyncAction("add-batch", {
-          inventoryId: inventory.id,
+          inventoryId: inventoryRow.id,
           batchNumber,
           quantity: qty,
           costPrice: parseFloat(costPrice) || 0,
           expiryDate: new Date(expiryDate).toISOString(),
-          drugId: inventory.drugId,
-          branchId: inventory.branchId || String(store.get("branchId") || ""),
+          drugId: inventoryRow.drugId,
+          branchId: inventoryRow.branchId || String(store.get("branchId") || ""),
           supplierId: supplierId || null,
+          // ميزة وحدة التسعير: عدد الأشرطة يُرفع مع الدفعة فيُثبّت
+          // على الدواء في السحابة. لا يُخزّن محلياً لأن GlobalDrug المحلي
+          // بلا عمود له — ولاية الرقم للسحابة لأنه مشترك بين كل الصيدليات.
+          unitsPerPack:
+            Number.isInteger(Number(unitsPerPack)) && Number(unitsPerPack) > 0
+              ? Number(unitsPerPack)
+              : null,
         });
         void processPendingSyncActions();
       }
 
       return {
         success: true,
+        inventory: inventoryRow,
         pendingSyncCount: getPendingSyncActions().length,
       };
     } catch (error) {

@@ -8,6 +8,12 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
 
+function scopedWhere(tenantBranchWhere: Record<string, any>, branchId?: string) {
+    return branchId
+        ? { AND: [tenantBranchWhere, { branchId }] }
+        : tenantBranchWhere;
+}
+
 export default async function EmployeesReportPage(
     props: {
         searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -18,29 +24,49 @@ export default async function EmployeesReportPage(
 
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
-    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
 
-    // 1. Fetch Users with their Sales (filtered by branch)
-    const userWhereClause = { ...tenantBranchWhere, ...(branchId ? { branchId } : {}) };
-    const salesWhereClause = { ...tenantBranchWhere, ...(branchId ? { branchId } : {}) };
+    const userWhereClause = scopedWhere(tenantBranchWhere, branchId);
+    const salesWhereClause = scopedWhere(tenantBranchWhere, branchId);
 
-    const users = await prisma.user.findMany({
-        where: userWhereClause,
-        include: {
-            sales: { where: salesWhereClause },
-        },
-    });
+    const [users, salesByUser] = await Promise.all([
+        prisma.user.findMany({
+            where: userWhereClause,
+            select: {
+                id: true,
+                name: true,
+                role: true,
+            },
+        }),
+        prisma.sale.groupBy({
+            by: ["userId"],
+            where: { AND: [salesWhereClause, { userId: { not: null } }] },
+            _sum: { total: true },
+            _count: { id: true },
+        }),
+    ]);
 
-    // 2. Calculate total revenue across all employees
-    const totalRevenueAll = users.reduce(
-        (sum: any, u: any) => sum + u.sales.reduce((s: any, sale: any) => s + sale.total, 0), 0
+    const salesStatsByUser = new Map(
+        salesByUser.map((row) => [
+            row.userId,
+            {
+                totalSales: row._sum.total ?? 0,
+                salesCount: row._count.id,
+            },
+        ]),
     );
 
-    // 3. Calculate Stats per user
+    const visibleUserIds = new Set(users.map((user) => user.id));
+    const totalRevenueAll = salesByUser.reduce(
+        (sum, row) => row.userId && visibleUserIds.has(row.userId) ? sum + (row._sum.total ?? 0) : sum,
+        0,
+    );
+
     const stats = users
-        .map((user: any) => {
-            const totalSales = user.sales.reduce((sum: any, s: any) => sum + s.total, 0);
-            const salesCount = user.sales.length;
+        .map((user) => {
+            const userSales = salesStatsByUser.get(user.id);
+            const totalSales = userSales?.totalSales ?? 0;
+            const salesCount = userSales?.salesCount ?? 0;
             const averageSale = salesCount > 0 ? totalSales / salesCount : 0;
             const revenueShare = totalRevenueAll > 0 ? (totalSales / totalRevenueAll) * 100 : 0;
 
@@ -56,7 +82,6 @@ export default async function EmployeesReportPage(
         })
         .sort((a: any, b: any) => b.totalSales - a.totalSales);
 
-    // 4. Team averages
     const teamAvgSale = stats.length > 0
         ? stats.reduce((s: any, st: any) => s + st.averageSale, 0) / stats.length
         : 0;

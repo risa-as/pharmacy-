@@ -11,6 +11,22 @@ interface SyncCallbacks {
 // Global callbacks — set by SyncContext bridge in app root
 let globalCallbacks: SyncCallbacks = {};
 
+function notifySyncStart() {
+    try {
+        globalCallbacks.onStart?.('sync');
+    } catch (error) {
+        console.error('Error notifying sync start:', error);
+    }
+}
+
+function notifySyncDone() {
+    try {
+        globalCallbacks.onDone?.('sync');
+    } catch (error) {
+        console.error('Error notifying sync completion:', error);
+    }
+}
+
 export const syncService = {
     /** Register SyncContext callbacks so syncData() can report status reactively. */
     setCallbacks(cbs: SyncCallbacks) {
@@ -32,35 +48,62 @@ export const syncService = {
             return;
         }
 
+        this.isSyncing = true;
+
         // Don't sync if user is not authenticated or token is invalid
-        const currentUser = await authService.getCurrentUser();
-        const token = await authService.getToken();
+        let currentUser: Awaited<ReturnType<typeof authService.getCurrentUser>>;
+        let token: string | null;
+        try {
+            currentUser = await authService.getCurrentUser();
+            token = await authService.getToken();
+        } catch (error) {
+            console.error('Error preparing sync:', error);
+            this.isSyncing = false;
+            return;
+        }
         // JWT tokens have 3 base64url parts separated by dots; old tokens don't
         if (!currentUser || !token || token.split('.').length !== 3) {
             console.log('Not authenticated or invalid token: Skipping sync');
-            if (currentUser && token && token.split('.').length !== 3) {
-                // Clear stale non-JWT token so user is redirected to login cleanly
-                await authService.logout();
+            try {
+                if (currentUser && token && token.split('.').length !== 3) {
+                    // Clear stale non-JWT token so user is redirected to login cleanly
+                    await authService.logout();
+                }
+            } catch (error) {
+                console.error('Error clearing invalid sync session:', error);
+            } finally {
+                this.isSyncing = false;
             }
             return;
         }
 
-        if (!(await this.isOnline())) {
+        let online = false;
+        try {
+            online = await this.isOnline();
+        } catch (error) {
+            console.error('Error checking network state:', error);
+        }
+
+        if (!online) {
             console.log('Offline: Skipping sync');
+            this.isSyncing = false;
             return;
         }
 
-        this.isSyncing = true;
-        globalCallbacks.onStart?.('sync');
+        notifySyncStart();
         console.log('Starting sync...');
 
         try {
+            const isCurrentSession = async () => (await authService.getToken()) === token;
+
             // 1. Upload Pending Sales
             try {
+                if (!(await isCurrentSession())) throw new Error('Session changed before sale sync');
                 const pendingSales = await dbService.getPendingSales();
                 if (pendingSales.length > 0) {
                     console.log(`Found ${pendingSales.length} pending sales to sync`);
                     for (const sale of pendingSales) {
+                        if (!(await isCurrentSession())) throw new Error('Session changed during sale sync');
                         try {
                             // Replay the full payload with the key minted at checkout,
                             // so a sale whose first request did reach the server is
@@ -69,6 +112,7 @@ export const syncService = {
                                 sale.payload,
                                 sale.idempotencyKey ?? `offline-${sale.id}-${sale.createdAt}`,
                             );
+                            if (!(await isCurrentSession())) throw new Error('Session changed before deleting synced sale');
                             await dbService.deleteOfflineSale(sale.id);
                             console.log(`Synced sale ${sale.id}`);
                         } catch (error) {
@@ -84,11 +128,12 @@ export const syncService = {
             // 2. Download Products (Inventory)
             try {
                 // Fetch products for current user's branch if applicable
-                const user = await authService.getCurrentUser();
-                const branchId = user?.branchId || undefined;
+                if (!(await isCurrentSession())) throw new Error('Session changed before inventory sync');
+                const branchId = currentUser.branchId || undefined;
                 const products = await apiService.getInventory(branchId);
 
-                if (products && products.length > 0) {
+                if (Array.isArray(products)) {
+                    if (!(await isCurrentSession())) throw new Error('Session changed during inventory sync');
                     await dbService.saveProducts(products);
                     console.log('Inventory synced to local DB');
                 }
@@ -98,10 +143,11 @@ export const syncService = {
 
             // 3. Download Debts
             try {
-                const user = await authService.getCurrentUser();
-                const branchId = user?.branchId || undefined;
+                if (!(await isCurrentSession())) throw new Error('Session changed before debt sync');
+                const branchId = currentUser.branchId || undefined;
                 const debts = await apiService.getDebts(branchId);
                 if (debts && debts.length > 0) {
+                    if (!(await isCurrentSession())) throw new Error('Session changed during debt sync');
                     await dbService.saveDebts(debts);
                     console.log(`Debts synced: ${debts.length} records`);
                 }
@@ -111,10 +157,11 @@ export const syncService = {
 
             // 4. Download Patients
             try {
-                const user = await authService.getCurrentUser();
-                const branchId = user?.branchId || undefined;
+                if (!(await isCurrentSession())) throw new Error('Session changed before patient sync');
+                const branchId = currentUser.branchId || undefined;
                 const patients = await apiService.getPatients(branchId);
                 if (patients && patients.length > 0) {
+                    if (!(await isCurrentSession())) throw new Error('Session changed during patient sync');
                     await dbService.savePatients(patients);
                     console.log(`Patients synced: ${patients.length} records`);
                 }
@@ -124,8 +171,10 @@ export const syncService = {
 
             // 5. Download Loyalty Settings
             try {
+                if (!(await isCurrentSession())) throw new Error('Session changed before loyalty sync');
                 const loyaltySettings = await apiService.getLoyaltySettings();
                 if (loyaltySettings) {
+                    if (!(await isCurrentSession())) throw new Error('Session changed during loyalty sync');
                     await dbService.saveLoyalty(loyaltySettings);
                     console.log('Loyalty settings synced');
                 }
@@ -135,12 +184,14 @@ export const syncService = {
 
             // 6. Retry pending loyalty earns (queued when offline/failed during sale)
             try {
+                if (!(await isCurrentSession())) throw new Error('Session changed before loyalty retry sync');
                 const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
                 const raw = await AsyncStorage.getItem('pendingLoyaltyEarns');
                 if (raw) {
                     const queue: { patientId: string; amount: number; ts: number }[] = JSON.parse(raw);
                     const failed: typeof queue = [];
                     for (const earn of queue) {
+                        if (!(await isCurrentSession())) throw new Error('Session changed during loyalty retry sync');
                         try {
                             await apiService.earnLoyaltyPoints(earn.patientId, null, earn.amount);
                         } catch {
@@ -156,10 +207,10 @@ export const syncService = {
             }
 
             console.log('Sync completed');
-            globalCallbacks.onDone?.('sync');
+            notifySyncDone();
         } catch (error) {
             console.error('Sync failed:', error);
-            globalCallbacks.onDone?.('sync'); // mark done even on error
+            notifySyncDone(); // mark done even on error
         } finally {
             this.isSyncing = false;
         }

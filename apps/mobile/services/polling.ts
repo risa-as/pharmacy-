@@ -4,10 +4,41 @@ interface PollingJob {
     fetchFn: () => Promise<void>;
     intervalMs: number;
     timer: ReturnType<typeof setInterval> | null;
+    running: boolean;
+    pending: boolean;
 }
 
 const jobs: Record<string, PollingJob> = {};
 let currentAppState: AppStateStatus = 'active';
+
+function runJob(key: string, job: PollingJob, queueIfRunning = false) {
+    if (job.running) {
+        if (queueIfRunning && currentAppState === 'active') {
+            job.pending = true;
+        }
+        return;
+    }
+
+    job.running = true;
+    void Promise.resolve()
+        .then(job.fetchFn)
+        .catch(error => {
+            console.error(`Polling job "${key}" failed:`, error);
+        })
+        .finally(() => {
+            job.running = false;
+            if (jobs[key] !== job) {
+                job.pending = false;
+                return;
+            }
+            if (job.pending && currentAppState === 'active') {
+                job.pending = false;
+                runJob(key, job, true);
+            } else {
+                job.pending = false;
+            }
+        });
+}
 
 // Pause all timers when app goes to background; restart when it returns
 AppState.addEventListener('change', (nextState: AppStateStatus) => {
@@ -25,9 +56,11 @@ AppState.addEventListener('change', (nextState: AppStateStatus) => {
         });
     } else if (!wasActive && isNowActive) {
         // Returning to foreground — restart timers and fetch immediately
-        Object.values(jobs).forEach(job => {
-            void job.fetchFn(); // immediate refresh
-            job.timer = setInterval(job.fetchFn, job.intervalMs);
+        Object.entries(jobs).forEach(([key, job]) => {
+            runJob(key, job, true); // immediate refresh
+            if (!job.timer) {
+                job.timer = setInterval(() => runJob(key, job), job.intervalMs);
+            }
         });
     }
 });
@@ -40,12 +73,12 @@ export const pollingService = {
     register(key: string, fetchFn: () => Promise<void>, intervalMs: number) {
         this.unregister(key); // clear any existing job
 
-        const job: PollingJob = { fetchFn, intervalMs, timer: null };
+        const job: PollingJob = { fetchFn, intervalMs, timer: null, running: false, pending: false };
         jobs[key] = job;
 
         if (currentAppState === 'active') {
-            void fetchFn(); // run immediately on registration
-            job.timer = setInterval(fetchFn, intervalMs);
+            runJob(key, job, true); // run immediately on registration
+            job.timer = setInterval(() => runJob(key, job), intervalMs);
         }
     },
 
@@ -59,7 +92,7 @@ export const pollingService = {
     /** Immediately trigger a fetch for the given key without waiting for the next interval. */
     trigger(key: string) {
         const job = jobs[key];
-        if (job) void job.fetchFn();
+        if (job) runJob(key, job, true);
     },
 
     /** Stop all registered polling jobs. */

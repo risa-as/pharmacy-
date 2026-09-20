@@ -50,23 +50,26 @@ export async function GET(req: Request) {
             if (searchDrugIds.length === 0) return NextResponse.json([]);
         }
 
-        const where = {
-            ...tenantBranchWhere,
-            ...(filterDrugId    ? { drugId: filterDrugId }   : {}),
-            ...(filterBranchId  ? { branchId: filterBranchId } : {}),
-            ...(searchDrugIds   ? { drugId: { in: searchDrugIds } } : {}),
-        };
+        const where = { AND: [
+            tenantBranchWhere,
+            filterDrugId ? { drugId: filterDrugId } : {},
+            filterBranchId ? { branchId: filterBranchId } : {},
+            searchDrugIds ? { drugId: { in: searchDrugIds } } : {},
+        ] };
 
         const inventory = await prisma.inventory.findMany({
             where,
-            include: { batches: true },
+            include: { batches: { select: { quantity: true, expiryDate: true } } },
             ...(isSearch ? { take: 10 } : {}),
         });
 
         // Fetch only drugs referenced in this inventory result (avoids full-table scan)
         const drugIds = Array.from(new Set(inventory.map((item: any) => item.drugId)));
         const drugs = drugIds.length > 0
-            ? await prisma.globalDrug.findMany({ where: { id: { in: drugIds } } })
+            ? await prisma.globalDrug.findMany({
+                where: { id: { in: drugIds } },
+                select: { id: true, barcode: true, tradeName: true, scientificName: true, isQuickSale: true },
+            })
             : [];
         const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
 

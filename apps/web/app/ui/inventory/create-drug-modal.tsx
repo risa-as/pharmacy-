@@ -29,8 +29,14 @@ export default function CreateDrugModal({
   const [mounted, setMounted] = useState(false);
   const [packetPrice, setPacketPrice] = useState<number>(0);
   const [stripSellPrice, setStripSellPrice] = useState<number>(0);
-  const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
-  const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+  /**
+   * دواء جديد كلياً، فلا تعبئة مسجّلة له ولا رقم مقترَح. يبدأ فارغاً لا
+   * بـ 1 لأن هذه هي اللحظة المثالية لالتقاط الرقم: الصيدلاني ممسك بالعلبة
+   * الآن. ما يكتبه هنا يُحفظ مؤكّداً فلا يُسأل عنه أحد بعده.
+   */
+  const [stripsPerPacket, setStripsPerPacket] = useState<number | null>(null);
+  const computedCost =
+    stripsPerPacket && stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
   const { confirm, dialog: confirmDialog } = useConfirm();
   const router = useRouter();
 
@@ -54,6 +60,11 @@ export default function CreateDrugModal({
     const qty = parseInt(formData.get("quantity") as string, 10) || 0;
     if (qty <= 0) {
       toast.error("لا يمكن الحفظ: الكمية يجب أن تكون أكبر من صفر");
+      return;
+    }
+    // عدد الأشرطة شرط للحفظ: هو المقسوم عليه، ولا يُفترض 1 صامتاً.
+    if (!stripsPerPacket || stripsPerPacket <= 0) {
+      toast.error("اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).");
       return;
     }
     // سعر الباكيت أقل من 125 دينار = تحذير وتأكيد قبل الحفظ
@@ -129,6 +140,8 @@ export default function CreateDrugModal({
           branchId: formData.get("branchId"),
           price: stripSellPrice,
           cost: computedCost,
+          // يُحفظ على الدواء الجديد مؤكّداً — العلبة في يد الصيدلاني الآن.
+          unitsPerPack: stripsPerPacket,
           minStock: parseInt(formData.get("minStock") as string, 10),
           maxStock: parseInt(formData.get("maxStock") as string, 10),
           quantity: parseInt(formData.get("quantity") as string, 10),
@@ -273,15 +286,20 @@ export default function CreateDrugModal({
                   type="number"
                   min="1"
                   step="1"
-                  value={stripsPerPacket || ""}
-                  onChange={(e) =>
-                    setStripsPerPacket(
-                      Math.max(1, parseInt(e.target.value) || 1),
-                    )
-                  }
-                  placeholder="1"
-                  className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  value={stripsPerPacket ?? ""}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setStripsPerPacket(Number.isInteger(v) && v > 0 ? v : null);
+                  }}
+                  placeholder="اعدُدها من العلبة"
+                  className="w-full rounded-lg border border-warning/60 bg-background px-4 py-2 focus:border-warning focus:ring-2 focus:ring-ring/20"
                 />
+                <p className="mt-1 text-[11px] font-bold text-warning">
+                  ⚠ دواء جديد — اعدُد أشرطة العلبة واكتب العدد.{" "}
+                  <span className="font-normal text-muted-foreground">
+                    يُحفظ مرة واحدة ولن يُطلب منك مجدداً.
+                  </span>
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <div>
@@ -339,7 +357,7 @@ export default function CreateDrugModal({
                   </span>
                 </div>
               </div>
-              {stripsPerPacket > 20 && (
+              {stripsPerPacket !== null && stripsPerPacket > 20 && (
                 <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
                   <span>⚠</span>
                   هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ

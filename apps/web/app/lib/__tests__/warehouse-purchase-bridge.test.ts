@@ -73,4 +73,52 @@ describe("buildDraftPurchasePlan — بنود فاتورة الشراء المس
     const p = buildDraftPurchasePlan(items);
     expect(p.items).toHaveLength(2);
   });
+
+  // ميزة نقل الدفعة/الانتهاء عند التسعير: batchNumber/expiryDate يمرّان بلا
+  // تعديل من WarehouseOrderItem إلى PurchaseItem — انظر تعليق
+  // DraftPurchaseItem.batchNumber أعلى الملف المصدر.
+  describe("نقل batchNumber/expiryDate إلى بنود فاتورة الشراء", () => {
+    it("سطر بلا batchNumber/expiryDate (كالمعتاد اليوم) → لا يظهر أي منهما على السطر (سلوك بلا تغيير)", () => {
+      const items: DraftPurchaseItem[] = [{ drugId: "a", quantity: 10, effectivePrice: 1000 }];
+      const p = buildDraftPurchasePlan(items);
+      expect(p.ok).toBe(true);
+      // toEqual يتجاهل خصائص undefined — هذا يثبت أن غياب الحقلين لا يُدخل
+      // قيمة مُختلَقة (لا null ولا نص فارغ) في مكانهما.
+      expect(p.items).toEqual([{ drugId: "a", quantity: 10, cost: 1000 }]);
+      expect(p.items[0].batchNumber).toBeUndefined();
+      expect(p.items[0].expiryDate).toBeUndefined();
+    });
+
+    it("سطر مدفوع بـ batchNumber/expiryDate مُعلَنين → ينتقلان حرفياً إلى PurchaseItem", () => {
+      const expiry = new Date("2027-01-01T00:00:00.000Z");
+      const items: DraftPurchaseItem[] = [
+        { drugId: "a", quantity: 10, effectivePrice: 1000, batchNumber: "LOT-42", expiryDate: expiry },
+      ];
+      const p = buildDraftPurchasePlan(items);
+      expect(p.ok).toBe(true);
+      expect(p.items).toEqual([{ drugId: "a", quantity: 10, cost: 1000, batchNumber: "LOT-42", expiryDate: expiry }]);
+    });
+
+    it("bonusQuantity > 0 مع batchNumber/expiryDate → سطر البونص يحمل نفس القيم بالضبط (نفس الدفعة الفعلية)", () => {
+      const expiry = new Date("2027-06-15T00:00:00.000Z");
+      const items: DraftPurchaseItem[] = [
+        { drugId: "a", quantity: 10, effectivePrice: 1000, bonusQuantity: 2, batchNumber: "LOT-7", expiryDate: expiry },
+      ];
+      const p = buildDraftPurchasePlan(items);
+      expect(p.ok).toBe(true);
+      expect(p.items).toEqual([
+        { drugId: "a", quantity: 10, cost: 1000, batchNumber: "LOT-7", expiryDate: expiry },
+        { drugId: "a", quantity: 2, cost: 0, batchNumber: "LOT-7", expiryDate: expiry },
+      ]);
+    });
+
+    it("batchNumber مُعلَن لكن expiryDate غائب (والعكس) → كل حقل يمرّ باستقلالية عن الآخر", () => {
+      const items: DraftPurchaseItem[] = [
+        { drugId: "a", quantity: 5, effectivePrice: 200, batchNumber: "LOT-ONLY" },
+      ];
+      const p = buildDraftPurchasePlan(items);
+      expect(p.items[0].batchNumber).toBe("LOT-ONLY");
+      expect(p.items[0].expiryDate).toBeUndefined();
+    });
+  });
 });

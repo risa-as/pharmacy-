@@ -51,7 +51,14 @@ export async function POST(req: Request) {
             }
         }
 
-        const { inventoryId, batchNumber, quantity, expiryDate, branchId, drugId, costPrice, supplierId } = body;
+        const { inventoryId, batchNumber, quantity, expiryDate, branchId, drugId, costPrice, supplierId, unitsPerPack } = body;
+
+        // ميزة وحدة التسعير: عدد الأشرطة في الباكيت، يصل من سطح المكتب
+        // والهاتف. قيمة غير صالحة تُهمَل: الرقم مشترك بين كل الصيدليات،
+        // فرقم فاسد يرثه الجميع بينما تركه فارغاً يعني أن يُسأل عنه لاحقاً.
+        const parsedUnitsPerPack = Number.parseInt(String(unitsPerPack ?? ''), 10);
+        const validUnitsPerPack =
+            Number.isInteger(parsedUnitsPerPack) && parsedUnitsPerPack > 0 ? parsedUnitsPerPack : null;
 
         if (!inventoryId && !drugId) {
             return NextResponse.json(
@@ -141,6 +148,16 @@ export async function POST(req: Request) {
                     supplierId: supplierId ?? null,
                 }
             });
+
+            // داخل المعاملة مع الدفعة: تثبيت تعبئة مشتركة بناءً على دفعة فشلت
+            // أسوأ من ألّا تُثبّت. وinventory.drugId مأخوذ من صف مخزون تحقّقت
+            // منه حراسة النطاق أعلاه، لا من جسم الطلب مباشرة.
+            if (validUnitsPerPack !== null) {
+                await tx.globalDrug.update({
+                    where: { id: inventory.drugId },
+                    data: { unitsPerPack: validUnitsPerPack, unitsPerPackConfirmedAt: new Date() },
+                });
+            }
 
             if (idempotencyKey) {
                 await tx.syncActionLog.create({

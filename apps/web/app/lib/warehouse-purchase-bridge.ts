@@ -47,13 +47,34 @@ export interface DraftPurchaseItem {
    * تُضاف لـ total: الصيدلية لا تدفع ثمنها إطلاقاً.
    */
   bonusQuantity?: number;
+  /**
+   * ميزة نقل الدفعة/الانتهاء عند التسعير: ما أعلنه المذخر لهذا الصنف وقت
+   * التسعير (WarehouseOrderItem.batchNumber/expiryDate) — وعد لا إثبات، انظر
+   * تعليق العمودين في schema.prisma. يمرّ بلا تعديل إلى PurchaseItem — **لكلا
+   * سطري هذا الصنف** (المدفوع وسطر البونص إن وُجد) لأن وحدات البونص من نفس
+   * الصنف تخرج فعلياً من نفس الدفعة الفعلية التي خرجت منها الوحدات المدفوعة،
+   * فلا معنى لتمييزهما هنا — انظر بناء planItems أدناه.
+   */
+  batchNumber?: string | null;
+  expiryDate?: Date | null;
 }
 
 export interface DraftPurchasePlan {
   ok: boolean;
   errors: string[];
   total: number;
-  items: Array<{ drugId: string; quantity: number; cost: number }>;
+  items: Array<{
+    drugId: string;
+    quantity: number;
+    cost: number;
+    /**
+     * undefined (لا null) حين لا قيمة — لا "قيمة موجودة لكنها فارغة" — كي
+     * تبقى الاختبارات القديمة (قبل هذه الميزة) التي تقارن plan.items بكائنات
+     * بلا هذين الحقلين صحيحة بلا تعديل (toEqual يتجاهل خصائص undefined).
+     */
+    batchNumber?: string | null;
+    expiryDate?: Date | null;
+  }>;
 }
 
 /**
@@ -67,7 +88,7 @@ export function buildDraftPurchasePlan(
   items: DraftPurchaseItem[]
 ): DraftPurchasePlan {
   const errors: string[] = [];
-  const planItems: Array<{ drugId: string; quantity: number; cost: number }> = [];
+  const planItems: DraftPurchasePlan["items"] = [];
   let total = 0;
 
   for (const it of items) {
@@ -79,7 +100,17 @@ export function buildDraftPurchasePlan(
       errors.push(`سعر غير صالح للصنف ${it.drugId}.`);
       continue;
     }
-    planItems.push({ drugId: it.drugId, quantity: it.quantity, cost: it.effectivePrice });
+    // batchNumber/expiryDate: ?? undefined لا ?? null عمداً — يبقي المفتاح
+    // غائباً فعلياً حين لا قيمة (undefined) بدل "موجود لكن فارغ" (null)، فلا
+    // تنكسر مقارنات toEqual القديمة التي لا تعرف عن هذين الحقلين إطلاقاً
+    // (انظر تعليق DraftPurchasePlan.items أعلاه).
+    planItems.push({
+      drugId: it.drugId,
+      quantity: it.quantity,
+      cost: it.effectivePrice,
+      batchNumber: it.batchNumber ?? undefined,
+      expiryDate: it.expiryDate ?? undefined,
+    });
     total += it.quantity * it.effectivePrice;
 
     // ميزة البونص: سطر منفصل بنفس drugId، كمية = bonusQuantity، كلفة = 0
@@ -92,7 +123,16 @@ export function buildDraftPurchasePlan(
     // صفر حقيقية على الرفّ ودفعة المدفوع بكلفتها الكاملة.
     const bonusQuantity = it.bonusQuantity;
     if (typeof bonusQuantity === "number" && Number.isInteger(bonusQuantity) && bonusQuantity > 0) {
-      planItems.push({ drugId: it.drugId, quantity: bonusQuantity, cost: 0 });
+      // نفس batchNumber/expiryDate بالضبط: وحدات البونص من نفس الصنف تخرج
+      // فعلياً من نفس الدفعة الفعلية التي خرجت منها الوحدات المدفوعة — انظر
+      // تعليق DraftPurchaseItem.batchNumber أعلى الملف.
+      planItems.push({
+        drugId: it.drugId,
+        quantity: bonusQuantity,
+        cost: 0,
+        batchNumber: it.batchNumber ?? undefined,
+        expiryDate: it.expiryDate ?? undefined,
+      });
     }
   }
 

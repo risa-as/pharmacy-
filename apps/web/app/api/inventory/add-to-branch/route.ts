@@ -55,7 +55,7 @@ export async function POST(req: Request) {
             }
         }
 
-        const { id, drugId, branchId, price, cost, minStock, maxStock, quantity, expiryDate, supplierId } = body;
+        const { id, drugId, branchId, price, cost, minStock, maxStock, quantity, expiryDate, supplierId, unitsPerPack } = body;
 
         if (!drugId || !branchId) {
             return NextResponse.json(
@@ -73,6 +73,12 @@ export async function POST(req: Request) {
         const parsedCost = Number.parseFloat(String(cost ?? 0)) || 0;
         const parsedMin = Number.parseInt(String(minStock ?? 0), 10) || 0;
         const parsedMax = Number.parseInt(String(maxStock ?? 100), 10) || 100;
+        // ميزة وحدة التسعير: عدد الأشرطة يُثبّت من هذه اللحظة — الصيدلاني
+        // ممسك بالعلبة. قيمة غير صالحة تُهمَل بدل أن تُفسد تعبئة مشتركة
+        // بين كل الصيدليات — المسار يخدم مزامنة سطح المكتب أيضاً.
+        const parsedUnitsPerPack = Number.parseInt(String(unitsPerPack ?? ''), 10);
+        const validUnitsPerPack =
+            Number.isInteger(parsedUnitsPerPack) && parsedUnitsPerPack > 0 ? parsedUnitsPerPack : null;
 
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             let inventory;
@@ -101,6 +107,15 @@ export async function POST(req: Request) {
                         minStock: parsedMin,
                         maxStock: parsedMax,
                     }
+                });
+            }
+
+            // يُكتب داخل المعاملة مع المخزون والدفعة: تثبيت تعبئة مشتركة
+            // بناءً على إضافة فشلت أسوأ من ألّا تُثبّت أصلاً.
+            if (validUnitsPerPack !== null) {
+                await tx.globalDrug.update({
+                    where: { id: drugId },
+                    data: { unitsPerPack: validUnitsPerPack, unitsPerPackConfirmedAt: new Date() },
                 });
             }
 

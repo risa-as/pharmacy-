@@ -65,6 +65,11 @@ model GlobalDrug {
   isActive       Boolean     @default(true)
   isQuickSale    Boolean     @default(false)
   organizationId String?
+  // ميزة وحدة التسعير: مرآة للحقلين في السحابة. التعبئة خاصية بالدواء ومشتركة
+  // بين كل الصيدليات، وتُسحب مع بيانات الأدوية كي يعرف الجهاز — وهو يعمل
+  // أوفلاين — أعُدَّت أشرطة هذا الدواء أم لا، فيعرض الإشارة الصحيحة بلا تخمين.
+  unitsPerPack            Int?
+  unitsPerPackConfirmedAt DateTime?
   inventory      Inventory[]
   saleItems      SaleItem[]
   saleReturnItems SaleReturnItem[]
@@ -83,6 +88,9 @@ model Inventory {
   maxStock    Int     @default(100)
   syncPending Boolean @default(false) // true when edited locally but not yet pushed to cloud
   batches     Batch[]
+
+  @@index([branchId, drugId], name: "idx_inventory_branch_drug")
+  @@index([drugId], name: "idx_inventory_drug")
 }
 
 model Batch {
@@ -96,6 +104,8 @@ model Batch {
   supplierId  String?
   supplier    Supplier? @relation(fields: [supplierId], references: [id])
   stocktakeItems StocktakeItem[]
+
+  @@index([inventoryId, expiryDate], name: "idx_batch_inventory_expiry")
 }
 
 model Supplier {

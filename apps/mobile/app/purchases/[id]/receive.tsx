@@ -75,12 +75,16 @@ export default function ReceiveItemsScreen() {
         setFailed(false);
         try {
             const data: any = await apiService.getPurchaseDetails(id as string);
-            const baseTs = Date.now().toString(36).toUpperCase();
-            setItems(data.items.map((item: any, idx: number) => ({
+            setItems(data.items.map((item: any) => ({
                 ...item,
                 itemId: item.id,
                 receivedQuantity: String(item.quantity),
-                batchNumber: `B${baseTs}${String(idx + 1).padStart(2, '0')}`,
+                // Seeded from the purchase line only — never generated. The old
+                // `B<timestamp><nn>` default silently satisfied the itemErrors
+                // batch check above, so that validator could never fire and an
+                // invented number reached Batch.batchNumber. Recalls and returns
+                // need the supplier's real number, not ours.
+                batchNumber: item.batchNumber ?? '',
                 expiryMonth: '',
                 expiryYear: '',
                 lastCost: typeof item.lastCost === 'number' && item.lastCost > 0 ? item.lastCost : null,

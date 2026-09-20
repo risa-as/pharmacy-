@@ -103,10 +103,19 @@ export function classifyNeedLines(lines: NeedLine[]): { sendable: SendableLine[]
             continue;
         }
         const opt = selectedOption(line);
-        if (!line.globalDrugId) {
+        // غياب المقابل العالمي لم يعد مانعاً: الخادم يُنشئ الصفّ المشترك عند
+        // أول إرسال من صفّ المؤسسة نفسه (انظر POST /api/warehouses/orders).
+        // اشتراط ترقية مسبقة كان ترتيباً إدارياً يوقف الصيدلاني عن طلب دواء
+        // يحتاجه اليوم. ويبقى مانعان حقيقيان:
+        //   • بلا باركود — لا مفتاح تعريف يفهمه الطرفان أصلاً.
+        //   • مطابقة غامضة — صفّان عالميان بنفس الباركود؛ الإرسال قد يصيب
+        //     الصنف الخطأ، والتكرار نفسه خطأ بيانات يحتاج دمجاً.
+        const blockingIdentity =
+            !line.barcode?.trim() || line.orderability === 'AMBIGUOUS_BARCODE';
+        if (blockingIdentity) {
             blocked.push({
                 line,
-                reason: line.orderabilityReason ?? 'لا مقابل عالمي لهذا الصنف.',
+                reason: line.orderabilityReason ?? 'لا يمكن تعريف هذا الصنف للمذخر.',
                 manualSupplierName: opt && !opt.orderable ? opt.supplierName : null,
             });
             continue;

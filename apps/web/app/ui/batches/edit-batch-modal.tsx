@@ -22,11 +22,13 @@ interface Supplier {
 interface EditBatchModalProps {
     batch: BatchData | null;
     suppliers: Supplier[];
+    /** لم يصل جواب الموردين بعد — قائمة فارغة لا تعني أنه لا موردين. */
+    suppliersLoading?: boolean;
     onClose: () => void;
     onSaved: () => void;
 }
 
-export default function EditBatchModal({ batch, suppliers, onClose, onSaved }: EditBatchModalProps) {
+export default function EditBatchModal({ batch, suppliers, suppliersLoading, onClose, onSaved }: EditBatchModalProps) {
     const [batchNumber, setBatchNumber] = useState('');
     const [costPrice, setCostPrice] = useState('');
     const [quantity, setQuantity] = useState('');
@@ -111,7 +113,7 @@ export default function EditBatchModal({ batch, suppliers, onClose, onSaved }: E
                     </div>
 
                     <div>
-                        <label className="block text-sm font-bold text-foreground mb-1">سعر الشراء (للوحدة)</label>
+                        <label className="block text-sm font-bold text-foreground mb-1">سعر الشراء <span className="font-normal text-muted-foreground">(للشريط الواحد — لا للباكيت)</span></label>
                         <input
                             type="number"
                             min="0"
@@ -148,9 +150,15 @@ export default function EditBatchModal({ batch, suppliers, onClose, onSaved }: E
                         <select
                             value={supplierId}
                             onChange={e => setSupplierId(e.target.value)}
-                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                            disabled={suppliersLoading && suppliers.length === 0}
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all disabled:opacity-60"
                         >
-                            <option value="">بدون مورد</option>
+                            {/* قائمة فارغة أثناء التحميل تُقرأ «لا موردين عندي»، فيُعلن الفرق. */}
+                            {suppliersLoading && suppliers.length === 0 ? (
+                                <option value="">جارٍ تحميل الموردين…</option>
+                            ) : (
+                                <option value="">بدون مورد</option>
+                            )}
                             {suppliers.map(s => (
                                 <option key={s.id} value={s.id}>{s.name}</option>
                             ))}

@@ -98,7 +98,8 @@ describe("draftHasContent", () => {
                 expiryDate: "",
                 supplierId: "",
                 batchPacketPrice: 0,
-                batchStripsPerPacket: 1,
+                // ميزة وحدة التسعير: الخانة تبدأ فارغة لا بـ 1.
+                batchStripsPerPacket: "",
             }),
         ).toBe(false);
     });
@@ -123,7 +124,8 @@ describe("draftHasContent", () => {
                 packetPrice: 0,
                 supplierId: "",
                 quantity: "0",
-                stripsPerPacket: 1,
+                // ميزة وحدة التسعير: الخانة تبدأ فارغة لا بـ 1.
+                stripsPerPacket: "",
                 minStock: "1",
                 maxStock: "10",
                 expiryDate: "2028-08-02",
@@ -136,11 +138,18 @@ describe("draftHasContent", () => {
             draftHasContent("create-drug", {
                 tradeName: "Panadol",
                 quantity: "0",
-                stripsPerPacket: 1,
+                stripsPerPacket: "",
                 minStock: "1",
                 maxStock: "10",
             }),
         ).toBe(true);
+    });
+
+    // بعد أن صارت الخانة تبدأ فارغة، صار 1 رقماً كتبه الصيدلاني بعد عدّ
+    // أشرطة العلبة — معلومة حقيقية لا قيمة افتراضية، فلا تُرمى مسودته.
+    it("treats a typed strips count of 1 as real input", () => {
+        expect(draftHasContent("create-drug", { stripsPerPacket: 1 })).toBe(true);
+        expect(draftHasContent("batch", { batchStripsPerPacket: 1 })).toBe(true);
     });
 
     it("does not treat min/max stock defaults alone as content", () => {

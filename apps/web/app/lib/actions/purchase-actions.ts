@@ -7,6 +7,7 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
 import { receivePurchaseStock } from '@/app/lib/purchase-receipt';
+import { computeShippedBatchPrefill, type ShippedBatchPrefill } from '@/app/lib/shipped-batch-prefill';
 
 // Smart-reorder tuning (matches /api/smart-order).
 const VELOCITY_WINDOW_DAYS = 30; // sales look-back window
@@ -223,11 +224,66 @@ export async function getPurchaseDetails(id: string) {
     });
     const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d.tradeName]));
 
+    // فاتورة صادرة من طلب مذخر على المنصة: المذخر يعرف الدفعة/تاريخ الانتهاء
+    // الحقيقيين مما شحنه فعلاً (WarehouseStockMove)، فنقترحهما على الصيدلاني
+    // بدل أن يعيد كتابتهما يدوياً من فاتورة ورقية — انظر
+    // app/lib/shipped-batch-prefill.ts لقاعدة التجميع ولماذا نمتنع عن الاقتراح
+    // حين تتعدد الدفعات المصدر لنفس الدواء (تخصيص FEFO عبر أكثر من دفعة).
+    //
+    // البوابة الرخيصة: purchase.supplier.warehouseId (مُحمَّل أصلاً ضمن include
+    // supplier أعلاه — بلا استعلام إضافي) يُميّز "مورد مرآة" لمذخر. المسار
+    // الوحيد في الكود الذي يكتب حدث APPROVED الحامل purchaseId (app/api/
+    // warehouses/orders/[id]/route.ts) يضبط Purchase.supplierId دائماً على
+    // هذا المورد المرآة — سواء أُعيد استخدامه أو أُنشئ للتو، وكلاهما بـ
+    // warehouseId غير فارغ بالتصميم. فحين تغيب هذه القيمة (فاتورة مورّد عادية،
+    // الحالة الغالبة) لا يُنفَّذ أي استعلام إضافي إطلاقاً — لا حتى بحث حدث
+    // APPROVED. صيدلية قد تختار يدوياً موردها المرآة لفاتورة عادية غير مرتبطة
+    // فعلاً بطلب: البحث أدناه يعمل ولا يجد حدثاً مطابقاً، فتبقى النتيجة بلا
+    // اقتراح بأمان — الفحص هنا تفاؤلي (تصفية تكلفة) لا شرط صحة.
+    let prefillByDrug = new Map<string, ShippedBatchPrefill>();
+    if (purchase.supplier?.warehouseId) {
+        const linkedOrder = await prisma.warehouseOrderEvent.findFirst({
+            where: { type: 'APPROVED', payload: { path: ['purchaseId'], equals: id } },
+            select: { orderId: true },
+        });
+        if (linkedOrder) {
+            const moves = await prisma.warehouseStockMove.findMany({
+                where: { orderId: linkedOrder.orderId, type: 'SHIPMENT', batchId: { not: null } },
+                select: {
+                    catalogItemId: true,
+                    quantity: true,
+                    batch: { select: { batchNumber: true, expiryDate: true } },
+                },
+            });
+            if (moves.length > 0) {
+                const catalogItemIds = Array.from(new Set(moves.map((m: any) => m.catalogItemId)));
+                const catalogItems = await prisma.warehouseCatalogItem.findMany({
+                    where: { id: { in: catalogItemIds } },
+                    select: { id: true, drugId: true },
+                });
+                const catalogDrugMap = new Map<string, string>(catalogItems.map((c: any) => [c.id, c.drugId]));
+                const rows = moves
+                    // onDelete: SetNull على batchId يضمن أن batch يغيب فقط حين تُحذف
+                    // الدفعة فعلاً — لا يُفترض حصوله هنا، لكن الحارس دفاعي بلا كلفة.
+                    .filter((m: any) => m.batch)
+                    .map((m: any) => ({
+                        drugId: catalogDrugMap.get(m.catalogItemId) ?? '',
+                        batchNumber: m.batch.batchNumber,
+                        expiryDate: m.batch.expiryDate,
+                        quantity: m.quantity,
+                    }))
+                    .filter((r: any) => r.drugId);
+                prefillByDrug = computeShippedBatchPrefill(rows);
+            }
+        }
+    }
+
     return {
         ...purchase,
         items: purchase.items.map((item: any) => ({
             ...item,
-            drugName: drugMap.get(item.drugId) || 'Unknown Drug'
+            drugName: drugMap.get(item.drugId) || 'Unknown Drug',
+            shippedPrefill: prefillByDrug.get(item.drugId) ?? null,
         }))
     };
 }

@@ -198,6 +198,7 @@ export const authService = {
         }
         await secureDelete(TOKEN_KEY);
         await secureDelete(USER_KEY);
+        setCachedToken(null);
     },
 
     async isAuthenticated(): Promise<boolean> {

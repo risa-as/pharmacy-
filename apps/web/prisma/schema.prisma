@@ -198,6 +198,26 @@ model GlobalDrug {
   warehouseId          String?
   warehouse            Warehouse? @relation("WarehouseCustomDrugs", fields: [warehouseId], references: [id])
 
+  // ميزة وحدة التسعير: عدد الأشرطة في الباكيت الواحد لهذا الدواء.
+  // يُخزَّن هنا **مرة واحدة لكل باركود** لا لكل مؤسسة ولا لكل مورد — بقرار
+  // صاحب النظام: التعبئة خاصية بالدواء نفسه ومطابقة لجميع الموردين، فأي نسخة
+  // ثانية منها (على Inventory مثلاً) تخلق مصدرَي حقيقة يتعارضان.
+  //
+  // NULL = «غير معروف بعد»، وهي القيمة الحالية لكل الصفوف بلا استثناء وبقرار
+  // صريح: لا تُعبَّأ هذه الأعمدة بتخمين ولا باشتقاق من نِسَب الأسعار. كل مستهلك
+  // لها ملزَم بالتصرّف الصحيح عند NULL — أي **المنع والمراجعة** لا التخمين،
+  // انظر app/lib/pack-units.ts (toStripPrice) وهي القاعدة الحسابية الوحيدة.
+  unitsPerPack         Int?
+  // متى أكّد صيدلاني هذا العدد بنفسه وهو ينظر إلى العلبة.
+  // NULL = **لم يؤكّده أحد** — إمّا فارغ أصلاً، أو رقم مستنتَج من الدفعات القديمة
+  // (نحو نصفه غير دقيق). التمييز بين «رقم موجود» و«رقم مُتحقَّق منه» هو جوهر
+  // الآلية: الرقم وحده لا يكفي للثقة، ولذلك لا يُستغنى عن هذا الحقل بفحص
+  // unitsPerPack IS NOT NULL.
+  //
+  // مشترك بين كل الصيدليات بقرار صاحب النظام: أول من يؤكّد العدد يُعتمد تأكيده
+  // للجميع فلا يُسأل عنه أحد بعده — التعبئة خاصية بالمنتج لا بالصيدلية.
+  unitsPerPackConfirmedAt DateTime?
+
   @@unique([barcode, organizationId])
   // قيد منفصل عن الذي فوقه بقصد: Postgres يعتبر NULL مميزاً، فلو أُدمج
   // warehouseId في نفس الثلاثية لصار صفوف المؤسسات تحمل NULL في الثلاثية
@@ -900,6 +920,12 @@ model WarehouseOrder {
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 
+  // ميزة وحدة التسعير — قرار صاحب النظام 2026-09: «كل أسعار المذاخر أسعار
+  // باكيت». PACKET صارت قاعدة غير مشروطة داخل toStripPrice (app/lib/pack-units.ts)
+  // بصرف النظر عن قيمة هذا العمود، فلم يعد يُقرأ ولا يُكتَب في أي مسار. أُبقي
+  // العمود بلا حذف لأنه nullable على قاعدة إنتاج حيّة (حذف عمود أخطر من تركه).
+  priceUnit    String?
+
   warehouse Warehouse            @relation(fields: [warehouseId], references: [id])
   branch    Branch               @relation(fields: [branchId], references: [id])
   items     WarehouseOrderItem[]
@@ -926,6 +952,20 @@ model WarehouseOrderItem {
   // effectiveLine في app/lib/warehouse-quote.ts: البونص لا يدخل حساب السعر أو
   // الإجمالي إطلاقاً — إيراده صفر دوماً — لكن يدخل خصم المخزون والتكلفة كاملاً).
   bonusQuantity Int @default(0)
+
+  // ميزة نقل الدفعة/الانتهاء عند التسعير (2026-09): ما يُعلنه المذخر لهذا
+  // الصنف وقت التسعير — إلى جانب السعر والبونص أعلاه. القرار: أغلب مذاخر
+  // البوابة المجانية لن تتبنّى تتبّع مخزون (WarehouseBatch/WarehouseStockMove)
+  // إطلاقاً، فلا يوجد مصدر آخر لرقم الدفعة/تاريخ الانتهاء يصل الصيدلية أصلاً —
+  // هذان الحقلان هما الطريق الوحيد المتاح لمذخر كهذا.
+  //
+  // كلاهما **وعدٌ لا إثبات**: يُدخَلان قبل أن يُنتقى الشحن فعلياً من الرفّ، فقد
+  // يختلف ما يُشحَن فعلاً عمّا صُرِّح به هنا. حين يتتبّع المذخر مخزونه فعلاً
+  // فالمشتق من تخصيص FEFO الحقيقي عند الشحن (WarehouseStockMove → WarehouseBatch،
+  // عبر app/lib/shipped-batch-prefill.ts) هو الأصدق ويتقدّم عليهما دائماً عند
+  // الاستلام — انظر قاعدة الأولوية في app/dashboard/purchases/[id]/receive/page.tsx.
+  batchNumber String?
+  expiryDate  DateTime?
 
   warehouseOrder WarehouseOrder @relation(fields: [warehouseOrderId], references: [id], onDelete: Cascade)
   drug           GlobalDrug     @relation(fields: [drugId], references: [id])
@@ -991,6 +1031,15 @@ model WarehouseCatalogItem {
   // المذخر يفاوض حالة بحالة وقد يمنح بونصاً مختلفاً عن قاعدته المعلنة.
   bonusThreshold Int @default(0) // اشترِ هذا العدد…
   bonusQuantity  Int @default(0) // …واحصل على هذا العدد مجاناً
+
+  // ميزة وحدة التسعير — قرار صاحب النظام 2026-09: «كل أسعار المذاخر أسعار
+  // باكيت». PACKET صارت قاعدة غير مشروطة داخل toStripPrice (app/lib/pack-units.ts)
+  // بصرف النظر عن قيمة هذا العمود، فلم يعد يُقرأ ولا يُكتَب في أي مسار. أُبقي
+  // العمود بلا حذف لأنه nullable على قاعدة إنتاج حيّة (حذف عمود أخطر من تركه).
+  priceUnit      String?
+  // تعبئة المذخر المعلَنة لهذا الصنف — تُقارَن بـ GlobalDrug.unitsPerPack.
+  // اختلافهما تعارض يوقف التحويل بدل ترجيح أحدهما. NULL في الاثنين = توقّف كذلك.
+  unitsPerPack   Int?
 
   warehouse Warehouse  @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   drug      GlobalDrug @relation(fields: [drugId], references: [id])
@@ -1122,6 +1171,15 @@ model WarehouseCustomer {
   organizationId  String
   creditLimit     Float    @default(0) // 0 = بلا حد ائتماني
   paymentTermDays Int      @default(0) // 0 = نقدي / بلا مهلة سداد
+  // رصيد سابق: دَين هذه الصيدلية من قبل انضمام هذا المذخر للمنصة — يُدخَل
+  // يدوياً مرة واحدة عند الإعداد (صفحة app/warehouse/customers)، وليس رقماً
+  // متحركاً يُعاد حسابه هنا أبداً. كل رقم "مستحق" في النظام = هذا الحقل +
+  // فواتير المنصة المفتوحة + مبيعات المندوبين الميدانية المفتوحة (انظر
+  // outstandingWithOpeningBalance في warehouse-accounts.ts) — يُضاف فوقها لا
+  // يحل محلها. لو سجّل المذخر لاحقاً ديناً قديماً كفاتورة حقيقية هنا، يجب
+  // تخفيض هذا الحقل يدوياً؛ لا وسيلة آلية لاكتشاف التداخل بين الاثنين.
+  // 0 = لا يوجد رصيد سابق مسجَّل (الافتراضي لكل عميل جديد بلا تاريخ سابق).
+  openingBalance  Float    @default(0)
   priceTier       String?
   isBlocked       Boolean  @default(false)
   notes           String?

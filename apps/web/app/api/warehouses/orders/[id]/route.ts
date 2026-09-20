@@ -15,16 +15,15 @@ import { prisma } from '@/app/lib/prisma';
 import { lockWarehouseOrder } from '@/app/lib/warehouse-order-lock';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { warehouseOrderScope } from '@/app/lib/warehouse-access';
-import { decideMirrorSupplier, buildDraftPurchasePlan, type DraftPurchaseItem } from '@/app/lib/warehouse-purchase-bridge';
-import { effectiveLine } from '@/app/lib/warehouse-quote';
 import { assertTransition } from '@/app/lib/warehouse-order-state';
-import { computeDueDate, checkCreditLimit } from '@/app/lib/warehouse-accounts';
 import { notifyWarehouseUsers } from '@/app/lib/notifications/notificationTriggers';
+// منطق الاعتماد (بناء فاتورة الشراء المسودة، المورد المرآة، فاتورة المذخر،
+// فحص حدّ الائتمان) استُخرج بالكامل إلى warehouse-order-approval.ts — نفس
+// السلوك حرفياً، لكن قابل للاستدعاء أيضاً من مسار الاعتماد الآلي في
+// app/api/warehouse-portal/orders/[id]/quote/route.ts (لا سياق صيدلية هناك).
+import { approveWarehouseOrder } from '@/app/lib/warehouse-order-approval';
 
 type Action = 'APPROVED' | 'REJECTED' | 'CANCELLED';
-
-/** رفض ائتماني عند الاعتماد — يُترجم إلى 403 في catch أدناه. */
-class CreditRejectedError extends Error {}
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
@@ -124,233 +123,59 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             return NextResponse.json({ order: updated, purchaseId: null });
         }
 
-        // الاعتماد: بنود فاتورة الشراء من العرض النهائي — عبر effectiveLine()، مصدر
-        // الحقيقة الوحيد المشترك مع مسار إجمالي عرض السعر. الأصناف النافدة (quantity=0
-        // دائماً لها) تُستبعد هنا قبل الوصول لـ buildDraftPurchasePlan حتى لا تُسجَّل
-        // كأخطاء "كمية غير صالحة" رغم كونها استبعاداً متعمَّداً وليس خطأ إدخال.
-        const draftItems: DraftPurchaseItem[] = order.items
-            .map((it) => {
-                const eff = effectiveLine({
-                    status: it.status,
-                    quantity: it.quantity,
-                    quotedQuantity: it.quotedQuantity,
-                    unitPrice: it.unitPrice,
-                    quotedPrice: it.quotedPrice,
-                    // requestedPrice غير مُمرَّر عمداً — effectiveLine لا يستخدمه أصلاً.
-                });
-                // ميزة البونص: bonusQuantity يمرّ بلا تعديل — buildDraftPurchasePlan
-                // هو من يقرر كيف يُبنى منه سطر PurchaseItem منفصل بكلفة صفر (لا
-                // حساب هنا). سطر OUT_OF_STOCK (eff.quantity = 0) يُستبعَد بالكامل
-                // أدناه قبل الوصول لـ buildDraftPurchasePlan — فبونصه العالق (إن
-                // وُجد) لا يُفوتَر ولا يُسلَّم أبداً، اتساقاً مع خصم المخزون.
-                return { drugId: it.drugId, quantity: eff.quantity, effectivePrice: eff.unitPrice, bonusQuantity: it.bonusQuantity };
-            })
-            .filter((it) => it.quantity > 0);
-
-        if (draftItems.length === 0) {
-            return NextResponse.json(
-                {
-                    error: 'كل أصناف هذا الطلب نافدة لدى المذخر — لا يوجد ما يمكن اعتماده أو فوترته. الرجاء رفض العرض بدلاً من اعتماده.',
-                    code: 'ALL_ITEMS_OUT_OF_STOCK',
-                },
-                { status: 400 }
-            );
-        }
-
-        const plan = buildDraftPurchasePlan(draftItems);
-        if (!plan.ok) {
-            return NextResponse.json(
-                { error: 'تعذر بناء فاتورة الشراء من العرض', details: plan.errors },
-                { status: 400 }
-            );
-        }
-
-        // المورد المرآة: قرار نقّي + إنشاء آمن ضد التسابق (P2002 → إعادة جلب).
-        const existingMirror = tenantCtx.organizationId
-            ? await prisma.supplier.findFirst({
-                  where: { warehouseId: order.warehouseId, organizationId: tenantCtx.organizationId },
-                  select: { id: true },
-              })
-            : null;
-
-        const decision = decideMirrorSupplier({
-            existingSupplier: existingMirror,
-            organizationId: tenantCtx.organizationId ?? null,
-        });
-
-        if (decision.action === 'BLOCKED_NO_ORG') {
+        // الاعتماد: كل المنطق (effectiveLine، تحويل الباكيت↔الشريط، المورد
+        // المرآة، حدّ الائتمان، فاتورة المذخر...) استُخرج إلى
+        // approveWarehouseOrder() — يُستدعى أيضاً من مسار الاعتماد الآلي عند
+        // تطابق العرض تماماً (quote/route.ts). لا يرمي أبداً للرفض التجاري —
+        // يُرجع ApprovalOutcome، فنعيد بناء نفس شكل/كود/حالة الاستجابة الأصلي
+        // بالضبط أدناه (عقد الواجهة الحالي — OrdersTrackClient.tsx — بلا تغيير).
+        // حارس مُستبقى عمداً بعد الاستخراج: approveWarehouseOrder تشتق المنظمة من
+        // order.branch.organizationId (وجب ذلك ليعمل الاعتماد الآلي من بوابة
+        // المذخر حيث لا سياق صيدلية أصلاً). لكن warehouseOrderScope يعيد {} لـ
+        // SUPER_ADMIN — أي كل الطلبات — فبلا هذا السطر يصير بوسع مدير المنصة بلا
+        // منظمة أن يعتمد طلب أي صيدلية فينشئ عليها فاتورة وذمة، وهو ما كان
+        // BLOCKED_NO_ORG يمنعه قبل الاستخراج. توسيع صلاحية كهذا لا يصح أن يتسرّب
+        // كأثر جانبي لإعادة هيكلة؛ إن أُريد فليكن قراراً صريحاً.
+        if (!tenantCtx.organizationId) {
             return NextResponse.json(
                 { error: 'لا يمكن اعتماد الطلب: الحساب غير مرتبط بمنظمة لإنشاء مورد للمذخر.' },
                 { status: 403 }
             );
         }
 
-        const approvedAt = new Date();
-
-        const updated = await prisma.$transaction(async (tx) => {
-            await lockWarehouseOrder(tx, order.id, order.status);
-            let supplierId: string;
-            let organizationId: string;
-
-            if (decision.action === 'USE') {
-                supplierId = decision.supplierId!;
-                // USE فقط عندما وُجد مورد مرآة موجود، وهذا لا يحدث إلا إن كان
-                // tenantCtx.organizationId صالحاً أصلاً (existingMirror أعلاه لا
-                // يُستعلَم عنه إلا حين يكون هذا الحقل حقيقياً) — نفس الضمان
-                // المنطقي الذي يستند إليه decision.supplierId! في السطر أعلاه.
-                organizationId = tenantCtx.organizationId!;
-            } else {
-                // CREATE: نحتاج اسم المذخر + الفرع — جلب داخل المعاملة.
-                const [warehouse, orderWithBranch] = await Promise.all([
-                    tx.warehouse.findUnique({ where: { id: order.warehouseId }, select: { name: true } }),
-                    tx.warehouseOrder.findUnique({
-                        where: { id: order.id },
-                        select: { branch: { select: { organizationId: true } } },
-                    }),
-                ]);
-                const orgId = orderWithBranch?.branch.organizationId ?? null;
-                if (!orgId) {
-                    throw new Error('NO_ORG');
-                }
-                const mirror = await tx.supplier.create({
-                    data: {
-                        name: `مذخر على المنصة: ${warehouse?.name ?? order.warehouseId}`,
-                        warehouseId: order.warehouseId,
-                        organizationId: orgId,
-                    },
-                });
-                supplierId = mirror.id;
-                organizationId = orgId;
-            }
-
-            // Phase 2: العلاقة التجارية (WarehouseCustomer) — تُنشأ تلقائياً عند أول
-            // تعامل بين هذا المذخر وهذه الصيدلية، بنفس نمط المورد المرآة أعلاه
-            // (بحث ثم إنشاء؛ التسابق يُحل عبر @@unique([warehouseId, organizationId])
-            // + معالجة P2002 في catch أدناه). القيم الافتراضية (بلا حد ائتماني،
-            // نقدي بلا مهلة) تُطبَّق من أول فاتورة حتى يضبطها مالك المذخر لاحقاً.
-            let customer = await tx.warehouseCustomer.findUnique({
-                where: { warehouseId_organizationId: { warehouseId: order.warehouseId, organizationId } },
-            });
-            if (!customer) {
-                customer = await tx.warehouseCustomer.create({
-                    data: { warehouseId: order.warehouseId, organizationId },
-                });
-            }
-
-            await tx.$queryRaw`SELECT "id" FROM "WarehouseCustomer" WHERE "id" = ${customer.id} FOR UPDATE`;
-            customer = await tx.warehouseCustomer.findUniqueOrThrow({ where: { id: customer.id } });
-            const purchase = await tx.purchase.create({
-                data: {
-                    branchId: order.branchId,
-                    supplierId,
-                    total: plan.total,
-                    status: 'PENDING',
-                    items: {
-                        create: plan.items.map((i) => ({
-                            drugId: i.drugId,
-                            quantity: i.quantity,
-                            cost: i.cost,
-                        })),
-                    },
-                },
-            });
-
-            // Phase 2: فاتورة المذخر على هذه الصيدلية. total = plan.total بالضبط —
-            // نفس المتغيّر المُستخدَم لإجمالي Purchase أعلاه حرفياً، وليس محسوباً من
-            // جديد بقاعدة مختلفة؛ هذا هو الثابت الذي يبقي فاتورة الشراء (جانب
-            // الصيدلية) وفاتورة المذخر (جانب المذخر) متفقتين ماليّاً دوماً.
-            //
-            // رقم الفاتورة: نفس نمط orderNumber الآمن ضد السباق في
-            // app/api/warehouses/orders/route.ts (طابع زمني base-36 + محاولات
-            // فحص تفرّد + فشل صريح بدل مرور رقم null بصمت — لا نكرر خطأ "!" القديم).
-            let invoiceNumber: string | null = null;
-            for (let attempt = 0; attempt < 5; attempt++) {
-                const candidate = `WI-${Date.now().toString(36).toUpperCase()}${attempt ? `-${attempt}` : ''}`;
-                const exists = await tx.warehouseInvoice.findUnique({ where: { invoiceNumber: candidate } });
-                if (!exists) {
-                    invoiceNumber = candidate;
-                    break;
-                }
-            }
-            if (invoiceNumber === null) {
-                throw new Error('WI_NUMBER_GENERATION_FAILED');
-            }
-
-            // orderId فريد على WarehouseInvoice: لو دخل طلبان متزامنان هذه المعاملة
-            // معاً بنفس order.id (كلاهما قرأ الحالة QUOTED قبل أن يُحدِّث أيّهما)،
-            // فإن create الثاني هنا يضرب قيد التفرد على orderId ويُفشل معاملته
-            // بالكامل (Purchase/customer/order-update معه) — لا فاتورة مكرَّرة ولا
-            // Purchase يتيمة من الخاسر. catch أدناه يميّز هذه الحالة تحديداً.
-            // حدّ الائتمان يُفحص هنا أيضاً، لا عند إنشاء الطلب فقط: عند الإنشاء
-            // يكون unitPrice غالباً 0 (السعر يُحسم عند التسعير)، فيُفحص الحدّ ضد
-            // إجمالي صفري ولا يمنع شيئاً أبداً. الاعتماد هو لحظة الالتزام الحقيقي
-            // وفيه plan.total معروف — فهنا يبيت الفحص ذا معنى.
-            if (customer.isBlocked) {
-                throw new CreditRejectedError(
-                    'هذا المذخر أوقف التعامل مع صيدليتك — لا يمكن اعتماد الطلب.'
-                );
-            }
-            if (customer.creditLimit > 0) {
-                const openInvoices = await tx.warehouseInvoice.findMany({
-                    where: {
-                        warehouseId: order.warehouseId,
-                        organizationId,
-                        status: { in: ['UNPAID', 'PARTIAL'] },
-                    },
-                    select: { total: true, paidAmount: true },
-                });
-                const outstanding = openInvoices.reduce(
-                    (sum, inv) => sum + Math.max(inv.total - inv.paidAmount, 0),
-                    0
-                );
-                const credit = checkCreditLimit({
-                    creditLimit: customer.creditLimit,
-                    outstanding,
-                    newOrderTotal: plan.total,
-                });
-                if (!credit.ok) {
-                    throw new CreditRejectedError(credit.error);
-                }
-            }
-
-            const invoice = await tx.warehouseInvoice.create({
-                data: {
-                    warehouseId: order.warehouseId,
-                    organizationId,
-                    orderId: order.id,
-                    invoiceNumber,
-                    total: plan.total,
-                    dueAt: computeDueDate(approvedAt, customer.paymentTermDays),
-                },
-            });
-
-            const u = await tx.warehouseOrder.update({ where: { id: order.id }, data: { status: 'APPROVED' } });
-
-            await tx.warehouseOrderEvent.create({
-                data: {
-                    orderId: order.id,
-                    actorType: 'PHARMACY',
-                    actorName: tenantCtx.user.name ?? tenantCtx.user.email ?? null,
-                    type: 'APPROVED',
-                    payload: { purchaseId: purchase.id, supplierId, total: plan.total, invoiceId: invoice.id, invoiceNumber },
-                },
-            });
-
-            return { order: u, purchaseId: purchase.id, invoiceId: invoice.id };
+        const outcome = await approveWarehouseOrder({
+            orderId: order.id,
+            actorType: 'PHARMACY',
+            actorName: tenantCtx.user.name ?? tenantCtx.user.email ?? null,
         });
 
-        await notifyWarehouseUsers({
-            warehouseId: order.warehouseId,
-            title: 'تم اعتماد طلب المذخر',
-            body: `اعتمدت الصيدلية عرض السعر للطلب ${order.orderNumber ?? ''}. يمكنك تجهيز الشحن الآن.`,
-            data: { orderId: order.id, orderNumber: order.orderNumber, status: 'APPROVED' },
-        });
-
-        return NextResponse.json({ order: updated.order, purchaseId: updated.purchaseId, invoiceId: updated.invoiceId });
-    } catch (e: any) {
-        if (e instanceof CreditRejectedError) {
-            return NextResponse.json({ error: e.message, code: 'CREDIT_LIMIT' }, { status: 403 });
+        if (!outcome.ok) {
+            // code يظهر فقط للحالات التي كانت تحمله أصلاً في الجسم الأصلي
+            // (PACK_UNITS_UNRESOLVED، ALL_ITEMS_OUT_OF_STOCK، CREDIT_LIMIT)؛
+            // البقية بلا code كما كانت تماماً (BLOCKED_NO_ORG، فشل بناء الخطة،
+            // تسابق الفاتورة). details فقط حين وُجدت فعلياً على outcome.
+            const body: Record<string, unknown> = { error: outcome.message };
+            if (
+                outcome.code === 'PACK_UNITS_UNRESOLVED' ||
+                outcome.code === 'ALL_ITEMS_OUT_OF_STOCK' ||
+                outcome.code === 'CREDIT_LIMIT'
+            ) {
+                body.code = outcome.code;
+            }
+            if (outcome.details) body.details = outcome.details;
+            return NextResponse.json(body, { status: outcome.status });
         }
+
+        // ApprovalOutcome لا يحمل صف الطلب نفسه عمداً (الدالة تُستدعى أيضاً من
+        // مسار لا يحتاجه) — نجلبه هنا مرة واحدة رخيصة لإعادة نفس شكل الاستجابة
+        // الأصلي {order, purchaseId, invoiceId} بحالته الطازجة بعد الاعتماد.
+        const updatedOrder = await prisma.warehouseOrder.findUniqueOrThrow({ where: { id: order.id } });
+        return NextResponse.json({
+            order: updatedOrder,
+            purchaseId: outcome.purchaseId,
+            invoiceId: outcome.invoiceId,
+        });
+    } catch (e: any) {
         if (e?.message?.includes('انتقال غير شرعي')) {
             return NextResponse.json({ error: e.message }, { status: 409 });
         }

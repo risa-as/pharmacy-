@@ -1,11 +1,12 @@
 // المرحلة 3 من ميزة المذاخر: صفحة «أدويتي» — كتالوج المذخر (قراءة الخادم + عميل).
 // المرحلة ب من ميزة تتبّع المخزون: زُوِّدت القراءة الأولية برصيد قابل للبيع
-// وتوفر فعلي (deriveAvailability) — نفس حساب /api/warehouse-portal/stock حرفياً.
+// وتوفر فعلي (deriveAvailability) وحالة تتبّع (isTracked عبر decideStockTracking)
+// — نفس حساب /api/warehouse-portal/stock حرفياً (انظر تعليق نزاهة الواجهة هناك).
 import { prisma } from "@/app/lib/prisma";
 import { getWarehouseContext } from "@/app/lib/warehouse-context";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
-import { summarizeStock, deriveAvailability, isLowStock } from "@/app/lib/warehouse-stock";
+import { summarizeStock, deriveAvailability, isLowStock, decideStockTracking } from "@/app/lib/warehouse-stock";
 import { catalogMarginPercent } from "@/app/lib/warehouse-pricing";
 import { hasWarehousePermission } from "@/app/lib/warehouse-permissions";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
@@ -63,7 +64,15 @@ export default async function WarehouseCatalogPage() {
             canEditPricing={canEditPricing}
             canViewFinance={canViewFinance}
             initialItems={items.map((i) => {
-                const sellableQuantity = summarizeStock(i.batches).totalQuantity;
+                const summary = summarizeStock(i.batches);
+                const sellableQuantity = summary.totalQuantity;
+                // بوابة المذاخر المجانية: نفس قرار "متتبَّع أم لا" المطبَّق فعلياً عند
+                // الشحن (decideStockTracking في warehouse-stock.ts، بلا إعادة تنفيذ
+                // "> 0" هنا) — صنف بلا أي صف دفعة (batchCount من العدد الخام لا
+                // sellableQuantity) يعني أن هذا المذخر لم يبدأ تتبّع مخزونه لهذا
+                // الصنف بعد، فلا يجوز عرضه "غير متوفر". صنف دفعاته كلها مباعة حتى
+                // الصفر يبقى متتبَّعاً ويظهر "غير متوفر" فعلاً — الفرق جوهري.
+                const isTracked = decideStockTracking(summary.batchCount) === "ENFORCE";
                 return {
                     id: i.id,
                     barcode: i.barcode,
@@ -80,6 +89,7 @@ export default async function WarehouseCatalogPage() {
                     sellableQuantity,
                     availability: deriveAvailability({ isListed: i.isAvailable, sellableQuantity }),
                     isLowStock: isLowStock({ sellableQuantity, minStock: i.minStock }),
+                    isTracked,
                 };
             })}
         />

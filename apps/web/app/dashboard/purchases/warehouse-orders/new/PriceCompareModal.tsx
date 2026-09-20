@@ -16,11 +16,14 @@ import {
     type NeedLine,
     type SupplierPriceOption,
     QUALITY_LABEL,
+    QUALITY_FIX,
     SOURCE_LABEL,
     formatIQD,
     formatDate,
     selectedOption,
 } from './types';
+// §302: القاعدة الحسابية الوحيدة لسعر الباكيت — لا ضرب مباشر مكرَّر هنا.
+import { toPacketPrice } from '@/app/lib/pack-units';
 
 interface PairHistory {
     batches: Array<{ id: string; price: number; recordedAt: string; branchId: string }>;
@@ -46,6 +49,7 @@ export default function PriceCompareModal({
     const [loadingHistory, setLoadingHistory] = useState(false);
 
     const comparison = line.comparison;
+    const unitsPerPack = line.unitsPerPack ?? null;
     const options = comparison?.options ?? [];
     const comparable = options.filter((o) => o.comparable);
     const nonComparable = options.filter((o) => !o.comparable);
@@ -110,14 +114,24 @@ export default function PriceCompareModal({
                             )}
                         </div>
 
+                        {/* السبب والعلاج مفصولان، وكلٌّ موسوم بعنوانه: «غير مؤهل»
+                            يمنع الترشيح والإجمالي، و«الطلب الإلكتروني» شأن آخر
+                            تماماً — خلطهما بلا وسم كان يجعل السبب غامضاً. */}
                         {o.qualityReason && (
-                            <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-600">
-                                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                                {QUALITY_LABEL[o.qualityReason]}
-                            </p>
+                            <div className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5">
+                                <p className="flex items-start gap-1 text-[11px] font-bold text-amber-600">
+                                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                                    غير مؤهل: {QUALITY_LABEL[o.qualityReason]}
+                                </p>
+                                <p className="mt-0.5 pr-4 text-[11px] text-muted-foreground">
+                                    {QUALITY_FIX[o.qualityReason]}
+                                </p>
+                            </div>
                         )}
                         {!o.orderable && o.orderabilityReason && (
-                            <p className="mt-1 text-[11px] text-muted-foreground">{o.orderabilityReason}</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                                <span className="font-bold">الطلب الإلكتروني:</span> {o.orderabilityReason}
+                            </p>
                         )}
                     </div>
 
@@ -126,6 +140,19 @@ export default function PriceCompareModal({
                             {o.price !== null ? `${formatIQD(o.price)} د.ع` : '—'}
                         </div>
                         <div className="text-[11px] text-muted-foreground">لكل {o.unitLabel}</div>
+                        {/* سعر الباكيت المُشتق — المذخر يسعّر بالباكيت، فعرضه هنا
+                            يجعل المقارنة بالوحدة التي سيُساوم بها فعلاً. يظهر فقط متى
+                            وُثّقت التعبئة — وبدونها لا يُخترَع رقم. toPacketPrice هي
+                            القاعدة الوحيدة (§302) — لا ضرب مباشر هنا. */}
+                        {(() => {
+                            const packet = o.price !== null ? toPacketPrice(o.price, unitsPerPack) : null;
+                            if (packet === null) return null;
+                            return (
+                                <div className="text-[11px] text-muted-foreground">
+                                    الباكيت ({unitsPerPack}): <b className="text-foreground">{formatIQD(packet)}</b> د.ع
+                                </div>
+                            );
+                        })()}
                         <div className="mt-2 flex items-center gap-2">
                             {o.supplierId && (
                                 <button
@@ -215,9 +242,13 @@ export default function PriceCompareModal({
                         {/* غير المؤهلة منفصلة تماماً ولا تنافس على الأرخص (§90) */}
                         {nonComparable.length > 0 && (
                             <div>
-                                <h3 className="mb-2 text-xs font-bold text-muted-foreground">
+                                <h3 className="text-xs font-bold text-muted-foreground">
                                     سجلات غير مؤهلة للمقارنة
                                 </h3>
+                                <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">
+                                    أسعارها ظاهرة للمراجعة، لكنها لا تُرشَّح كأرخص ولا تدخل الإجمالي حتى يُعالَج السبب.
+                                    قِدم التاريخ وحده لا يُسقط أي سعر.
+                                </p>
                                 <ul className="divide-y divide-border overflow-hidden rounded-lg border border-dashed border-border">
                                     {nonComparable.map((o) => renderRow(o, null))}
                                 </ul>

@@ -186,6 +186,16 @@ export async function addBatch(prevState: any, formData: FormData) {
         return { message: "جميع الحقول مطلوبة." };
     }
 
+    // ميزة وحدة التسعير: عدد الأشرطة في الباكيت يُثبَّت من هنا — هذه هي اللحظة
+    // الوحيدة التي يكون فيها الصيدلاني ممسكاً بالعلبة فعلاً. القيمة تُحفظ على
+    // الدواء (مشتركة بين كل الصيدليات بقرار صاحب النظام) مع تاريخ التأكيد، فلا
+    // يُسأل عنها أحد بعد ذلك.
+    const rawUnits = formData.get("unitsPerPack");
+    const unitsPerPack = rawUnits === null || rawUnits === "" ? null : parseInt(String(rawUnits), 10);
+    if (unitsPerPack !== null && (!Number.isInteger(unitsPerPack) || unitsPerPack <= 0)) {
+        return { message: "عدد الأشرطة في الباكيت يجب أن يكون عدداً صحيحاً أكبر من صفر." };
+    }
+
     try {
         const batch = await prisma.batch.create({
             data: {
@@ -207,6 +217,25 @@ export async function addBatch(prevState: any, formData: FormData) {
             details: JSON.stringify({ inventoryId, batchNumber, quantity, costPrice, expiryDate }),
             branchId: tenantCtx.user.branchId ?? undefined,
         });
+
+        // يُكتب بعد نجاح الدفعة لا قبلها: تثبيت تعبئة دواء مشتركة بين كل
+        // الصيدليات بناءً على حفظ فشل هو أسوأ من ألّا تُثبَّت أصلاً.
+        //
+        // النطاق شرط لا زينة: inventoryId يأتي من المتصفح، والكتابة هنا تمسّ صفاً
+        // عالمياً تراه كل المؤسسات — فيُتحقَّق أن صف المخزون يخصّ مؤسسة الطالب
+        // قبل أي كتابة.
+        if (unitsPerPack !== null && tenantCtx.organizationId) {
+            const inv = await prisma.inventory.findFirst({
+                where: { id: inventoryId, branch: { organizationId: tenantCtx.organizationId } },
+                select: { drugId: true },
+            });
+            if (inv) {
+                await prisma.globalDrug.update({
+                    where: { id: inv.drugId },
+                    data: { unitsPerPack, unitsPerPackConfirmedAt: new Date() },
+                });
+            }
+        }
     } catch (error) {
         console.error("Error adding batch:", error);
         return { message: "خطأ في قاعدة البيانات: فشل في إضافة الدفعة." };

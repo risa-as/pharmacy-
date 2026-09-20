@@ -27,8 +27,14 @@ export default async function WarehouseOrdersPage(
         where: { id: ctx.user.id },
         select: { warehouseUserType: true, permissions: true, isActive: true, warehouseId: true },
     });
-    const canView =
-        !!actor && actor.isActive !== false && actor.warehouseId === ctx.warehouseId && hasWarehousePermission(actor, 'canViewOrders');
+    const belongsAndActive =
+        !!actor && actor.isActive !== false && actor.warehouseId === ctx.warehouseId;
+    const canView = belongsAndActive && hasWarehousePermission(actor!, 'canViewOrders');
+    // يحكم ظهور رابط «قائمة التجهيز» فقط — الصفحة المطبوعة تحرس نفسها بنفس
+    // المفتاح، فإخفاء الرابط واجهةٌ لا حماية.
+    const canShipOrders = belongsAndActive && hasWarehousePermission(actor!, 'canShipOrders');
+    // يحكم ظهور زرّ «طلب هاتفي» — ومسار POST /orders/phone يحرس نفسه بنفس المفتاح.
+    const canQuoteOrders = belongsAndActive && hasWarehousePermission(actor!, 'canQuoteOrders');
     if (!canView) {
         return (
             <div className="space-y-4" dir="rtl">
@@ -51,7 +57,12 @@ export default async function WarehouseOrdersPage(
             status: query.status,
         },
         include: {
-            branch: { select: { name: true } },
+            // اسم الفرع وحده لا يميّز الصيدلية: كل المؤسسات الست في الإنتاج
+            // تسمّي فرعها الافتراضي «الفرع الرئيسي»، فيصل اسم المؤسسة أيضاً —
+            // نفس شكل select في app/api/warehouse-portal/orders/route.ts
+            // و.../[id]/route.ts، إذ الثلاثة تغذّي نفس OrdersClient.tsx ويجب
+            // أن تتطابق أشكالها كي لا يختفي الحقل بين التحميل الأول والتحديث.
+            branch: { select: { name: true, organization: { select: { name: true } } } },
             items: {
                 include: { drug: { select: { tradeName: true, barcode: true, alternatives: true } } },
             },
@@ -95,6 +106,8 @@ export default async function WarehouseOrdersPage(
     return (
         <OrdersClient
             initialOrders={JSON.parse(JSON.stringify(ordersWithBonusRule))}
+            canShipOrders={canShipOrders}
+            canQuoteOrders={canQuoteOrders}
         />
     );
 }

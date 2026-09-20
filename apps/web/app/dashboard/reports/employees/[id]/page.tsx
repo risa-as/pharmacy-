@@ -4,10 +4,9 @@ import { prisma } from "@/app/lib/prisma";
 import { User, DollarSign, Calendar, TrendingUp, ShoppingBag, Calculator, ArrowRight, Building2 } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
+import { buildEmployeeDailySalesQuery, type EmployeeDailySalesRow } from "@/app/lib/report-sales-aggregates";
 
 // Keep this component clean, chart will be client-side if needed, 
 // or simpler: just use server generated data for chart
@@ -19,17 +18,15 @@ import RecentSalesTable from "@/app/ui/dashboard/reports/recent-sales-table";
 
 export default async function EmployeeDetailPage(props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
+    const reportTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
-    const { tenantBranchWhere, tenantWhere } = tenantCtx;
+    const { tenantBranchWhere } = tenantCtx;
 
     const employee = await prisma.user.findFirst({
         where: { id: params.id, ...tenantBranchWhere },
         include: {
             branch: true,
-            _count: {
-                select: { sales: true }
-            }
         }
     });
 
@@ -39,43 +36,51 @@ export default async function EmployeeDetailPage(props: { params: Promise<{ id: 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const sales = await prisma.sale.findMany({
-        where: {
-            ...tenantBranchWhere,
-            userId: params.id,
-            createdAt: { gte: thirtyDaysAgo }
-        },
-        orderBy: { createdAt: 'desc' },
-        include: {
-            items: {
-                include: {
-                    drug: true
-                }
-            },
-            user: true
-        }
-    });
+    const saleWhere = {
+        AND: [
+            tenantBranchWhere,
+            { userId: params.id },
+            { createdAt: { gte: thirtyDaysAgo } },
+        ],
+    };
 
-    // Stats
-    const totalSales = sales.reduce((acc: any, sale: any) => acc + sale.total, 0);
-    const saleCount = sales.length;
+    const [saleSummary, dailyRows, recentActivity] = await Promise.all([
+        prisma.sale.aggregate({
+            where: saleWhere,
+            _sum: { total: true },
+            _count: { id: true },
+        }),
+        prisma.$queryRaw<EmployeeDailySalesRow[]>(
+            buildEmployeeDailySalesQuery({
+                tenantBranchWhere,
+                userId: params.id,
+                start: thirtyDaysAgo,
+                timeZone: reportTimeZone,
+            }),
+        ),
+        prisma.sale.findMany({
+            where: saleWhere,
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            include: {
+                items: {
+                    include: {
+                        drug: true
+                    }
+                },
+                user: true
+            }
+        }),
+    ]);
+
+    const totalSales = saleSummary._sum.total ?? 0;
+    const saleCount = saleSummary._count.id;
     const averageSale = saleCount > 0 ? totalSales / saleCount : 0;
 
-    // Prepare Chart Data
-    // Group by Date
-    const dailyData = sales.reduce((acc: any, sale: any) => {
-        const date = format(sale.createdAt, 'yyyy-MM-dd');
-        acc[date] = (acc[date] || 0) + sale.total;
-        return acc;
-    }, {});
-
-    const chartData = Object.keys(dailyData).map((date: any) => ({
-        date,
-        total: dailyData[date]
-    })).sort((a: any, b: any) => a.date.localeCompare(b.date));
-
-    // Recent Activity (Top 20)
-    const recentActivity = sales.slice(0, 20);
+    const chartData = dailyRows.map((row) => ({
+        date: row.date,
+        total: row.total,
+    }));
 
     const fmt = (v: number) => Math.round(v).toLocaleString("en-US");
 

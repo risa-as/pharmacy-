@@ -4,6 +4,13 @@
 // تفاصيل الطلب: العرض (المتوفرة/الجزئية/النافدة والأسعار النهائية) + Timeline +
 // اعتماد/رفض العرض وإلغاء الطلب قبل الشحن.
 import { useEffect, useMemo, useState } from 'react';
+// النافذتان أدناه تُنقلان إلى document.body عبر بوابة (نفس نمط PriceCompareModal
+// و«إدارة المذاخر» وبقية نوافذ المستودع). صيّرهما داخل الشجرة مباشرةً كان يجعلهما
+// ابنين للحاوية الجذرية `space-y-6`، فتُطبَّق عليها قاعدة `> * + * { margin-top:
+// 1.5rem }`: ومع `fixed inset-0` (top و bottom صفر وارتفاع تلقائي) يحلّ المتصفح
+// التعارض بإزاحة الطبقة 24px للأسفل وإنقاص ارتفاعها 24px، فيظهر شريط شفاف بعرض
+// الشاشة أعلى التعتيم. البوابة تُخرجها من أي سياق هوامش كهذا نهائياً.
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -386,7 +393,9 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
         }
     };
 
-    return (
+    if (typeof document === 'undefined') return null;
+
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" dir="rtl">
             <div className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl bg-card p-6 shadow-xl">
                 <div className="mb-4 flex items-center justify-between">
@@ -439,12 +448,15 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
 function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => void }) {
-    return (
+    if (typeof document === 'undefined') return null;
+
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
             <div
                 className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-card p-6 shadow-xl"
@@ -476,7 +488,17 @@ function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => vo
                                 <tr key={it.id} className="border-t">
                                     <td className="px-3 py-2">
                                         <div className="font-medium">{it.drug.tradeName}</div>
-                                        <div className="font-mono text-xs text-muted-foreground">{it.drug.barcode}</div>
+                                        {/* بعض الأصناف تحمل باركوداً طويلاً جداً (رأينا 80 خانة
+                                            ست عشرية بدل 13 خانة EAN-13)، فكان يمدّ عمود «الصنف»
+                                            ويكسر عرض الجدول. القصّ هنا بصري فقط عبر max-w+truncate:
+                                            الباركودات الطبيعية تظهر كاملة، والطويل وحده يُختصر
+                                            بثلاث نقاط، والقيمة الكاملة تبقى في title للمرور عليها. */}
+                                        <div
+                                            className="max-w-[16ch] truncate font-mono text-xs text-muted-foreground"
+                                            title={it.drug.barcode}
+                                        >
+                                            {it.drug.barcode}
+                                        </div>
                                     </td>
                                     <td className="px-3 py-2">
                                         {it.quotedQuantity != null && it.status === 'PARTIAL'
@@ -542,6 +564,7 @@ function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => vo
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

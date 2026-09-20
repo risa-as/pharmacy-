@@ -33,6 +33,11 @@ import {
   formatDraftAge,
   type InventoryDraft,
 } from "../lib/inventory-draft";
+import {
+  removeInventoryRow,
+  shouldApplyInventorySnapshot,
+  upsertInventoryRow,
+} from "../lib/inventory-row-state";
 
 function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {
   return Promise.race([
@@ -59,6 +64,10 @@ interface InventoryItem {
     barcode: string;
     price: number;
     isQuickSale: boolean;
+    // ميزة وحدة التسعير: يُسحبان من السحابة ويُخزّنان محلياً، فيعرف الجهاز
+    // أوفلاين أُعُدّت أشرطة هذا الدواء أم لا.
+    unitsPerPack?: number | null;
+    unitsPerPackConfirmedAt?: string | Date | null;
   };
   quantity: number;
   costPrice: number;
@@ -112,6 +121,7 @@ export default function InventoryPage({ user }: { user: any }) {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const syncingRef = useRef(false); // guard: prevent overlapping sync button clicks
+  const inventoryMutationRevisionRef = useRef(0);
 
   // Quick-Sale Toggle State
   const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>(
@@ -159,9 +169,24 @@ export default function InventoryPage({ user }: { user: any }) {
 
   // Form States for Add Batch
   const [batchPacketPrice, setBatchPacketPrice] = useState(0);
-  const [batchStripsPerPacket, setBatchStripsPerPacket] = useState(1);
+  /**
+   * ميزة وحدة التسعير: يبدأ فارغاً لا بـ 1. القيمة 1 مشروعة وشائعة، لكن
+   * وضعها افتراضياً يجعل «العلبة فيها شريط واحد» و«لم ينتبه للخانة» رقماً
+   * واحداً، فيُحفظ سعر الباكيت كاملاً في حقل سعر الشريط.
+   */
+  const [batchStripsPerPacket, setBatchStripsPerPacket] = useState<number | null>(
+    null,
+  );
   const batchComputedCost =
-    batchStripsPerPacket > 0 ? batchPacketPrice / batchStripsPerPacket : 0;
+    batchStripsPerPacket && batchStripsPerPacket > 0
+      ? batchPacketPrice / batchStripsPerPacket
+      : 0;
+  /**
+   * هل أكّد صيدلاني تعبئة هذا الدواء؟ القيمة مخزّنة محلياً بعد أن صارت
+   * تُسحب مع بيانات الأدوية، فالجواب متاح أوفلاين ولا داعي لافتراضه.
+   */
+  const batchUnitsConfirmed = Boolean(showBatchModal?.drug?.unitsPerPackConfirmedAt);
+  const batchSuggestedUnits = showBatchModal?.drug?.unitsPerPack ?? null;
   const [batchData, setBatchData] = useState({
     quantity: 0,
     costPrice: 0,
@@ -185,9 +210,9 @@ export default function InventoryPage({ user }: { user: any }) {
 
   // Packet price calculator state (create-drug modal)
   const [packetPrice, setPacketPrice] = useState<number>(0);
-  const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
+  const [stripsPerPacket, setStripsPerPacket] = useState<number | null>(null);
   const computedCostPrice =
-    stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+    stripsPerPacket && stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
 
   // ─── مسودة الإدخال (حفظ تلقائي) ────────────────────────────────────────
   // الصفحة تُفكَّك عند الانتقال إلى نقطة البيع، فتضيع حالة النموذج. نحفظها في
@@ -236,7 +261,9 @@ export default function InventoryPage({ user }: { user: any }) {
         expiryDate: batchData.expiryDate,
         supplierId: batchData.supplierId,
         batchPacketPrice,
-        batchStripsPerPacket,
+        // الفارغ يُخزّن نصاً فارغاً لا null — مسودة الإدخال تقبل نصّاً أو رقماً،
+        // وdraftHasContent يعتبر النص الفارغ «بلا إدخال» فيستقيم المعنى.
+        batchStripsPerPacket: batchStripsPerPacket ?? "",
       };
       if (!draftHasContent("batch", fields)) return null;
       return {
@@ -250,7 +277,7 @@ export default function InventoryPage({ user }: { user: any }) {
     if (showCreateDrugModal) {
       const fields: Record<string, string | number> = {
         packetPrice,
-        stripsPerPacket,
+        stripsPerPacket: stripsPerPacket ?? "",
         supplierId: createDrugSupplierId,
       };
       // حقول هذا النموذج غير مرتبطة بحالة React (تُقرأ عبر FormData عند الحفظ)،
@@ -313,7 +340,7 @@ export default function InventoryPage({ user }: { user: any }) {
     } else {
       setShowCreateDrugModal(null);
       setPacketPrice(0);
-      setStripsPerPacket(1);
+      setStripsPerPacket(null);
     }
     // يظهر الشريط فوراً حتى لو بقي المستخدم في الصفحة، ليعرف أن بياناته محفوظة.
     if (stashed) setDraftBanner(stashed);
@@ -371,8 +398,19 @@ export default function InventoryPage({ user }: { user: any }) {
       expiryDate: "",
       supplierId: "",
     });
-    setBatchPacketPrice(0);
-    setBatchStripsPerPacket(1);
+    // ميزة وحدة التسعير: يُعبّأ العدد **فقط** إن كان مؤكّداً من صيدلاني،
+    // ومعه يُشتق سعر الباكيت من كلفة الشريط المحفوظة × العدد — نفس دورة
+    // العمل في الويب: يفتح النموذج فيجد الرقمين جاهزين ويعدّل إن تغيّر السعر.
+    const confirmedUnits = item.drug?.unitsPerPackConfirmedAt
+      ? (item.drug?.unitsPerPack ?? null)
+      : null;
+    const rowStripCost = Number(item.costPrice) || 0;
+    setBatchPacketPrice(
+      confirmedUnits && rowStripCost > 0
+        ? Math.round(rowStripCost * confirmedUnits * 100) / 100
+        : 0,
+    );
+    setBatchStripsPerPacket(confirmedUnits);
     setShowBatchModal(item);
   };
 
@@ -381,7 +419,7 @@ export default function InventoryPage({ user }: { user: any }) {
     setRestoredCreateFields(null);
     setCreateDrugSupplierId("");
     setPacketPrice(0);
-    setStripsPerPacket(1);
+    setStripsPerPacket(null);
     setShowCreateDrugModal(code);
   };
 
@@ -408,12 +446,12 @@ export default function InventoryPage({ user }: { user: any }) {
         supplierId: String(f.supplierId ?? ""),
       });
       setBatchPacketPrice(Number(f.batchPacketPrice) || 0);
-      setBatchStripsPerPacket(Number(f.batchStripsPerPacket) || 1);
+      setBatchStripsPerPacket(Number(f.batchStripsPerPacket) || null);
       setShowBatchModal(item);
     } else {
       setRestoredCreateFields(f);
       setPacketPrice(Number(f.packetPrice) || 0);
-      setStripsPerPacket(Number(f.stripsPerPacket) || 1);
+      setStripsPerPacket(Number(f.stripsPerPacket) || null);
       setCreateDrugSupplierId(String(f.supplierId ?? ""));
       setShowCreateDrugModal(String(draft.barcode ?? ""));
     }
@@ -588,8 +626,31 @@ export default function InventoryPage({ user }: { user: any }) {
     }
   };
 
+  const updatePendingSyncFromResult = (result: any) => {
+    const pendingCount = Number(result?.pendingSyncCount);
+    if (Number.isFinite(pendingCount)) setPendingSyncCount(pendingCount);
+  };
+
+  const mergeAffectedInventoryRow = (row: InventoryItem | null | undefined) => {
+    if (!row?.id) return;
+    inventoryMutationRevisionRef.current += 1;
+    setItems((prev) => upsertInventoryRow(prev, row));
+    if (row.drug?.id) {
+      setQuickSaleState((prev) => ({
+        ...prev,
+        [row.drug.id]: row.drug.isQuickSale ?? false,
+      }));
+    }
+  };
+
+  const removeAffectedInventoryRow = (inventoryId: string) => {
+    inventoryMutationRevisionRef.current += 1;
+    setItems((prev) => removeInventoryRow(prev, inventoryId));
+  };
+
   const fetchInventory = async () => {
     if (window.ipcRenderer) {
+      const snapshotStartedAtRevision = inventoryMutationRevisionRef.current;
       setLoading(true);
       try {
         // Use direct invoke (no 12s timeout wrapper) — these are local
@@ -603,16 +664,22 @@ export default function InventoryPage({ user }: { user: any }) {
           window.ipcRenderer.invoke("get-pending-sync-count"),
           window.ipcRenderer.invoke("get-sync-health"),
         ]);
-        setItems(data);
         if (Array.isArray(data)) {
-          setQuickSaleState(
-            Object.fromEntries(
-              data.map((i: InventoryItem) => [
-                i.drug.id,
-                i.drug.isQuickSale ?? false,
-              ]),
-            ),
+          const canApplySnapshot = shouldApplyInventorySnapshot(
+            snapshotStartedAtRevision,
+            inventoryMutationRevisionRef.current,
           );
+          if (canApplySnapshot) {
+            setItems(data);
+            setQuickSaleState(
+              Object.fromEntries(
+                data.map((i: InventoryItem) => [
+                  i.drug.id,
+                  i.drug.isQuickSale ?? false,
+                ]),
+              ),
+            );
+          }
         }
         const pendingCount = Number(
           health?.pendingCount ?? pending?.count ?? 0,
@@ -828,9 +895,17 @@ export default function InventoryPage({ user }: { user: any }) {
   const handleDelete = async () => {
     if (!showDeleteModal) return;
     try {
-      await ipcInvoke("delete-inventory-item", showDeleteModal);
+      const res = await ipcInvoke("delete-inventory-item", showDeleteModal);
+      if (!res?.success) {
+        setUploadToast({
+          type: "error",
+          message: res?.error || "فشل حذف العنصر",
+        });
+        return;
+      }
+      removeAffectedInventoryRow(res.inventoryId || showDeleteModal);
+      updatePendingSyncFromResult(res);
       setShowDeleteModal(null);
-      fetchInventory();
     } catch (error) {
       setUploadToast({ type: "error", message: "فشل حذف العنصر" });
     }
@@ -841,7 +916,7 @@ export default function InventoryPage({ user }: { user: any }) {
     if (!showEditModal) return;
     const formData = new FormData(e.currentTarget);
     try {
-      await ipcInvoke("update-inventory-item", {
+      const res = await ipcInvoke("update-inventory-item", {
         id: showEditModal.id,
         drugId: showEditModal.drugId || showEditModal.drug?.id,
         price: formData.get("price"),
@@ -849,8 +924,16 @@ export default function InventoryPage({ user }: { user: any }) {
         minStock: formData.get("minStock"),
         maxStock: formData.get("maxStock"),
       });
+      if (!res?.success) {
+        setUploadToast({
+          type: "error",
+          message: res?.error || "فشل تحديث البيانات",
+        });
+        return;
+      }
+      mergeAffectedInventoryRow(res.inventory);
+      updatePendingSyncFromResult(res);
       setShowEditModal(null);
-      fetchInventory();
       setUploadToast({ type: "success", message: "تم تحديث البيانات بنجاح ✓" });
     } catch (error) {
       setUploadToast({ type: "error", message: "فشل تحديث البيانات" });
@@ -861,6 +944,14 @@ export default function InventoryPage({ user }: { user: any }) {
     e.preventDefault();
     if (!showBatchModal) return;
     // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
+    // عدد الأشرطة شرط للحفظ: هو المقسوم عليه، ولا يُفترض 1 صامتاً.
+    if (!batchStripsPerPacket || batchStripsPerPacket <= 0) {
+      setUploadToast({
+        type: "error",
+        message: "اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).",
+      });
+      return;
+    }
     if (
       batchPacketPrice > 0 &&
       (batchStripsPerPacket > 20 ||
@@ -923,13 +1014,24 @@ export default function InventoryPage({ user }: { user: any }) {
       if (!ok) return;
     }
     try {
-      await ipcInvoke("add-inventory-batch", {
+      const res = await ipcInvoke("add-inventory-batch", {
         inventoryId: showBatchModal.id,
         ...batchData,
         expiryDate: batchExpiry.value || batchData.expiryDate,
         costPrice:
           batchPacketPrice > 0 ? batchComputedCost : batchData.costPrice,
+        // يُحفظ على الدواء عند المزامنة فلا يُسأل عنه مجدداً.
+        unitsPerPack: batchStripsPerPacket,
       });
+      if (!res?.success) {
+        setUploadToast({
+          type: "error",
+          message: res?.error || "فشل إضافة الدفعة",
+        });
+        return;
+      }
+      mergeAffectedInventoryRow(res.inventory);
+      updatePendingSyncFromResult(res);
       setShowBatchModal(null);
       setBatchData({
         quantity: 0,
@@ -938,9 +1040,8 @@ export default function InventoryPage({ user }: { user: any }) {
         supplierId: "",
       });
       setBatchPacketPrice(0);
-      setBatchStripsPerPacket(1);
+      setBatchStripsPerPacket(null);
       dropDraft();
-      fetchInventory();
       setUploadToast({ type: "success", message: "تمت إضافة الدفعة بنجاح ✓" });
     } catch (error) {
       setUploadToast({ type: "error", message: "فشل إضافة الدفعة" });
@@ -951,7 +1052,15 @@ export default function InventoryPage({ user }: { user: any }) {
     e.preventDefault();
     if (!showCreateDrugModal) return;
     const formData = new FormData(e.currentTarget);
-    const stripCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+    // عدد الأشرطة شرط للحفظ — لحظة إنشاء الدواء هي أفضل وقت لالتقاطه.
+    if (!stripsPerPacket || stripsPerPacket <= 0) {
+      setUploadToast({
+        type: "error",
+        message: "اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).",
+      });
+      return;
+    }
+    const stripCost = packetPrice / stripsPerPacket;
     // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
     const createQty = parseInt(formData.get("quantity") as string, 10) || 0;
     if (
@@ -1028,12 +1137,14 @@ export default function InventoryPage({ user }: { user: any }) {
       origin: formData.get("origin"),
       expiryDate: createExpiry.value || formData.get("expiryDate"),
       supplierId: createDrugSupplierId || null,
+      // تعبئة الدواء الجديد — تُرفع مع إنشائه في السحابة.
+      unitsPerPack: stripsPerPacket,
     };
 
     try {
       const res = await ipcInvoke("create-global-drug-local", data);
       if (res.success) {
-        await ipcInvoke("add-to-inventory-local", {
+        const inventoryRes = await ipcInvoke("add-to-inventory-local", {
           drugId: res.drug.id,
           branchId: user.branchId,
           costPrice: stripCost,
@@ -1045,13 +1156,26 @@ export default function InventoryPage({ user }: { user: any }) {
           supplierId: createDrugSupplierId || null,
           skipCloudPush: true,
         });
+        if (!inventoryRes?.success) {
+          setUploadToast({
+            type: "error",
+            message: inventoryRes?.error || "فشل إضافة الدواء",
+          });
+          return;
+        }
+        mergeAffectedInventoryRow(inventoryRes.inventory);
+        updatePendingSyncFromResult(inventoryRes);
         setShowCreateDrugModal(null);
         setCreateDrugSupplierId("");
         setPacketPrice(0);
-        setStripsPerPacket(1);
+        setStripsPerPacket(null);
         dropDraft();
-        fetchInventory();
         setUploadToast({ type: "success", message: "تم إضافة الدواء بنجاح ✓" });
+      } else {
+        setUploadToast({
+          type: "error",
+          message: res?.error || "فشل إضافة الدواء",
+        });
       }
     } catch (error) {
       setUploadToast({ type: "error", message: "فشل إضافة الدواء" });
@@ -1101,7 +1225,7 @@ export default function InventoryPage({ user }: { user: any }) {
       if (!ok) return;
     }
     try {
-      await ipcInvoke("add-to-inventory-local", {
+      const res = await ipcInvoke("add-to-inventory-local", {
         drugId: showAddToInventoryModal.id,
         branchId: user.branchId,
         costPrice: formData.get("costPrice"),
@@ -1111,8 +1235,16 @@ export default function InventoryPage({ user }: { user: any }) {
         maxStock: formData.get("maxStock"),
         expiryDate: invExpiry.value || formData.get("expiryDate"),
       });
+      if (!res?.success) {
+        setUploadToast({
+          type: "error",
+          message: res?.error || "فشل الإضافة للمخزن",
+        });
+        return;
+      }
+      mergeAffectedInventoryRow(res.inventory);
+      updatePendingSyncFromResult(res);
       setShowAddToInventoryModal(null);
-      fetchInventory();
       setUploadToast({ type: "success", message: "تم الإضافة للمخزون ✓" });
     } catch (error) {
       setUploadToast({ type: "error", message: "فشل الإضافة للمخزن" });
@@ -2175,15 +2307,35 @@ export default function InventoryPage({ user }: { user: any }) {
                       type="number"
                       min="1"
                       step="1"
-                      value={batchStripsPerPacket || ""}
-                      onChange={(e) =>
+                      value={batchStripsPerPacket ?? ""}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
                         setBatchStripsPerPacket(
-                          Math.max(1, parseInt(e.target.value) || 1),
-                        )
+                          Number.isInteger(v) && v > 0 ? v : null,
+                        );
+                      }}
+                      placeholder={
+                        batchUnitsConfirmed ? "" : "اعدُدها من العلبة"
                       }
-                      placeholder="1"
-                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                      className={`w-full rounded-lg border bg-background px-4 py-2 text-sm focus:ring-2 focus:ring-ring/20 ${
+                        batchUnitsConfirmed
+                          ? "border-border focus:border-ring"
+                          : "border-warning/60 focus:border-warning"
+                      }`}
                     />
+                    {/* صارت الحالة معروفة أوفلاين: unitsPerPackConfirmedAt يُسحب مع
+                        بيانات الأدوية ويُخزّن محلياً، فالإشارة تقول الحقيقة لا تخمّنها. */}
+                    {!batchUnitsConfirmed && (
+                      <p className="mt-1 text-[11px] font-bold text-warning">
+                        ⚠ يرجى التأكد من عدد أشرطة هذا الدواء — لم يُراجَع من قبل.
+                        {batchSuggestedUnits !== null
+                          ? ` الرقم المقترح: ${batchSuggestedUnits}.`
+                          : ""}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          يُحفظ مرة واحدة ولن يُطلب منك مجدداً.
+                        </span>
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
@@ -2196,7 +2348,7 @@ export default function InventoryPage({ user }: { user: any }) {
                       : "—"}
                   </span>
                 </div>
-                {batchStripsPerPacket > 20 && (
+                {batchStripsPerPacket !== null && batchStripsPerPacket > 20 && (
                   <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
                     <span>⚠</span>
                     هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي
@@ -2371,15 +2523,19 @@ export default function InventoryPage({ user }: { user: any }) {
                         type="number"
                         min="1"
                         step="1"
-                        value={stripsPerPacket || ""}
-                        onChange={(e) =>
+                        value={stripsPerPacket ?? ""}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
                           setStripsPerPacket(
-                            Math.max(1, parseInt(e.target.value) || 1),
-                          )
-                        }
-                        placeholder="1"
-                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm focus:border-ring focus:ring-2 focus:ring-ring/20"
+                            Number.isInteger(v) && v > 0 ? v : null,
+                          );
+                        }}
+                        placeholder="اعدُدها من العلبة"
+                        className="w-full rounded-lg border border-warning/60 bg-background px-4 py-2 text-sm focus:border-warning focus:ring-2 focus:ring-ring/20"
                       />
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        دواء جديد — اعدُد أشرطة العلبة واكتب العدد.
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
@@ -2387,12 +2543,12 @@ export default function InventoryPage({ user }: { user: any }) {
                       سعر التكلفة للشريط:
                     </span>
                     <span className="text-sm font-bold text-primary mr-auto tabular-nums">
-                      {packetPrice > 0 && stripsPerPacket > 0
+                      {packetPrice > 0 && stripsPerPacket !== null && stripsPerPacket > 0
                         ? `${packetPrice} ÷ ${stripsPerPacket} = ${computedCostPrice.toLocaleString("en", { maximumFractionDigits: 2 })}`
                         : "—"}
                     </span>
                   </div>
-                  {stripsPerPacket > 20 && (
+                  {stripsPerPacket !== null && stripsPerPacket > 20 && (
                     <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
                       <span>⚠</span>
                       هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي

@@ -15,6 +15,7 @@ import { getAlertStats } from "@/app/lib/alerts";
 import { GlassKpiCard } from "@/app/ui/dashboard/kpi-card";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
 import { getSubscriptionState } from "@/app/lib/subscription-state";
+import { buildSalesByLocalDateQuery, type DailySalesRow } from "@/app/lib/report-sales-aggregates";
 
 /* ─────────────────────────────────────────────
    Data helpers
@@ -198,19 +199,21 @@ async function getAdminData(organizationId: string, branchId?: string) {
     // 7-day sales chart
     const sevenDaysAgo = new Date(todayStart);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    const rawWeeklySales = await prisma.sale.findMany({
-        where: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere },
-        select: { total: true, createdAt: true },
-    });
+    const weeklySalesRows = await prisma.$queryRaw<DailySalesRow[]>(
+        buildSalesByLocalDateQuery({
+            tenantBranchWhere: orgBranchWhere,
+            start: sevenDaysAgo,
+            timeZone: 'Asia/Baghdad',
+        }),
+    );
+    const weeklySalesByDate = new Map(weeklySalesRows.map((row) => [row.date, row.total]));
     const dayMap: Record<string, number> = {};
     for (let i = 0; i < 7; i++) {
         const d = new Date(todayStart);
         d.setDate(d.getDate() - (6 - i));
-        dayMap[d.toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' })] = 0;
-    }
-    for (const s of rawWeeklySales) {
-        const label = new Date(s.createdAt).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' });
-        if (label in dayMap) dayMap[label] += s.total || 0;
+        const label = d.toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' });
+        const dateKey = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
+        dayMap[label] = weeklySalesByDate.get(dateKey) ?? 0;
     }
     const weeklySalesChart = Object.entries(dayMap).map(([day, amount]: any) => ({ day, amount }));
 

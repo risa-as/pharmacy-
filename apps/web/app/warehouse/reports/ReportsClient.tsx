@@ -8,7 +8,7 @@
 // لا من تخمين العميل، فإخفاؤهما هنا فعلي لا مجرد CSS. لا مكتبة رسوم بيانية
 // (القيد §8 من هذه المرحلة) — كل التمثيل المرئي أدناه CSS/divs بسيطة.
 import { useEffect, useState, useCallback } from "react";
-import { Download } from "lucide-react";
+import { Download, Info } from "lucide-react";
 import { exportToExcel } from "@/app/lib/excel-export";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import LoadingBlock from "@/app/warehouse/_components/Loading";
@@ -16,6 +16,16 @@ import StatusChip, { type StatusChipVariant } from "@/app/warehouse/_components/
 
 type Period = "day" | "week" | "month";
 type TabId = "sales" | "top-sellers" | "slow-movers" | "fulfilment" | "expiry-risk" | "margins" | "customers" | "payables" | "reps";
+
+/**
+ * التبويبات المبنية على getSoldLines (طلبات المنصة حصراً) — تحمل وسم نطاق.
+ * «مخاطر الصلاحية» و«الذمم الدائنة» مستثناة: الأولى من الدفعات والثانية من
+ * المشتريات، ولا علاقة لأيّهما بمصدر المبيعات. و«المندوبون» هو موضع البيع
+ * الميداني نفسه.
+ */
+const FIELD_SALE_EXCLUDED_TABS: TabId[] = [
+    "sales", "top-sellers", "slow-movers", "fulfilment", "margins", "customers",
+];
 
 interface SalesPoint {
     key: string;
@@ -531,6 +541,18 @@ export default function ReportsClient({
                 ))}
             </div>
 
+            {/* نطاق البيانات (فحص 2026-09-17، فجوة G1): getSoldLines تُشتق من
+                WarehouseOrder حصراً، فهذه التبويبات لا تشمل فواتير البيع
+                الميداني للمندوبين — وهي تظهر في تبويب «المندوبون». التسميات
+                المجرّدة («المبيعات») كانت تُقرأ كإجماليات وهي ليست كذلك. */}
+            {FIELD_SALE_EXCLUDED_TABS.includes(tab) && (
+                <p className="flex items-start gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    يشمل هذا التقرير طلبات المنصة المعتمدة فقط. مبيعات المندوبين الميدانية
+                    {canViewReps ? ' في تبويب «المندوبون».' : ' غير محتسبة هنا.'}
+                </p>
+            )}
+
             {tab === "sales" && (
                 <SectionCard
                     title="إجمالي المبيعات بفترة"
@@ -774,7 +796,34 @@ export default function ReportsClient({
             )}
 
             {tab === "fulfilment" && (
-                <SectionCard title="نسبة التلبية">
+                <SectionCard
+                    title="نسبة التلبية"
+                    // كان هذا التبويب الوحيد من التسعة بلا تصدير (فحص 2026-09-17).
+                    // البيانات هنا مجاميع لا صفوف، فتُصدَّر كأربعة صفوف مسمّاة.
+                    action={
+                        fulfilmentData && fulfilmentData.totalLines > 0 ? (
+                            <ExportButton
+                                onClick={() =>
+                                    exportToExcel(
+                                        [
+                                            { label: "مكتمل بالكامل", value: fulfilmentData.fullyFilled },
+                                            { label: "تلبية جزئية", value: fulfilmentData.partial },
+                                            { label: "نافد", value: fulfilmentData.outOfStock },
+                                            { label: "إجمالي البنود", value: fulfilmentData.totalLines },
+                                            { label: "نسبة التلبية الكاملة %", value: fulfilmentData.ratePercent },
+                                        ],
+                                        [
+                                            { header: "البند", key: "label", width: 24 },
+                                            { header: "القيمة", key: "value", width: 14 },
+                                        ],
+                                        "تقرير_نسبة_التلبية",
+                                        "نسبة التلبية"
+                                    )
+                                }
+                            />
+                        ) : undefined
+                    }
+                >
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                         <p className="text-xs text-muted-foreground">من بنود الطلبات التي بُتَّ فيها (بحسب تاريخ إنشاء الطلب)</p>
                         <RangePicker value={fulfilmentRangeDays} onChange={setFulfilmentRangeDays} />

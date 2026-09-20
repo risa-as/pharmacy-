@@ -5,6 +5,8 @@
 // نافذة كشف حساب (فواتير كل صيدلية ودفعاتها) — نفس أسلوب
 // app/warehouse/stock/StockClient.tsx (sonner، نوافذ عبر Modal المشترك).
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import EmptyState from "@/app/warehouse/_components/EmptyState";
@@ -20,6 +22,10 @@ interface CustomerRow {
     lastOrderDate: string | null;
     creditLimit: number;
     paymentTermDays: number;
+    // رصيد سابق: دَين موروث من قبل هذا النظام، وليس جزءاً متحركاً من outstanding
+    // أدناه — outstanding يشمله فعلياً (مُضافاً من الخادم)، لكنه يبقى حقلاً
+    // مستقلاً هنا كي تُعرض القيمتان معاً بلا التباس بينهما.
+    openingBalance: number;
     priceTier: string | null;
     isBlocked: boolean;
     notes: string | null;
@@ -102,7 +108,7 @@ export default function CustomersClient({
 }) {
     const [customers, setCustomers] = useState(initialCustomers);
     const [editing, setEditing] = useState<CustomerRow | null>(null);
-    const [editForm, setEditForm] = useState({ creditLimit: "", paymentTermDays: "", priceTier: "", notes: "" });
+    const [editForm, setEditForm] = useState({ creditLimit: "", paymentTermDays: "", openingBalance: "", priceTier: "", notes: "" });
     const [saving, setSaving] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
     const [statementFor, setStatementFor] = useState<CustomerRow | null>(null);
@@ -112,6 +118,7 @@ export default function CustomersClient({
         organizationId: "",
         creditLimit: "0",
         paymentTermDays: "0",
+        openingBalance: "0",
         priceTier: "",
         notes: "",
     });
@@ -121,7 +128,7 @@ export default function CustomersClient({
     const openAdd = async () => {
         setShowAdd(true);
         setAddError(null);
-        setAddForm({ organizationId: "", creditLimit: "0", paymentTermDays: "0", priceTier: "", notes: "" });
+        setAddForm({ organizationId: "", creditLimit: "0", paymentTermDays: "0", openingBalance: "0", priceTier: "", notes: "" });
         if (availableOrgs === null) {
             try {
                 const res = await fetch("/api/warehouse-portal/customers/available-organizations");
@@ -149,6 +156,7 @@ export default function CustomersClient({
                     organizationId: addForm.organizationId,
                     creditLimit: Number(addForm.creditLimit) || 0,
                     paymentTermDays: Number(addForm.paymentTermDays) || 0,
+                    openingBalance: Number(addForm.openingBalance) || 0,
                     priceTier: addForm.priceTier.trim() || null,
                     notes: addForm.notes.trim() || null,
                 }),
@@ -168,10 +176,13 @@ export default function CustomersClient({
                     lastOrderDate: null,
                     creditLimit: data.customer.creditLimit,
                     paymentTermDays: data.customer.paymentTermDays,
+                    openingBalance: data.customer.openingBalance,
                     priceTier: data.customer.priceTier,
                     isBlocked: false,
                     notes: data.customer.notes,
-                    outstanding: 0,
+                    // عميل جديد بلا أي طلب/فاتورة بعد — outstanding = الرصيد
+                    // السابق فقط بالضبط (لا مستندات مفتوحة أصلاً لتضاف إليه).
+                    outstanding: data.customer.openingBalance ?? 0,
                 },
                 ...prev,
             ]);
@@ -191,6 +202,7 @@ export default function CustomersClient({
         setEditForm({
             creditLimit: String(c.creditLimit),
             paymentTermDays: String(c.paymentTermDays),
+            openingBalance: String(c.openingBalance),
             priceTier: c.priceTier ?? "",
             notes: c.notes ?? "",
         });
@@ -208,6 +220,7 @@ export default function CustomersClient({
                 body: JSON.stringify({
                     creditLimit: Number(editForm.creditLimit),
                     paymentTermDays: Number(editForm.paymentTermDays),
+                    openingBalance: Number(editForm.openingBalance),
                     priceTier: editForm.priceTier.trim() || null,
                     notes: editForm.notes.trim() || null,
                 }),
@@ -224,6 +237,14 @@ export default function CustomersClient({
                               ...c,
                               creditLimit: data.customer.creditLimit,
                               paymentTermDays: data.customer.paymentTermDays,
+                              openingBalance: data.customer.openingBalance,
+                              // outstanding محسوب على الخادم من مستندات + رصيد سابق
+                              // قديم — لا نداء GET إضافي هنا، فنعدّله محلياً بنفس
+                              // فرق الرصيد السابق فقط (المستندات المفتوحة لم تتغيّر
+                              // بهذا الحفظ): يبقى outstanding صحيحاً فوراً بلا حاجة
+                              // لتحديث الصفحة، وإلا بقي العمود القديم ظاهراً خطأً
+                              // حتى إعادة تحميل الصفحة.
+                              outstanding: c.outstanding - c.openingBalance + data.customer.openingBalance,
                               priceTier: data.customer.priceTier,
                               notes: data.customer.notes,
                           }
@@ -304,7 +325,10 @@ export default function CustomersClient({
                     <thead>
                         <tr className="sticky top-0 z-10 border-b bg-muted">
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">الصيدلية</th>
-                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المتبقي عليها</th>
+                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المتبقي عليها (الكلي)</th>
+                            <th className="px-4 py-3 text-right font-bold text-muted-foreground" title="دَين موروث من قبل هذا النظام — مُضمَّن أصلاً داخل «المتبقي عليها»، معروض هنا فقط للتوضيح">
+                                منه رصيد سابق
+                            </th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">حدّ الائتمان</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">مهلة السداد</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">الطلبات</th>
@@ -319,6 +343,12 @@ export default function CustomersClient({
                                 <td className="px-4 py-3 font-medium">{c.name}</td>
                                 <td className={`tabular-nums px-4 py-3 ${c.outstanding > 0 ? "font-bold text-destructive" : "text-muted-foreground"}`}>
                                     {money(c.outstanding)}
+                                </td>
+                                {/* عمود منفصل بلا لون تحذيري — جزء من المتبقي أعلاه لا
+                                    رقم إضافي، فتمييزه بصرياً عن عمود "المتبقي" يمنع
+                                    قراءته كدَين مضاعف. */}
+                                <td className="tabular-nums px-4 py-3 text-muted-foreground">
+                                    {c.openingBalance > 0 ? money(c.openingBalance) : "—"}
                                 </td>
                                 <td className="tabular-nums px-4 py-3 text-muted-foreground">
                                     {c.creditLimit > 0 ? money(c.creditLimit) : "بلا حد"}
@@ -345,6 +375,16 @@ export default function CustomersClient({
                                         >
                                             كشف حساب
                                         </button>
+                                        {/* نسخة ورقية للعميل — تقرأ دفترَي الذمم
+                                            (طلبات المنصة + البيع الميداني)، بخلاف
+                                            كشف الشاشة أعلاه الذي يعرض الفواتير. */}
+                                        <Link
+                                            href={`/warehouse/print/statement/${c.organizationId}`}
+                                            title="طباعة كشف الحساب"
+                                            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        >
+                                            <Printer className="h-3.5 w-3.5" />
+                                        </Link>
                                         {isOwner && c.customerId && (
                                             <>
                                                 <button
@@ -402,6 +442,22 @@ export default function CustomersClient({
                                     inputMode="numeric"
                                     className="w-full rounded-lg border bg-muted px-3 py-2 text-sm"
                                 />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                                    الرصيد السابق (دَين موروث قبل هذا النظام — وليس المستحق الحالي)
+                                </label>
+                                <input
+                                    value={editForm.openingBalance}
+                                    onChange={(e) => setEditForm({ ...editForm, openingBalance: e.target.value })}
+                                    inputMode="decimal"
+                                    className="w-full rounded-lg border bg-muted px-3 py-2 text-sm"
+                                />
+                                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                    مبلغ ثابت يُدخَل يدوياً مرة واحدة عند الإعداد — لا يُحسَب من فواتير هذا
+                                    النظام ولا يتغيّر تلقائياً معها. لو سجَّلت هذا الدَين لاحقاً كفاتورة
+                                    حقيقية هنا، خفِّض هذا الرقم يدوياً بنفس القيمة حتى لا يُحسَب مرتين.
+                                </p>
                             </div>
                             <div>
                                 <label className="mb-1 block text-xs font-medium text-muted-foreground">شريحة التسعير (اختياري)</label>
@@ -492,6 +548,22 @@ export default function CustomersClient({
                                     inputMode="numeric"
                                     className="w-full rounded-lg border bg-muted px-3 py-2 text-sm"
                                 />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                                    الرصيد السابق (دَين موروث قبل هذا النظام، 0 = لا يوجد)
+                                </label>
+                                <input
+                                    value={addForm.openingBalance}
+                                    onChange={(e) => setAddForm({ ...addForm, openingBalance: e.target.value })}
+                                    inputMode="decimal"
+                                    className="w-full rounded-lg border bg-muted px-3 py-2 text-sm"
+                                />
+                                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                    إن كانت لهذه الصيدلية ديون سابقة من قبل انضمام مذخرك للمنصة (نظام
+                                    ورقي/إكسل/برنامج آخر)، سجّلها هنا مرة واحدة. تُضاف فوق أي فواتير
+                                    تُنشأ لاحقاً على هذا النظام ولا تُستبدَل بها أبداً.
+                                </p>
                             </div>
                             <div>
                                 <label className="mb-1 block text-xs font-medium text-muted-foreground">شريحة التسعير (اختياري)</label>

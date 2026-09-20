@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { effectiveLine, buildQuoteDecision, type OrderLine } from "../warehouse-quote";
 import { buildDraftPurchasePlan, type DraftPurchaseItem } from "../warehouse-purchase-bridge";
+import { toStripPrice } from "../pack-units";
 
 // إصلاح خطأ مالي مؤكَّد: إجمالي عرض السعر (PATCH /api/warehouse-portal/orders/[id]/quote)
 // وبنود فاتورة الشراء المسودة (POST /api/warehouses/orders/[id]) كانا يحسبان "قيمة
@@ -150,6 +151,113 @@ describe("إصلاح الخطأ المالي: توحيد قيمة السطر ب�
 
     const plan = approveRoutePlan(orderItems);
     expect(plan.ok).toBe(false);
+    expect(plan.items).toHaveLength(0);
+  });
+});
+
+// إصلاح خطأ مالي ثانٍ ومؤكَّد: طلب المذخر بالكامل بوحدة الباكيت (قرار صاحب
+// النظام 2026-09) — WarehouseOrderItem.quantity عدد باكيتات وquotedPrice سعر
+// باكيت واحد، بينما Batch.quantity/costPrice في بقية النظام بوحدة الشريط.
+// route.ts (POST /api/warehouses/orders/[id]) كان يحوّل نصف المعادلة فقط:
+// السعر يُقسَم على unitsPerPack عبر toStripPrice لكن الكمية تمرّ بلا تغيير،
+// فتصل الدفعة للرفّ منقوصة بمقدار unitsPerPack وplan.total يهبط بنفس النسبة
+// عن WarehouseOrder.totalAmount (المحسوب في مسار العرض بسعر الباكيت الكامل).
+// الدوال أدناه تحاكي حلقة route.ts الحقيقية بعد الإصلاح: effectiveLine() ثم
+// toStripPrice() ثم ضرب الكمية/البونص بنفس conversion.unitsPerPack — بالضبط
+// كما يبنيها الراوت اليوم (انظر pricedItems.push في route.ts).
+function approveRoutePricedItems(
+  lines: Array<OrderLine & { drugId: string; bonusQuantity?: number }>,
+  unitsPerPack: number
+): DraftPurchaseItem[] {
+  const draftItems: DraftPurchaseItem[] = lines
+    .map((l) => {
+      const eff = effectiveLine(l);
+      return { drugId: l.drugId, quantity: eff.quantity, effectivePrice: eff.unitPrice, bonusQuantity: l.bonusQuantity };
+    })
+    .filter((it) => it.quantity > 0);
+
+  const priced: DraftPurchaseItem[] = [];
+  for (const it of draftItems) {
+    const conversion = toStripPrice({
+      price: it.effectivePrice,
+      priceUnit: null,
+      drugUnitsPerPack: unitsPerPack,
+      warehouseUnitsPerPack: unitsPerPack,
+    });
+    if (!conversion.ok) throw new Error("unexpected block in test setup: " + conversion.message);
+    priced.push({
+      ...it,
+      quantity: it.quantity * conversion.unitsPerPack,
+      effectivePrice: conversion.stripPrice,
+      bonusQuantity:
+        typeof it.bonusQuantity === "number" ? it.bonusQuantity * conversion.unitsPerPack : it.bonusQuantity,
+    });
+  }
+  return priced;
+}
+
+describe("تحويل وحدة الباكيت↔الشريط عند الاعتماد — الثابت الحسابي (route.ts)", () => {
+  it.each([1, 2, 10])(
+    "N=9 باكيت بسعر P=500 للباكيت، unitsPerPack=%i → quantity=N×U، cost=P÷U، total=N×P (=إجمالي عرض السعر)",
+    (U) => {
+      const N = 9;
+      const P = 500;
+      const lines: Array<OrderLine & { drugId: string }> = [
+        { drugId: "d1", status: "AVAILABLE", quantity: N, unitPrice: P, quotedPrice: P },
+      ];
+
+      const priced = approveRoutePricedItems(lines, U);
+      const plan = buildDraftPurchasePlan(priced);
+
+      expect(plan.ok).toBe(true);
+      expect(plan.items).toEqual([{ drugId: "d1", quantity: N * U, cost: P / U }]);
+      expect(plan.total).toBe(N * P);
+
+      // نفس الرقم الذي يحسبه مسار عرض السعر (WarehouseOrder.totalAmount) عبر
+      // effectiveLine() بالكمية/السعر الخام (بالباكيت) — الثابت الذي يبقي
+      // الفاتورتين متفقتين ماليّاً دوماً، حتى بعد إصلاح تحويل الكمية.
+      const quoteTotal = lines.reduce((sum, l) => sum + effectiveLine(l).lineTotal, 0);
+      expect(plan.total).toBe(quoteTotal);
+    }
+  );
+
+  it("سطر البونص (bonusQuantity بالباكيت) يُضرَب بنفس unitsPerPack، ويبقى بكلفة صفر بلا إضافة لـ total", () => {
+    const U = 2;
+    const N = 9;
+    const P = 500;
+    const bonus = 3; // باكيتات بونص معتمدة على السطر
+    const lines: Array<OrderLine & { drugId: string; bonusQuantity: number }> = [
+      { drugId: "d1", status: "AVAILABLE", quantity: N, unitPrice: P, quotedPrice: P, bonusQuantity: bonus },
+    ];
+
+    const priced = approveRoutePricedItems(lines, U);
+    const plan = buildDraftPurchasePlan(priced);
+
+    expect(plan.ok).toBe(true);
+    expect(plan.items).toEqual([
+      { drugId: "d1", quantity: N * U, cost: P / U },
+      { drugId: "d1", quantity: bonus * U, cost: 0 }, // بلا الضرب: كانت تصل منقوصة للرفّ
+    ]);
+    expect(plan.total).toBe(N * P); // البونص بلا مقابل مالي — لا يغيّر الإجمالي
+  });
+
+  it("حافة السعر الصفري: toStripPrice يعيد unitsPerPack:1 للسطر الصفري، لكن buildDraftPurchasePlan يرفضه كسطر مدفوع قبل أي كتابة لقاعدة البيانات", () => {
+    // هذا فرع مختلف عن سطر البونص (الذي له مسار cost:0 هيكلي منفصل): هنا
+    // effectivePrice نفسه صفر لسطر "مدفوع" مفترَض — حالة نادرة (خطأ تسعير
+    // مثلاً) لا سطر بونص متعمَّد.
+    const conversion = toStripPrice({ price: 0, priceUnit: null, drugUnitsPerPack: 4, warehouseUnitsPerPack: 4 });
+    expect(conversion).toEqual({ ok: true, stripPrice: 0, unitsPerPack: 1, converted: false });
+
+    const priced: DraftPurchaseItem[] = [
+      { drugId: "d1", quantity: 9 * conversion.unitsPerPack, effectivePrice: conversion.stripPrice },
+    ];
+    const plan = buildDraftPurchasePlan(priced);
+
+    // الكمية (×1) غير متضررة هنا، لكن السعر صفر فيُرفَض السطر كاملاً في فحص
+    // "سعر غير صالح" — فلا كمية ولا كلفة صفرية لسطر مدفوع تصلان لقاعدة
+    // البيانات أبداً، بصرف النظر عن unitsPerPack المُستخدَم في الضرب.
+    expect(plan.ok).toBe(false);
+    expect(plan.errors.join(" ")).toContain("سعر غير صالح");
     expect(plan.items).toHaveLength(0);
   });
 });

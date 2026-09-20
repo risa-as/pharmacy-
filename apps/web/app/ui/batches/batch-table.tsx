@@ -37,22 +37,31 @@ export default function BatchTable({ batches, currentPage, pageSize }: BatchTabl
     const router = useRouter();
     const [editBatch, setEditBatch] = useState<any>(null);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    /** لم يصل جواب الموردين بعد؟ يُميّز «لم تصل» عن «لا موردين». */
+    const [suppliersLoading, setSuppliersLoading] = useState(true);
 
     const now = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-    // Load suppliers when modal opens
+    // يُجلَب مرة واحدة عند تحميل الجدول، لا عند فتح النافذة.
+    //
+    // كان مربوطاً بـ editBatch، فيبدأ لحظة الضغط على «تعديل» فينتظر المستخدم
+    // رحلة الشبكة كاملة والقائمة فارغة أمامه. ولأن editBatch كائن جديد في كل
+    // فتح، كان يُعاد الجلب لكل دفعة تُعدّل ولو لم يتغيّر الموردون. القائمة قصيرة
+    // ونادرة التغيّر، فجلبة واحدة تكفي وتكون جاهزة قبل أول ضغطة.
     useEffect(() => {
-        if (editBatch) {
-            fetch('/api/suppliers')
-                .then(r => r.json())
-                .then(data => {
-                    if (Array.isArray(data)) setSuppliers(data);
-                })
-                .catch(() => {});
-        }
-    }, [editBatch]);
+        let cancelled = false;
+        fetch('/api/suppliers')
+            .then(r => r.json())
+            .then(data => {
+                if (cancelled) return;
+                if (Array.isArray(data)) setSuppliers(data);
+            })
+            .catch(() => {})
+            .finally(() => { if (!cancelled) setSuppliersLoading(false); });
+        return () => { cancelled = true; };
+    }, []);
 
     const handleEdit = (batch: BatchRow) => {
         setEditBatch({
@@ -81,7 +90,7 @@ export default function BatchTable({ batches, currentPage, pageSize }: BatchTabl
                             <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الفرع</th>
                             <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">المورد</th>
                             <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">رقم الدفعة</th>
-                            <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">سعر الشراء</th>
+                            <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">سعر الشراء<span className="font-normal text-muted-foreground"> (للشريط)</span></th>
                             <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الكمية</th>
                             <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">تاريخ الانتهاء</th>
                             <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">وقت الإدخال</th>
@@ -203,6 +212,7 @@ export default function BatchTable({ batches, currentPage, pageSize }: BatchTabl
             <EditBatchModal
                 batch={editBatch}
                 suppliers={suppliers}
+                suppliersLoading={suppliersLoading}
                 onClose={() => setEditBatch(null)}
                 onSaved={handleSaved}
             />

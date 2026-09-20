@@ -33,7 +33,8 @@ const ORDERABILITY_REASON: Record<DrugOrderability, string | null> = {
     GLOBAL: null,
     MAPPED_BY_BARCODE: null,
     NO_BARCODE: 'هذا الصنف بلا باركود صالح، والباركود هو ما يفهمه الطرفان — لا يمكن إرساله.',
-    NO_GLOBAL_MATCH: 'لا يوجد صنف عالمي بهذا الباركود، فلا يمكن للمذخر التعرّف عليه.',
+    // لم يعد مانعاً: الخادم يُنشئ الصفّ المشترك عند أول إرسال، فالنصّ خبر لا تحذير.
+    NO_GLOBAL_MATCH: null,
     AMBIGUOUS_BARCODE: 'يوجد أكثر من صنف عالمي بهذا الباركود — مطابقة غامضة تحتاج مراجعة الإدارة.',
 };
 

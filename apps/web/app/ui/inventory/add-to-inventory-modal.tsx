@@ -17,20 +17,37 @@ interface GlobalDrug {
 interface AddToInventoryModalProps {
   drug: GlobalDrug;
   branches: { id: string; name: string }[];
+  /**
+   * ميزة وحدة التسعير: تعبئة الدواء إن كانت معروفة. الدواء هنا موجود
+   * في النظام وغير موجود في مخزنك، فقد يحمل تعبئة أكّدها غيرك — وهي
+   * مشتركة بين كل الصيدليات بقرار صاحب النظام.
+   */
+  unitsPerPack?: number | null;
+  unitsPerPackConfirmed?: boolean;
   onClose: () => void;
 }
 
 export default function AddToInventoryModal({
   drug,
   branches,
+  unitsPerPack: unitsPerPackProp,
+  unitsPerPackConfirmed,
   onClose,
 }: AddToInventoryModalProps) {
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [packetPrice, setPacketPrice] = useState<number>(0);
   const [stripSellPrice, setStripSellPrice] = useState<number>(0);
-  const [stripsPerPacket, setStripsPerPacket] = useState<number>(1);
-  const computedCost = stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
+  /**
+   * يبدأ فارغاً لا بـ 1: القيمة 1 مشروعة وشائعة، لكن وضعها افتراضياً
+   * يجعل «العلبة فيها شريط واحد» و«لم ينتبه للخانة» رقماً واحداً، فيُحفظ
+   * سعر الباكيت كاملاً في حقل سعر الشريط — عطب نيسانـحزيران نفسه.
+   */
+  const [stripsPerPacket, setStripsPerPacket] = useState<number | null>(
+    unitsPerPackConfirmed && unitsPerPackProp ? unitsPerPackProp : null,
+  );
+  const computedCost =
+    stripsPerPacket && stripsPerPacket > 0 ? packetPrice / stripsPerPacket : 0;
   const { confirm, dialog: confirmDialog } = useConfirm();
   const router = useRouter();
 
@@ -47,6 +64,11 @@ export default function AddToInventoryModal({
     const qty = parseInt(formData.get("quantity") as string, 10) || 0;
     if (qty <= 0) {
       toast.error("لا يمكن الحفظ: الكمية يجب أن تكون أكبر من صفر");
+      return;
+    }
+    // عدد الأشرطة شرط للحفظ: هو المقسوم عليه، ولا يُفترض 1 صامتاً.
+    if (!stripsPerPacket || stripsPerPacket <= 0) {
+      toast.error("اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).");
       return;
     }
     // سعر الباكيت أقل من 125 دينار = تحذير وتأكيد قبل الحفظ
@@ -119,6 +141,8 @@ export default function AddToInventoryModal({
           branchId: formData.get("branchId"),
           price: stripSellPrice,
           cost: computedCost,
+          // يُحفظ على الدواء مع تاريخ تأكيده فلا يُسأل عنه مجدداً.
+          unitsPerPack: stripsPerPacket,
           minStock: parseInt(formData.get("minStock") as string, 10),
           maxStock: parseInt(formData.get("maxStock") as string, 10),
           quantity: parseInt(formData.get("quantity") as string, 10),
@@ -213,15 +237,30 @@ export default function AddToInventoryModal({
                   type="number"
                   min="1"
                   step="1"
-                  value={stripsPerPacket || ""}
-                  onChange={(e) =>
-                    setStripsPerPacket(
-                      Math.max(1, parseInt(e.target.value) || 1),
-                    )
-                  }
-                  placeholder="1"
-                  className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:ring-2 focus:ring-ring/20"
+                  value={stripsPerPacket ?? ""}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setStripsPerPacket(Number.isInteger(v) && v > 0 ? v : null);
+                  }}
+                  placeholder="اعدُدها من العلبة"
+                  className={`w-full rounded-lg border bg-background px-4 py-2 focus:ring-2 focus:ring-ring/20 ${
+                    unitsPerPackConfirmed
+                      ? "border-border focus:border-primary"
+                      : "border-warning/60 focus:border-warning"
+                  }`}
                 />
+                {/* إشارة التحقق — مرة واحدة لكل دواء، تختفي بعد أول حفظ. */}
+                {!unitsPerPackConfirmed && (
+                  <p className="mt-1 text-[11px] font-bold text-warning">
+                    ⚠ يرجى التأكد من عدد أشرطة هذا الدواء — لم يُراجَع من قبل.
+                    {unitsPerPackProp !== null && unitsPerPackProp !== undefined
+                      ? ` الرقم المقترح: ${unitsPerPackProp}.`
+                      : ""}{" "}
+                    <span className="font-normal text-muted-foreground">
+                      يُحفظ مرة واحدة ولن يُطلب منك مجدداً.
+                    </span>
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <div>
@@ -279,7 +318,7 @@ export default function AddToInventoryModal({
                   </span>
                 </div>
               </div>
-              {stripsPerPacket > 20 && (
+              {stripsPerPacket !== null && stripsPerPacket > 20 && (
                 <p className="text-xs font-bold text-warning mt-1.5 flex items-center gap-1">
                   <span>⚠</span>
                   هذا الحقل هو عدد الأشرطة داخل الباكيت الواحد وليس إجمالي الأشرطة — سيظهر تأكيد عند الحفظ

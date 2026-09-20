@@ -6,6 +6,8 @@
 // app/warehouse/stock/StockClient.tsx (sonner، فلترة عميل بلا إعادة جلب لأن
 // القائمة الأولية تغطي حتى 300 فاتورة).
 import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { Printer, FileText } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import EmptyState from "@/app/warehouse/_components/EmptyState";
@@ -305,16 +307,33 @@ export default function AccountsClient({
                                     {inv.dueAt ? new Date(inv.dueAt).toLocaleDateString("ar-IQ") : "نقدي"}
                                 </td>
                                 <td className="px-4 py-3">
-                                    {canRecordPayment && inv.status !== "PAID" && inv.status !== "CANCELLED" ? (
-                                        <button
-                                            onClick={() => openPay(inv)}
-                                            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                                    <div className="flex items-center gap-1.5">
+                                        {canRecordPayment && inv.status !== "PAID" && inv.status !== "CANCELLED" && (
+                                            <button
+                                                onClick={() => openPay(inv)}
+                                                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                                            >
+                                                تسجيل دفعة
+                                            </button>
+                                        )}
+                                        {/* الورقة التي تسافر مع البضاعة — متاحة لكل
+                                            من يرى هذه الصفحة (canViewFinance)، وهي
+                                            نفس صلاحية صفحة الطباعة. */}
+                                        <Link
+                                            href={`/warehouse/print/invoice/${inv.id}`}
+                                            title="طباعة الفاتورة"
+                                            className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                         >
-                                            تسجيل دفعة
-                                        </button>
-                                    ) : (
-                                        <span className="text-xs text-muted-foreground">—</span>
-                                    )}
+                                            <Printer className="h-3.5 w-3.5" />
+                                        </Link>
+                                        <Link
+                                            href={`/warehouse/print/statement/${inv.organizationId}`}
+                                            title="طباعة كشف حساب هذا العميل"
+                                            className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                        >
+                                            <FileText className="h-3.5 w-3.5" />
+                                        </Link>
+                                    </div>
                                 </td>
                             </tr>
                         ))}

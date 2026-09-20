@@ -35,6 +35,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         const data: {
             creditLimit?: number;
             paymentTermDays?: number;
+            openingBalance?: number;
             priceTier?: string | null;
             isBlocked?: boolean;
             notes?: string | null;
@@ -46,6 +47,17 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                 return NextResponse.json({ error: 'حدّ الائتمان يجب أن يكون رقماً غير سالب.' }, { status: 400 });
             }
             data.creditLimit = v;
+        }
+
+        // رصيد سابق: نفس نمط تحقّق creditLimit — رقم منتهٍ غير سالب. تعديله هنا
+        // لا يُعيد حساب أي شيء تلقائياً (لا الفواتير ولا المستحق المعروض سابقاً)؛
+        // القيمة الجديدة تدخل حساب "المستحق" من الاستعلام التالي فقط.
+        if ('openingBalance' in body) {
+            const v = Number(body.openingBalance);
+            if (!Number.isFinite(v) || v < 0) {
+                return NextResponse.json({ error: 'الرصيد السابق يجب أن يكون رقماً غير سالب.' }, { status: 400 });
+            }
+            data.openingBalance = v;
         }
 
         if ('paymentTermDays' in body) {

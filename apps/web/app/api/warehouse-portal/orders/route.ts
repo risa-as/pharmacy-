@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
                 status: query.status,
             },
             include: {
-                branch: { select: { name: true } },
+                // العلامة المميِّزة للطلب اسم الصيدلية (organization) لا الفرع وحده:
+                // كل المؤسسات في الإنتاج تسمّي فرعها الافتراضي «الفرع الرئيسي»،
+                // فاسم الفرع وحده لا يميّز عميلاً عن آخر — انظر OrdersClient.tsx.
+                branch: { select: { name: true, organization: { select: { name: true } } } },
                 items: {
                     include: { drug: { select: { tradeName: true, barcode: true } } },
                 },

@@ -27,6 +27,11 @@ export async function POST(req: Request) {
                 barcode: true,
                 tradeName: true,
                 scientificName: true,
+                // ميزة وحدة التسعير: يُضافان إلى هذا الاستعلام القائم بدل أن
+                // تجلبهما نافذة الدفعة برحلة ثانية — الإدخال السريع هو المسار
+                // الأساسي لإدخال الأدوية، وكل رحلة إلى Neon تكلف قرابة 183ms.
+                unitsPerPack: true,
+                unitsPerPackConfirmedAt: true,
             },
         });
 
@@ -56,12 +61,19 @@ export async function POST(req: Request) {
                         name: true,
                     },
                 },
+                // بلا مرشّح على الرصيد: الرصيد وآخر كلفة يُحسبان معاً من هذا الجلب
+                // الواحد. الفصل إلى علاقتين غير ممكن في Prisma، والدفعة المنتهية
+                // مطلوبة للسعر وإن لم تعد مطلوبة للرصيد.
                 batches: {
-                    select: { quantity: true },
-                    where: { quantity: { gt: 0 } },
+                    select: { quantity: true, costPrice: true, createdAt: true },
                 },
             },
         });
+
+        // أحدث دفعة ذات كلفة موجبة — دفعة البونص بكلفة صفر ليست مرجعاً للسعر.
+        const priced = (inventoryRaw?.batches ?? [])
+            .filter((b) => b.costPrice > 0)
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
         // Compute total available quantity from batches
         const inventory = inventoryRaw
@@ -69,8 +81,13 @@ export async function POST(req: Request) {
                 id: inventoryRaw.id,
                 branchId: inventoryRaw.branchId,
                 price: inventoryRaw.price,
-                quantity: inventoryRaw.batches.reduce((sum: any, b: any) => sum + b.quantity, 0),
+                quantity: inventoryRaw.batches.reduce(
+                    (sum, b) => sum + (b.quantity > 0 ? b.quantity : 0),
+                    0,
+                ),
                 branch: inventoryRaw.branch,
+                lastStripCost: priced?.costPrice ?? null,
+                lastCostAt: priced?.createdAt.toISOString() ?? null,
               }
             : null;
 

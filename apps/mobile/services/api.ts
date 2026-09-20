@@ -36,6 +36,8 @@ let _branchCacheTs = 0;
 // Keyed by full endpoint string (path + query). TTL per path prefix.
 interface _CacheEntry { data: unknown; ts: number }
 const _responseCache = new Map<string, _CacheEntry>();
+const _cacheGenerations = new Map<string, number>();
+let _sessionGeneration = 0;
 const _CACHE_TTL: Array<[string, number]> = [
     ['/stats',               30_000],  // 30 s
     ['/alerts',              30_000],  // 30 s
@@ -66,10 +68,60 @@ function _requestTimeout(endpoint: string): number {
     }
     return 8_000; // default
 }
-function _clearRelatedCache(endpoint: string) {
+function _cacheScope(endpoint: string): string {
     const path = endpoint.split('?')[0];
+    // Every filtered/branch inventory list describes the same inventory
+    // collection, so a stock mutation invalidates each cached variant.
+    if (path === '/inventory' || path === '/inventory/page') return '/inventory';
+    // Reports have several cached child routes; invalidating the report family
+    // must retire those entries and their in-flight requests as one unit.
+    if (path === '/reports' || path.startsWith('/reports/')) return '/reports';
+    return path;
+}
+
+function _invalidateCacheScope(endpoint: string) {
+    const scope = _cacheScope(endpoint);
+    _cacheGenerations.set(scope, (_cacheGenerations.get(scope) ?? 0) + 1);
     for (const key of _responseCache.keys()) {
-        if (key.split('?')[0] === path) _responseCache.delete(key);
+        if (_cacheScope(key) === scope) _responseCache.delete(key);
+    }
+    for (const key of _inflight.keys()) {
+        if (_cacheScope(key) === scope) _inflight.delete(key);
+    }
+}
+
+// Keep the original exact-path invalidation behaviour for all successful
+// writes. The inventory mutation policy below additionally clears related
+// collection and dashboard reads.
+function _clearRelatedCache(endpoint: string) {
+    _invalidateCacheScope(endpoint);
+}
+
+const _INVENTORY_MUTATION_PATHS = new Set([
+    '/inventory/add-batch',
+    '/inventory/add-to-branch',
+    '/inventory/create-quick',
+    '/inventory/quick-sale',
+]);
+
+function _isSuccessfulInventoryMutation(endpoint: string, result: unknown): boolean {
+    const path = endpoint.split('?')[0];
+    if (!_INVENTORY_MUTATION_PATHS.has(path) && path !== '/sales' && !/^\/purchases\/[^/]+\/receive$/.test(path)) return false;
+    // Inventory routes return `{ success: boolean }`. Do not evict a useful
+    // cache entry for a domain-level failure that was returned as HTTP 200.
+    return !!result && typeof result === 'object' && (result as { success?: unknown }).success === true;
+}
+
+function _invalidateInventoryCaches() {
+    for (const endpoint of [
+        '/inventory',
+        '/stats',
+        '/alerts',
+        '/smart-order',
+        '/purchases/low-stock',
+        '/reports',
+    ]) {
+        _invalidateCacheScope(endpoint);
     }
 }
 
@@ -79,18 +131,32 @@ function _clearRelatedCache(endpoint: string) {
 const _inflight = new Map<string, Promise<unknown>>();
 
 export function setCachedToken(token: string | null) {
+    if (cachedToken !== token) {
+        _sessionGeneration++;
+        _branchCache = null;
+        _responseCache.clear();
+        _inflight.clear();
+    }
     cachedToken = token;
 }
 
 // دالة مساعدة لقراءة التوكن من التخزين الآمن
-async function getStoredToken(): Promise<string | null> {
+async function getStoredToken(expectedSessionGeneration = _sessionGeneration): Promise<string | null> {
     if (cachedToken !== undefined) return cachedToken;
     try {
-        cachedToken = await SecureStore.getItemAsync('authToken');
-        return cachedToken;
+        const token = await SecureStore.getItemAsync('authToken');
+        // A late storage read from the old account must not overwrite a token
+        // set by a new login or refresh while this await was pending.
+        if (expectedSessionGeneration === _sessionGeneration && cachedToken === undefined) {
+            cachedToken = token;
+        }
+        return token;
     } catch {
-        cachedToken = await AsyncStorage.getItem('authToken');
-        return cachedToken;
+        const token = await AsyncStorage.getItem('authToken');
+        if (expectedSessionGeneration === _sessionGeneration && cachedToken === undefined) {
+            cachedToken = token;
+        }
+        return token;
     }
 }
 
@@ -117,6 +183,7 @@ async function handleSessionExpiry() {
     // always gets the freshly-stored user, not stale admin/previous user data.
     _sessionExpiredHandler?.();
 
+    _sessionGeneration++;
     cachedToken = null;       // Clear token cache
     _branchCache = null;      // Clear branch cache
     _responseCache.clear();   // Clear all response caches
@@ -170,6 +237,7 @@ async function fetchOnce<T>(
     baseUrl: string,
     noAutoLogout = false,
     timeoutMs = 8_000,
+    sessionGeneration = _sessionGeneration,
 ): Promise<T> {
     // Short-circuit immediately if the session has already expired.
     if (sessionExpired) {
@@ -201,6 +269,12 @@ async function fetchOnce<T>(
 
         clearTimeout(timeoutId);
 
+        // A response authenticated with an old account must not log out or
+        // return data into a newer session after the token has changed.
+        if (sessionGeneration !== _sessionGeneration) {
+            throw new Error('Session changed while the request was in flight');
+        }
+
         if (response.status === 401) {
             if (noAutoLogout) {
                 // Background/polling call — throw silently without wiping the session
@@ -222,7 +296,11 @@ async function fetchOnce<T>(
             }
         }
 
-        return response.json() as Promise<T>;
+        const result = await response.json() as T;
+        if (sessionGeneration !== _sessionGeneration) {
+            throw new Error('Session changed while the request was in flight');
+        }
+        return result;
     } catch (error) {
         clearTimeout(timeoutId);
         throw error;
@@ -234,11 +312,19 @@ async function request<T>(
     endpoint: string,
     options: RequestInit = {},
     noAutoLogout = false,
+    behavior: { forceRefresh?: boolean } = {},
 ): Promise<T> {
     const isGet = !options.method || options.method.toUpperCase() === 'GET';
+    const cacheScope = _cacheScope(endpoint);
+    const sessionGeneration = _sessionGeneration;
+
+    // A manual refresh needs a new server response, not a cache hit or a
+    // previously-started request. Advancing the generation also prevents that
+    // older request from writing its result into the cache when it finishes.
+    if (isGet && behavior.forceRefresh) _invalidateCacheScope(endpoint);
 
     // ── 1. Response cache (GET only) ─────────────────────────────────────────
-    if (isGet) {
+    if (isGet && !behavior.forceRefresh) {
         const ttl = _cacheTTL(endpoint);
         if (ttl > 0) {
             const hit = _responseCache.get(endpoint);
@@ -247,27 +333,43 @@ async function request<T>(
     }
 
     // ── 2. In-flight deduplication (GET only) ────────────────────────────────
-    if (isGet) {
+    if (isGet && !behavior.forceRefresh) {
         const pending = _inflight.get(endpoint);
         if (pending) return pending as Promise<T>;
     }
 
-    // ── 3. Resolve token + baseUrl in parallel ────────────────────────────────
-    const [token, baseUrl] = await Promise.all([getStoredToken(), getBaseUrl()]);
+    const cacheGeneration = _cacheGenerations.get(cacheScope) ?? 0;
 
     const MAX_RETRIES = 2;
     const BACKOFF_MS = [300, 800];
     const timeoutMs = _requestTimeout(endpoint);
 
     const execute = async (): Promise<T> => {
+        // Register the in-flight promise before yielding for token storage,
+        // so simultaneous callers also share request preparation.
+        const [token, baseUrl] = await Promise.all([getStoredToken(sessionGeneration), getBaseUrl()]);
+        if (sessionGeneration !== _sessionGeneration) {
+            throw new Error('Session changed while the request was being prepared');
+        }
         let lastError: unknown;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-                const result = await fetchOnce<T>(endpoint, options, token, baseUrl, noAutoLogout, timeoutMs);
+                const result = await fetchOnce<T>(endpoint, options, token, baseUrl, noAutoLogout, timeoutMs, sessionGeneration);
                 // Store in response cache on success
                 if (isGet) {
                     const ttl = _cacheTTL(endpoint);
-                    if (ttl > 0) _responseCache.set(endpoint, { data: result, ts: Date.now() });
+                    if (
+                        ttl > 0 &&
+                        sessionGeneration === _sessionGeneration &&
+                        cacheGeneration === (_cacheGenerations.get(cacheScope) ?? 0)
+                    ) {
+                        _responseCache.set(endpoint, { data: result, ts: Date.now() });
+                        // Search/page combinations otherwise accumulate for the
+                        // whole session even after their TTL has expired.
+                        while (_responseCache.size > 100) {
+                            _responseCache.delete(_responseCache.keys().next().value!);
+                        }
+                    }
                 }
                 return result;
             } catch (error) {
@@ -282,14 +384,22 @@ async function request<T>(
     };
 
     if (isGet) {
-        const promise = execute().finally(() => _inflight.delete(endpoint));
+        const promise = execute();
         _inflight.set(endpoint, promise);
+        void promise.finally(() => {
+            // Do not let an older forced/renewed request remove a newer one.
+            if (_inflight.get(endpoint) === promise) _inflight.delete(endpoint);
+        }).catch(() => {});
         return promise;
     }
 
-    // For mutations: run immediately then invalidate matching cache entries
+    // Writes are never cached. Preserve exact-path invalidation for every
+    // successful HTTP mutation, then clear the inventory and its derived data
+    // only after a successful inventory domain mutation. Barcode checks are
+    // read-only POSTs and therefore do not evict inventory reads.
     const result = await execute();
     _clearRelatedCache(endpoint);
+    if (_isSuccessfulInventoryMutation(endpoint, result)) _invalidateInventoryCaches();
     return result;
 }
 
@@ -355,10 +465,10 @@ export const apiService = {
         }
     },
 
-    async getInventory(branchId?: string) {
+    async getInventory(branchId?: string, forceRefresh = false) {
         try {
             const query = branchId ? `?branchId=${branchId}` : '';
-            return await request<any[]>(`/inventory${query}`);
+            return await request<any[]>(`/inventory${query}`, {}, false, { forceRefresh });
         } catch (error) {
             console.error('API Error getInventory:', error);
             // For development, allow mock inventory
@@ -371,6 +481,20 @@ export const apiService = {
             // ];
             throw error;
         }
+    },
+
+    async getInventoryPage(options: {
+        branchId?: string; page: number; search: string; status: string;
+        sort: string; direction: 'asc' | 'desc';
+    }, forceRefresh = false) {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(options)) {
+            if (value !== undefined) params.set(key, String(value));
+        }
+        return request<{
+            items: any[]; page: number; hasMore: boolean; total: number; totalValue: number;
+            counts: Record<'all' | 'low-stock' | 'out' | 'near-expiry' | 'expired', number>;
+        }>(`/inventory/page?${params}`, {}, false, { forceRefresh });
     },
 
     // Get drug by barcode — uses POST /inventory/check-barcode
@@ -437,7 +561,17 @@ export const apiService = {
     },
 
     // Add Batch (Drug exists in Branch Inventory)
-    async addBatch(data: { inventoryId: string; batchNumber?: string; quantity: number; expiryDate: string; price?: number; costPrice?: number; supplierId?: string | null }) {
+    async addBatch(data: {
+        inventoryId: string;
+        batchNumber?: string;
+        quantity: number;
+        expiryDate: string;
+        price?: number;
+        costPrice?: number;
+        supplierId?: string | null;
+        /** ميزة وحدة التسعير: عدد الأشرطة في الباكيت — يُثبّت على الدواء ومشترك بين كل الصيدليات. */
+        unitsPerPack?: number | null;
+    }) {
         try {
             return await request<any>(`/inventory/add-batch`, {
                 method: 'POST',
@@ -462,6 +596,8 @@ export const apiService = {
         quantity: number;
         expiryDate: string;
         supplierId?: string | null;
+        /** ميزة وحدة التسعير: عدد الأشرطة في الباكيت — يُثبّت على الدواء ومشترك بين كل الصيدليات. */
+        unitsPerPack?: number | null;
     }) {
         try {
             return await request<any>(`/inventory/add-to-branch`, {
@@ -496,6 +632,8 @@ export const apiService = {
         expiryDate: string;
         supplierId?: string | null;
         isQuickSale?: boolean;
+        /** ميزة وحدة التسعير: عدد الأشرطة في الباكيت — يُثبّت على الدواء ومشترك بين كل الصيدليات. */
+        unitsPerPack?: number | null;
     }) {
         try {
             return await request<any>(`/inventory/create-quick`, {

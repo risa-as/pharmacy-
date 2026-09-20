@@ -7,6 +7,7 @@ import { downloadWorkbook, readFirstSheetRows } from "@/app/lib/exceljs-browser"
 // sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
 // sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
 import { toast } from "sonner";
+import { Info } from "lucide-react";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import EmptyState from "@/app/warehouse/_components/EmptyState";
 import StatusChip from "@/app/warehouse/_components/StatusChip";
@@ -43,6 +44,14 @@ interface CatalogItem {
     // يبقى بمعناه الأصلي: مفتاح العرض اليدوي («معروض للبيع»)، لا التوفر الفعلي.
     sellableQuantity: number;
     availability: boolean;
+    // بوابة المذاخر المجانية: نفس قرار decideStockTracking المطبَّق فعلياً عند
+    // الشحن — false تعني "لا توجد أي دفعة لهذا الصنف بعد" أي أن هذا المذخر لم
+    // يبدأ تتبّع مخزونه له إطلاقاً، فـ availability أعلاه غير ذات معنى (دائماً
+    // false لعدم وجود رصيد) ويجب ألا تُعرَض كـ"غير متوفر" — هذا لا يمنع الشحن،
+    // شحن هذا الصنف يستمر بلا تحقق كما كان قبل ميزة المخزون. true تعني أن
+    // المذخر أدخل دفعة واحدة على الأقل (حتى لو صفرية أو منتهية) فبدأ التتبّع،
+    // وحينها availability تعكس رصيداً حقيقياً ويصح عرضها كما هي.
+    isTracked: boolean;
 }
 
 interface ImportReport {
@@ -76,6 +85,9 @@ async function fetchStockItems(): Promise<CatalogItem[] | null> {
         isAvailable: x.isAvailable,
         sellableQuantity: x.sellableQuantity ?? 0,
         availability: x.availability ?? false,
+        // /api/warehouse-portal/stock يعيد isTracked محسوبة بنفس decideStockTracking
+        // (batchCount الخام) — لا حساب مستقل هنا؛ ?? false احتياط دفاعي فقط.
+        isTracked: x.isTracked ?? false,
     }));
 }
 
@@ -115,6 +127,13 @@ export default function CatalogClient({
                 i.barcode.toLowerCase().includes(q)
         );
     }, [items, search]);
+
+    // البانر التوضيحي أسفله يظهر فقط حين لا يوجد أي صنف متتبَّع بعد — أي أن هذا
+    // المذخر لم يدخل أي دفعة إطلاقاً في كامل كتالوجه (حالة المذاخر التي حصلت
+    // على البوابة مجاناً وأدخلت الأسعار فقط). مبني على items الكاملة لا filtered
+    // كي لا يختفي/يظهر تبعاً لنص البحث. كتالوج فارغ (items.length === 0) له
+    // EmptyState مخصص أصلاً أسفل الصفحة، فلا داعي لبانر إضافي هنا.
+    const noTrackingStarted = items.length > 0 && items.every((it) => !it.isTracked);
 
     const addItem = async () => {
         const price = Number(form.price);
@@ -192,6 +211,8 @@ export default function CatalogClient({
                     // صنف جديد لا دفعات له بعد — سيُستبدل فوراً بالتحميل الخفيف أدناه.
                     sellableQuantity: 0,
                     availability: false,
+                    // بلا دفعات بعد ⇒ غير متتبَّع بعد (نفس decideStockTracking)، لا "نافد".
+                    isTracked: false,
                 },
             ]);
             // جلب الاسم العلمي والرصيد كاملَين — أعد التحميل الخفيف للتبسيط
@@ -402,6 +423,30 @@ export default function CatalogClient({
                     </>
                 }
             />
+
+            {noTrackingStarted && (
+                <div className="flex items-start gap-2 rounded-lg border border-info/20 bg-info/5 px-4 py-3 text-sm text-muted-foreground">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
+                    <div className="space-y-1">
+                        <p className="font-bold text-foreground">تتبّع المخزون لم يبدأ بعد لهذا المذخر</p>
+                        <p>
+                            لا توجد أي دفعة مسجَّلة لأي صنف في كتالوجك حتى الآن، لذلك التوفر غير
+                            محسوب — «غير محسوب» في عمود التوفر أدناه لا يخفي شيئاً عن الصيدليات؛
+                            طلباتها تصل وتُشحن بشكل طبيعي تماماً كما كان الحال قبل هذه الميزة.
+                        </p>
+                        <p>
+                            حين تُدخل رصيد أول دفعة لدواء ما، يبدأ تتبّع المخزون لهذا الدواء
+                            تحديداً تلقائياً — صنفاً بصنف، لا للكتالوج كاملاً دفعة واحدة، وبلا أي
+                            مفتاح تفعيل يدوي.
+                        </p>
+                        <p className="font-semibold text-warning">
+                            تنبيه: بمجرد بدء التتبّع لدواء، أي طلب يحتاج كمية أكبر من الكمية
+                            المسجَّلة له يُسقِط الشحنة كاملة، لا ذلك السطر فقط — تأكّد أن الرصيد
+                            الافتتاحي الذي تُدخله يطابق ما هو موجود فعلياً على الرف.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {showForm && (
                 <div className="rounded-lg border bg-card p-5 shadow-sm">
@@ -674,11 +719,25 @@ export default function CatalogClient({
                                     <td className="px-4 py-3">
                                         <div className="space-y-1">
                                             {/* التوفر الفعلي كما تراه الصيدلية عند الطلب — deriveAvailability
-                                                (معروض للبيع && رصيد > 0)، لا مجرد مفتاح isAvailable الخام. */}
-                                            <StatusChip
-                                                variant={it.availability ? "success" : "danger"}
-                                                label={it.availability ? "متوفر فعلياً" : "غير متوفر"}
-                                            />
+                                                (معروض للبيع && رصيد > 0)، لا مجرد مفتاح isAvailable الخام.
+                                                لكن هذا لا معنى له قبل بدء تتبّع المخزون لهذا الصنف (isTracked):
+                                                صنف بلا أي دفعة سيظهر availability=false دائماً لغياب الرصيد لا
+                                                لنفاده فعلياً، فعرضه "غير متوفر" كذبة — نعرض حالة محايدة بدلاً
+                                                من ذلك (title يشرح السبب لمن يمرّر الفأرة). الأصناف المتتبَّعة
+                                                فعلاً تحتفظ بالعرض الحالي حرفياً. */}
+                                            {it.isTracked ? (
+                                                <StatusChip
+                                                    variant={it.availability ? "success" : "danger"}
+                                                    label={it.availability ? "متوفر فعلياً" : "غير متوفر"}
+                                                />
+                                            ) : (
+                                                <span
+                                                    title="لم يبدأ تتبّع المخزون لهذا الصنف بعد، فالتوفر غير محسوب له. هذا لا يمنع الصيدليات من طلبه — يصل الطلب ويُشحن بشكل طبيعي."
+                                                    className="inline-block"
+                                                >
+                                                    <StatusChip variant="neutral" label="غير محسوب" />
+                                                </span>
+                                            )}
                                             {/* مفتاح التاجر اليدوي فقط — قرار عرض، وليس تأكيداً لوجود رصيد. */}
                                             <button
                                                 onClick={() => updateItem(it.id, { isAvailable: !it.isAvailable })}

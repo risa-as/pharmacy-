@@ -126,6 +126,20 @@ export default function InventoryScreen() {
     const [loading, setLoading]           = useState(true);
     const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
     const [isOnline, setIsOnline]         = useState(true);
+    // Only the most recent load may update the screen. This prevents an older
+    // branch/pre-save request from replacing the result of a newer refresh.
+    const inventoryRequestSequence = useRef(0);
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [serverSummary, setServerSummary] = useState<{ totalValue: number; counts: Record<TabKey, number> } | null>(null);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [loadMoreError, setLoadMoreError] = useState(false);
+    const pageRef = useRef(1);
+    const loadMoreLock = useRef(false);
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 250);
+        return () => clearTimeout(timer);
+    }, [search]);
 
     // Modal states (preserved)
     const [showBatchModal, setShowBatchModal]   = useState<any | null>(null);
@@ -134,7 +148,12 @@ export default function InventoryScreen() {
     const [modalLoading, setModalLoading]       = useState(false);
     // Packet → strip cost calculator (cost per strip = packet price ÷ strips)
     const [packetPrice, setPacketPrice]         = useState('');
-    const [stripsPerPacket, setStripsPerPacket] = useState('1');
+    /**
+     * ميزة وحدة التسعير: يبدأ فارغاً لا بـ '1'. القيمة 1 مشروعة وشائعة،
+     * لكن وضعها افتراضياً يجعل «العلبة فيها شريط واحد» و«لم ينتبه الصيدلاني
+     * للخانة» رقماً واحداً، فيُحفظ سعر الباكيت كاملاً في حقل سعر الشريط.
+     */
+    const [stripsPerPacket, setStripsPerPacket] = useState('');
     const [formData, setFormData] = useState({
         tradeName: '', scientificName: '', price: '', costPrice: '',
         minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '',
@@ -186,42 +205,81 @@ export default function InventoryScreen() {
         if (!isAdmin && authBranchId) setSelectedBranch(authBranchId);
     }, [isAdmin, authBranchId]);
 
-    const fetchInventory = useCallback(async () => {
-        setLoading(true);
+    const fetchInventory = useCallback(async (forceRefresh = false, page = 1) => {
+        const effectiveBranchId = (!isAdmin ? authBranchId : selectedBranch) || undefined;
+        const append = page > 1;
+        if (append && loadMoreLock.current) return;
+        const requestSequence = append ? inventoryRequestSequence.current : ++inventoryRequestSequence.current;
+        if (append) {
+            loadMoreLock.current = true;
+            setLoadingMore(true);
+        } else {
+            loadMoreLock.current = false;
+            setLoadingMore(false);
+            setLoading(true);
+            setHasMore(false);
+        }
+        setLoadMoreError(false);
         try {
             const online = await syncService.isOnline();
+            if (requestSequence !== inventoryRequestSequence.current) return;
             setIsOnline(online);
             if (online) {
-                const effectiveBranchId = !isAdmin ? authBranchId : selectedBranch;
-                const data = await apiService.getInventory(effectiveBranchId || undefined);
-                setItems(data);
+                const result = await apiService.getInventoryPage({
+                    branchId: effectiveBranchId || undefined, page, search: debouncedSearch,
+                    status: activeTab, sort: sortKey, direction: sortAsc ? 'asc' : 'desc',
+                }, forceRefresh);
+                if (requestSequence !== inventoryRequestSequence.current) return;
+                const data = result.items;
+                setItems(previous => append
+                    ? Array.from(new Map([...previous, ...data].map(item => [item.id, item])).values())
+                    : data);
+                setServerSummary({ totalValue: result.totalValue, counts: result.counts });
+                setHasMore(result.hasMore);
+                pageRef.current = page;
                 if (Array.isArray(data)) {
-                    setQuickSaleState(Object.fromEntries(
+                    const quickSale = Object.fromEntries(
                         data.filter((i: any) => i.drugId).map((i: any) => [i.drugId, i.isQuickSale ?? false])
-                    ));
+                    );
+                    setQuickSaleState(previous => append ? { ...previous, ...quickSale } : quickSale);
                 }
             } else {
-                const products = await dbService.searchProducts('');
+                if (append) { setLoadMoreError(true); return; }
+                setServerSummary(null);
+                const products = await dbService.searchProducts('', effectiveBranchId);
+                if (requestSequence !== inventoryRequestSequence.current) return;
                 setItems(products.map((p: any) => ({
                     id: p.id, drugName: p.drugName, price: p.price,
                     quantity: p.quantity, reorderLevel: p.reorderLevel,
                 })));
             }
         } catch {
+            if (requestSequence !== inventoryRequestSequence.current) return;
+            if (append) { setLoadMoreError(true); return; }
+            setServerSummary(null);
+            setIsOnline(false);
             try {
-                const products = await dbService.searchProducts('');
+                const products = await dbService.searchProducts('', effectiveBranchId);
+                if (requestSequence !== inventoryRequestSequence.current) return;
                 setItems(products.map((p: any) => ({
                     id: p.id, drugName: p.drugName, price: p.price,
                     quantity: p.quantity, reorderLevel: p.reorderLevel,
                 })));
             } catch { /* silent fallback */ }
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (requestSequence === inventoryRequestSequence.current) {
+                setLoading(false);
+                setRefreshing(false);
+                setLoadingMore(false);
+                loadMoreLock.current = false;
+            }
         }
-    }, [selectedBranch, isAdmin, authBranchId]);
+    }, [selectedBranch, isAdmin, authBranchId, debouncedSearch, activeTab, sortKey, sortAsc]);
 
-    useEffect(() => { fetchInventory(); }, [fetchInventory]);
+    useEffect(() => {
+        void fetchInventory();
+        return () => { inventoryRequestSequence.current++; };
+    }, [fetchInventory]);
 
     // "إدخال يدوي" in the scanner hands the search field back to this screen;
     // focus only sticks once the screen transition has finished.
@@ -259,7 +317,7 @@ export default function InventoryScreen() {
         if (!showBatchModal && !showBranchModal && !showCreateModal) {
             setSelectedSupplierId(null);
             setSupplierSearch('');
-            setPacketPrice(''); setStripsPerPacket('1');
+            setPacketPrice(''); setStripsPerPacket('');
         }
     }, [showBatchModal, showBranchModal, showCreateModal]);
 
@@ -297,8 +355,10 @@ export default function InventoryScreen() {
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         triggerSync('inventory');
-        await syncService.syncData();
-        fetchInventory();
+        // Refresh the visible inventory immediately. The broader offline sync
+        // may take longer and should not make this user-initiated refresh wait.
+        void syncService.syncData().catch(() => {});
+        await fetchInventory(true);
     }, [fetchInventory, triggerSync]);
 
     // Runs soft-warning confirms one after another; any "إلغاء" aborts the save.
@@ -324,8 +384,13 @@ export default function InventoryScreen() {
             Alert.alert('لا يمكن الحفظ', 'الكمية يجب أن تكون أكبر من صفر.');
             return;
         }
+        // عدد الأشرطة شرط للحفظ: هو المقسوم عليه، ولا يُفترض 1 صامتاً.
+        const strips = parseInt(stripsPerPacket, 10);
+        if (!Number.isInteger(strips) || strips <= 0) {
+            Alert.alert('لا يمكن الحفظ', 'اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).');
+            return;
+        }
         const pkt = parseFloat(packetPrice) || 0;
-        const strips = Math.max(1, parseInt(stripsPerPacket) || 1);
         const stripCost = pkt > 0 ? pkt / strips : 0;
         const checks: Array<{ title: string; message: string }> = [];
 
@@ -401,17 +466,23 @@ export default function InventoryScreen() {
         guardAndSave(async (fixedExpiry) => {
             setModalLoading(true);
             try {
-                await apiService.addBatch({
+                const result = await apiService.addBatch({
                     inventoryId: showBatchModal.id,
                     quantity: parseInt(formData.quantity) || 0,
                     costPrice: computedStripCost,
                     expiryDate: fixedExpiry + 'T00:00:00.000Z',
                     supplierId: selectedSupplierId || null,
+                    // يُحفظ على الدواء فلا يُسأل عنه مجدداً — مشترك بين كل الصيدليات.
+                    unitsPerPack: _strips,
                 });
+                if (!result?.success) {
+                    Alert.alert('خطأ', result?.message || 'فشل إضافة الجرعة');
+                    return;
+                }
                 setShowBatchModal(null);
                 setFormData(f => ({ ...f, quantity: '', expiryDate: '', costPrice: '' }));
-                setPacketPrice(''); setStripsPerPacket('1');
-                fetchInventory();
+                setPacketPrice(''); setStripsPerPacket('');
+                await fetchInventory(true);
             } catch { Alert.alert('خطأ', 'فشل إضافة الجرعة'); }
             finally { setModalLoading(false); }
         }, { currentPrice: Number(showBatchModal?.price) || null });
@@ -424,7 +495,7 @@ export default function InventoryScreen() {
         guardAndSave(async (fixedExpiry) => {
             setModalLoading(true);
             try {
-                await apiService.addToBranch({
+                const result = await apiService.addToBranch({
                     drugId: showBranchModal.id, branchId: selectedBranch!,
                     price: parseFloat(formData.price) || 0,
                     cost: computedStripCost,
@@ -433,11 +504,16 @@ export default function InventoryScreen() {
                     quantity: parseInt(formData.quantity) || 0,
                     expiryDate: fixedExpiry + 'T00:00:00.000Z',
                     supplierId: selectedSupplierId || null,
+                    unitsPerPack: _strips,
                 });
+                if (!result?.success) {
+                    Alert.alert('خطأ', result?.message || 'فشل إضافة الدواء للفرع');
+                    return;
+                }
                 setShowBranchModal(null);
                 setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
-                setPacketPrice(''); setStripsPerPacket('1');
-                fetchInventory();
+                setPacketPrice(''); setStripsPerPacket('');
+                await fetchInventory(true);
             } catch { Alert.alert('خطأ', 'فشل إضافة الدواء للفرع'); }
             finally { setModalLoading(false); }
         }, { sellPrice: parseFloat(formData.price) || 0 });
@@ -450,7 +526,7 @@ export default function InventoryScreen() {
         guardAndSave(async (fixedExpiry) => {
             setModalLoading(true);
             try {
-                await apiService.createQuickDrug({
+                const result = await apiService.createQuickDrug({
                     barcode: showCreateModal!, tradeName: formData.tradeName,
                     scientificName: formData.scientificName, drugType: 'Tablet', dosage: 'Custom',
                     unit: 'Box', category: 'General', manufacturer: 'Unknown', country: 'Unknown',
@@ -462,28 +538,33 @@ export default function InventoryScreen() {
                     expiryDate: fixedExpiry + 'T00:00:00.000Z',
                     supplierId: selectedSupplierId || null,
                     isQuickSale,
+                    unitsPerPack: _strips,
                 });
+                if (!result?.success) {
+                    Alert.alert('خطأ', result?.message || 'فشل تسجيل الدواء الجديد');
+                    return;
+                }
                 setShowCreateModal(null);
                 setIsQuickSale(false);
                 setFormData({ tradeName: '', scientificName: '', price: '', costPrice: '', minStock: '5', maxStock: '100', quantity: '', expiryDate: '', batchNumber: '' });
-                setPacketPrice(''); setStripsPerPacket('1');
-                fetchInventory();
+                setPacketPrice(''); setStripsPerPacket('');
+                await fetchInventory(true);
             } catch { Alert.alert('خطأ', 'فشل تسجيل الدواء الجديد'); }
             finally { setModalLoading(false); }
         }, { sellPrice: parseFloat(formData.price) || 0 });
     };
 
     // Total inventory value at sale price (Σ quantity × price).
-    const totalValue = useMemo(() => items.reduce((s, i) => s + i.quantity * i.price, 0), [items]);
+    const totalValue = useMemo(() => serverSummary?.totalValue ?? items.reduce((s, i) => s + i.quantity * i.price, 0), [items, serverSummary]);
 
     // ── Counts for tab badges ──────────────────────────────────────────────────
-    const counts = useMemo(() => ({
+    const counts = useMemo(() => serverSummary?.counts ?? ({
         all:            items.length,
         'low-stock':    items.filter(i => i.quantity > 0 && i.quantity <= i.reorderLevel).length,
         out:            items.filter(i => i.quantity <= 0).length,
         'near-expiry':  items.filter(i => { const d = getDaysToExpiry(i.expiryDate); return d !== null && d >= 0 && d < 120; }).length,
         expired:        items.filter(i => { const d = getDaysToExpiry(i.expiryDate); return d !== null && d < 0; }).length,
-    }), [items]);
+    }), [items, serverSummary]);
 
     // ── Collator instance — created once, 10-100× faster than localeCompare('ar') ──
     const collator = useMemo(() => new Intl.Collator('ar', { sensitivity: 'base' }), []);
@@ -495,6 +576,7 @@ export default function InventoryScreen() {
 
     // ── Fast filter (no sort) — runs synchronously, cheap ─────────────────────
     const filtered = useMemo(() => {
+        if (serverSummary) return items;
         const q = search.toLowerCase();
         return items.filter(i => {
             if (q && !i.drugName.toLowerCase().includes(q) && !(i.barcode?.includes(search) ?? false)) return false;
@@ -504,10 +586,11 @@ export default function InventoryScreen() {
             if (activeTab === 'expired')     { const d = expiryCache.get(i.id)!; return d !== 9999 && d < 0; }
             return true;
         });
-    }, [items, search, activeTab, expiryCache]);
+    }, [items, search, activeTab, expiryCache, serverSummary]);
 
     // ── Async sort — shows loading state immediately, then sorts off the render cycle
     useEffect(() => {
+        if (serverSummary) { setSorted(items); setIsSorting(false); return; }
         setIsSorting(true);
         const task = InteractionManager.runAfterInteractions(() => {
             const result = [...filtered].sort((a, b) => {
@@ -521,7 +604,7 @@ export default function InventoryScreen() {
             setIsSorting(false);
         });
         return () => task.cancel();
-    }, [filtered, sortKey, sortAsc, collator, expiryCache]);
+    }, [filtered, sortKey, sortAsc, collator, expiryCache, serverSummary, items]);
 
     // ── Item card (shared by both shells — navigation-map §7) ──────────────────
     const renderItem = ({ item }: { item: InventoryItem }) => {
@@ -638,8 +721,8 @@ export default function InventoryScreen() {
 
     // Cost-per-strip derived from the packet calculator.
     const _pkt = parseFloat(packetPrice) || 0;
-    const _strips = Math.max(1, parseInt(stripsPerPacket) || 1);
-    const computedStripCost = _pkt > 0 ? _pkt / _strips : 0;
+    const _strips = parseInt(stripsPerPacket, 10) > 0 ? parseInt(stripsPerPacket, 10) : 0;
+    const computedStripCost = _pkt > 0 && _strips > 0 ? _pkt / _strips : 0;
     // سعر البيع الحالي للشريط — متاح فقط في نموذج «إضافة دفعة»؛ النماذج الأخرى
     // فيها حقل سعر بيع خاص بها فتغطّيها فحوصات البيع/التكلفة.
     const _batchSellPrice = showBatchModal ? Number(showBatchModal.price) || 0 : 0;
@@ -674,7 +757,7 @@ export default function InventoryScreen() {
                 />
                 <TextInput
                     style={[inputStyle, { flex: 1, marginBottom: 8 }]}
-                    placeholder="عدد الأشرطة" keyboardType="numeric" placeholderTextColor={C.mutedForeground}
+                    placeholder="اعدُدها من العلبة" keyboardType="numeric" placeholderTextColor={C.mutedForeground}
                     value={stripsPerPacket} onChangeText={setStripsPerPacket}
                 />
             </View>
@@ -917,6 +1000,15 @@ export default function InventoryScreen() {
                 <View style={{ flex: 1 }}>
                     <FlatList
                         data={sorted}
+                        onEndReached={() => {
+                            if (hasMore && !loading && !loadMoreError) void fetchInventory(false, pageRef.current + 1);
+                        }}
+                        onEndReachedThreshold={0.4}
+                        ListFooterComponent={loadingMore ? <ActivityIndicator color={C.primary} /> : loadMoreError ? (
+                            <TouchableOpacity onPress={() => void fetchInventory(false, pageRef.current + 1)} style={{ padding: 16 }}>
+                                <Text style={{ color: C.primary, textAlign: 'center' }}>تعذر تحميل المزيد — اضغط لإعادة المحاولة</Text>
+                            </TouchableOpacity>
+                        ) : null}
                         keyExtractor={item => item.id}
                         renderItem={renderItem}
                         ListHeaderComponent={listHeaderEl}

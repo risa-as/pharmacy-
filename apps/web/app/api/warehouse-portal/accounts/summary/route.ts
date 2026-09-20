@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { summarizeReceivables } from '@/app/lib/warehouse-accounts';
+import { loadOpenReceivables } from '@/app/lib/warehouse-receivables';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
 
 export async function GET() {
@@ -18,12 +19,12 @@ export async function GET() {
         const gate = await requireWarehousePermission(ctx, 'canViewFinance');
         if (!gate.ok) return gate.response;
 
-        const invoices = await prisma.warehouseInvoice.findMany({
-            where: { warehouseId: ctx.warehouseId, status: { in: ['UNPAID', 'PARTIAL'] } },
-            select: { total: true, paidAmount: true, status: true, dueAt: true },
-        });
+        // دفترا الذمم معاً — فواتير طلبات المنصة وفواتير البيع الميداني
+        // (فحص 2026-09-17، فجوة G1): كان هذا الملخّص يقرأ الأول وحده فيُظهر
+        // ذمماً أقلّ من الحقيقة لأي مذخر يبيع بمندوبين.
+        const receivables = await loadOpenReceivables(prisma, ctx.warehouseId);
 
-        const summary = summarizeReceivables(invoices);
+        const summary = summarizeReceivables(receivables);
 
         return NextResponse.json(summary);
     } catch (e: any) {

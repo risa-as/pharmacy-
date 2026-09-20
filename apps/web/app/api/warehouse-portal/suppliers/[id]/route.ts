@@ -90,3 +90,63 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         return NextResponse.json({ error: 'فشل في تعديل بيانات المورّد' }, { status: 500 });
     }
 }
+
+// DELETE: حذف مورّد أُضيف بالخطأ (فحص 2026-09-17، فجوة G5).
+//
+// كان المسار PATCH فقط، فمورّد أُنشئ بخطأ إملائي أو تجربةً يبقى في القائمة
+// إلى الأبد — والإيقاف (isActive: false) يُخفيه من الاختيار لكنه يبقى في
+// القائمة وفي أي تجميع.
+//
+// الحذف مشروط بألّا يكون للمورّد **أي** تاريخ: لا فاتورة شراء ولا دفعة سداد.
+// وجود أيٍّ منهما يعني أن الحذف سيقطع سند فاتورة قائمة، فيُرفض ويُوجَّه
+// المستخدم إلى الإيقاف — وهو السلوك الصحيح لمورّد حقيقي توقّف التعامل معه.
+//
+// onDelete على WarehousePurchase.supplier ليس Cascade (علاقة إلزامية بلا
+// حذف متتالٍ)، فحذف مورّد له فواتير يفشل في قاعدة البيانات أصلاً — الفحص
+// هنا يحوّل ذلك الفشل الغامض إلى رسالة عربية تقول ماذا يفعل المستخدم.
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
+    const ctx = await getWarehouseContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    try {
+        const gate = await requireWarehousePermission(ctx, 'canCreatePurchase');
+        if (!gate.ok) return gate.response;
+
+        // warehouseId في الشرط يمنع حذف مورّد مذخر آخر بتخمين المعرّف.
+        const supplier = await prisma.warehouseSupplier.findFirst({
+            where: { id: params.id, warehouseId: ctx.warehouseId },
+            select: { id: true, name: true },
+        });
+        if (!supplier) {
+            return NextResponse.json({ error: 'المورّد غير موجود ضمن هذا المذخر' }, { status: 404 });
+        }
+
+        const [purchaseCount, paymentCount] = await Promise.all([
+            prisma.warehousePurchase.count({ where: { supplierId: supplier.id } }),
+            // الدفعة مرتبطة بفاتورة لا بمورّد مباشرةً، فتُعدّ عبر العلاقة.
+            prisma.warehouseSupplierPayment.count({
+                where: { purchase: { supplierId: supplier.id } },
+            }),
+        ]);
+
+        if (purchaseCount > 0 || paymentCount > 0) {
+            return NextResponse.json(
+                {
+                    error:
+                        `لا يمكن حذف «${supplier.name}»: مرتبط بـ${purchaseCount} فاتورة شراء ` +
+                        `و${paymentCount} دفعة سداد. أوقفه بدل حذفه كي يبقى سند فواتيره سليماً.`,
+                    code: 'SUPPLIER_HAS_HISTORY',
+                },
+                { status: 409 }
+            );
+        }
+
+        await prisma.warehouseSupplier.delete({ where: { id: supplier.id } });
+
+        return NextResponse.json({ success: true, deletedId: supplier.id });
+    } catch (e: any) {
+        console.error('warehouse-portal supplier DELETE error:', e);
+        return NextResponse.json({ error: 'فشل في حذف المورّد' }, { status: 500 });
+    }
+}

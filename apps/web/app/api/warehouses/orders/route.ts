@@ -150,6 +150,38 @@ export async function POST(req: NextRequest) {
         const errors: Array<{ index: number; message: string }> = [];
         const resolvedItems: Array<{ drugId: string; quantity: number; unitPrice: number; requestedPrice: number | null }> = [];
 
+        // جلب مجمّع قبل الحلقة: كانت تستعلم مرة أو مرتين **لكل صنف** بالتتابع،
+        // فطلب من عشرين صنفاً = أربعون رحلة إلى Neon قبل أن تبدأ المعاملة أصلاً.
+        // استعلامان يغنيان عنها جميعاً، ولا يبقى في الحلقة استعلام إلا لإنشاء صفّ
+        // عالمي مفقود — وهي حالة نادرة تحدث مرة واحدة لكل دواء في تاريخ المنصة.
+        const wantedBarcodes = Array.from(new Set(
+            items.map((it: any) => (it?.barcode ? String(it.barcode).trim() : '')).filter(Boolean)
+        ));
+        const [globalRows, ownRows] = wantedBarcodes.length
+            ? await Promise.all([
+                  prisma.globalDrug.findMany({
+                      where: { barcode: { in: wantedBarcodes }, ...GLOBAL_DRUG_SCOPE },
+                      select: { id: true, barcode: true },
+                  }),
+                  prisma.globalDrug.findMany({
+                      where: {
+                          barcode: { in: wantedBarcodes },
+                          ...(tenantCtx.organizationId
+                              ? { organizationId: tenantCtx.organizationId }
+                              : { organizationId: { not: null } }),
+                      },
+                      select: { barcode: true, tradeName: true, scientificName: true, origin: true },
+                  }),
+              ])
+            : [[], []];
+        const globalsByBarcode = new Map<string, Array<{ id: string }>>();
+        for (const g of globalRows) {
+            const list = globalsByBarcode.get(g.barcode) ?? [];
+            list.push({ id: g.id });
+            globalsByBarcode.set(g.barcode, list);
+        }
+        const ownByBarcode = new Map(ownRows.map((o) => [o.barcode, o]));
+
         for (let i = 0; i < items.length; i++) {
             const it = items[i] ?? {};
             const quantity = Number(it.quantity);
@@ -166,14 +198,56 @@ export async function POST(req: NextRequest) {
             let globalDrugId: string | null = null;
             if (it.barcode) {
                 const barcode = String(it.barcode).trim();
-                const matches = barcode ? await prisma.globalDrug.findMany({
-                    where: { barcode, ...GLOBAL_DRUG_SCOPE }, select: { id: true }, take: 2,
-                }) : [];
-                if (matches.length !== 1) {
-                    errors.push({ index: i, message: 'الباركود لا يطابق صنفاً عالمياً واحداً — راجع هوية الدواء.' });
+                const matches = barcode ? (globalsByBarcode.get(barcode) ?? []) : [];
+                if (matches.length > 1) {
+                    // مطابقة غامضة — وهي **خطأ بيانات** لا حالة طبيعية: الرمز
+                    // في السوق لا يتكرر لدواءين، فوجود صفّين عالميين يعني تكراراً
+                    // يحتاج دمجاً. المنع هنا يحمي من إصابة الصنف الخطأ.
+                    errors.push({ index: i, message: 'يوجد أكثر من صنف عالمي بهذا الباركود — تكرار يحتاج مراجعة الإدارة قبل الإرسال.' });
                     continue;
                 }
-                globalDrugId = matches[0].id;
+                if (matches.length === 1) {
+                    globalDrugId = matches[0].id;
+                } else {
+                    // لا صفّ عالمي بعد — يُنشَأ من صفّ المؤسسة عند أول إرسال.
+                    //
+                    // اشتراط وجوده مسبقاً كان ترتيباً إدارياً لا ضرورة تقنية: مسار
+                    // المذخر يسعّر يدوياً ويطابق بالباركود عند الشحن، والرمز ثابت
+                    // في السوق لا يختلف معناه بين الأطراف (بقرار صاحب النظام). والإنشاء
+                    // هنا يُوحّد الكتالوغ من العمل اليومي: أول صيدلية تطلبه تُنشئ
+                    // الصفّ المشترك، ومن بعدها يُطابَق عليه بالباركود تلقائياً.
+                    const own = ownByBarcode.get(barcode);
+                    if (!own) {
+                        errors.push({ index: i, message: 'لا يوجد صنف بهذا الباركود في أدويتك.' });
+                        continue;
+                    }
+                    try {
+                        const created = await prisma.globalDrug.create({
+                            data: {
+                                barcode,
+                                tradeName: own.tradeName,
+                                scientificName: own.scientificName,
+                                origin: own.origin,
+                                ...GLOBAL_DRUG_SCOPE,
+                            },
+                            select: { id: true },
+                        });
+                        globalDrugId = created.id;
+                        // تحديث الخريطة المجمّعة كي يرى باقي أسطر الطلب الصفّ الجديد.
+                        globalsByBarcode.set(barcode, [{ id: created.id }]);
+                    } catch {
+                        // تسابق: صيدلية أخرى أنشأته بين الفحص والإنشاء — يُعاد الجلب
+                        // بدل إفشال الطلب، فالنتيجة المرجوة تحقّقت على يد غيرنا.
+                        const again = await prisma.globalDrug.findFirst({
+                            where: { barcode, ...GLOBAL_DRUG_SCOPE }, select: { id: true },
+                        });
+                        if (!again) {
+                            errors.push({ index: i, message: 'تعذر تسجيل الصنف في الكتالوغ المشترك — أعد المحاولة.' });
+                            continue;
+                        }
+                        globalDrugId = again.id;
+                    }
+                }
             } else if (it.drugId) {
                 const g = await prisma.globalDrug.findFirst({
                     where: { id: String(it.drugId), organizationId: null, warehouseId: null },
@@ -242,6 +316,9 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // مهلة أوسع من الافتراضية (5 ثوانٍ): المعاملة تضمّ قفلاً وفحصاً وإنشاءين،
+        // وكل رحلة إلى Neon قرابة 180ms في أحسن الأحوال وأكثر بكثير على اتصال
+        // بطيء. القفل مفتاحه idempotencyKey فلا تزاحم بين الطلبات المختلفة.
         const outcome = await prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))::text`;
             const prior = await tx.warehouseOrder.findUnique({ where: { idempotencyKey }, include: { items: true, events: { where: { type: 'SENT' } } } });
@@ -252,21 +329,13 @@ export async function POST(req: NextRequest) {
                 }
                 return { order: prior, idempotentReplay: true };
             }
-            let orderNumber: string | null = null;
-            for (let attempt = 0; attempt < 5; attempt++) {
-                const candidate = `WO-${randomUUID().toUpperCase()}`;
-                const exists = await tx.warehouseOrder.findUnique({ where: { orderNumber: candidate } });
-                if (!exists) {
-                    orderNumber = candidate;
-                    break;
-                }
-            }
-            // كل المحاولات الخمس اصطدمت برقم موجود — orderNumber يبقى null، والعمود
-            // اختياري (String?) رغم كونه فريداً، فبدون هذا الحارس كان Prisma سينشئ
-            // طلباً بلا رقم بصمت (! كانت تكذب). نُفشل المعاملة بدل ذلك فتتراجع بالكامل.
-            if (orderNumber === null) {
-                throw new Error('WO_NUMBER_GENERATION_FAILED');
-            }
+            // رقم الطلب مبنيّ على UUID، فاحتمال تكراره معدوم عملياً. كانت هنا
+            // حلقة تفحص تفرّده خمس مرات — خمس رحلات متتالية إلى قاعدة بعيدة (قرابة
+            // 180ms للرحلة) داخل معاملة مهلتها 5 ثوانٍ، فكانت تستنفد المهلة وتسقط
+            // المعاملة بـ P2028. والفحص لم يكن يحمي شيئاً أصلاً: العمود فريد في
+            // المخطط، فالقاعدة ترفض التكرار وتتراجع المعاملة ويُعيد العميل بنفس
+            // مفتاح idempotency فلا يُنشَأ طلب مكرر.
+            const orderNumber = `WO-${randomUUID().toUpperCase()}`;
 
             const created = await tx.warehouseOrder.create({
                 data: {
@@ -301,7 +370,7 @@ export async function POST(req: NextRequest) {
             });
 
             return { order: created, idempotentReplay: false };
-        });
+        }, { timeout: 20_000, maxWait: 10_000 });
 
         const { order, idempotentReplay } = outcome;
         if (idempotentReplay) return NextResponse.json(outcome, { status: 200 });

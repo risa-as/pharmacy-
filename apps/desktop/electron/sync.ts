@@ -4,9 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import store from './store';
-import { buildApiUrl, getApiCandidates, setApiBaseUrl } from './api-config';
+import { buildApiUrl, getApiBaseUrl, getApiCandidates, setApiBaseUrl } from './api-config';
 import { storeOfflineToken } from './offline-token';
 import { buildIdempotencyKey, buildBatchIdempotencyKey } from './idempotency';
+import { changedProductSyncData } from './product-sync-diff';
+import { createCoalescedRun } from './sync-coalescer';
+import { fetchProductSyncSnapshotWithCache } from './product-sync-cache';
+import {
+    removeInventoryIdsFromProductSyncMaps,
+    setDrugInventoriesInProductSyncMaps,
+    upsertBatchInProductSyncMaps,
+} from './product-sync-maps';
 
 // SQLite has a max of 999 bind variables per statement. When using `{ in: [...] }`
 // or `{ notIn: [...] }` with large arrays, Prisma generates one bind variable per
@@ -34,6 +42,27 @@ async function updateManyChunked(
         const chunk = ids.slice(i, i + SQLITE_VAR_LIMIT);
         await model.updateMany({ where: { [field]: { in: chunk } }, data });
     }
+}
+
+async function findManyByFieldChunked(
+    model: any,
+    field: string,
+    ids: string[],
+    options: Record<string, any> = {},
+) {
+    const rows: any[] = [];
+    for (let i = 0; i < ids.length; i += SQLITE_VAR_LIMIT) {
+        const chunk = ids.slice(i, i + SQLITE_VAR_LIMIT);
+        if (chunk.length === 0) continue;
+        rows.push(...await model.findMany({
+            ...options,
+            where: {
+                ...(options.where || {}),
+                [field]: { in: chunk },
+            },
+        }));
+    }
+    return rows;
 }
 
 // Debug log file — written to userData so the user can share it for troubleshooting.
@@ -100,7 +129,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 
             clearTimeout(timeoutId);
 
-            if (response.ok) return response;
+            if (response.ok || response.status === 304) return response;
 
             // If server error (5xx) or Rate Limit (429), retry
             if (response.status >= 500 || response.status === 429) {
@@ -1135,27 +1164,21 @@ export type SyncProductsResult = {
     count?: number;
 };
 
-export async function syncProducts(): Promise<SyncProductsResult> {
+export const syncProducts = createCoalescedRun<SyncProductsResult>(
+    syncProductsExclusive,
+    {
+        timeoutMs: 60_000,
+        timeoutResult: { success: false, reason: 'lock_timeout' },
+        onJoin: () => console.log('[Sync] Product sync already running — joining current snapshot sync.'),
+        onTimeout: () => console.warn('[Sync] Product sync wait timed out after 60 s'),
+    },
+);
+
+async function syncProductsExclusive(): Promise<SyncProductsResult> {
     const taskName = "products";
 
-    // If another syncProducts is already running, wait for it to finish
-    // (up to 60s) instead of silently returning.  This is critical for
-    // the manual-sync button so it doesn't skip the pull.
     if (!beginSyncTask(taskName)) {
-        console.log('[Sync] syncProducts lock held — waiting for current run to finish…');
-        const waitStart = Date.now();
-        const WAIT_LIMIT_MS = 60_000;
-        while (runningSyncTasks.has(taskName)) {
-            if (Date.now() - waitStart > WAIT_LIMIT_MS) {
-                console.warn('[Sync] syncProducts wait timed out after 60 s');
-                return { success: false, reason: 'lock_timeout' };
-            }
-            await new Promise(r => setTimeout(r, 500));
-        }
-        // Lock released — acquire it ourselves
-        if (!beginSyncTask(taskName)) {
-            return { success: false, reason: 'lock_contention' };
-        }
+        return { success: false, reason: 'lock_contention' };
     }
 
     try {
@@ -1170,10 +1193,21 @@ export async function syncProducts(): Promise<SyncProductsResult> {
 
         console.log(`[Sync] Starting product snapshot sync for branch: ${branchId}`);
 
-        const response = await fetchWithRetry(buildApiUrl(`/sync/products?branchId=${branchId}`));
-        if (!response.ok) throw new Error("Product sync failed");
+        const snapshotResult = await fetchProductSyncSnapshotWithCache(
+            {
+                apiBaseUrl: getApiBaseUrl(),
+                branchId,
+                authHeaders: getDeviceAuthHeaders(),
+            },
+            (conditionalHeaders) => fetchWithRetry(buildApiUrl(`/sync/products?branchId=${branchId}`), {
+                headers: conditionalHeaders,
+            }),
+        );
+        if (snapshotResult.fromCache) {
+            console.log(`[Sync] Product snapshot unchanged by ETag; reapplying cached snapshot for branch: ${branchId}`);
+        }
 
-        const data = await response.json() as {
+        const data = snapshotResult.snapshot as {
             drugs?: Array<{
                 id: string;
                 inventoryId?: string;
@@ -1185,6 +1219,13 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                 purchasePrice?: number;
                 buyPrice?: number;
                 isQuickSale?: boolean;
+                /**
+                 * ميزة وحدة التسعير. التمييز بين undefined وnull مقصود:
+                 * undefined = خادم أقدم لا يرسل الحقل فتُترك القيمة المحلية،
+                 * null = الخادم يقول صراحةً إنها غير معروفة فتُمسح.
+                 */
+                unitsPerPack?: number | null;
+                unitsPerPackConfirmedAt?: string | null;
                 stock?: number;
                 minStock?: number;
                 maxStock?: number;
@@ -1211,10 +1252,100 @@ export async function syncProducts(): Promise<SyncProductsResult> {
         const fetchedInventoryIds: string[] = [];
         const hasCompleteInventoryIds =
             drugs.every((drug) => String(drug?.inventoryId || '').trim().length > 0);
+        const snapshotDrugIds = Array.from(new Set(
+            drugs
+                .map((drug) => String(drug?.id || '').trim())
+                .filter(Boolean),
+        ));
+        const snapshotBarcodes = Array.from(new Set(
+            drugs
+                .map((drug) => String(drug?.barcode ?? `NOBARCODE_${drug?.id || ''}`))
+                .filter(Boolean),
+        ));
 
         // Use generous timeout — large inventories (hundreds of drugs+batches)
         // can exceed Prisma's 5s default.
         await prisma.$transaction(async (tx: any) => {
+            const drugSelect = {
+                id: true,
+                barcode: true,
+                tradeName: true,
+                scientificName: true,
+                price: true,
+                isActive: true,
+                isQuickSale: true,
+                unitsPerPack: true,
+                unitsPerPackConfirmedAt: true,
+            };
+            const drugsById = new Map<string, any>();
+            const drugsByBarcode = new Map<string, any>();
+            const prefetchedDrugsById = await findManyByFieldChunked(
+                tx.globalDrug,
+                'id',
+                snapshotDrugIds,
+                { select: drugSelect },
+            );
+            const prefetchedDrugsByBarcode = await findManyByFieldChunked(
+                tx.globalDrug,
+                'barcode',
+                snapshotBarcodes,
+                { select: drugSelect },
+            );
+            for (const row of [...prefetchedDrugsById, ...prefetchedDrugsByBarcode]) {
+                drugsById.set(row.id, row);
+                drugsByBarcode.set(row.barcode, row);
+            }
+            const prefetchedInventories = await findManyByFieldChunked(
+                tx.inventory,
+                'drugId',
+                snapshotDrugIds,
+                {
+                    where: { branchId },
+                    select: {
+                        id: true,
+                        branchId: true,
+                        drugId: true,
+                        quantity: true,
+                        costPrice: true,
+                        minStock: true,
+                        maxStock: true,
+                        syncPending: true,
+                    },
+                },
+            );
+            const inventoriesByDrugId = new Map<string, any[]>();
+            for (const inventory of prefetchedInventories) {
+                const rows = inventoriesByDrugId.get(inventory.drugId) || [];
+                rows.push(inventory);
+                inventoriesByDrugId.set(inventory.drugId, rows);
+            }
+            const prefetchedInventoryIds = prefetchedInventories.map((row: any) => row.id);
+            const prefetchedBatches = prefetchedInventoryIds.length > 0
+                ? await findManyByFieldChunked(
+                    tx.batch,
+                    'inventoryId',
+                    prefetchedInventoryIds,
+                    {
+                        select: {
+                            id: true,
+                            inventoryId: true,
+                            batchNumber: true,
+                            quantity: true,
+                            expiryDate: true,
+                            costPrice: true,
+                        }
+                    },
+                )
+                : [];
+            const batchesByInventoryId = new Map<string, any[]>();
+            const batchesById = new Map<string, any>();
+            for (const batch of prefetchedBatches) {
+                const rows = batchesByInventoryId.get(batch.inventoryId) || [];
+                rows.push(batch);
+                batchesByInventoryId.set(batch.inventoryId, rows);
+                batchesById.set(batch.id, batch);
+            }
+
             for (const drug of drugs) {
                 if (!drug?.id) continue;
               try {
@@ -1230,12 +1361,8 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                     fetchedInventoryIds.push(cloudInventoryId);
                 }
 
-                const collision = await tx.globalDrug.findFirst({
-                    where: {
-                        barcode: safeBarcode,
-                        id: { not: drug.id }
-                    }
-                });
+                const collisionCandidate = drugsByBarcode.get(safeBarcode);
+                const collision = collisionCandidate?.id !== drug.id ? collisionCandidate : null;
 
                 if (collision) {
                     console.log(`[Sync] Barcode collision '${safeBarcode}'. Replacing local ID ${collision.id} with cloud ID ${drug.id}.`);
@@ -1251,37 +1378,82 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                         await tx.inventory.deleteMany({
                             where: { id: { in: collisionInventoryIds } }
                         });
+                        removeInventoryIdsFromProductSyncMaps(
+                            { inventoriesByDrugId, batchesByInventoryId, batchesById },
+                            collisionInventoryIds,
+                        );
                     }
                     await tx.globalDrug.update({
                         where: { id: collision.id },
                         data: { barcode: `__REPLACED_${collision.id}`, isActive: false }
                     });
+                    drugsByBarcode.delete(safeBarcode);
+                    drugsById.set(collision.id, {
+                        ...collision,
+                        barcode: `__REPLACED_${collision.id}`,
+                        isActive: false,
+                    });
                 }
 
-                await tx.globalDrug.upsert({
-                    where: { id: drug.id },
-                    update: {
-                        barcode: safeBarcode,
-                        tradeName: safeTradeName,
-                        scientificName: safeScientificName,
-                        price: Number(drug.price || 0),
-                        isActive: true,
-                        isQuickSale: drug.isQuickSale ?? false,
-                    },
-                    create: {
-                        id: drug.id,
-                        barcode: safeBarcode,
-                        tradeName: safeTradeName,
-                        scientificName: safeScientificName,
-                        price: Number(drug.price || 0),
-                        isActive: true,
-                        isQuickSale: drug.isQuickSale ?? false,
-                    }
-                });
+                // ميزة وحدة التسعير: التعبئة تُسحب من السحابة ليعرف الجهاز أوفلاين
+                // أُعُدّت أشرطة هذا الدواء أم لا. غياب الحقل في الرد (خادم أقدم) يُبقي
+                // القيمة المحلية كما هي بدل أن يمسحها — undefined في Prisma يعني «لا تغيّر»،
+                // وهذا مقصود: تأكيد وصل سابقاً لا يُفقَد بمزامنة مع نسخة لا ترسله.
+                const cloudUnits =
+                    Number.isInteger(Number(drug.unitsPerPack)) && Number(drug.unitsPerPack) > 0
+                        ? Number(drug.unitsPerPack)
+                        : drug.unitsPerPack === null
+                            ? null
+                            : undefined;
+                const cloudUnitsConfirmedAt =
+                    drug.unitsPerPackConfirmedAt === undefined
+                        ? undefined
+                        : drug.unitsPerPackConfirmedAt
+                            ? new Date(drug.unitsPerPackConfirmedAt)
+                            : null;
 
-                const branchInventories = await tx.inventory.findMany({
-                    where: { drugId: drug.id, branchId }
-                });
+                const desiredDrugData = {
+                    barcode: safeBarcode,
+                    tradeName: safeTradeName,
+                    scientificName: safeScientificName,
+                    price: Number(drug.price || 0),
+                    isActive: true,
+                    isQuickSale: drug.isQuickSale ?? false,
+                    unitsPerPack: cloudUnits,
+                    unitsPerPackConfirmedAt: cloudUnitsConfirmedAt,
+                };
+                const desiredNewDrugData = {
+                    ...desiredDrugData,
+                    unitsPerPack: cloudUnits ?? null,
+                    unitsPerPackConfirmedAt: cloudUnitsConfirmedAt ?? null,
+                };
+                const existingDrug = drugsById.get(drug.id) || null;
+
+                if (existingDrug) {
+                    const drugChanges = changedProductSyncData(existingDrug, desiredDrugData);
+                    if (Object.keys(drugChanges).length > 0) {
+                        await tx.globalDrug.update({
+                            where: { id: drug.id },
+                            data: drugChanges,
+                        });
+                        const updatedDrug = { ...existingDrug, ...drugChanges };
+                        drugsById.set(drug.id, updatedDrug);
+                        drugsByBarcode.delete(existingDrug.barcode);
+                        drugsByBarcode.set(updatedDrug.barcode, updatedDrug);
+                    }
+                } else {
+                    await tx.globalDrug.create({
+                        data: {
+                            id: drug.id,
+                            ...desiredNewDrugData,
+                        }
+                    });
+                    const createdDrug = { id: drug.id, ...desiredNewDrugData };
+                    drugsById.set(drug.id, createdDrug);
+                    drugsByBarcode.set(createdDrug.barcode, createdDrug);
+                }
+
+                const branchInventories = inventoriesByDrugId.get(drug.id) || [];
 
                 const cloudCost = Number(
                     (drug.costPrice && drug.costPrice > 0)
@@ -1312,6 +1484,15 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                         .filter((id: string) => id !== existingInventory.id);
                     await tx.batch.deleteMany({ where: { inventoryId: { in: orphanIds } } });
                     await tx.inventory.deleteMany({ where: { id: { in: orphanIds } } });
+                    removeInventoryIdsFromProductSyncMaps(
+                        { inventoriesByDrugId, batchesByInventoryId, batchesById },
+                        orphanIds,
+                    );
+                    setDrugInventoriesInProductSyncMaps(
+                        { inventoriesByDrugId },
+                        drug.id,
+                        [existingInventory],
+                    );
                 }
 
                 const safeCost = isNaN(cloudCost) ? 0 : cloudCost;
@@ -1327,15 +1508,19 @@ export async function syncProducts(): Promise<SyncProductsResult> {
 
                 let targetInventoryId: string;
                 if (existingInventory) {
-                    await tx.inventory.update({
-                        where: { id: existingInventory.id },
-                        data: {
-                            quantity: isNaN(safeQuantity) ? 0 : safeQuantity,
-                            branchId,
-                            // Skip editable fields if local has unsaved changes (syncPending=true)
-                            ...(hasPendingLocalEdits ? {} : cloudEditableFields),
-                        }
+                    const inventoryChanges = changedProductSyncData(existingInventory, {
+                        quantity: isNaN(safeQuantity) ? 0 : safeQuantity,
+                        branchId,
+                        // Skip editable fields if local has unsaved changes (syncPending=true)
+                        ...(hasPendingLocalEdits ? {} : cloudEditableFields),
                     });
+                    if (Object.keys(inventoryChanges).length > 0) {
+                        await tx.inventory.update({
+                            where: { id: existingInventory.id },
+                            data: inventoryChanges,
+                        });
+                        Object.assign(existingInventory, inventoryChanges);
+                    }
                     targetInventoryId = existingInventory.id;
                 } else {
                     // New record: always use full cloud payload (no local edits exist yet)
@@ -1349,6 +1534,7 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                         }
                     });
                     targetInventoryId = newInv.id;
+                    setDrugInventoriesInProductSyncMaps({ inventoriesByDrugId }, drug.id, [newInv]);
                 }
 
                 // Sync Batches
@@ -1357,15 +1543,20 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                     // non-null primary key for upsert's `where` clause.
                     const validBatches = drug.batches.filter((b: any) => b && typeof b.id === 'string' && b.id.trim().length > 0);
 
-                    const existingBatches = await tx.batch.findMany({
-                        where: { inventoryId: targetInventoryId }, select: { id: true }
-                    });
+                    const existingBatches = batchesByInventoryId.get(targetInventoryId) || [];
 
                     const cloudBatchIds = validBatches.map((b: any) => b.id);
                     const staleBatchIds = existingBatches.map((b: any) => b.id).filter((id: string) => !cloudBatchIds.includes(id));
 
                     if (staleBatchIds.length > 0) {
                         await tx.batch.deleteMany({ where: { id: { in: staleBatchIds } } });
+                        for (const staleBatchId of staleBatchIds) {
+                            batchesById.delete(staleBatchId);
+                        }
+                        batchesByInventoryId.set(
+                            targetInventoryId,
+                            existingBatches.filter((batch: any) => cloudBatchIds.includes(batch.id)),
+                        );
                     }
 
                     for (const b of validBatches) {
@@ -1379,10 +1570,20 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                         // If the local quantity is lower, it means a sale deducted it locally
                         // but the cloud hasn't reflected that deduction yet (sync lag).
                         // Overwriting would silently restore stock that was already sold.
-                        const existingBatch = await tx.batch.findUnique({
-                            where: { id: b.id },
-                            select: { quantity: true }
-                        });
+                        const mappedBatch = batchesById.get(b.id);
+                        const existingBatch = !mappedBatch || mappedBatch.inventoryId === targetInventoryId
+                            ? mappedBatch
+                            : await tx.batch.findUnique({
+                                where: { id: b.id },
+                                select: {
+                                    id: true,
+                                    inventoryId: true,
+                                    batchNumber: true,
+                                    quantity: true,
+                                    expiryDate: true,
+                                    costPrice: true,
+                                }
+                            });
                         const localQuantity = existingBatch?.quantity ?? cloudQuantity;
                         const safeQuantityToApply = existingBatch && localQuantity < cloudQuantity
                             ? localQuantity   // keep the locally-decremented value
@@ -1396,15 +1597,37 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                             costPrice: Number(b.costPrice || 0)
                         };
 
-                        await tx.batch.upsert({
-                            where: { id: b.id },
-                            update: batchPayload,
-                            create: {
+                        if (existingBatch) {
+                            const batchChanges = changedProductSyncData(existingBatch, batchPayload);
+                            if (Object.keys(batchChanges).length > 0) {
+                                await tx.batch.update({
+                                    where: { id: b.id },
+                                    data: batchChanges,
+                                });
+                                upsertBatchInProductSyncMaps(
+                                    { batchesByInventoryId, batchesById },
+                                    { ...existingBatch, ...batchChanges },
+                                );
+                            } else {
+                                upsertBatchInProductSyncMaps(
+                                    { batchesByInventoryId, batchesById },
+                                    existingBatch,
+                                );
+                            }
+                        } else {
+                            const createdBatch = {
                                 id: b.id,
                                 ...batchPayload,
                                 quantity: cloudQuantity, // for new batches always use cloud value
-                            }
-                        });
+                            };
+                            await tx.batch.create({
+                                data: createdBatch
+                            });
+                            upsertBatchInProductSyncMaps(
+                                { batchesByInventoryId, batchesById },
+                                createdBatch,
+                            );
+                        }
                     }
 
                     // After syncing all batches, ensure their total quantity matches
@@ -1415,7 +1638,7 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                         (sum: number, b: any) => sum + Math.round(Number(b.quantity || 0)), 0
                     );
                     if (safeQuantity > 0 && syncedBatchTotal === 0) {
-                        await tx.batch.create({
+                        const createdSyntheticBatch = await tx.batch.create({
                             data: {
                                 inventoryId: targetInventoryId,
                                 batchNumber: 'SYNCED',
@@ -1424,17 +1647,18 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                                 costPrice: safeCost,
                             }
                         });
+                        upsertBatchInProductSyncMaps(
+                            { batchesByInventoryId, batchesById },
+                            createdSyntheticBatch,
+                        );
                         console.log(`[Sync] Created synthetic batch for drug ${drug.id} qty=${safeQuantity} (no batches from cloud)`);
                     }
                 } else if (safeQuantity > 0 && targetInventoryId) {
                     // No batches field at all from cloud — ensure at least one batch exists
-                    const existingBatches = await tx.batch.findMany({
-                        where: { inventoryId: targetInventoryId },
-                        select: { id: true, quantity: true }
-                    });
+                    const existingBatches = batchesByInventoryId.get(targetInventoryId) || [];
                     const existingTotal = existingBatches.reduce((s: number, b: any) => s + b.quantity, 0);
                     if (existingTotal === 0) {
-                        await tx.batch.create({
+                        const createdSyntheticBatch = await tx.batch.create({
                             data: {
                                 inventoryId: targetInventoryId,
                                 batchNumber: 'SYNCED',
@@ -1443,6 +1667,10 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                                 costPrice: safeCost,
                             }
                         });
+                        upsertBatchInProductSyncMaps(
+                            { batchesByInventoryId, batchesById },
+                            createdSyntheticBatch,
+                        );
                         console.log(`[Sync] Created synthetic batch for drug ${drug.id} qty=${safeQuantity} (no batch data)`);
                     }
                 }
@@ -1458,6 +1686,15 @@ export async function syncProducts(): Promise<SyncProductsResult> {
                     await tx.inventory.deleteMany({
                         where: { id: { in: duplicateInventoryIds } }
                     });
+                    removeInventoryIdsFromProductSyncMaps(
+                        { inventoriesByDrugId, batchesByInventoryId, batchesById },
+                        duplicateInventoryIds,
+                    );
+                    setDrugInventoriesInProductSyncMaps(
+                        { inventoriesByDrugId },
+                        drug.id,
+                        [existingInventory].filter(Boolean),
+                    );
                 }
               } catch (drugErr) {
                 console.error(`[Sync] Failed to process drug id=${drug.id} barcode=${drug.barcode}:`, drugErr);
@@ -1869,6 +2106,8 @@ export async function pushCreateDrugToCloud(data: {
     expiryDate?: string;
     inventoryId?: string;
     supplierId?: string | null;
+    /** تعبئة الدواء الجديد — تُكتب مؤكّدة عند إنشائه في السحابة. */
+    unitsPerPack?: number | null;
 }, options?: { actionId?: string }): Promise<boolean> {
     try {
         if (!await checkConnection()) return false;
@@ -1899,7 +2138,8 @@ export async function pushCreateDrugToCloud(data: {
                 quantity: data.quantity || 0,
                 expiryDate: data.expiryDate || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
                 inventoryId: data.inventoryId,
-                supplierId: data.supplierId ?? null
+                supplierId: data.supplierId ?? null,
+                unitsPerPack: data.unitsPerPack ?? null
             })
         });
 
@@ -2090,6 +2330,8 @@ export async function pushAddBatchToCloud(data: {
     branchId?: string;
     supplierId?: string | null;
     costPrice?: number;
+    /** عدد الأشرطة في الباكيت — يُثبّت على الدواء في السحابة عند الوصول. */
+    unitsPerPack?: number | null;
 }, options?: { actionId?: string }): Promise<boolean> {
     try {
         if (!await checkConnection()) return false;
@@ -2115,6 +2357,7 @@ export async function pushAddBatchToCloud(data: {
                 branchId: data.branchId || null,
                 supplierId: data.supplierId ?? null,
                 costPrice: data.costPrice ?? 0,
+                unitsPerPack: data.unitsPerPack ?? null,
             })
         });
 

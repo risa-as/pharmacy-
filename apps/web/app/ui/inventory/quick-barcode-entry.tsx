@@ -24,6 +24,17 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
     const [foundDrug, setFoundDrug] = useState<any>(null);
     const [foundInventoryId, setFoundInventoryId] = useState<string | null>(null);
     const [foundInventoryPrice, setFoundInventoryPrice] = useState<number | null>(null);
+    /**
+     * ميزة وحدة التسعير: تعبئة الدواء وآخر كلفة تصل ضمن جواب فحص
+     * الباركود نفسه، فتفتح نافذة الدفعة مكتملة بلا رحلة شبكة ثانية.
+     * هذا المسار هو المستخدَم في إدخال الأدوية عملياً، فتأخيره يمسّ كل إدخال.
+     */
+    const [foundPack, setFoundPack] = useState<{
+        unitsPerPack: number | null;
+        unitsPerPackConfirmed: boolean;
+        lastStripCost: number | null;
+        lastCostAt: string | null;
+    } | null>(null);
     const [lastScannedBarcode, setLastScannedBarcode] = useState("");
 
     const inputRef = useRef<HTMLInputElement>(null);
@@ -67,6 +78,7 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
         setFoundDrug(null);
         setFoundInventoryId(null);
         setFoundInventoryPrice(null);
+        setFoundPack(null);
 
         try {
             const res = await fetch("/api/inventory/check-barcode", {
@@ -88,6 +100,12 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
                 if (data.inventory?.id) {
                     setFoundInventoryId(data.inventory.id);
                     setFoundInventoryPrice(typeof data.inventory.price === "number" ? data.inventory.price : null);
+                    setFoundPack({
+                        unitsPerPack: data.drug.unitsPerPack ?? null,
+                        unitsPerPackConfirmed: Boolean(data.drug.unitsPerPackConfirmedAt),
+                        lastStripCost: data.inventory.lastStripCost ?? null,
+                        lastCostAt: data.inventory.lastCostAt ?? null,
+                    });
                     setShowAddBatch(true);
                     toast.success("تم العثور على الدواء. يمكنك إضافة دفعة جديدة.");
                 } else {
@@ -134,11 +152,15 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
                 </div>
             </div>
 
-            {showAddBatch && foundInventoryId && foundDrug && (
+            {showAddBatch && foundInventoryId && foundDrug && foundPack && (
                 <AddBatchModal
                     inventoryId={foundInventoryId}
                     drugName={foundDrug.tradeName}
                     currentPrice={foundInventoryPrice}
+                    unitsPerPack={foundPack.unitsPerPack}
+                    unitsPerPackConfirmed={foundPack.unitsPerPackConfirmed}
+                    lastStripCost={foundPack.lastStripCost}
+                    lastCostAt={foundPack.lastCostAt}
                     onClose={() => {
                         setShowAddBatch(false);
                         focusInput();
@@ -161,6 +183,8 @@ export default function QuickBarcodeEntry({ branches }: QuickBarcodeEntryProps) 
                 <AddToInventoryModal
                     drug={foundDrug}
                     branches={branches}
+                    unitsPerPack={foundDrug.unitsPerPack ?? null}
+                    unitsPerPackConfirmed={Boolean(foundDrug.unitsPerPackConfirmedAt)}
                     onClose={() => {
                         setShowAddToInventory(false);
                         focusInput();

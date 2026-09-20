@@ -4,8 +4,9 @@
  * Wraps all /dashboard/inventory/** pages with a sticky tab bar so that
  * every inventory sub-tool is reachable without a sidebar entry.
  *
- * Tabs  (8):  Inventory · Stocktakes · Shortages · Expired/Damaged
+ * Tabs  (9):  Inventory · Stocktakes · Shortages · Expired/Damaged
  *             Transfers · Batches · Product Movement · Margin Warnings
+ *             Pack Units (confirm strips-per-packet)
  * Actions (2): Print Barcode · Bulk Pricing
  *
  * The nav is hidden on deep /create and /edit forms (skipOnPatterns).
@@ -23,6 +24,7 @@ import {
   TrendingDown,
   Tag,
   DollarSign,
+  PackageCheck,
 } from "lucide-react";
 
 const TABS: HubTab[] = [
@@ -50,6 +52,11 @@ const TABS: HubTab[] = [
     name: "تحذيرات الهامش",
     href: "/dashboard/inventory/margin-warnings",
     icon: <TrendingDown className="w-3.5 h-3.5 shrink-0" />,
+  },
+  {
+    name: "تأكيد التعبئة",
+    href: "/dashboard/inventory/pack-units",
+    icon: <PackageCheck className="w-3.5 h-3.5 shrink-0" />,
   },
 ];
 

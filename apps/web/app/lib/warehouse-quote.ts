@@ -19,6 +19,15 @@ export interface QuoteItemInput {
    * السطر أو إجمالي الطلب بأي شكل (انظر التعليق الحرج أعلى effectiveLine).
    */
   bonusQuantity?: number | null;
+  /**
+   * ميزة نقل الدفعة/الانتهاء عند التسعير: ما يُعلنه المذخر لهذا السطر —
+   * تُتحقَّق عبر validateQuoteBatchInfo() أدناه في مسار الـ API، وتُخزَّن في
+   * WarehouseOrderItem.batchNumber/expiryDate مباشرة. مثل bonusQuantity، **لا
+   * تدخلان buildQuoteDecision أو effectiveLine إطلاقاً** — وعدٌ بشأن هوية
+   * البضاعة لا سعرها أو كميتها.
+   */
+  batchNumber?: string | null;
+  expiryDate?: string | Date | null;
 }
 
 // --- مصدر الحقيقة الوحيد لقيمة السطر الفعلية ------------------------------
@@ -190,4 +199,88 @@ export function buildQuoteDecision(
   }
 
   return { ok: errors.length === 0, errors, lineTotals, total, summary };
+}
+
+// --- الاعتماد الآلي عند تطابق العرض تماماً (قرار صاحب النظام 2026-09) ------
+// الخطوة الفعلية اليوم عملياً هي «قرار الصيدلية بعد عرض المذخر»، وهذا قرار
+// حقيقي فقط حين اختلف العرض عمّا طلبته الصيدلية (سعر تغيّر، سطر جزئي، سطر
+// نافد) — عندها تحقُّق الصيدلي عند الباب هو ما يُعتمَد عليه فعلياً، فضغطة
+// الاعتماد نسخة رقمية لا تضيف شيئاً. حين طابق العرض الطلب تماماً في كل شيء
+// (بلا جزئي ولا نافد ولا تغيّر سعر ولا سطر لم يُحكَم عليه) لا قرار بشري إضافي
+// له قيمة — فيُعتمَد آلياً بنفس مسار الاعتماد اليدوي بالضبط (نفس الفاتورة، نفس
+// فحص حدّ الائتمان، نفس لحظة إنشاء الذمّة) — انظر warehouse-order-approval.ts.
+//
+// changedPrices تحديداً (buildQuoteDecision أعلاه): تُحسَب من
+// input.quotedPrice !== ctx.unitPrice، وctx.unitPrice هو سعر الصيدلية
+// المخزَّن وقت الطلب. هذا السعر صفر حين لا تاريخ سعر لدى الصيدلية لهذا
+// الصنف، وقد يكون سعر شريط بينما العرض سعر باكيت (وحدتان مختلفتان تماماً) —
+// كلتا الحالتين تُسجَّل "تغيّر" رغم أن لا أحداً غيّر شيئاً فعلياً، فيتراجع
+// الاعتماد الآلي ويقرر الصيدلي بنفسه. هذا التحيّز نحو الحذر مقصود: تفويت
+// اعتماد آلي كان يصح تطبيقه أرخص بكثير من اعتماد آلي لسعر بدا متطابقاً
+// بالخطأ بسبب اختلاف وحدة لا اختلاف سعر حقيقي.
+export function shouldAutoApprove(summary: QuoteSummary, judgedItemCount: number): boolean {
+  // judgedItemCount > 0 إلزامي: طلب فارغ (0 أصناف) أو لم يُحكَم على أي سطر
+  // فيه لا يصح اعتماده آلياً أبداً — summary.available === 0 وحدها لا تكفي
+  // تمييزاً بين "لا أصناف متوفرة" و"لا أصناف على الإطلاق".
+  if (judgedItemCount <= 0) return false;
+
+  return (
+    summary.partial === 0 &&
+    summary.outOfStock === 0 &&
+    summary.changedPrices === 0 &&
+    summary.available === judgedItemCount
+  );
+}
+
+// --- ميزة نقل الدفعة/الانتهاء عند التسعير ----------------------------------
+// المذخر يعلن رقم الدفعة وتاريخ الانتهاء وقت التسعير — إلى جانب السعر والبونص.
+// كلاهما وعدٌ قبل انتقاء الشحن فعلياً من الرفّ، لا إثبات (انظر تعليق العمودين
+// في schema.prisma وقاعدة الأولوية عند الاستلام في
+// app/dashboard/purchases/[id]/receive/page.tsx). كلا الحقلين اختياري تماماً:
+// مذخر لا يدخل شيئاً يبقى يعمل بالضبط كما اليوم.
+
+/** رقم دفعة حقيقي لا يقترب من هذا الطول أبداً — حدّ دفاعي بحت، لا قيد عملي. */
+const MAX_BATCH_NUMBER_LENGTH = 100;
+
+export type ValidateQuoteBatchResult =
+  | { ok: true; batchNumber: string | null; expiryDate: Date | null }
+  | { ok: false; error: string };
+
+/**
+ * يتحقق من رقم الدفعة/تاريخ الانتهاء اللذين أدخلهما المذخر عند التسعير لسطر
+ * واحد — يُستدعى من مسار التسعير (PATCH .../quote) قبل أي كتابة، بنفس نمط
+ * validateBonus() في app/lib/warehouse-bonus.ts.
+ *
+ * - batchNumber: نص مقصوص من الفراغات؛ فارغ أو بياض فقط → null (لا حقل
+ *   إلزامي، ولا خطأ). يُقصّ عند MAX_BATCH_NUMBER_LENGTH حرفاً دفاعياً — نفس
+ *   انضباط حدود الحقول النصية القصيرة الأخرى في هذا المشروع
+ *   (مثل .slice(0, 100) على معاملات البحث).
+ * - expiryDate: اختياري تماماً؛ غيابه أو فراغه → null بلا أي رفض. حين يُرسَل
+ *   يجب أن يُحلَّل تاريخاً صالحاً **في المستقبل** — نفس شرط
+ *   app/lib/purchase-receipt.ts عند الاستلام الفعلي (> لا >=: اللحظة الحالية
+ *   بالضبط ليست "مستقبلاً"). تاريخ ماضٍ أو غير صالح يُرفض هنا صراحةً بدل
+ *   تأجيل الفشل لمسار الاستلام — قبول تاريخ منتهٍ الآن يعني كتابته لاحقاً على
+ *   PurchaseItem بصمت، وpurchase-receipt.ts سيرفضه بأي حال عند الاستلام، فقط
+ *   بعد أن ينتقل الخطأ لمرحلة أسوأ (فاتورة معتمَدة بوعد فاسد).
+ */
+export function validateQuoteBatchInfo(input: {
+  batchNumber?: string | null;
+  expiryDate?: string | Date | null;
+}): ValidateQuoteBatchResult {
+  let batchNumber: string | null = null;
+  if (typeof input.batchNumber === "string") {
+    const trimmed = input.batchNumber.trim();
+    if (trimmed) batchNumber = trimmed.slice(0, MAX_BATCH_NUMBER_LENGTH);
+  }
+
+  if (input.expiryDate === undefined || input.expiryDate === null || input.expiryDate === "") {
+    return { ok: true, batchNumber, expiryDate: null };
+  }
+
+  const parsed = input.expiryDate instanceof Date ? input.expiryDate : new Date(input.expiryDate);
+  if (!Number.isFinite(parsed.getTime()) || parsed <= new Date()) {
+    return { ok: false, error: "تاريخ الانتهاء غير صالح أو ليس في المستقبل." };
+  }
+
+  return { ok: true, batchNumber, expiryDate: parsed };
 }

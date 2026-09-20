@@ -46,6 +46,42 @@ interface PayablesSummary {
     byBucket: Record<AgingBucket, number>;
 }
 
+/** مُطابِق لما يعيده GET /api/warehouse-portal/purchases/[id]. */
+interface PurchaseDetail {
+    id: string;
+    supplierName: string;
+    invoiceNumber: string;
+    total: number;
+    paidAmount: number;
+    remaining: number;
+    status: PurchaseStatus;
+    issuedAt: string;
+    dueAt: string | null;
+    notes: string | null;
+    items: Array<{
+        id: string;
+        tradeName: string;
+        barcode: string;
+        batchNumber: string;
+        expiryDate: string;
+        quantity: number;
+        bonusQuantity: number;
+        unitCost: number;
+        lineTotal: number;
+    }>;
+    payments: Array<{
+        id: string;
+        amount: number;
+        method: string;
+        reference: string | null;
+        paidAt: string;
+    }>;
+    /** يحسبه الخادم: لا دفعة سداد، وكل دفعة مخزون سليمة. */
+    cancellable: boolean;
+    /** أسباب المنع بنصّها — تُعرض كما جاءت لأنها تسمّي الدفعة والكمية. */
+    cancelBlockers: string[];
+}
+
 interface CatalogSearchItem {
     id: string;
     barcode: string;
@@ -203,6 +239,89 @@ export default function PurchasesClient({
         } catch (e) {
             console.error("Failed to toggle supplier:", e);
             toast.error("تعذر الاتصال بالسيرفر");
+        }
+    };
+
+    // حذف مورّد أُضيف بالخطأ. الخادم هو الحاكم: يرفض الحذف إن كان للمورّد أي
+    // فاتورة أو دفعة (409 + SUPPLIER_HAS_HISTORY) ويوجّه للإيقاف — فلا يُكرَّر
+    // ذلك الفحص هنا، والرسالة تُعرض كما جاءت لأنها تسمّي العدد والسبب.
+    const [deletingSupplierId, setDeletingSupplierId] = useState<string | null>(null);
+    const deleteSupplier = async (supplier: SupplierRow) => {
+        if (!confirm(`حذف المورّد «${supplier.name}» نهائياً؟ لا يمكن التراجع.`)) return;
+        setDeletingSupplierId(supplier.id);
+        try {
+            const res = await fetch(`/api/warehouse-portal/suppliers/${supplier.id}`, {
+                method: "DELETE",
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                toast.error(data.error ?? "تعذر حذف المورّد");
+                return;
+            }
+            setSuppliers((prev) => prev.filter((s) => s.id !== supplier.id));
+            toast.success(`حُذف المورّد «${supplier.name}»`);
+        } catch (e) {
+            console.error("Failed to delete supplier:", e);
+            toast.error("تعذر الاتصال بالسيرفر");
+        } finally {
+            setDeletingSupplierId(null);
+        }
+    };
+
+    // ── تفصيل فاتورة شراء وإلغاؤها ─────────────────────────────────────────
+    // كل شيء يأتي من GET /purchases/[id]: البنود والدفعات و cancellable
+    // و cancelBlockers. لا تُستنتَج قابلية الإلغاء في الواجهة — شرطها أن تكون
+    // كل دفعة مخزون أنشأتها الفاتورة سليمة، وهذا لا يُعرَف إلا من الخادم.
+    const [detail, setDetail] = useState<PurchaseDetail | null>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
+
+    const openDetail = async (purchaseId: string) => {
+        setDetailLoading(true);
+        setDetail(null);
+        try {
+            const res = await fetch(`/api/warehouse-portal/purchases/${purchaseId}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                toast.error(data.error ?? "تعذر جلب تفاصيل الفاتورة");
+                return;
+            }
+            setDetail(data.purchase);
+        } catch (e) {
+            console.error("Failed to load purchase detail:", e);
+            toast.error("تعذر الاتصال بالسيرفر");
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    const cancelPurchase = async () => {
+        if (!detail) return;
+        if (!confirm(
+            `إلغاء فاتورة «${detail.invoiceNumber}»؟ ستُسحب كل دفعات المخزون التي أنشأتها. لا يمكن التراجع.`
+        )) return;
+        setCancelling(true);
+        try {
+            const res = await fetch(`/api/warehouse-portal/purchases/${detail.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "CANCELLED" }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                toast.error(data.error ?? "تعذر إلغاء الفاتورة");
+                return;
+            }
+            setPurchases((prev) =>
+                prev.map((p) => (p.id === detail.id ? { ...p, status: "CANCELLED", remaining: 0 } : p))
+            );
+            toast.success(`أُلغيت الفاتورة وسُحبت ${data.reversedBatches ?? 0} دفعة مخزون`);
+            setDetail(null);
+        } catch (e) {
+            console.error("Failed to cancel purchase:", e);
+            toast.error("تعذر الاتصال بالسيرفر");
+        } finally {
+            setCancelling(false);
         }
     };
 
@@ -547,12 +666,24 @@ export default function PurchasesClient({
                                         </td>
                                         {canCreatePurchase && (
                                             <td className="px-4 py-2">
-                                                <button
-                                                    onClick={() => toggleSupplierActive(s)}
-                                                    className="rounded-lg border px-2.5 py-1 text-xs hover:bg-muted"
-                                                >
-                                                    {s.isActive ? "إيقاف" : "تفعيل"}
-                                                </button>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        onClick={() => toggleSupplierActive(s)}
+                                                        className="rounded-lg border px-2.5 py-1 text-xs hover:bg-muted"
+                                                    >
+                                                        {s.isActive ? "إيقاف" : "تفعيل"}
+                                                    </button>
+                                                    {/* الحذف للمورّد المُضاف بالخطأ فقط — الخادم
+                                                        يرفضه إن كان له أي فاتورة أو دفعة ويوجّه
+                                                        للإيقاف، فلا حاجة لإخفاء الزرّ هنا. */}
+                                                    <button
+                                                        onClick={() => deleteSupplier(s)}
+                                                        disabled={deletingSupplierId === s.id}
+                                                        className="rounded-lg border border-destructive/40 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                                                    >
+                                                        {deletingSupplierId === s.id ? "..." : "حذف"}
+                                                    </button>
+                                                </div>
                                             </td>
                                         )}
                                     </tr>
@@ -642,19 +773,28 @@ export default function PurchasesClient({
                                             يفحص المدفوع قبل الإجمالي) — فلا يُعرض زر دفع
                                             يرفضه applyPayment حتماً بـ«المتبقي: 0.00». نقيس
                                             المتبقي لا الحالة. */}
-                                        {canPaySupplier &&
-                                        p.status !== "PAID" &&
-                                        p.status !== "CANCELLED" &&
-                                        p.total - p.paidAmount > 0.01 ? (
+                                        <div className="flex items-center gap-1.5">
+                                            {canPaySupplier &&
+                                                p.status !== "PAID" &&
+                                                p.status !== "CANCELLED" &&
+                                                p.total - p.paidAmount > 0.01 && (
+                                                <button
+                                                    onClick={() => openPay(p)}
+                                                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                                                >
+                                                    تسجيل دفعة
+                                                </button>
+                                            )}
+                                            {/* التفصيل يجلب البنود والدفعات وقابلية
+                                                الإلغاء وأسبابها من الخادم — لا يُحسب
+                                                أيٌّ منها هنا. */}
                                             <button
-                                                onClick={() => openPay(p)}
-                                                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                                                onClick={() => openDetail(p.id)}
+                                                className="rounded-lg border px-2.5 py-1 text-xs hover:bg-muted"
                                             >
-                                                تسجيل دفعة
+                                                تفصيل
                                             </button>
-                                        ) : (
-                                            <span className="text-xs text-muted-foreground">—</span>
-                                        )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -901,6 +1041,116 @@ export default function PurchasesClient({
                     </div>
                 </Modal>
             )}
+
+            {/* نافذة تفصيل فاتورة شراء وإلغائها — مستقلة عن نافذة الدفعة أدناه */}
+                <Modal
+                    open={detailLoading || !!detail}
+                    onClose={() => setDetail(null)}
+                    title={detail ? `فاتورة ${detail.invoiceNumber}` : "جارٍ التحميل…"}
+                    maxWidthClass="max-w-3xl"
+                >
+                    {detailLoading || !detail ? (
+                        <p className="p-4 text-center text-sm text-muted-foreground">جارٍ جلب التفاصيل…</p>
+                    ) : (
+                        <div className="space-y-4">
+                            <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
+                                {[
+                                    { label: "المورّد", value: detail.supplierName },
+                                    { label: "تاريخ الإصدار", value: new Date(detail.issuedAt).toLocaleDateString("ar-IQ") },
+                                    { label: "الاستحقاق", value: detail.dueAt ? new Date(detail.dueAt).toLocaleDateString("ar-IQ") : "نقدي" },
+                                    { label: "الإجمالي", value: `${money(detail.total)} د.ع` },
+                                    { label: "المسدَّد", value: `${money(detail.paidAmount)} د.ع` },
+                                    { label: "المتبقي", value: `${money(detail.remaining)} د.ع` },
+                                ].map((r) => (
+                                    <div key={r.label} className="flex gap-1.5">
+                                        <dt className="shrink-0 text-muted-foreground">{r.label}:</dt>
+                                        <dd className="min-w-0 truncate font-medium text-foreground">{r.value}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+
+                            <div className="overflow-x-auto rounded-lg border">
+                                <table className="w-full text-xs">
+                                    <thead className="bg-muted/40 text-right text-muted-foreground">
+                                        <tr>
+                                            <th className="px-3 py-2 font-medium">الصنف</th>
+                                            <th className="px-3 py-2 font-medium">الدفعة</th>
+                                            <th className="px-3 py-2 font-medium">الانتهاء</th>
+                                            <th className="px-3 py-2 font-medium">الكمية</th>
+                                            <th className="px-3 py-2 font-medium">بونص</th>
+                                            <th className="px-3 py-2 font-medium">الكلفة</th>
+                                            <th className="px-3 py-2 font-medium">الإجمالي</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {detail.items.map((it) => (
+                                            <tr key={it.id} className="border-t">
+                                                <td className="px-3 py-2">
+                                                    <div className="font-medium">{it.tradeName}</div>
+                                                    <div className="font-mono text-[10px] text-muted-foreground" dir="ltr">{it.barcode}</div>
+                                                </td>
+                                                <td className="px-3 py-2 font-mono text-[11px]" dir="ltr">{it.batchNumber}</td>
+                                                <td className="px-3 py-2 text-muted-foreground">
+                                                    {new Date(it.expiryDate).toLocaleDateString("ar-IQ")}
+                                                </td>
+                                                <td className="tabular-nums px-3 py-2">{it.quantity}</td>
+                                                <td className="tabular-nums px-3 py-2">{it.bonusQuantity > 0 ? it.bonusQuantity : "—"}</td>
+                                                <td className="tabular-nums px-3 py-2">{money(it.unitCost)}</td>
+                                                <td className="tabular-nums px-3 py-2 font-medium">{money(it.lineTotal)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {detail.payments.length > 0 && (
+                                <div>
+                                    <p className="mb-1.5 text-xs font-bold">الدفعات المسدَّدة</p>
+                                    <ul className="space-y-1 text-[11px]">
+                                        {detail.payments.map((pm) => (
+                                            <li key={pm.id} className="flex justify-between gap-3 text-muted-foreground">
+                                                <span>{new Date(pm.paidAt).toLocaleDateString("ar-IQ")} — {pm.method}</span>
+                                                <span className="tabular-nums">{money(pm.amount)} د.ع</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {detail.notes && (
+                                <p className="text-[11px] text-muted-foreground">ملاحظات: {detail.notes}</p>
+                            )}
+
+                            {/* الإلغاء يتطلب canCreatePurchase على الخادم — من يُدخل
+                                الفاتورة هو من يصحّح خطأه، لا المحاسب الذي يسدّد. */}
+                            {canCreatePurchase && detail.status !== "CANCELLED" && (
+                                <div className="border-t pt-3">
+                                    {detail.cancellable ? (
+                                        <button
+                                            onClick={cancelPurchase}
+                                            disabled={cancelling}
+                                            className="rounded-lg bg-destructive px-4 py-2 text-sm font-bold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+                                        >
+                                            {cancelling ? "جارٍ الإلغاء…" : "إلغاء الفاتورة وسحب دفعاتها"}
+                                        </button>
+                                    ) : (
+                                        <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2">
+                                            <p className="text-xs font-bold text-warning">لا يمكن إلغاء هذه الفاتورة:</p>
+                                            <ul className="mt-1 list-inside list-disc space-y-0.5 text-[11px] text-muted-foreground">
+                                                {detail.cancelBlockers.map((b, i) => (
+                                                    <li key={i}>{b}</li>
+                                                ))}
+                                            </ul>
+                                            <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                                صحّح المخزون بجرد أو إتلاف من صفحة المخزون بدل الإلغاء.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </Modal>
 
             {/* نافذة تسجيل دفعة لمورّد */}
             {payingId && (

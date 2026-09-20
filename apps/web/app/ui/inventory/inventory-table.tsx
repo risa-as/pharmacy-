@@ -12,6 +12,10 @@ interface InventoryItem {
     tradeName: string;
     barcode: string;
     isQuickSale: boolean;
+    // ميزة وحدة التسعير: محمّلان أصلاً ضمن include: { drug: true }،
+    // فتمريرهما للنافذة بلا كلفة ويوفّر ذهاباً وإياباً إلى قاعدة بعيدة.
+    unitsPerPack?: number | null;
+    unitsPerPackConfirmedAt?: Date | string | null;
   };
   branch: { name: string };
   currentStock: number;
@@ -23,7 +27,34 @@ interface InventoryItem {
     quantity: number;
     expiryDate: Date;
     batchNumber: string;
+    // محمّلان أصلاً ضمن include: { batches: true } — منهما تُشتق آخر كلفة.
+    costPrice?: number;
+    createdAt?: Date | string;
   }[];
+}
+
+/**
+ * آخر كلفة وحالة التعبئة من البيانات المحمّلة أصلاً مع الصف.
+ *
+ * سبب وجودها: النافذة كانت تجلب هذه القيم بنفسها عند الفتح، فينتظر
+ * الصيدلاني ثانية أو اثنتين قبل أن تكتمل الواجهة. والقيم موجودة هنا أصلاً
+ * (include: { batches: true, drug: true})، فالجلب كان رحلتين إلى قاعدة بعيدة
+ * (قرابة 183ms للرحلة الفارغة) لأجل بيانات في اليد.
+ *
+ * دفعة بكلفة صفر ليست مرجعاً للسعر (بونص)، فتُستبعد.
+ */
+function lastCostOf(item: InventoryItem) {
+  const priced = item.batches.filter((b) => (b.costPrice ?? 0) > 0 && b.createdAt);
+  priced.sort(
+    (a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime(),
+  );
+  const newest = priced[0];
+  return {
+    unitsPerPack: item.drug.unitsPerPack ?? null,
+    unitsPerPackConfirmed: Boolean(item.drug.unitsPerPackConfirmedAt),
+    lastStripCost: newest ? newest.costPrice! : null,
+    lastCostAt: newest ? new Date(newest.createdAt!).toISOString() : null,
+  };
 }
 
 export default function InventoryTable({
@@ -41,6 +72,10 @@ export default function InventoryTable({
     id: string;
     drugName: string;
     price: number;
+    unitsPerPack: number | null;
+    unitsPerPackConfirmed: boolean;
+    lastStripCost: number | null;
+    lastCostAt: string | null;
   } | null>(null);
   const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>(
     () => Object.fromEntries(items.map((i) => [i.drug.id, i.drug.isQuickSale])),
@@ -196,6 +231,7 @@ export default function InventoryTable({
                               id: item.id,
                               drugName: item.drug.tradeName,
                               price: Number(item.price) || 0,
+                              ...lastCostOf(item),
                             })
                           }
                           title="إضافة دفعة"
@@ -232,6 +268,10 @@ export default function InventoryTable({
           inventoryId={selectedInventory.id}
           drugName={selectedInventory.drugName}
           currentPrice={selectedInventory.price}
+          unitsPerPack={selectedInventory.unitsPerPack}
+          unitsPerPackConfirmed={selectedInventory.unitsPerPackConfirmed}
+          lastStripCost={selectedInventory.lastStripCost}
+          lastCostAt={selectedInventory.lastCostAt}
           onClose={() => setSelectedInventory(null)}
         />
       )}

@@ -279,6 +279,10 @@ export async function runMigrations(): Promise<void> {
     await addColumn('Batch', 'supplierId', 'TEXT');
     await addColumn('GlobalDrug', 'isQuickSale', 'BOOLEAN NOT NULL DEFAULT false');
     await addColumn('GlobalDrug', 'organizationId', 'TEXT');
+    // ميزة وحدة التسعير: nullable بلا قيمة افتراضية — NULL يعني «غير معروف»
+    // لا «شريط واحد»، والفرق بينهما هو ما يمنع كتابة سعر باكيت في حقل شريط.
+    await addColumn('GlobalDrug', 'unitsPerPack', 'INTEGER');
+    await addColumn('GlobalDrug', 'unitsPerPackConfirmedAt', 'DATETIME');
     await addColumn('Patient', 'branchId', 'TEXT');
     await addColumn('Shift', 'safeId', 'TEXT');
     await addColumn('Shift', 'synced', 'BOOLEAN NOT NULL DEFAULT false');
@@ -288,6 +292,13 @@ export async function runMigrations(): Promise<void> {
     await addColumn('User', 'isActive', 'BOOLEAN NOT NULL DEFAULT true');
     await addColumn('SaleReturn', 'userId', 'TEXT');
     await addColumn('DebtPayment', 'userId', 'TEXT');
+
+    // ── Hot-path indexes ────────────────────────────────────────────────────
+    // Keep these idempotent for existing installs; they are deliberately
+    // non-unique because sync/import flows can still resolve duplicate rows.
+    await exec('CREATE INDEX IF NOT EXISTS "idx_inventory_branch_drug" ON "Inventory" ("branchId", "drugId")');
+    await exec('CREATE INDEX IF NOT EXISTS "idx_inventory_drug" ON "Inventory" ("drugId")');
+    await exec('CREATE INDEX IF NOT EXISTS "idx_batch_inventory_expiry" ON "Batch" ("inventoryId", "expiryDate")');
 
     console.log('[DB Migration] Schema migrations complete.');
 }

@@ -65,7 +65,15 @@ export async function POST(req: Request) {
             inventoryId,
             supplierId,
             isQuickSale,
+            unitsPerPack,
         } = body;
+
+        // ميزة وحدة التسعير: إنشاء الدواء هو أفضل لحظة لالتقاط التعبئة —
+        // العلبة في يد الصيدلاني. قيمة غير صالحة تُهمَل فيُسأل عنها لاحقاً،
+        // ولا تُفسد تعبئة يرثها كل من يستعمل هذا الباركود.
+        const parsedUnitsPerPack = Number.parseInt(String(unitsPerPack ?? ''), 10);
+        const validUnitsPerPack =
+            Number.isInteger(parsedUnitsPerPack) && parsedUnitsPerPack > 0 ? parsedUnitsPerPack : null;
 
         if (!barcode || !tradeName || !branchId) {
             return NextResponse.json(
@@ -136,6 +144,9 @@ export async function POST(req: Request) {
                         origin: origin || "unknown",
                         isQuickSale: isQuickSale === true,
                         organizationId,
+                        // مؤكّدة من لحظة الإنشاء، فلا تظهر إشارة التحقق لاحقاً.
+                        unitsPerPack: validUnitsPerPack,
+                        unitsPerPackConfirmedAt: validUnitsPerPack !== null ? new Date() : null,
                     }
                 });
             }

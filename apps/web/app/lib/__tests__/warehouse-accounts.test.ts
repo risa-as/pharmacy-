@@ -6,6 +6,7 @@ import {
   computeDueDate,
   checkCreditLimit,
   summarizeReceivables,
+  outstandingWithOpeningBalance,
   MONEY_EPSILON,
 } from "../warehouse-accounts";
 
@@ -175,6 +176,51 @@ describe("checkCreditLimit", () => {
 
   it("يقبل طلباً يصل بالضبط إلى الحدّ (لا يتجاوزه)", () => {
     expect(checkCreditLimit({ creditLimit: 1000, outstanding: 700, newOrderTotal: 300 })).toEqual({ ok: true });
+  });
+
+  // إثبات تكوين حدّ الائتمان مع الرصيد السابق (STEP 3 من ميزة الرصيد السابق):
+  // عميل بلا أي مستند مفتوح إطلاقاً، لكن رصيده السابق وحده يتجاوز حدّه — يجب
+  // أن يُرفض طلبه تماماً كأنه مدين بفواتير حقيقية بنفس القيمة. هذا هو الإثبات
+  // الفعلي لدخول الرصيد السابق في فحص حدّ الائتمان، لا مجرد تتبّع سلسلة
+  // الاستدعاء نصياً.
+  it("رصيد سابق وحده (بلا أي مستند مفتوح) يتجاوز الحدّ يرفض الطلب", () => {
+    const outstanding = outstandingWithOpeningBalance(1200, []); // لا فواتير ولا مبيعات ميدانية
+    expect(outstanding).toBe(1200);
+
+    const result = checkCreditLimit({ creditLimit: 1000, outstanding, newOrderTotal: 1 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // المتاح فعلياً صفر — الرصيد السابق وحده تجاوز الحدّ أصلاً.
+      expect(result.available).toBe(0);
+    }
+  });
+});
+
+describe("outstandingWithOpeningBalance", () => {
+  it("رصيد سابق صفري يتصرّف تماماً كما كان الحساب قبل هذه الميزة (مجموع المستندات فقط)", () => {
+    const rows = [
+      { total: 100, paidAmount: 40 },
+      { total: 200, paidAmount: 200 },
+    ];
+    expect(outstandingWithOpeningBalance(0, rows)).toBe(60);
+  });
+
+  it("رصيد سابق موجب يُضاف فوق مجموع المستندات لا يستبدله", () => {
+    const rows = [{ total: 300, paidAmount: 100 }]; // متبقي 200 من المستندات
+    expect(outstandingWithOpeningBalance(3_800_076, rows)).toBe(3_800_076 + 200);
+  });
+
+  it("رصيد سابق بلا أي مستندات مفتوحة يُرجع الرصيد السابق وحده", () => {
+    expect(outstandingWithOpeningBalance(500, [])).toBe(500);
+  });
+
+  it("مستند مسدَّد بالكامل يساهم بصفر — الرصيد السابق فقط هو المستحق", () => {
+    const rows = [{ total: 150, paidAmount: 150 }];
+    expect(outstandingWithOpeningBalance(500, rows)).toBe(500);
+  });
+
+  it("عميل رصيده السابق فقط (بلا أي طلب/فاتورة على الإطلاق) يُبلَّغ عنه صحيحاً", () => {
+    expect(outstandingWithOpeningBalance(75.5, [])).toBe(75.5);
   });
 });
 

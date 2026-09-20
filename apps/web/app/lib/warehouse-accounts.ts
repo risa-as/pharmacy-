@@ -197,6 +197,54 @@ export function checkCreditLimit(input: CheckCreditLimitInput): CheckCreditLimit
 
 // ── تلخيص الذمم المدينة ──────────────────────────────────────────────────────
 
+/**
+ * مجموع المتبقي على صفوف ذمم — الجزء الحسابي من فحص حدّ الائتمان وأرصدة
+ * العملاء. كان هذا الـreduce مكتوباً يدوياً في موضع الاعتماد
+ * (app/api/warehouses/orders/[id]/route.ts)، واستُخرج هنا كي يتقاسمه ذلك
+ * الموضع مع warehouse-receivables.ts بلا نسختين تنحرفان.
+ *
+ * السالب يُقصّ إلى صفر: فاتورة سُدِّد فيها أكثر من قيمتها (دفعة زائدة) لا
+ * تُخفّض دَين فواتير أخرى تلقائياً.
+ */
+export function sumOutstanding(rows: Array<{ total: number; paidAmount: number }>): number {
+  return rows.reduce(
+    (sum, row) => sum + Math.max(safeFinite(row.total) - safeFinite(row.paidAmount), 0),
+    0
+  );
+}
+
+// ── رصيد سابق + مستندات مفتوحة = المستحق الكلي ──────────────────────────────
+
+/**
+ * المستحق الكلي على عميل واحد = رصيده السابق (WarehouseCustomer.openingBalance
+ * — دَين من قبل انضمام هذا المذخر للمنصة، انظر تعليق الحقل في schema.prisma)
+ * + مجموع ما تبقّى من مستندات الذمم المفتوحة لديه (فواتير طلبات المنصة ومبيعات
+ * المندوبين الميدانية معاً).
+ *
+ * كانت هذه العملية مكتوبة مرتين مختلفتين قبل هذا التعديل: مرة في
+ * customerOutstanding() (warehouse-receivables.ts، لعميل واحد لفحص حدّ
+ * الائتمان) ومرة inline في GET /api/warehouse-portal/customers (تجميع دفعة
+ * لكل العملاء دفعة واحدة لأداء أفضل) — ونسخة ثالثة غير مقصودة في
+ * app/warehouse/customers/page.tsx (كانت ناقصة حتى دفتر مبيعات المندوبين
+ * كلياً). الدالة هنا هي المصدر الوحيد الآن لكل المواضع الثلاثة.
+ *
+ * الرصيد السابق **يُضاف فوق** مجموع المستندات المفتوحة — لا يحل محله ولا يُشتق
+ * منه أبداً. لا تصفير ولا إعادة حساب تلقائية لـopeningBalance هنا مهما بلغت
+ * قيمة المستندات المفتوحة أو تغيّرت؛ الحقل يبقى كما أدخله مالك المذخر يدوياً
+ * إلى أن يعدّله هو بنفسه من صفحة العملاء.
+ *
+ * `rows` مجموعة "صفوف" مبلغ/مسدَّد — قد تكون فواتير فردية (استدعاء دقيق لكل
+ * صنف) أو صفوف مُجمَّعة مسبقاً بـPrisma groupBy لكل مصدر (invoice/fieldSale)
+ * عند التجميع الدفعي لعدّة عملاء معاً؛ كلا الشكلين صحيح رياضياً لأن sumOutstanding
+ * تُقصّ كل صفّ سالب إلى صفر قبل الجمع في الحالتين.
+ */
+export function outstandingWithOpeningBalance(
+  openingBalance: number,
+  rows: Array<{ total: number; paidAmount: number }>
+): number {
+  return safeFinite(openingBalance) + sumOutstanding(rows);
+}
+
 export interface ReceivableInvoiceInput {
   total: number;
   paidAmount: number;

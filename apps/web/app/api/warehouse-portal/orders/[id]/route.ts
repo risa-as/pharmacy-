@@ -19,7 +19,11 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
         const order = await prisma.warehouseOrder.findFirst({
             where: { id: params.id, warehouseId: ctx.warehouseId },
             include: {
-                branch: { select: { name: true } },
+                // نفس تبرير GET /api/warehouse-portal/orders: اسم الفرع وحده لا
+                // يميّز الصيدلية (كل المؤسسات تسمّي فرعها الافتراضي «الفرع
+                // الرئيسي»)، فيُضاف اسم المؤسسة هنا أيضاً كي لا يفقد refreshOne
+                // في OrdersClient.tsx هذا الحقل بعد تحديث الطلب.
+                branch: { select: { name: true, organization: { select: { name: true } } } },
                 items: {
                     include: {
                         drug: {

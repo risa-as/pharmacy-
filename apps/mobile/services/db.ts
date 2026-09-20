@@ -1,6 +1,8 @@
 import * as SQLite from 'expo-sqlite';
+import { getProductSnapshotChanges, type LocalProductRow } from './productSyncDiff';
 
 let db: SQLite.SQLiteDatabase | null = null;
+let productSaveQueue: Promise<void> = Promise.resolve();
 
 export interface OfflineSalePayload {
     // originalPrice is present only on a line whose price the cashier changed;
@@ -43,6 +45,8 @@ export const dbService = {
                     branchId TEXT,
                     barcode TEXT
                 );
+                CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
+                CREATE INDEX IF NOT EXISTS idx_products_branch ON products(branchId);
                 CREATE TABLE IF NOT EXISTS offline_sales (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     items TEXT,
@@ -64,57 +68,31 @@ export const dbService = {
         return dbPromise;
     },
 
-    // Save products (Bulk insert/replace)
-    isSaving: false, // Mutex flag
+    // Save a complete product snapshot, applying only row-level changes.
+    isSaving: false,
 
     async saveProducts(products: any[]) {
-        if (!db) await this.init();
-        if (!products || products.length === 0) return;
-
-        // Prevent concurrent saves / transaction conflicts
-        if (this.isSaving) {
-            console.log('Skipping saveProducts: Already saving');
-            return;
-        }
-
-        this.isSaving = true;
-
-        try {
-            await db!.withTransactionAsync(async () => {
-                await db!.runAsync('DELETE FROM products');
-                for (const p of products) {
-                    await db!.runAsync(
-                        `INSERT INTO products (id, drugName, tradeName, scientificName, quantity, price, reorderLevel, branchId, barcode)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-                        [
-                            p.id ?? 'unknown',
-                            p.drugName ?? null,
-                            p.tradeName ?? p.drugName ?? null,
-                            p.scientificName ?? null,
-                            p.quantity ?? 0,
-                            p.price ?? 0,
-                            p.reorderLevel ?? 0,
-                            p.branchId ?? null,
-                            p.barcode ?? ''
-                        ]
-                    );
-                }
-            });
-            console.log(`Saved ${products.length} products to local DB`);
-        } catch (e) {
-            console.error('Error saving products:', e);
-        } finally {
-            this.isSaving = false;
-        }
+        if (!Array.isArray(products)) throw new TypeError('Product snapshot must be an array');
+        const snapshot = products;
+        const save = productSaveQueue.then(
+            () => saveProductsSnapshot(snapshot),
+            () => saveProductsSnapshot(snapshot),
+        );
+        productSaveQueue = save.catch(() => {});
+        return save;
     },
 
     // Search products locally
-    async searchProducts(query: string) {
+    async searchProducts(query: string, branchId?: string | null) {
         if (!db) await this.init();
         const searchTerm = `%${query}%`;
+        const params: Array<string | null> = [searchTerm, searchTerm, searchTerm];
+        const branchFilter = branchId ? ' AND branchId = ?' : '';
+        if (branchId) params.push(branchId);
+
         return await db!.getAllAsync(
-            `SELECT * FROM products WHERE drugName LIKE ? OR tradeName LIKE ? OR barcode LIKE ?`,
-            [searchTerm, searchTerm, searchTerm]
+            `SELECT * FROM products WHERE (drugName LIKE ? OR tradeName LIKE ? OR barcode LIKE ?)${branchFilter}`,
+            params
         );
     },
 
@@ -174,3 +152,61 @@ export const dbService = {
         // TODO: persist to local loyalty table when offline loyalty is needed
     },
 };
+
+async function saveProductsSnapshot(products: any[]): Promise<void> {
+    if (!db) await dbService.init();
+
+    dbService.isSaving = true;
+
+    try {
+        const currentRows = await db!.getAllAsync<LocalProductRow>(
+            `SELECT id, drugName, tradeName, scientificName, quantity, price, reorderLevel, branchId, barcode FROM products`
+        );
+        const { upserts, deleteIds } = getProductSnapshotChanges(products, currentRows);
+
+        if (upserts.length === 0 && deleteIds.length === 0) {
+            console.log(`Products already up to date (${products.length} rows)`);
+            return;
+        }
+
+        await db!.withTransactionAsync(async () => {
+            for (const id of deleteIds) {
+                await db!.runAsync('DELETE FROM products WHERE id = ?', [id]);
+            }
+
+            for (const row of upserts) {
+                await db!.runAsync(
+                    `INSERT INTO products (id, drugName, tradeName, scientificName, quantity, price, reorderLevel, branchId, barcode)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(id) DO UPDATE SET
+                        drugName = excluded.drugName,
+                        tradeName = excluded.tradeName,
+                        scientificName = excluded.scientificName,
+                        quantity = excluded.quantity,
+                        price = excluded.price,
+                        reorderLevel = excluded.reorderLevel,
+                        branchId = excluded.branchId,
+                        barcode = excluded.barcode;`,
+                    [
+                        row.id,
+                        row.drugName,
+                        row.tradeName,
+                        row.scientificName,
+                        row.quantity,
+                        row.price,
+                        row.reorderLevel,
+                        row.branchId,
+                        row.barcode,
+                    ]
+                );
+            }
+        });
+
+        console.log(`Saved product snapshot: ${upserts.length} upserted, ${deleteIds.length} deleted, ${products.length} received`);
+    } catch (e) {
+        console.error('Error saving products:', e);
+        throw e;
+    } finally {
+        dbService.isSaving = false;
+    }
+}

@@ -183,3 +183,40 @@ describe("warehousesNeedingDuplicateConfirm", () => {
     expect(warehousesNeedingDuplicateConfirm(["dup", "linked", "clean", "dup", "unknown"], whs)).toEqual(["dup"]);
   });
 });
+
+// قاعدة تغيّرت بقرار صاحب النظام: الرمز ثابت في السوق ولا يتكرر لدواءين،
+// فاشتراط ترقية مسبقة إلى الكتالوغ المشترك كان ترتيباً إدارياً لا ضرورة تقنية.
+// الخادم يُنشئ الصفّ عند أول إرسال، ويبقى مانعا الهوية الحقيقيّان وحدهما.
+describe('هوية الصنف عند الإرسال', () => {
+    const withWarehouse = (over: Partial<NeedLine>): NeedLine =>
+        line({
+            barcode: '123',
+            globalDrugId: null,
+            orderability: 'NO_GLOBAL_MATCH',
+            comparison: {
+                cheapest: option({ orderable: true, warehouseId: 'w1', warehouseName: 'مذخر' }),
+                cheapestOrderable: option({ orderable: true, warehouseId: 'w1', warehouseName: 'مذخر' }),
+                options: [option({ orderable: true, warehouseId: 'w1', warehouseName: 'مذخر' })],
+                hasPrice: true,
+            },
+            ...over,
+        });
+
+    it('يُرسل صنفاً بلا مقابل عالمي ما دام له باركود', () => {
+        const r = classifyNeedLines([withWarehouse({})]);
+        expect(r.sendable).toHaveLength(1);
+        expect(r.blocked).toHaveLength(0);
+    });
+
+    it('يمنع الصنف بلا باركود', () => {
+        const r = classifyNeedLines([withWarehouse({ barcode: '  ', orderability: 'NO_BARCODE' })]);
+        expect(r.sendable).toHaveLength(0);
+        expect(r.blocked).toHaveLength(1);
+    });
+
+    it('يمنع المطابقة الغامضة — تكرار يحتاج دمجاً لا إرسالاً', () => {
+        const r = classifyNeedLines([withWarehouse({ orderability: 'AMBIGUOUS_BARCODE' })]);
+        expect(r.sendable).toHaveLength(0);
+        expect(r.blocked).toHaveLength(1);
+    });
+});

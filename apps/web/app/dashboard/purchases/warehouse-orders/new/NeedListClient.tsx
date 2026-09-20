@@ -17,24 +17,30 @@
 //  §195 المجموعة الناجحة تصير للعرض فقط ولا تدخل إعادة الإرسال.
 //  §197 تجاوز حد 100 صنف يظهر قبل أي إرسال.
 //  §199 حالة الإرسال في sessionStorage بمفتاح المستخدم والمؤسسة والفرع، وتُمسح عند الاكتمال.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import {
     ShoppingCart, Trash2, Loader2, AlertTriangle, Check, Printer, ArrowRight,
-    Building2, BarChart3, Info,
+    Building2, BarChart3, Info, ChevronDown,
 } from 'lucide-react';
 import DrugSearchBox from './DrugSearchBox';
 import PriceCompareModal from './PriceCompareModal';
 import { resumeUnsentLines } from './resume-list';
 import {
     type NeedLine, type DrugSearchResult, type DrugComparison, type ActiveWarehouse, type OrgSupplier,
-    formatIQD, formatDate, selectedOption, priceDrift,
+    formatIQD, formatDate, selectedOption, priceDrift, QUALITY_LABEL, QUALITY_FIX,
 } from './types';
 import {
     applyOrderTarget, classifyNeedLines, currentTargetValue, encodeOrderTarget, groupBlockedBySupplier,
     splitWarehousesByRelation, warehousesNeedingDuplicateConfirm, type BlockedLine,
 } from './need-line-routing';
+// ميزة وحدة التسعير (§302): المذخر يسعّر بالباكيت والكمية هنا بالباكيت، لكن
+// opt.price سعر شريط دوماً. هذه الدالة نقطة التحويل الوحيدة عند العرض والحمولة.
+import { resolveLinePrice } from './need-line-pricing';
+// نفس القاعدة الحسابية المستعملة في PriceCompareModal.tsx للسطر الإضافي —
+// «الباكيت (N): X» — لا ضرب مباشر مكرَّر هنا أيضاً.
+import { toPacketPrice } from '@/app/lib/pack-units';
 // التقسيم والمفاتيح وإعادة المحاولة منطق نقي مُختبَر في
 // app/lib/warehouse-order-grouping.ts — لا يُكرَّر هنا، لأن إعداد الاختبارات في
 // هذا المستودع لا يُحمِّل ملفات .tsx فكان سيبقى بلا تغطية.
@@ -61,6 +67,10 @@ export default function NeedListClient({
     const [lines, setLines] = useState<NeedLine[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(false);
     const [compareLine, setCompareLine] = useState<string | null>(null);
+    // الأسطر الموسَّعة: §79 يمنع استبدال الاختيار اليدوي، لكن الصفّ كان يخفي معه
+    // بقية الموردين تماماً — فلا يرى المستخدم أن هناك أرخص منه ولا تواريخ الأسعار.
+    // التوسيع يُظهرها داخل الجدول، ونافذة المقارنة تبقى للسجل الكامل والمصادر.
+    const [expandedRows, setExpandedRows] = useState<string[]>([]);
     const [stage, setStage] = useState<'BUILD' | 'REVIEW'>('BUILD');
     const [groups, setGroups] = useState<SendGroup[]>([]);
     const [notes, setNotes] = useState<Record<string, string>>({});
@@ -149,10 +159,24 @@ export default function NeedListClient({
                 }
                 if (data.disclaimer) setDisclaimer(data.disclaimer);
                 const comparisons = data.comparisons as Record<string, DrugComparison>;
+                // ميزة وحدة التسعير: تعبئة موثّقة لكل دواء (null = غير موثّقة).
+                const packs = (data.unitsPerPack ?? {}) as Record<string, number | null>;
+                const requested = new Set(ids);
                 setLines((prev) =>
                     prev.map((l) => {
-                        const c = comparisons[l.drugId];
-                        if (!c || versions[l.drugId] !== priceVersions.current[l.drugId]) return l;
+                        if (!requested.has(l.drugId)) return l;
+                        if (versions[l.drugId] !== priceVersions.current[l.drugId]) return l;
+                        // دواء بلا أي تاريخ سعر لا يعود له مدخل في comparisons أصلاً
+                        // (الخادم يبنيها من سجلات موجودة). تركه على null كان يُبقي
+                        // صفّه يدور إلى الأبد ويحجب لوحة توثيق التعبئة — فيُسجّل مقارنة
+                        // فارغة صريحة: «جاء الجواب ولا أسعار» تختلف عن «لم يصل الجواب».
+                        const c = comparisons[l.drugId] ?? {
+                            cheapest: null,
+                            cheapestOrderable: null,
+                            options: [],
+                            hasPrice: false,
+                        };
+                        l = { ...l, unitsPerPack: packs[l.drugId] ?? null };
                         // §79: الاختيار اليدوي لا يُستبدل عند إعادة الجلب.
                         return { ...l, comparison: c };
                     })
@@ -248,6 +272,11 @@ export default function NeedListClient({
     const removeLine = (drugId: string) =>
         setLines((prev) => prev.filter((l) => l.drugId !== drugId));
 
+    const toggleExpanded = (drugId: string) =>
+        setExpandedRows((prev) =>
+            prev.includes(drugId) ? prev.filter((id) => id !== drugId) : [...prev, drugId]
+        );
+
     // ── تصنيف الأسطر: قابل للإرسال أو لا ─────────────────────────────────────
     // المنطق في need-line-routing.ts المُختبَرة: مورد محلي لا يدخل أي طلب إلكتروني.
     const classified = useMemo(() => classifyNeedLines(lines), [lines]);
@@ -259,7 +288,10 @@ export default function NeedListClient({
         for (const l of lines) {
             const opt = selectedOption(l);
             if (opt?.comparable && opt.price !== null) {
-                total += opt.price * l.quantity;
+                // §302: الإجمالي التقديري بوحدة الباكيت حين تُعرَف تعبئته، وإلا
+                // يبقى بسعر الشريط (لا اختراع رقم) — نفس القاعدة المعروضة بالسطر.
+                const display = resolveLinePrice(opt.price, l.unitsPerPack);
+                if (display.amount !== null) total += display.amount * l.quantity;
                 priced += 1;
             } else {
                 unpriced += 1;
@@ -279,7 +311,10 @@ export default function NeedListClient({
             warehouseId: s.warehouseId,
             warehouseName: s.warehouseName,
             supplierName: s.supplierName,
-            unitPrice: s.price,
+            // §302: s.price سعر شريط (classifyNeedLines لا يحوّله). الكمية هنا
+            // باكيتات، فيجب أن يكون unitPrice سعر باكيت حين تُعرف التعبئة —
+            // وإلا يبقى سعر الشريط كما كان (لا اختراع رقم بلا عدد أشرطة).
+            unitPrice: resolveLinePrice(s.price, s.line.unitsPerPack).amount,
         }));
 
         originalLines.current = [...lines];
@@ -369,6 +404,65 @@ export default function NeedListClient({
         const updated = lines.map(l => l.drugId === drugId ? { ...l, unitConfirmed: checked, comparison: null } : l);
         setLines(updated);
         fetchComparisons(updated.filter(l => l.drugId === drugId));
+    };
+
+    /**
+     * أسطر فُتح عليها مُنتقي جهة الطلب يدوياً رغم وجود سعر مؤهل.
+     *
+     * كان المُنتقي يظهر فقط حين لا يوجد سعر، فيصير وجود السعر سبباً لإخفاء
+     * أداة القرار — وهذا خلط بين سؤالين: «بكم اشتريتُ وممّن؟» تاريخ يُقيّد
+     * بمن له سعر بحق، و«إلى أين أرسل هذا الطلب؟» قرار تجاري لا سبب لتقييده
+     * بالتاريخ. المذخر يحمل آلاف الأصناف، وعدم شرائك صنفاً منه من قبل
+     * لا يقول شيئاً عن توفّره عنده — بل طلب التسعير منه هو جوهر البوابة.
+     */
+    const [targetPickerOpen, setTargetPickerOpen] = useState<Set<string>>(new Set());
+    const toggleTargetPicker = (drugId: string) =>
+        setTargetPickerOpen((prev) => {
+            const next = new Set(prev);
+            if (next.has(drugId)) next.delete(drugId);
+            else next.add(drugId);
+            return next;
+        });
+
+    /** ما كتبه المستخدم في خانة التعبئة قبل حفظها، لكل دواء. */
+    const [packDraft, setPackDraft] = useState<Record<string, string>>({});
+    const [savingPack, setSavingPack] = useState<string | null>(null);
+
+    /**
+     * توثيق دائم لعدد الأشرطة — بديل التأشيرة المؤقتة.
+     *
+     * التأشيرة كانت تقول «راجعتُ الوحدة» لهذا الطلب وحده، فيعود السؤال في
+     * كل طلب ولا تستفيد منها بقية النظام. حفظ العدد يعالج السبب مرة
+     * واحدة: تصير أسعار الدواء مؤهلة للمقارنة وقابلة للاختيار، ويظهر سعر
+     * الباكيت، وتستفيد نافذة الدفعة وكل من يستعمل هذا الباركود من نفس الرقم.
+     */
+    const savePackUnits = async (drugId: string) => {
+        const raw = packDraft[drugId] ?? '';
+        const value = parseInt(raw, 10);
+        if (!Number.isInteger(value) || value <= 0) {
+            toast.error('اكتب عدد أشرطة صحيحاً (اعدُدها من العلبة).');
+            return;
+        }
+        setSavingPack(drugId);
+        try {
+            const res = await fetch('/api/inventory/pack-units', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drugId, unitsPerPack: value }),
+            });
+            const data = await res.json();
+            if (!res.ok) { toast.error(data.error ?? 'فشل حفظ عدد الأشرطة'); return; }
+            toast.success('تم توثيق التعبئة — لن يُطلب منك مجدداً.');
+            // إعادة الجلب هي ما يحوّل الأسعار إلى مؤهلة: بوابة الوحدة في
+            // الخادم تقرأ unitsPerPackConfirmedAt الذي كُتِب للتوّ.
+            const updated = lines.map(l =>
+                l.drugId === drugId ? { ...l, unitsPerPack: value, comparison: null } : l,
+            );
+            setLines(updated);
+            fetchComparisons(updated.filter(l => l.drugId === drugId));
+        } finally {
+            setSavingPack(null);
+        }
     };
 
     const printManual = () => window.print();
@@ -473,10 +567,19 @@ export default function NeedListClient({
                                             const cheapestOrderable = l.comparison?.cheapestOrderable ?? null;
                                             const showAlternative =
                                                 opt && !opt.orderable && cheapestOrderable && cheapestOrderable.supplierId !== opt.supplierId;
-                                            const lineTotal = opt?.comparable && opt.price !== null ? opt.price * l.quantity : null;
+                                            // §302: opt.price سعر شريط دوماً (لا يتغيّر هنا — priceDrift في
+                                            // types.ts يقارنه بـchosenPriceAtSelection). السعر المعروض هنا
+                                            // وحده يتحوّل إلى سعر الباكيت حين تُعرَف التعبئة، مع وسم صريح.
+                                            const linePrice = opt?.comparable ? resolveLinePrice(opt.price, l.unitsPerPack) : null;
+                                            const lineTotal = linePrice && linePrice.amount !== null ? linePrice.amount * l.quantity : null;
+                                            const priceOptions = l.comparison?.options ?? [];
+                                            const isExpanded = expandedRows.includes(l.drugId);
+                                            // فهرس أول خيار قابل للمقارنة = «الأرخص» (الخادم يُرتّبها
+                                            // تصاعدياً ويُزيح غير المؤهّل للنهاية، §88/§90).
+                                            const cheapestIndex = priceOptions.findIndex((o) => o.comparable);
                                             return (
+                                                <Fragment key={l.drugId}>
                                                 <tr
-                                                    key={l.drugId}
                                                     ref={(el) => { rowRefs.current[l.drugId] = el; }}
                                                     className="border-t border-border transition-shadow"
                                                 >
@@ -507,26 +610,104 @@ export default function NeedListClient({
                                                         <div className="mt-0.5 text-[11px] text-muted-foreground">
                                                             {opt?.unitLabel ?? 'وحدة المخزون'}
                                                         </div>
-                                                        <label className="block max-w-48 text-xs text-muted-foreground"><input type="checkbox" checked={!!l.unitConfirmed} onChange={e => confirmUnit(l.drugId, e.target.checked)} /> راجعت الأسعار ووحدتها لهذا الدواء في سجل المقارنة</label>
+                                                        {/* التعبئة: توثيق دائم بدل تأشيرة تنتهي بانتهاء الطلب.
+                                                            حفظ العدد يرفع عدم الأهلية عن كل أسعار هذا الدواء دفعة
+                                                            واحدة، ويُظهِر سعر الباكيت الذي يسعّر به المذخر فعلاً. */}
+                                                        {/* لا تُرسم اللوحة قبل وصول المقارنة: unitsPerPack يصل معها،
+                                                            وغيابه قبلها يعني «لم يصل الجواب» لا «غير موثّق». الخلط بينهما
+                                                            كان يُومِض تحذير «غير موثّقة» ثم يستبدله بـ«الباكيت: N شريط»،
+                                                            وتحذير يظهر ثم يختفي يُفقِد التحذيرات كلّها مصداقيتها.
+                                                            ينطبق أيضاً على إعادة الجلب بعد «توثيق»: لا تعود اللوحة لحظةً. */}
+                                                        {!l.comparison ? null : l.unitsPerPack ? (
+                                                            <div className="mt-1 text-[11px] text-muted-foreground">
+                                                                الباكيت: <b className="text-foreground">{l.unitsPerPack}</b> شريط
+                                                            </div>
+                                                        ) : (
+                                                            <div className="mt-1 max-w-48 rounded-md border border-warning/40 bg-warning/5 p-1.5">
+                                                                <p className="text-[11px] font-bold text-warning">
+                                                                    ⚠ تعبئة هذا الدواء غير موثّقة
+                                                                </p>
+                                                                <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                                                                    اكتب عدد أشرطة الباكيت ليُحسَب سعر الباكيت وتصير الأسعار
+                                                                    قابلة للمقارنة والاختيار. يُحفظ مرة واحدة.
+                                                                </p>
+                                                                <div className="mt-1 flex items-center gap-1">
+                                                                    <input
+                                                                        type="number"
+                                                                        min={1}
+                                                                        step={1}
+                                                                        value={packDraft[l.drugId] ?? ''}
+                                                                        onChange={(e) => setPackDraft(p => ({ ...p, [l.drugId]: e.target.value }))}
+                                                                        placeholder="العدد"
+                                                                        className="w-16 rounded border border-border bg-background px-1.5 py-0.5 text-center text-xs tabular-nums"
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => savePackUnits(l.drugId)}
+                                                                        disabled={savingPack === l.drugId}
+                                                                        className="rounded bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                                                    >
+                                                                        {savingPack === l.drugId ? '…' : 'توثيق'}
+                                                                    </button>
+                                                                </div>
+                                                                <label className="mt-1 block text-[10px] text-muted-foreground">
+                                                                    <input type="checkbox" checked={!!l.unitConfirmed} onChange={e => confirmUnit(l.drugId, e.target.checked)} />{' '}
+                                                                    لهذا الطلب فقط: راجعتُ الأسعار ووحدتها
+                                                                </label>
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {!l.comparison ? (
-                                                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                                                        ) : opt?.comparable && opt.price !== null ? (
-                                                            <span className="font-bold tabular-nums text-foreground">
-                                                                {formatIQD(opt.price)}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">لا يوجد سعر مؤهل — راجع المقارنة والوحدة</span>
-                                                        )}
+                                                        <div className="flex flex-col items-start gap-1.5">
+                                                            <div className="min-h-5">
+                                                                {!l.comparison ? (
+                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                                                ) : linePrice && linePrice.amount !== null ? (
+                                                                    <span className="inline-flex flex-col items-start gap-0.5">
+                                                                        <span className="inline-flex items-baseline gap-1 rounded-md bg-muted/60 px-2 py-1 font-bold tabular-nums text-foreground">
+                                                                            <span>{formatIQD(linePrice.amount)}</span>
+                                                                            <span className="text-[10px] font-medium text-muted-foreground">د.ع</span>
+                                                                        </span>
+                                                                        {/* الوسم لا يغيب أبداً: باكيت (مشتق) أو شريط (كما هو) —
+                                                                            هذا هو الخلل المُصلَح، أن تظهر الوحدتان بلا تمييز. */}
+                                                                        <span className="text-[10px] text-muted-foreground">{linePrice.label}</span>
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-xs text-muted-foreground">لا يوجد سعر مؤهل — راجع المقارنة والوحدة</span>
+                                                                )}
+                                                            </div>
+                                                            {priceOptions.length > 0 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleExpanded(l.drugId)}
+                                                                    aria-expanded={isExpanded}
+                                                                    className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-bold transition-colors ${
+                                                                        isExpanded
+                                                                            ? 'border-primary bg-primary text-primary-foreground'
+                                                                            : 'border-primary/25 bg-primary/5 text-primary hover:bg-primary/10'
+                                                                    }`}
+                                                                >
+                                                                    <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+                                                                    <span>عرض الموردين</span>
+                                                                    <span className={`min-w-5 rounded-full px-1 text-center tabular-nums ${isExpanded ? 'bg-primary-foreground/20' : 'bg-primary/10'}`}>
+                                                                        {priceOptions.length}
+                                                                    </span>
+                                                                    <ChevronDown
+                                                                        className={`h-3 w-3 transition-transform duration-200 motion-reduce:transition-none ${isExpanded ? 'rotate-180' : ''}`}
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {/* صنف بلا سعر مؤهل: لا يوجد «مورد مختار» بعد — تُختار جهة الطلب:
                                                             مذخر على المنصة (طلب تسعير إلكتروني §81) أو مورد محلي (طلب يدوي). */}
-                                                        {!opt?.comparable ? (
+                                                        {!opt?.comparable || targetPickerOpen.has(l.drugId) ? (
                                                             <>
                                                                 <div className="mb-1 text-[11px] text-muted-foreground">
-                                                                    لا يوجد مورد بسعر — اختر جهة الطلب:
+                                                                    {opt?.comparable
+                                                                        ? 'اختر جهة الطلب (أي مذخر أو مورد، ولو بلا سعر سابق):'
+                                                                        : 'لا يوجد مورد بسعر — اختر جهة الطلب:'}
                                                                 </div>
                                                                 <select
                                                                     value={currentTargetValue(l)}
@@ -534,7 +715,7 @@ export default function NeedListClient({
                                                                     className="w-48 rounded border border-border bg-muted px-2 py-1 text-xs"
                                                                 >
                                                                     <option value="">— اختر جهة الطلب —</option>
-                                                                    {l.globalDrugId && warehouseSections.related.length > 0 && (
+                                                                    {l.barcode?.trim() && warehouseSections.related.length > 0 && (
                                                                         <optgroup label="مذاخر تتعامل معها (طلب إلكتروني)">
                                                                             {warehouseSections.related.map((w) => (
                                                                                 <option key={w.id} value={encodeOrderTarget({ kind: 'warehouse', id: w.id })}>
@@ -543,7 +724,7 @@ export default function NeedListClient({
                                                                             ))}
                                                                         </optgroup>
                                                                     )}
-                                                                    {l.globalDrugId && warehouseSections.others.length > 0 && (
+                                                                    {l.barcode?.trim() && warehouseSections.others.length > 0 && (
                                                                         <optgroup label="مذاخر أخرى على المنصة (طلب تسعير)">
                                                                             {warehouseSections.others.map((w) => (
                                                                                 <option key={w.id} value={encodeOrderTarget({ kind: 'warehouse', id: w.id })}>
@@ -567,6 +748,20 @@ export default function NeedListClient({
                                                                         يُضاف إلى قائمة الطلب اليدوي المطبوعة — لا يُرسل إلكترونياً.
                                                                     </div>
                                                                 )}
+                                                                {/* طريق عودة: من فتح المنتقي ثم عدَل عن التغيير يعود للجهة
+                                                                    المشتقّة من السعر بلا أن يعيد تحميل الصفحة. */}
+                                                                {opt?.comparable && targetPickerOpen.has(l.drugId) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            chooseTarget(l.drugId, '');
+                                                                            toggleTargetPicker(l.drugId);
+                                                                        }}
+                                                                        className="mt-1 block text-[11px] text-muted-foreground hover:underline"
+                                                                    >
+                                                                        إلغاء والعودة إلى الأرخص
+                                                                    </button>
+                                                                )}
                                                                 {(() => {
                                                                     // تحذير المورد المكرر لحظة اختيار المذخر، قبل الوصول للمراجعة.
                                                                     const wh = l.manualWarehouseId ? warehouses.find((w) => w.id === l.manualWarehouseId) : null;
@@ -582,34 +777,54 @@ export default function NeedListClient({
                                                                 })()}
                                                             </>
                                                         ) : (
-                                                            <div className="text-xs text-foreground">{opt?.supplierName ?? '—'}</div>
+                                                            <>
+                                                                <div className="text-xs text-foreground">{opt?.supplierName ?? '—'}</div>
+                                                                {/* أداة القرار متاحة دائماً لا عند غياب السعر فقط. */}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleTargetPicker(l.drugId)}
+                                                                    className="mt-1 block text-[11px] text-primary hover:underline"
+                                                                >
+                                                                    تغيير جهة الطلب
+                                                                </button>
+                                                            </>
                                                         )}
                                                         {opt?.warehouseName && (
                                                             <div className="text-[11px] text-primary">{opt.warehouseName}</div>
                                                         )}
                                                         {(() => {
                                                             // §79: تغيّر سعر خيار اختاره المستخدم يدوياً يُعرَض ولا يُبتلع.
+                                                            // §302: القيمتان بنفس الوحدة دوماً (كلتاهما تمرّان بنفس l.unitsPerPack)،
+                                                            // فتحويلهما معاً لا يُغيّر معنى الفرق، ويُبقيه متّسقاً مع الشريحة أعلاه.
                                                             const drift = priceDrift(l);
                                                             if (!drift) return null;
+                                                            const from = resolveLinePrice(drift.from, l.unitsPerPack);
+                                                            const to = resolveLinePrice(drift.to, l.unitsPerPack);
                                                             return (
                                                                 <button
                                                                     onClick={() => acknowledgeDrift(l.drugId)}
                                                                     className="mt-1 block text-right text-[11px] text-amber-600 hover:underline"
                                                                     title="اضغط لقبول السعر الجديد"
                                                                 >
-                                                                    تغيّر السعر: {formatIQD(drift.from)} ← {formatIQD(drift.to)}
+                                                                    تغيّر السعر: {formatIQD(from.amount!)} ← {formatIQD(to.amount!)} ({to.label})
                                                                 </button>
                                                             );
                                                         })()}
-                                                        {showAlternative && (
-                                                            <button
-                                                                onClick={() => chooseSupplier(l.drugId, cheapestOrderable!.supplierId)}
-                                                                className="mt-1 block text-[11px] text-primary hover:underline"
-                                                            >
-                                                                أرخص قابل للإرسال: {cheapestOrderable!.supplierName} (
-                                                                {cheapestOrderable!.price !== null ? formatIQD(cheapestOrderable!.price) : '—'})
-                                                            </button>
-                                                        )}
+                                                        {showAlternative && (() => {
+                                                            // §302: خيار مورد آخر لنفس الدواء — نفس التعبئة، فيُحسب ويُوسَم
+                                                            // بنفس القاعدة كي لا يتعارض ظاهرياً مع السعر الموسوم أعلاه.
+                                                            const alt = resolveLinePrice(cheapestOrderable!.price, l.unitsPerPack);
+                                                            return (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => chooseSupplier(l.drugId, cheapestOrderable!.supplierId)}
+                                                                    className="mt-1 block max-w-56 rounded-md bg-primary px-2 py-1 text-right text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                                                                >
+                                                                    أرخص قابل للإرسال: {cheapestOrderable!.supplierName} (
+                                                                    {alt.amount !== null ? `${formatIQD(alt.amount)} ${alt.label}` : '—'})
+                                                                </button>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="px-4 py-3 text-xs text-muted-foreground">
                                                         {formatDate(opt?.recordedAt ?? null)}
@@ -623,10 +838,23 @@ export default function NeedListClient({
                                                     <td className="px-4 py-3">
                                                         {l.manualSupplierId ? (
                                                             <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground">طلب يدوي</span>
-                                                        ) : !l.globalDrugId ? (
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive">
-                                                                <AlertTriangle className="h-3 w-3" /> غير قابل للإرسال
-                                                            </span>
+                                                        ) : (!l.barcode?.trim() || l.orderability === 'AMBIGUOUS_BARCODE') ? (
+                                                            /* مانعا الهوية الوحيدان بعد أن صار الخادم يُنشئ الصفّ
+                                                               المشترك عند أول إرسال: بلا باركود، أو مطابقة غامضة. */
+                                                            <div className="max-w-56">
+                                                                <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive">
+                                                                    <AlertTriangle className="h-3 w-3" /> غير قابل للإرسال إلكترونياً
+                                                                </span>
+                                                                {l.orderabilityReason && (
+                                                                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                                                                        {l.orderabilityReason}
+                                                                    </p>
+                                                                )}
+                                                                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                                                                    يمكنك طلبه <b className="text-foreground">يدوياً</b> باختيار جهة الطلب من عمود المورد،
+                                                                    فيظهر في قائمة الطباعة والواتساب.
+                                                                </p>
+                                                            </div>
                                                         ) : (l.manualWarehouseId || opt?.orderable) ? (
                                                             <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success">{l.manualWarehouseId ? 'جاهز لطلب التسعير' : 'جاهز'}</span>
                                                         ) : (
@@ -655,6 +883,110 @@ export default function NeedListClient({
                                                         </div>
                                                     </td>
                                                 </tr>
+
+                                                {isExpanded && (
+                                                    <tr className="border-t border-border bg-muted/20">
+                                                        {/* ثمانية أعمدة في الترويسة — أي تغيير فيها يلزمه تعديل colSpan. */}
+                                                        <td colSpan={8} className="px-3 py-3 sm:px-4">
+                                                            <div className="rounded-lg border border-primary/15 bg-primary/5 p-2.5 sm:p-3">
+                                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                                    <span className="text-xs font-bold text-foreground">عروض الموردين</span>
+                                                                    <span className="rounded-full bg-card px-2 py-0.5 text-[11px] text-muted-foreground">
+                                                                        {priceOptions.length} خيارات متاحة
+                                                                    </span>
+                                                                </div>
+                                                                <div className="grid gap-2 sm:grid-cols-2">
+                                                                {priceOptions.map((o, i) => {
+                                                                    const isChosen = !!opt && opt.supplierId === o.supplierId;
+                                                                    return (
+                                                                        <div
+                                                                            key={o.supplierId || 'unattributed'}
+                                                                            className={`rounded-lg border px-2.5 py-2 text-xs ${isChosen ? 'border-primary/40 bg-card shadow-sm' : 'border-border bg-card'}`}
+                                                                        >
+                                                                            <div className="flex items-start justify-between gap-2">
+                                                                                <div className="min-w-0">
+                                                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                                                        <span className="truncate font-semibold text-foreground">{o.supplierName}</span>
+                                                                                        {i === cheapestIndex && (
+                                                                                            <span className="shrink-0 rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-bold text-success">
+                                                                                                الأرخص
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div className="mt-1 truncate text-[10px] text-muted-foreground">
+                                                                                        {o.warehouseName ? <span className="text-primary">{o.warehouseName}</span> : 'غير مربوط بمذخر'}
+                                                                                        <span className="mx-1">·</span>
+                                                                                        {formatDate(o.recordedAt)}
+                                                                                        {o.isStale && <span className="text-amber-600"> · قديم</span>}
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="shrink-0 text-left">
+                                                                                    <div className="font-bold tabular-nums text-foreground">
+                                                                                        {o.price !== null ? `${formatIQD(o.price)} د.ع` : '—'}
+                                                                                    </div>
+                                                                                    <div className="text-[10px] text-muted-foreground">لكل {o.unitLabel}</div>
+                                                                                    {/* §302: نفس السطر الإضافي في PriceCompareModal — بلا هذا
+                                                                                        السطر كانت هذه البطاقة (لمورد قد يكون هو نفسه المعروض في
+                                                                                        الشريحة أعلاه) تُظهر سعر الشريط وحده، فيتعارض ظاهرياً مع
+                                                                                        سعر الباكيت الموسوم هناك لنفس المورد. */}
+                                                                                    {(() => {
+                                                                                        const packet = o.price !== null ? toPacketPrice(o.price, l.unitsPerPack) : null;
+                                                                                        if (packet === null) return null;
+                                                                                        return (
+                                                                                            <div className="text-[10px] text-muted-foreground">
+                                                                                                الباكيت ({l.unitsPerPack}): <b className="text-foreground">{formatIQD(packet)}</b>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })()}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/70 pt-1.5">
+                                                                                {o.qualityReason ? (
+                                                                                    <span className="inline-flex min-w-0 items-center gap-1 truncate text-[10px] font-semibold text-amber-600" title={QUALITY_LABEL[o.qualityReason]}>
+                                                                                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                                                                                        غير مؤهل: {QUALITY_LABEL[o.qualityReason]}
+                                                                                    </span>
+                                                                                ) : isChosen ? (
+                                                                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary">
+                                                                                        <Check className="h-3 w-3" /> مختار
+                                                                                    </span>
+                                                                                ) : o.comparable && o.supplierId ? (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => chooseSupplier(l.drugId, o.supplierId)}
+                                                                                        className="rounded-md bg-primary px-2 py-1 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                                                                                    >
+                                                                                        اختر هذا السعر
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <span className="text-[10px] text-muted-foreground">غير مؤهل للاختيار</span>
+                                                                                )}
+                                                                                {o.qualityReason && (
+                                                                                    <span className="truncate text-[10px] text-muted-foreground" title={QUALITY_FIX[o.qualityReason]}>
+                                                                                        راجع السبب
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            {o.qualityReason && (
+                                                                                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{QUALITY_FIX[o.qualityReason]}</p>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCompareLine(l.drugId)}
+                                                                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                                                                >
+                                                                    <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+                                                                    السجل الكامل والمصادر
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                                </Fragment>
                                             );
                                         })}
                                     </tbody>

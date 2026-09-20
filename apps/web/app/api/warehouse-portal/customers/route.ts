@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
+import { outstandingWithOpeningBalance } from '@/app/lib/warehouse-accounts';
 
 export async function GET() {
     const ctx = await getWarehouseContext();
@@ -25,7 +26,7 @@ export async function GET() {
         const gate = await requireWarehousePermission(ctx, 'canViewCustomers');
         if (!gate.ok) return gate.response;
 
-        const [orders, customers, outstandingGroups] = await Promise.all([
+        const [orders, customers, outstandingGroups, fieldSaleGroups] = await Promise.all([
             // DRAFT لم تُرسل بعد — لا تُحسب "تعاملاً" (نفس استثناء GET /orders).
             prisma.warehouseOrder.findMany({
                 where: { warehouseId: ctx.warehouseId, status: { not: 'DRAFT' } },
@@ -41,6 +42,19 @@ export async function GET() {
             prisma.warehouseInvoice.groupBy({
                 by: ['organizationId'],
                 where: { warehouseId: ctx.warehouseId, status: { in: ['UNPAID', 'PARTIAL'] } },
+                _sum: { total: true, paidAmount: true },
+            }),
+            // الدفتر الثاني: فواتير البيع الميداني (فحص 2026-09-17، فجوة G1).
+            // `organizationId: { not: null }` لأن البيع لصيدلية خارج المنصة اسمٌ
+            // نصيّ لا مؤسسة — لا يُحمَّل على رصيد أي عميل هنا (يظهر في إجمالي
+            // المذخر عبر loadOpenReceivables).
+            prisma.warehouseFieldSale.groupBy({
+                by: ['organizationId'],
+                where: {
+                    warehouseId: ctx.warehouseId,
+                    status: { in: ['UNPAID', 'PARTIAL'] },
+                    organizationId: { not: null },
+                },
                 _sum: { total: true, paidAmount: true },
             }),
         ]);
@@ -77,13 +91,34 @@ export async function GET() {
         }
 
         const customerByOrg = new Map(customers.map((c) => [c.organizationId, c]));
-        const outstandingByOrg = new Map(
-            outstandingGroups.map((g) => [g.organizationId, (g._sum.total ?? 0) - (g._sum.paidAmount ?? 0)])
-        );
+
+        // صفّان مُجمَّعان لكل منظمة (لا صف واحد مدموج): صف فواتير المنصة وصف
+        // مبيعات المندوبين الميدانية، كلٌّ من مصدره — outstandingWithOpeningBalance
+        // (عبر sumOutstanding) تُقصّ كل صفّ سالب إلى صفر قبل الجمع، فإبقاؤهما
+        // منفصلين هنا يطابق تماماً ما كان يحدث سابقاً حين كانت كل مجموعة تُحسب
+        // على حدة ثم تُجمَع (بخلاف دمجهما في صفّ واحد قبل القص).
+        type AggRow = { total: number; paidAmount: number };
+        const openRowsByOrg = new Map<string, AggRow[]>();
+        const pushRow = (orgId: string | null, row: AggRow) => {
+            if (!orgId) return;
+            const list = openRowsByOrg.get(orgId);
+            if (list) list.push(row);
+            else openRowsByOrg.set(orgId, [row]);
+        };
+        for (const g of outstandingGroups) {
+            pushRow(g.organizationId, { total: g._sum.total ?? 0, paidAmount: g._sum.paidAmount ?? 0 });
+        }
+        for (const g of fieldSaleGroups) {
+            // organizationId: { not: null } مضبوط في استعلام fieldSaleGroups أصلاً
+            // (بيع لصيدلية خارج المنصة اسمٌ نصّي لا مؤسسة) — pushRow تتجاهله ثانيةً
+            // احترازاً فقط.
+            pushRow(g.organizationId, { total: g._sum.total ?? 0, paidAmount: g._sum.paidAmount ?? 0 });
+        }
 
         const rows = Array.from(byOrg.values())
             .map((org) => {
                 const customer = customerByOrg.get(org.organizationId) ?? null;
+                const openingBalance = customer?.openingBalance ?? 0;
                 return {
                     customerId: customer?.id ?? null,
                     organizationId: org.organizationId,
@@ -92,10 +127,17 @@ export async function GET() {
                     lastOrderDate: org.lastOrderDate,
                     creditLimit: customer?.creditLimit ?? 0,
                     paymentTermDays: customer?.paymentTermDays ?? 0,
+                    // رصيد سابق يُدار من صفحة العملاء — انظر تعليق الحقل في
+                    // schema.prisma. يُعرَض هنا منفصلاً عن outstanding أدناه كي لا
+                    // يظنّ أحد أن تعديله يصحّح "المستحق اليوم" بدل الدَين الموروث.
+                    openingBalance,
                     priceTier: customer?.priceTier ?? null,
                     isBlocked: customer?.isBlocked ?? false,
                     notes: customer?.notes ?? null,
-                    outstanding: outstandingByOrg.get(org.organizationId) ?? 0,
+                    // المستحق الكلي = الرصيد السابق + كل المستندات المفتوحة —
+                    // outstandingWithOpeningBalance الموحَّدة (warehouse-accounts.ts)،
+                    // نفس الدالة التي يستخدمها فحص حدّ الائتمان عند الاعتماد.
+                    outstanding: outstandingWithOpeningBalance(openingBalance, openRowsByOrg.get(org.organizationId) ?? []),
                 };
             })
             .sort((a, b) => (b.lastOrderDate?.getTime() ?? 0) - (a.lastOrderDate?.getTime() ?? 0));
@@ -141,6 +183,7 @@ export async function POST(req: NextRequest) {
             organizationId: string;
             creditLimit?: number;
             paymentTermDays?: number;
+            openingBalance?: number;
             priceTier?: string | null;
             notes?: string | null;
         } = { warehouseId: ctx.warehouseId, organizationId };
@@ -151,6 +194,17 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: 'حدّ الائتمان يجب أن يكون رقماً غير سالب.' }, { status: 400 });
             }
             data.creditLimit = v;
+        }
+
+        // رصيد سابق: نفس نمط تحقّق creditLimit بالضبط (رقم منتهٍ غير سالب) —
+        // دَين موروث لا يكون سالباً منطقياً هنا (رصيد دائن للعميل ليس ما تمثّله
+        // هذه الميزة)، ويُدخَل يدوياً مرة عند الإعداد فقط.
+        if ('openingBalance' in body) {
+            const v = Number(body.openingBalance);
+            if (!Number.isFinite(v) || v < 0) {
+                return NextResponse.json({ error: 'الرصيد السابق يجب أن يكون رقماً غير سالب.' }, { status: 400 });
+            }
+            data.openingBalance = v;
         }
 
         if ('paymentTermDays' in body) {

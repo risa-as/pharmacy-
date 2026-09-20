@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { validateSyncUser } from '@/app/lib/sync-auth';
+import { productSnapshotResponse } from '@/app/lib/product-snapshot-response';
 
 export async function GET(req: Request) {
     try {
@@ -32,9 +33,10 @@ export async function GET(req: Request) {
 
         const inventories = await prisma.inventory.findMany({
             where: { branchId },
+            orderBy: { id: 'asc' },
             include: {
                 drug: true,
-                batches: true,
+                batches: { orderBy: { id: 'asc' } },
             },
         });
 
@@ -53,6 +55,13 @@ export async function GET(req: Request) {
                     minStock: inv.minStock || 0,
                     maxStock: inv.maxStock || 100,
                     isQuickSale: inv.drug.isQuickSale ?? false,
+                    // ميزة وحدة التسعير: يُرسلان ليعرف سطح المكتب — وهو يعمل
+                    // أوفلاين — أُعُدّت أشرطة الدواء أم لا، فيعرض الإشارة الصحيحة
+                    // بدل افتراض حالة لا يعرفها. null صريح لا حذف للحقل.
+                    unitsPerPack: inv.drug.unitsPerPack ?? null,
+                    unitsPerPackConfirmedAt: inv.drug.unitsPerPackConfirmedAt
+                        ? inv.drug.unitsPerPackConfirmedAt.toISOString()
+                        : null,
                     stock: totalStock,
                     batches: inv.batches.map((b: any) => ({
                         id: b.id,
@@ -64,11 +73,10 @@ export async function GET(req: Request) {
                 };
             });
 
-        return NextResponse.json({
+        return productSnapshotResponse(req, {
             drugs,
             meta: {
                 branchId,
-                snapshotAt: new Date().toISOString(),
                 inventoryIds: inventories.map((inv: any) => inv.id),
                 drugIds: drugs.map((d: any) => d.id),
             },
