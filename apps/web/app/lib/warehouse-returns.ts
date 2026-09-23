@@ -17,7 +17,7 @@ import { MONEY_EPSILON, computeInvoiceStatus, type WarehouseInvoiceStatusValue }
 export interface ValidateReturnQuantityInput {
   /** الكمية الفعلية التي شُحنت فعلاً على هذا البند (effectiveLine().quantity وقت الشحن). */
   shippedQuantity: number;
-  /** مجموع الكميات على إرجاعات سابقة **مقبولة** فقط لنفس الطلب/الصنف — الطلبات PENDING/REJECTED لا تُحتسَب. */
+  /** الكمية المحجوزة سابقاً: PENDING + ACCEPTED عند الإنشاء، وACCEPTED عند اعتماد القرار. */
   alreadyAcceptedQuantity: number;
   /** الكمية المطلوب إرجاعها الآن. */
   requestedQuantity: number;
@@ -67,29 +67,7 @@ export type ApplyReturnCreditResult =
   | { ok: true; newTotal: number; newStatus: WarehouseInvoiceStatusValue }
   | { ok: false; error: string };
 
-/**
- * يطبّق إشعاراً دائناً (إرجاع مقبول) على فاتورة مذخر: يخفّض الإجمالي بقيمة
- * الإرجاع ويعيد حساب الحالة عبر computeInvoiceStatus() — نفس القاعدة
- * المستخدمة لكل فاتورة أخرى في النظام، فلا تتفرّق حالتا الفاتورة (المسار
- * العادي ومسار الإرجاع) بقاعدتين مختلفتين.
- *
- * يرفض:
- *   - فاتورة CANCELLED — لا معنى لإشعار دائن على فاتورة مُلغاة أصلاً (لا دين
- *     قائم عليها ليُخفَّض).
- *   - creditAmount غير موجب أو غير منتهٍ.
- *   - **الحارس الجوهري**: لو أدّى تخفيض الإجمالي إلى total جديد أقل من
- *     paidAmount الحالي (بهامش MONEY_EPSILON — نفس هامش كل فاتورة في
- *     warehouse-accounts.ts)، تُرفَض العملية بدل إنتاج فاتورة "مسدَّدة أكثر
- *     من إجمالها" (رصيد سالب فعلياً). الرسالة تُخبر صراحة أن المطلوب ردّ
- *     مبلغ نقدي للصيدلية، لا مجرد تعديل رقم على الفاتورة.
- *
- * انتقالات الحالة الحقيقية بعد تخفيض total (لا تُختبَر انتقالات مستحيلة مثل
- * PAID→PARTIAL، فالإجمالي ينخفض دائماً فيقترب من paidAmount أو يساويه، فلا
- * يمكن لفاتورة PAID أن تصبح PARTIAL بتخفيض إجماليها هي نفسها):
- *   - PARTIAL → PAID: إجمالي جديد يساوي المسدَّد فعلاً (خصماً أدى لتصفية الدين).
- *   - PARTIAL → PARTIAL: خصم لا يكفي لتصفية الدين بالكامل.
- *   - UNPAID → UNPAID: خصم على فاتورة لم يُسدَّد عليها شيء بعد.
- */
+/** Reduces the invoice net total. Any excess paid balance is recorded as a credit note by the transactional caller. */
 export function applyReturnCredit(input: ApplyReturnCreditInput): ApplyReturnCreditResult {
   if (input.invoiceStatus === "CANCELLED") {
     return { ok: false, error: "لا يمكن اعتماد إرجاع على فاتورة مُلغاة." };
@@ -105,16 +83,14 @@ export function applyReturnCredit(input: ApplyReturnCreditInput): ApplyReturnCre
 
   const newTotal = total - creditAmount;
 
-  if (newTotal < paidAmount - MONEY_EPSILON) {
+  if (newTotal < -MONEY_EPSILON) {
     return {
       ok: false,
-      error: `قيمة الإرجاع تتجاوز المتبقي غير المسدَّد على الفاتورة (المسدَّد فعلاً: ${paidAmount.toFixed(
-        2
-      )}) — يلزم ردّ الفرق نقداً للصيدلية قبل اعتماد هذا الإرجاع.`,
+      error: 'قيمة الإرجاع تتجاوز قيمة الفاتورة المتبقية بعد المرتجعات السابقة.',
     };
   }
 
-  const newStatus = computeInvoiceStatus({ total: newTotal, paidAmount });
+  const newStatus = computeInvoiceStatus({ total: Math.max(0, newTotal), paidAmount });
 
-  return { ok: true, newTotal, newStatus };
+  return { ok: true, newTotal: Math.max(0, newTotal), newStatus };
 }

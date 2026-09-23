@@ -245,7 +245,7 @@ export default function AddBatchModal({
             setError("لا يمكن الحفظ: اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).");
             return;
         }
-        if (computedCost <= 0) {
+        if (!Number.isFinite(computedCost) || computedCost <= 0) {
             setError("لا يمكن الحفظ: أدخل سعر الباكيت.");
             return;
         }

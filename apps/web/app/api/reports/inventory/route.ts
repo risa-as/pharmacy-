@@ -24,6 +24,7 @@ export async function GET() {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewReports) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
         const { tenantBranchWhere } = tenantCtx;
 
         const inventory = await prisma.inventory.findMany({

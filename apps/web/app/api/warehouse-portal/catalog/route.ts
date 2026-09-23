@@ -385,8 +385,10 @@ export async function DELETE(req: NextRequest) {
             return NextResponse.json({ error: 'الصنف غير موجود في كتالوج مذخرك' }, { status: 404 });
         }
 
-        await prisma.warehouseCatalogItem.delete({ where: { id } });
-        return NextResponse.json({ ok: true });
+        // Preserve batches, movements and historic references. Removing a listing
+        // must never cascade into the warehouse's stock ledger.
+        await prisma.warehouseCatalogItem.update({ where: { id }, data: { isAvailable: false } });
+        return NextResponse.json({ ok: true, archived: true, message: 'أُوقف عرض الصنف مع الاحتفاظ بمخزونه وسجل حركاته.' });
     } catch (e: any) {
         console.error('warehouse-portal catalog DELETE error:', e);
         return NextResponse.json({ error: 'فشل في حذف الصنف' }, { status: 500 });

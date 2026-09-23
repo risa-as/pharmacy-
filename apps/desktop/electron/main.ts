@@ -1,3 +1,6 @@
+import {recordSyncSuccess} from "./sync-success";
+import { registerStaffHistory } from "./staff-history";
+import { registerOperations } from "./operations";
 ﻿import { app, BrowserWindow, ipcMain, shell, powerMonitor, Menu } from "electron";
 import {
   loadOfflineToken,
@@ -12,8 +15,10 @@ import bcrypt from "bcryptjs";
 import { autoUpdater } from "electron-updater";
 import {
   startSyncService,
+  isSyncRunning,
   getConnectionStatus,
   syncSales,
+  syncSaleReturns,
   syncProducts,
   syncSuppliers,
   syncShifts,
@@ -1159,6 +1164,7 @@ app.whenReady().then(async () => {
         store.set("syncUserId", "");
         store.set("syncUserRole", "");
         store.set("syncOrgId", "");
+        store.set("syncSessionVersion", 0);
         store.set("loggedInUserId", "");
       }
       // A banked invoice number belongs to the previous org's sequence.
@@ -1531,6 +1537,8 @@ app.whenReady().then(async () => {
                 store.set("syncUserId", cloudUser.id);
                 store.set("syncUserRole", cloudUser.role);
                 store.set("syncOrgId", cloudUser.organizationId || "");
+                // The token is signed with this version; sent as x-session-version.
+                store.set("syncSessionVersion", Number(cloudUser.sessionVersion) || 0);
               }
               void processPendingSyncActions();
               // Trigger product sync in background — do not await so login
@@ -1614,6 +1622,28 @@ app.whenReady().then(async () => {
 });
 
   // ==================== Session Restore ====================
+  const authorizeOperations = registerOperations(async () => {
+    const pending = async () => {
+      const [sales, returns, inventory, failed] = await Promise.all([
+        prisma.sale.count({where:{synced:false}}), prisma.saleReturn.count({where:{synced:false}}), prisma.inventory.count({where:{syncPending:true}}), prisma.syncFailure.count(),
+      ]);
+      return {sales, returns, inventory, failed, queued:getPendingSyncActions().length};
+    };
+    let state=await pending();
+    if(state.failed) throw new Error("توجد عمليات متعثرة تحتاج مراجعة المسؤول قبل تعديل المخزون عبر الخادم.");
+    if(!state.sales&&!state.returns&&!state.inventory&&!state.queued) return;
+    await syncSales(); await syncSaleReturns(); await processPendingSyncActions();
+    state=await pending();
+    if(state.failed || state.sales || state.returns || state.queued) throw new Error("توجد مبيعات أو تغييرات مخزون لم تُزامن بعد. أكمل المزامنة قبل الجرد أو الاستلام.");
+    const pulled=await syncProducts();
+    if(!pulled.success || (await pending()).inventory) throw new Error("لم تكتمل مزامنة المخزون؛ أعد المحاولة بعد المزامنة.");
+  }, async () => {
+    // Drain a pull that may have started before the cloud mutation, then request a fresh one.
+    const first=await syncProducts();
+    if(!first.success) return first;
+    return await syncProducts();
+  });
+  registerStaffHistory(prisma, authorizeOperations);
   ipcMain.handle("get-session-user", async () => {
     try {
       const userId = store.get("loggedInUserId");
@@ -1911,17 +1941,31 @@ ipcMain.handle("set-branch-id", (_, branchId) => {
 });
 
 // Allow Renderer to trigger sync immediately
+let staffSyncBusy = false;
+async function staffSyncHealth() {
+  if(!store.get("loggedInUserId")) throw Error("سجل الدخول أولاً");
+  const [sales,returns,debts,failed]=await Promise.all([prisma.sale.count({where:{synced:false}}),prisma.saleReturn.count({where:{synced:false}}),prisma.debtPayment.count({where:{synced:false}}),prisma.syncFailure.count()]);
+  const health=buildSyncHealthSnapshot();
+  const lastSuccess=store.get("lastSuccessfulSync");
+  return {...health,retryableIssues:getPendingSyncActions().filter(a=>a.lastError).map(a=>({id:a.id,type:a.type,error:a.lastError})),lastSuccess:lastSuccess?.branchId===String(store.get("branchId")||"")?lastSuccess:null,failedCount:health.failedCount+failed,inventoryPending:health.pendingCount,pendingCount:health.pendingCount+sales+returns+debts,salesPending:sales,returnsPending:returns,debtsPending:debts,inProgress:health.inProgress||staffSyncBusy||isSyncRunning(),lastStaffSyncAt:store.get("lastStaffSyncAt")};
+}
+ipcMain.handle("staff:sync-health",()=>staffSyncHealth());
 ipcMain.handle("trigger-sync", async () => {
-  console.log("Manual Sync Triggered from Renderer");
+  if(staffSyncBusy)return {success:false,error:"المزامنة قيد التنفيذ"};
+  staffSyncBusy=true;
   try {
-    await syncSales();
-    await syncProducts();
-    void processPendingSyncActions();
-    return { success: true };
-  } catch (error: any) {
-    console.error("trigger-sync failed:", error);
-    return { success: false, error: error.message || String(error) };
-  }
+    if(!store.get("loggedInUserId") || store.get("loggedInUserId")!==store.get("syncUserId")) throw Error("سجّل الدخول بالحساب الحالي عبر الإنترنت أولاً");
+    await syncSales(); await syncSaleReturns(); await syncDebtPayments();
+    await processPendingSyncActions();
+    const inventory=await syncProducts();
+    const health=await staffSyncHealth();
+    if(!inventory.success) throw Error(inventory.reason || "لم تكتمل مزامنة المخزون");
+    if(health.pendingCount || health.failedCount) throw Error("لم تكتمل مزامنة جميع العمليات؛ راجع العدادات ثم أعد المحاولة عند استقرار الاتصال.");
+    store.set("lastStaffSyncAt",new Date().toISOString());
+    recordSyncSuccess("المبيعات والمرتجعات والتحصيل والمخزون");
+    return {success:true};
+  }catch(error){return {success:false,error:error instanceof Error?error.message:String(error)};}
+  finally{staffSyncBusy=false;for(const window of BrowserWindow.getAllWindows())window.webContents.send("staff-sync-updated");}
 });
 
 // Sync debts (debt payments) on demand from DebtsPage
@@ -2275,6 +2319,8 @@ async function getInventoryRowForBranch(
 
 ipcMain.handle("get-inventory-items", async (_, { searchTerm, user }) => {
   try {
+    const auth = await authorizeOperations("canViewInventory");
+    user = {...user, branchId:auth.who.branch};
     const effectiveBranchId = resolveInventoryBranchId(user);
     if (!effectiveBranchId) {
       console.warn(
@@ -2318,13 +2364,14 @@ ipcMain.handle("get-inventory-items", async (_, { searchTerm, user }) => {
     });
     return inventory;
   } catch (error) {
-    console.error("Error fetching inventory items:", error);
-    return [];
+    return {success:false,error:error instanceof Error?error.message:"تعذر تحميل المخزون"};
   }
 });
 
 ipcMain.handle("get-inventory-item", async (_, { inventoryId, user }) => {
   try {
+    const auth = await authorizeOperations("canViewInventory");
+    user = {...user, branchId:auth.who.branch};
     const effectiveBranchId = resolveInventoryBranchId(user);
     if (!effectiveBranchId) return null;
     return await getInventoryRowForBranch(String(inventoryId || ""), effectiveBranchId);
@@ -2368,8 +2415,10 @@ ipcMain.handle("check-barcode-local", async (_, { barcode, branchId }) => {
 
 ipcMain.handle("create-global-drug-local", async (_, data) => {
   try {
+    await authorizeOperations("canAddDrug");
     const parsedPrice = parseFloat(data.price) || 0;
-    const parsedCost = parseFloat(data.costPrice) || 0;
+    const parsedCost = typeof data.costPrice === "number" || typeof data.costPrice === "string" ? Number(data.costPrice) : NaN;
+    if (!Number.isFinite(parsedCost) || parsedCost <= 0 || parsedCost > 1000000000) return {success:false,error:"تكلفة الشراء يجب أن تكون أكبر من صفر."};
     const parsedMinStock = parseInt(data.minStock, 10) || 10;
     const parsedMaxStock = parseInt(data.maxStock, 10) || 100;
     const parsedQuantity = data.quantity ? parseInt(data.quantity, 10) : 0;
@@ -2440,8 +2489,11 @@ ipcMain.handle(
     },
   ) => {
     try {
+      const auth = await authorizeOperations("canAddDrug");
+      branchId = auth.who.branch;
       const parsedQuantity = parseInt(quantity, 10) || 0;
-      const parsedCost = parseFloat(costPrice) || 0;
+      const parsedCost = typeof costPrice === "number" || typeof costPrice === "string" ? Number(costPrice) : NaN;
+      if (!Number.isFinite(parsedCost) || parsedCost <= 0 || parsedCost > 1000000000) return {success:false,error:"تكلفة الشراء يجب أن تكون أكبر من صفر."};
       const parsedPrice = parseFloat(price) || 0;
       const parsedMinStock = parseInt(minStock, 10) || 10;
       const parsedMaxStock = parseInt(maxStock, 10) || 100;
@@ -2506,7 +2558,10 @@ ipcMain.handle(
 ipcMain.handle("update-inventory-item", async (_, data) => {
   const { id, drugId, price, costPrice, minStock, maxStock } = data;
   try {
-    console.log("!!! IPC: update-inventory-item received:", data);
+    const auth = await authorizeOperations("canEditDrug");
+    const row = await prisma.inventory.findFirst({where:{id,drugId,branchId:auth.who.branch}});
+    if(!row) throw Error("المخزون خارج فرع الجهاز");
+    auth.assertCurrent();
 
     const updPrice = parseFloat(price);
     const updCost = parseFloat(costPrice);
@@ -2572,6 +2627,7 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
 
 ipcMain.handle("delete-inventory-item", async (_, id) => {
   try {
+    const auth = await authorizeOperations("canDeleteDrug");
     const existingInventory = await prisma.inventory.findUnique({
       where: { id: String(id) },
       select: { id: true, branchId: true, drugId: true },
@@ -2585,6 +2641,8 @@ ipcMain.handle("delete-inventory-item", async (_, id) => {
       };
     }
 
+    if(existingInventory.branchId !== auth.who.branch) throw Error("المخزون خارج فرع الجهاز");
+    auth.assertCurrent();
     // Also delete batches associated with this inventory
     await prisma.batch.deleteMany({
       where: { inventoryId: existingInventory.id },
@@ -2617,6 +2675,11 @@ ipcMain.handle(
     { inventoryId, quantity, costPrice, expiryDate, supplierId, unitsPerPack },
   ) => {
     try {
+      const auth = await authorizeOperations("canAddDrug");
+      if(!await prisma.inventory.findFirst({where:{id:inventoryId,branchId:auth.who.branch}})) throw Error("الدفعة خارج فرع الجهاز");
+      auth.assertCurrent();
+      const validatedCost = typeof costPrice === "number" || typeof costPrice === "string" ? Number(costPrice) : NaN;
+      if (!Number.isFinite(validatedCost) || validatedCost <= 0 || validatedCost > 1000000000) return {success:false,error:"تكلفة الشراء يجب أن تكون أكبر من صفر."};
       const qty = parseInt(quantity, 10);
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       const batchNumber = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -2626,7 +2689,7 @@ ipcMain.handle(
             inventoryId,
             batchNumber,
             quantity: qty,
-            costPrice: parseFloat(costPrice) || 0,
+            costPrice: validatedCost,
             expiryDate: new Date(expiryDate),
             supplierId: supplierId || null,
           },
@@ -2644,7 +2707,7 @@ ipcMain.handle(
           inventoryId: inventoryRow.id,
           batchNumber,
           quantity: qty,
-          costPrice: parseFloat(costPrice) || 0,
+          costPrice: validatedCost,
           expiryDate: new Date(expiryDate).toISOString(),
           drugId: inventoryRow.drugId,
           branchId: inventoryRow.branchId || String(store.get("branchId") || ""),
@@ -2877,6 +2940,7 @@ ipcMain.handle(
 
         // FEFO (First-Expired, First-Out) inventory deduction & Cost Calculation
         for (const item of validItems) {
+          const allocations: { batchId: string; quantity: number }[] = [];
           let itemTotalCost = 0;
           let remainingToDeduct = item.quantity;
 
@@ -2890,7 +2954,7 @@ ipcMain.handle(
             include: {
               batches: {
                 orderBy: { expiryDate: "asc" },
-                where: { quantity: { gt: 0 } },
+                where: { quantity: { gt: 0 }, expiryDate: { gt: new Date() } },
               },
             },
           });
@@ -2903,7 +2967,7 @@ ipcMain.handle(
               (sum: number, b: any) => sum + b.quantity,
               0,
             );
-            const totalAvailable = Math.max(inventory.quantity, batchTotal);
+            const totalAvailable = batchTotal;
 
             if (item.quantity > totalAvailable) {
               throw new Error(
@@ -2929,6 +2993,7 @@ ipcMain.handle(
                     where: { id: batch.id },
                     data: { quantity: { decrement: deduction } },
                   });
+                  allocations.push({ batchId: batch.id, quantity: deduction });
                   remainingToDeduct -= deduction;
                 }
               }
@@ -2940,6 +3005,7 @@ ipcMain.handle(
             }
           }
 
+          if (remainingToDeduct > 0) throw new Error('لا توجد دفعات صالحة موثقة تكفي للبيع؛ حدّث المخزون.');
           const unitCost =
             item.quantity > 0 ? itemTotalCost / item.quantity : 0;
 
@@ -2949,6 +3015,7 @@ ipcMain.handle(
             price: Number(item.price),
             ...(item.originalPrice !== undefined && { originalPrice: Number(item.originalPrice) }),
             cost: unitCost,
+            batchAllocations: JSON.stringify(allocations),
           });
         }
 
@@ -3339,6 +3406,8 @@ ipcMain.handle("open-backup-folder", async () => {
 // 1. Get Debtors List
 ipcMain.handle("get-debtors", async (_event, { branchId, term }) => {
   try {
+    const auth = await authorizeOperations("canViewDebts");
+    branchId = auth.who.branch;
     const whereClause: any = {
       balance: { gt: 0 },
     };
@@ -3362,14 +3431,16 @@ ipcMain.handle("get-debtors", async (_event, { branchId, term }) => {
 
     return debtors;
   } catch (error) {
-    console.error("Failed to fetch debtors:", error);
-    return [];
+    return {success:false,error:error instanceof Error?error.message:"تعذر تحميل الديون"};
   }
 });
 
 // 2. Get Debtor Details (Ledger)
 ipcMain.handle("get-debtor-details", async (_event, patientId) => {
   try {
+    const auth = await authorizeOperations("canViewDebts");
+    if(!await prisma.patient.findFirst({where:{id:patientId,branchId:auth.who.branch}})) throw Error("العميل خارج فرع الجهاز");
+    auth.assertCurrent();
     const patient = await prisma.patient.findUnique({
       where: { id: patientId },
     });
@@ -3420,6 +3491,9 @@ ipcMain.handle(
   "add-debt-payment",
   async (_event, { patientId, amount, note }) => {
     try {
+      const auth = await authorizeOperations("canPayDebt");
+      if(!await prisma.patient.findFirst({where:{id:patientId,branchId:auth.who.branch}})) throw Error("العميل خارج فرع الجهاز");
+      auth.assertCurrent();
       // Find recent credit sale to attach this payment to (simplification for now,
       // ideally we attach to specific sale or just general ledger if schema supports)
 
@@ -3648,6 +3722,8 @@ ipcMain.handle("retry-sync-failure", async (_event, failureData) => {
 
 ipcMain.handle("search-sale", async (_event, query) => {
   try {
+    const auth = await authorizeOperations("canViewSales");
+    const scoped = { user: {branchId: auth.who.branch} };
     // Normalize Arabic/Eastern-Arabic digits to Western digits
     const normalized = String(query).replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
 
@@ -3659,8 +3735,9 @@ ipcMain.handle("search-sale", async (_event, query) => {
     };
     // Search by invoiceNumber first (what's printed on receipt), then fall back to id prefix
     const sale =
-      (await prisma.sale.findFirst({ where: { invoiceNumber: normalized }, include })) ||
-      (await prisma.sale.findFirst({ where: { id: { startsWith: normalized } }, include }));
+      (await prisma.sale.findFirst({ where: { ...scoped, invoiceNumber: normalized }, include })) ||
+      (await prisma.sale.findFirst({ where: { ...scoped, id: { startsWith: normalized } }, include }));
+    auth.assertCurrent();
     if (!sale) return { success: false, error: "الفاتورة غير موجودة" };
     return { success: true, sale };
   } catch (error: any) {
@@ -3670,6 +3747,8 @@ ipcMain.handle("search-sale", async (_event, query) => {
 
 ipcMain.handle("search-sales-by-drug", async (_event, { query, branchId }) => {
   try {
+    const auth = await authorizeOperations("canViewSales");
+    branchId = auth.who.branch;
     const normalized = String(query).trim();
     if (!normalized) return { success: false, error: "يرجى إدخال اسم الدواء أو الباركود" };
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -3699,6 +3778,7 @@ ipcMain.handle("search-sales-by-drug", async (_event, { query, branchId }) => {
       orderBy: { createdAt: "desc" },
       take: 20,
     });
+    auth.assertCurrent();
     return { success: true, sales };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -3714,6 +3794,8 @@ ipcMain.handle(
     const clientReturnId = typeof returnId === "string" && returnId.trim() ? returnId.trim() : null;
     const effectiveReturnId = clientReturnId || randomUUID();
     try {
+      const auth = await authorizeOperations("canProcessReturn");
+      branchId = auth.who.branch;
       // A return refunds money and changes stock. It must be accepted by the
       // server before being committed locally, otherwise another device could
       // refund the same invoice while this offline return is still pending.
@@ -3733,6 +3815,9 @@ ipcMain.handle(
         include: { items: true, payment: true, patient: true },
       });
       if (!sale) throw new Error("Sale not found");
+      const owner = await prisma.user.findUnique({where:{id:sale.userId}});
+      if(owner?.branchId !== branchId) throw new Error("الفاتورة خارج فرع الجهاز");
+      auth.assertCurrent();
 
       const cloudItems = (Array.isArray(items) ? items : []).map((item: any) => ({
         drugId: String(item.drugId),
@@ -3757,8 +3842,8 @@ ipcMain.handle(
       const result = await prisma.$transaction(async (tx: any) => {
         // The cloud has already accepted and validated this exact return under
         // the invoice lock. Mirror that authoritative result locally.
-        const validItems = cloudItems;
-        const returnAmount = validItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
+        const validItems = cloudResult.record!.items;
+        const returnAmount = cloudResult.record!.total;
         const returnSafeId = safeId || sale.safeId || null;
 
         // Create Return record
@@ -3777,6 +3862,8 @@ ipcMain.handle(
                 drugId: item.drugId,
                 quantity: item.quantity,
                 price: item.price,
+                stockStatus: item.stockStatus,
+                batchAllocations: item.batchAllocations,
               })),
             },
           },
@@ -3805,29 +3892,21 @@ ipcMain.handle(
           });
         }
 
-        // Restore Inventory
+        // Mirror exact server lots only. Legacy/expired returns remain segregated.
         for (const item of validItems) {
-          const inventory = await tx.inventory.findFirst({
-            where: { drugId: item.drugId },
-            include: { batches: { orderBy: { expiryDate: "desc" }, take: 1 } },
-          });
-          if (inventory) {
-            await tx.inventory.update({
-              where: { id: inventory.id },
-              data: { quantity: { increment: item.quantity } },
-            });
-            if (inventory.batches && inventory.batches.length > 0) {
-              await tx.batch.update({
-                where: { id: inventory.batches[0].id },
-                data: { quantity: { increment: item.quantity } },
-              });
-            }
+          if (item.stockStatus !== 'RESTOCKED') continue;
+          const allocations = JSON.parse(item.batchAllocations || '[]');
+          for (const allocation of allocations) {
+            const batch = await tx.batch.findFirst({ where: { id: allocation.batchId, inventory: { drugId: item.drugId, branchId } } });
+            if (!batch) continue; // A later full inventory sync brings down missing cloud lots.
+            await tx.batch.update({ where: { id: batch.id }, data: { quantity: { increment: allocation.quantity } } });
+            await tx.inventory.update({ where: { id: batch.inventoryId }, data: { quantity: { increment: allocation.quantity } } });
           }
         }
         return saleReturn;
       });
 
-      return { success: true, returnId: result.id };
+      return { success: true, returnId: result.id, message: cloudResult.record!.items.some(i => i.stockStatus === 'QUARANTINED') ? 'تم رد المبلغ. اعزل الأصناف غير الموثقة؛ يراجعها المدير من صفحة المرتجعات قبل إعادتها للبيع.' : 'تم الإرجاع إلى دفعات البيع الأصلية.' };
     } catch (error: any) {
       // Concurrent submit with the same id: the other one already recorded it.
       if (effectiveReturnId && error?.code === "P2002") {

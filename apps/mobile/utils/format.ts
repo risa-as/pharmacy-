@@ -19,11 +19,11 @@ export function formatIQD(n: number | null | undefined): string {
 
 /**
  * Invoice label from one source: the per-organisation sequential number when
- * present, otherwise the first 8 chars of the id. No "INV-" prefix.
+ * present, otherwise the persisted server document reference.
  */
-export function formatInvoiceNumber(sale: { invoiceNumber?: number | null; id?: string | null }): string {
+export function formatInvoiceNumber(sale: { invoiceNumber?: number | null; id?: string | null; documentNumber?: string | null }): string {
     if (sale.invoiceNumber != null) return `#${sale.invoiceNumber}`;
-    return sale.id ? `#${sale.id.slice(0, 8).toUpperCase()}` : '#—';
+    return sale.documentNumber || '—';
 }
 
 /** Arabic label for a sale payment method. */

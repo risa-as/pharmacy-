@@ -91,6 +91,7 @@ model User {
   expoPushToken String? // Expo push token for notifications
   pushEnabled   Boolean     @default(true)
   isActive      Boolean     @default(true) // Soft-disable a departed employee without deleting (preserves sales/shift FKs)
+  sessionVersion Int        @default(0) // Bumped to revoke every web/mobile/desktop session (password change, disable)
   // المرحلة 1 من ميزة المذاخر: حساب مذخر لا ينتمي لأي Organization أو Branch.
   warehouseId       String?
   warehouseUserType WarehouseUserType?
@@ -109,6 +110,7 @@ model User {
 }
 
 model Shift {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('SHF'::text)"))
   id           String    @id @default(uuid())
   userId       String
   branchId     String
@@ -249,6 +251,7 @@ model Inventory {
 
 model Batch {
   id              String          @id @default(uuid())
+  purchaseItemId  String?
   inventoryId     String
   expiryDate      DateTime
   quantity        Int
@@ -299,6 +302,7 @@ model SyncActionLog {
 }
 
 model Sale {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('INV'::text)"))
   id               String        @id @default(uuid())
   invoiceNumber    Int?
   branchId         String
@@ -341,6 +345,7 @@ enum PaymentMethod {
 }
 
 model SaleItem {
+  batchAllocations String? // Immutable batch ids and quantities deducted for this line.
   id            String     @id @default(uuid())
   saleId        String
   drugId        String
@@ -356,6 +361,7 @@ model SaleItem {
 }
 
 model SaleReturn {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('RTN'::text)"))
   id           String   @id @default(uuid())
   returnNumber String?  @unique // Independent return invoice number
   saleId       String
@@ -376,6 +382,11 @@ model SaleReturn {
 }
 
 model SaleReturnItem {
+  batchAllocations String?
+  stockStatus String @default("LEGACY") // RESTOCKED, QUARANTINED, DISPOSED; LEGACY predates tracking.
+  stockReviewNote String?
+  stockReviewedBy String?
+  stockReviewedAt DateTime?
   id           String @id @default(uuid())
   saleReturnId String
   drugId       String
@@ -447,7 +458,9 @@ model SupplierLinkRequest {
 }
 
 model Purchase {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('PUR'::text)"))
   id            String         @id @default(uuid())
+  warehouseOrderId String?      @unique
   supplierId    String
   branchId      String
   total         Float
@@ -779,6 +792,7 @@ model DrugInteraction {
 
 // ==================== الجرد الفعلي وتسوية المخزون ====================
 model Stocktake {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('STK'::text)"))
   id                     String   @id @default(uuid())
   branchId               String
   status                 String   @default("PENDING") // PENDING, COMPLETED, CANCELLED
@@ -815,6 +829,7 @@ model StocktakeItem {
 // =======================
 
 model Transfer {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('TRF'::text)"))
   id           String   @id @default(uuid())
   fromBranchId String
   toBranchId   String
@@ -867,10 +882,14 @@ model AuditLog {
 // المرحلة 3: المستودعات العراقية
 // =======================
 model Warehouse {
+  operatingMode String @default("ORDER_PORTAL")
   id            String           @id @default(uuid())
   name          String
   code          String?          @unique
   phone         String?
+  salesPhone    String?
+  followupPhone String?
+  managementPhone String?
   address       String?
   city          String?
   contactPerson String?
@@ -907,10 +926,13 @@ model Warehouse {
 }
 
 model WarehouseOrder {
+  shipmentMode String?
+  externalShipment Json?
   id           String               @id @default(uuid())
   warehouseId  String
   branchId     String
-  orderNumber  String?              @unique
+  orderNumber  String?              @unique @default(dbgenerated("next_warehouse_order_number()"))
+  legacyOrderNumber String?
   // Client-generated key makes retries of the same create operation harmless.
   idempotencyKey String?            @unique
   status       WarehouseOrderStatus @default(DRAFT)
@@ -934,6 +956,7 @@ model WarehouseOrder {
 
 model WarehouseOrderItem {
   id               String @id @default(uuid())
+  unitsPerPack     Int?
   warehouseOrderId String
   drugId           String
   quantity         Int
@@ -1126,6 +1149,7 @@ model WarehouseStockMove {
   batchId       String?
   type          WarehouseStockMoveType
   quantity      Int
+  unitCost      Float?
   reason        String?
   actorName     String?
   orderId       String?
@@ -1171,14 +1195,10 @@ model WarehouseCustomer {
   organizationId  String
   creditLimit     Float    @default(0) // 0 = بلا حد ائتماني
   paymentTermDays Int      @default(0) // 0 = نقدي / بلا مهلة سداد
-  // رصيد سابق: دَين هذه الصيدلية من قبل انضمام هذا المذخر للمنصة — يُدخَل
-  // يدوياً مرة واحدة عند الإعداد (صفحة app/warehouse/customers)، وليس رقماً
-  // متحركاً يُعاد حسابه هنا أبداً. كل رقم "مستحق" في النظام = هذا الحقل +
-  // فواتير المنصة المفتوحة + مبيعات المندوبين الميدانية المفتوحة (انظر
-  // outstandingWithOpeningBalance في warehouse-accounts.ts) — يُضاف فوقها لا
-  // يحل محلها. لو سجّل المذخر لاحقاً ديناً قديماً كفاتورة حقيقية هنا، يجب
-  // تخفيض هذا الحقل يدوياً؛ لا وسيلة آلية لاكتشاف التداخل بين الاثنين.
-  // 0 = لا يوجد رصيد سابق مسجَّل (الافتراضي لكل عميل جديد بلا تاريخ سابق).
+  // Remaining opening debt, added to invoice and field-sale receivables.
+  // Opening repayments decrease it under the customer lock and preserve
+  // before/after values in WarehouseSettlement. Direct replacement is blocked
+  // after the first repayment; earlier amendments are audited.
   openingBalance  Float    @default(0)
   priceTier       String?
   isBlocked       Boolean  @default(false)
@@ -1382,6 +1402,7 @@ model WarehouseSupplierPayment {
 // لا تُقبَل من جسم الطلب مباشرة (وإلا حدّدت الصيدلية قيمة إشعارها الدائن).
 model WarehouseReturn {
   id             String   @id @default(uuid())
+  creditNoteNumber String? @unique
   warehouseId    String
   orderId        String
   organizationId String
@@ -1389,6 +1410,10 @@ model WarehouseReturn {
   totalAmount    Float    @default(0)
   status         String   @default("PENDING") // PENDING | ACCEPTED | REJECTED
   actorName      String?
+  purchaseId     String?
+  creditBalance  Float    @default(0)
+  refundedAmount Float    @default(0)
+  acceptedAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -1405,10 +1430,30 @@ model WarehouseReturnItem {
   barcode   String
   quantity  Int
   unitPrice Float
+  pharmacyAllocations Json?
+  disposition String @default("QUARANTINE")
+  inspectionNote String?
+  inspectedBy String?
+  inspectedAt DateTime?
+  warehouseAllocations Json?
 
   returnRecord WarehouseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
 
   @@index([returnId])
+}
+
+// Durable replay ledger for warehouse commands. Written in the same transaction
+// as the money/stock mutation; the unique key is scoped to the warehouse.
+model WarehouseOperation {
+  id           String   @id @default(uuid())
+  warehouseId  String
+  key          String
+  scope        String
+  requestHash  String
+  result       Json
+  createdAt    DateTime @default(now())
+
+  @@unique([warehouseId, key])
 }
 
 // =======================
@@ -1440,6 +1485,25 @@ enum MarketplaceListingStatus {
   ARCHIVED
 }
 
+/// One explicit purchase attempt (client idempotency key). The durable record of
+/// its outcome, so a retry or a status query gets the original result: PROCESSING,
+/// SUCCEEDED (with the order) or REJECTED (never executed). Owned by one user.
+model MarketplaceOrderAttempt {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  userId      String
+  buyerId     String
+  requestHash String
+  status      String   @default("PROCESSING") // PROCESSING | SUCCEEDED | REJECTED
+  orderId     String?  @unique
+  httpStatus  Int?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
 model MarketplaceOrder {
   id         String                 @id @default(uuid())
   listingId  String
@@ -1448,6 +1512,10 @@ model MarketplaceOrder {
   totalPrice Float
   status     MarketplaceOrderStatus @default(PENDING)
   notes      String?
+  // Client retry key: a resend returns the original order; the same key with a
+  // different request (requestHash) is refused.
+  idempotencyKey String?                @unique
+  requestHash    String?
   createdAt  DateTime               @default(now())
   updatedAt  DateTime               @updatedAt
 
@@ -1867,6 +1935,7 @@ model WarehouseFieldSaleItem {
 // warehouse-accounts.ts، بلا نسخة موازية)؛ وإلا فهو تحصيل غير مخصَّص لفاتورة
 // بعينها (دفعة على الحساب العام للمندوب لدى المذخر).
 model WarehouseRepCollection {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('COL'::text)"))
   id          String   @id @default(uuid())
   repId       String
   warehouseId String
@@ -1881,4 +1950,25 @@ model WarehouseRepCollection {
   fieldSale WarehouseFieldSale? @relation(fields: [fieldSaleId], references: [id])
 
   @@index([repId, collectedAt])
+}
+
+// Append-only settlement vouchers. References prevent a second posting even
+// when the operator retries from another device with a new operation key.
+model WarehouseSettlement {
+  documentNumber String @unique @default(dbgenerated("next_document_reference('VCH'::text)"))
+  id             String   @id @default(uuid())
+  warehouseId    String
+  organizationId String?
+  kind           String
+  reference      String
+  sourceId       String
+  amount         Float
+  direction      String
+  actorId        String
+  details        Json
+  createdAt      DateTime @default(now())
+
+  @@unique([warehouseId, kind, reference])
+  @@index([warehouseId, createdAt])
+  @@index([warehouseId, sourceId])
 }

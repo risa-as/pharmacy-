@@ -56,7 +56,9 @@ export async function POST(req: Request) {
                 );
             }
         }
-        const syncToken = generateSyncToken(user.id, user.branchId || '', orgId, user.role);
+        // Signed with the current sessionVersion; the desktop echoes it back as
+        // x-session-version (user.sessionVersion is also in the response body).
+        const syncToken = generateSyncToken(user.id, user.branchId || '', orgId, user.role, user.sessionVersion);
 
         const { password: _, branch: __, ...userWithoutPassword } = user as any;
         return NextResponse.json({

@@ -24,7 +24,7 @@ export default async function Page(
         <div className="glass-card w-full p-6">
             <div className="flex w-full items-center justify-between">
                 <h1 className="text-2xl font-bold">جرد وتسوية المخزون</h1>
-                <StartStocktakeButton />
+                <StartStocktakeButton branchId={selectedBranchId} />
             </div>
 
             <div className="mt-4">
@@ -38,7 +38,7 @@ export default async function Page(
                         تنبيه هام
                     </h4>
                     <p className="opacity-90">
-                        عملية الجرد تؤثر مباشرة على أرصدة المستودع والتقارير المالية. في حالة وجود نقص (فروقات بالسالب) سيتم خصم تكلفتها من الأرباح وتسجيلها كـ "نواقص وتوالف الجرد" في المصروفات.
+                        أدخل العدد الفعلي وحدد التلف المؤكد إن وجد. الجرد الذي يحتوي عجزاً يُرسل إلى المدير لاعتماده أو طلب إعادة العد. لا تتغير كمياته ولا يُسجّل مصروفه قبل اعتماد المدير.
                     </p>
                 </div>
             </div>

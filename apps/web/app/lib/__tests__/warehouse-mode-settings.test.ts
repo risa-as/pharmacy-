@@ -1,0 +1,15 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+import {NextRequest} from 'next/server';
+const h=vi.hoisted(()=>({actor:'OWNER',mode:'FULL',batches:0,purchases:0,tx:{} as any,transaction:vi.fn()}));
+vi.mock('@/app/lib/prisma',()=>({prisma:{$transaction:h.transaction}}));
+vi.mock('@/app/lib/warehouse-context',()=>({getWarehouseContext:async()=>({warehouseId:'w',user:{id:'u',name:'Owner'}})}));
+vi.mock('@/app/lib/warehouse-permission-guard',()=>({requireWarehousePermission:async()=>({ok:true,actor:{warehouseUserType:h.actor}})}));
+import {PATCH} from '../../api/warehouse-portal/operating-mode/route';
+const request=(mode:string,confirmed=true)=>new NextRequest('http://local/x',{method:'PATCH',body:JSON.stringify({mode,confirmed})});
+beforeEach(()=>{vi.clearAllMocks();h.actor='OWNER';h.mode='FULL';h.batches=0;h.purchases=0;h.tx={$queryRaw:vi.fn(),warehouse:{findUniqueOrThrow:async()=>({operatingMode:h.mode}),update:vi.fn()},warehouseBatch:{count:async()=>h.batches},warehousePurchase:{count:async()=>h.purchases},auditLog:{create:vi.fn()}};h.transaction.mockImplementation((fn:any)=>fn(h.tx))});
+it('only the owner can change operating mode even if a manager can edit settings',async()=>{h.actor='MANAGER';expect((await PATCH(request('ORDER_PORTAL'))).status).toBe(403);expect(h.transaction).not.toHaveBeenCalled()});
+it.each(['BAD',''])('rejects unknown mode %s',async mode=>{expect((await PATCH(request(mode))).status).toBe(400)});
+it('requires acknowledgement',async()=>{expect((await PATCH(request('FULL',false))).status).toBe(400)});
+it.each(['batches','purchases'] as const)('blocks hiding existing stock records: %s',async field=>{h[field]=1;expect((await PATCH(request('ORDER_PORTAL'))).status).toBe(409);expect(h.tx.warehouse.update).not.toHaveBeenCalled()});
+it('records the owner and transition atomically',async()=>{expect((await PATCH(request('ORDER_PORTAL'))).status).toBe(200);expect(h.tx.auditLog.create).toHaveBeenCalledOnce();expect(h.tx.warehouse.update).toHaveBeenCalledWith({where:{id:'w'},data:{operatingMode:'ORDER_PORTAL'}})});
+it('activation does not invent opening inventory',async()=>{h.mode='ORDER_PORTAL';expect((await PATCH(request('FULL'))).status).toBe(200);expect(h.tx.warehouse.update).toHaveBeenCalledOnce()});

@@ -102,10 +102,11 @@ type SortField = "name" | "quantity" | "price" | "costPrice" | "profit";
 type SortDir = "asc" | "desc";
 type StockFilter = "all" | "out" | "low" | "good" | "over";
 
-export default function InventoryPage({ user }: { user: any }) {
+export default function InventoryPage({ user, initialSearch = "" }: { user: any; initialSearch?: string }) {
   const isAdmin = user?.role === "ADMIN";
   const [barcode, setBarcode] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [isChecking, setIsChecking] = useState(false);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -664,6 +665,8 @@ export default function InventoryPage({ user }: { user: any }) {
           window.ipcRenderer.invoke("get-pending-sync-count"),
           window.ipcRenderer.invoke("get-sync-health"),
         ]);
+        if (data?.success === false) throw new Error(data.error);
+        setLoadError("");
         if (Array.isArray(data)) {
           const canApplySnapshot = shouldApplyInventorySnapshot(
             snapshotStartedAtRevision,
@@ -687,7 +690,7 @@ export default function InventoryPage({ user }: { user: any }) {
         setPendingSyncCount(Number.isFinite(pendingCount) ? pendingCount : 0);
         setSyncHealth(health ?? null);
       } catch (error) {
-        console.error("Failed to fetch inventory", error);
+        setLoadError(error instanceof Error?error.message:"تعذر تحميل المخزون");
       } finally {
         setLoading(false);
       }
@@ -943,6 +946,10 @@ export default function InventoryPage({ user }: { user: any }) {
   const handleAddBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showBatchModal) return;
+    if (!Number.isFinite(batchComputedCost) || batchComputedCost <= 0) {
+      setUploadToast({type:"error",message:"لا يمكن الحفظ: أدخل تكلفة شراء صحيحة أكبر من صفر."});
+      return;
+    }
     // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
     // عدد الأشرطة شرط للحفظ: هو المقسوم عليه، ولا يُفترض 1 صامتاً.
     if (!batchStripsPerPacket || batchStripsPerPacket <= 0) {
@@ -1061,6 +1068,10 @@ export default function InventoryPage({ user }: { user: any }) {
       return;
     }
     const stripCost = packetPrice / stripsPerPacket;
+    if (!Number.isFinite(stripCost) || stripCost <= 0) {
+      setUploadToast({type:"error",message:"لا يمكن الحفظ: أدخل تكلفة شراء صحيحة أكبر من صفر."});
+      return;
+    }
     // عدد الأشرطة في الباكيت يساوي الكمية الكلية أو مرتفع جداً = غالباً أُدخل الإجمالي بالخطأ
     const createQty = parseInt(formData.get("quantity") as string, 10) || 0;
     if (
@@ -1186,7 +1197,11 @@ export default function InventoryPage({ user }: { user: any }) {
     e.preventDefault();
     if (!showAddToInventoryModal) return;
     const formData = new FormData(e.currentTarget);
-    const stripCost = parseFloat(formData.get("costPrice") as string) || 0;
+    const stripCost = Number(formData.get("costPrice"));
+    if (!Number.isFinite(stripCost) || stripCost <= 0) {
+      setUploadToast({type:"error",message:"لا يمكن الحفظ: أدخل تكلفة شراء صحيحة أكبر من صفر."});
+      return;
+    }
     const sellPrice = parseFloat(formData.get("price") as string) || 0;
     // البيع أقل من أو يساوي الشراء = غالباً خطأ إدخال
     if (stripCost > 0 && sellPrice > 0 && sellPrice <= stripCost) {
@@ -1311,6 +1326,7 @@ export default function InventoryPage({ user }: { user: any }) {
 
   return (
     <div dir="rtl" className="h-full flex flex-col bg-background">
+      {loadError && <div role="alert" className="m-3 rounded-lg border border-destructive/30 text-destructive p-3 text-sm">{loadError}<button className="mr-3 underline" onClick={()=>void fetchInventory()}>إعادة المحاولة</button></div>}
       {/* ======= شريط استعادة المسودة ======= */}
       {/* لا يُفتح النموذج تلقائياً: الاستعادة بقرار المستخدم، مع إظهار عمر
           المسودة ليحكم إن كانت ما تزال صالحة. */}

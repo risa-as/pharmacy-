@@ -110,15 +110,8 @@ describe('resolveOrderBranch', () => {
         expect(result).toEqual({ branchId: 'my-branch' });
     });
 
-    it('ignores a requested branchId for an ADMIN who has their own branch', () => {
-        // Guards against a future "improvement" that prefers the request
-        // body's branchId for admins — it must never override the caller's
-        // own branch, admin or not.
-        const result = resolveOrderBranch(
-            { role: 'ADMIN', organizationId: 'org-1', branchId: 'my-branch' },
-            'other-org-branch'
-        );
-        expect(result).toEqual({ branchId: 'my-branch' });
+    it('requires organization validation for an admin requested branch', () => {
+        expect(resolveOrderBranch({role:'ADMIN',organizationId:'org',branchId:'own'},'foreign')).toEqual({needsOrgBranchCheck:'foreign'});
     });
 
     it('flags a requested branchId for an org-check when the caller has no own branch', () => {

@@ -24,7 +24,7 @@ export default async function WarehouseOrderCreatePage() {
         if (upgrade) return <UpgradeRequired {...upgrade} />;
     }
 
-    if (!tenantCtx.userPermissions.canCreatePurchase) {
+    if (!tenantCtx.userPermissions.canCreateWarehouseOrder) {
         return (
             <div dir="rtl" className="rounded-xl border border-border bg-card p-10 text-center">
                 <p className="text-sm text-muted-foreground">
@@ -35,7 +35,7 @@ export default async function WarehouseOrderCreatePage() {
     }
 
     // المستخدم المقيَّد بفرع لا يرى غيره؛ ومستخدم المؤسسة يختار من فروعها (§63/§64).
-    const fixedBranchId = tenantCtx.user.branchId ?? null;
+    const fixedBranchId = ['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(tenantCtx.user.role) ? null : tenantCtx.user.branchId ?? null;
     const branches = organizationId
         ? await prisma.branch.findMany({
               where: {

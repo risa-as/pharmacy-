@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
             - IRAQ_MS
         );
 
-        const branchFilter = { ...tenantBranchWhere, ...(branchId && { branchId }) };
+        const branchFilter = { AND: [tenantBranchWhere, ...(branchId ? [{branchId}] : [])] };
 
         // Run all queries in parallel for performance
         const now = new Date();
@@ -129,18 +129,11 @@ export async function GET(request: NextRequest) {
 
         const salesToday = salesTodayAgg._sum.total ?? 0;
 
+        const can = tenantCtx.userPermissions;
         return NextResponse.json({
-            salesToday,
-            salesCount: salesCountToday,
-            inventory: inventoryCount,
-            lowStock: lowStockCount,
-            outOfStock: outOfStockCount,
-            expiring: expiringCount,
-            expiredCount,
-            debtsCount,
-            debtsTotal: debtsTotalAgg._sum.balance ?? 0,
-            creditCount: creditCountToday,
-            cashCount: Math.max(0, salesCountToday - creditCountToday),
+            ...(can.canViewSales ? {salesToday,salesCount:salesCountToday,creditCount:creditCountToday,cashCount:Math.max(0,salesCountToday-creditCountToday)} : {}),
+            ...(can.canViewInventory ? {inventory:inventoryCount,lowStock:lowStockCount,outOfStock:outOfStockCount,expiring:expiringCount,expiredCount} : {}),
+            ...(can.canViewDebts ? {debtsCount,debtsTotal:debtsTotalAgg._sum.balance ?? 0} : {}),
         });
     } catch (error) {
         console.error('API Stats Error:', error);

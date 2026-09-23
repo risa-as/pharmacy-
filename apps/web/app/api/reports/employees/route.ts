@@ -24,6 +24,7 @@ export async function GET(req: Request) {
 
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewEmployeeReport) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
         const { tenantBranchWhere } = tenantCtx;
 
         const whereClause: any = {
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
         };
 
         if (branchId) {
-            whereClause.branchId = branchId;
+            whereClause.AND = [tenantBranchWhere, { branchId }];
         }
 
         // 1. Fetch Sales by User

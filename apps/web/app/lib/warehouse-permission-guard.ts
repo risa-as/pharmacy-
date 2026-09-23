@@ -18,6 +18,7 @@
  * ينفذ فوراً في الطلب التالي، لا بعد انتهاء صلاحية الجلسة/تسجيل الدخول من
  * جديد.
  */
+import { FULL_ONLY_WRITES } from './warehouse-operating-mode';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import {
@@ -77,6 +78,10 @@ export async function requireWarehousePermission(
     }
 
     const keys = Array.isArray(key) ? key : [key];
+    if (keys.some(k => FULL_ONLY_WRITES.has(k))) {
+        const warehouse = await prisma.warehouse.findUnique({where:{id:ctx.warehouseId},select:{operatingMode:true}});
+        if (warehouse?.operatingMode === 'ORDER_PORTAL') return {ok:false,response:NextResponse.json({error:'هذه العملية تتطلب وضع إدارة المذخر بالكامل. بوابة الطلبات لا تدير مخزون المذخر.'},{status:403})};
+    }
     for (const k of keys) {
         if (!hasWarehousePermission(actor, k)) {
             const label = WAREHOUSE_PERMISSION_LABELS[k]?.label ?? k;

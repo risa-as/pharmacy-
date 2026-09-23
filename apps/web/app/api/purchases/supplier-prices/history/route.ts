@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return tenantCtx;
 
-    if (!tenantCtx.userPermissions.canCreatePurchase) {
+    if ((!tenantCtx.userPermissions.canCreatePurchase && !tenantCtx.userPermissions.canCreateWarehouseOrder)) {
         return NextResponse.json(
             { error: 'ليس لديك صلاحية الاطلاع على أسعار المشتريات.', code: 'FORBIDDEN' },
             { status: 403 }

@@ -390,7 +390,11 @@ export default function InventoryScreen() {
             Alert.alert('لا يمكن الحفظ', 'اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).');
             return;
         }
-        const pkt = parseFloat(packetPrice) || 0;
+        const pkt = Number(packetPrice);
+        if (!Number.isFinite(pkt) || pkt <= 0) {
+            Alert.alert('لا يمكن الحفظ', 'أدخل تكلفة شراء صحيحة أكبر من صفر؛ لا يمكن تجاوز هذا التحقق.');
+            return;
+        }
         const stripCost = pkt > 0 ? pkt / strips : 0;
         const checks: Array<{ title: string; message: string }> = [];
 

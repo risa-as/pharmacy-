@@ -1,3 +1,5 @@
+import { calculateRefund } from '@faramace/shared';
+import { restoreSaleReturnStock } from '@/app/lib/sale-return-stock';
 import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
@@ -8,8 +10,11 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 class DuplicateReturnError extends Error {}
 class ReturnValidationError extends Error {}
 
-async function isProcessedReturn(idempotencyKey: string): Promise<boolean> {
-    return !!(await prisma.syncActionLog.findUnique({ where: { idempotencyKey } }));
+async function isProcessedReturn(idempotencyKey: string, branchId: string): Promise<boolean> {
+    const log = await prisma.syncActionLog.findUnique({ where: { idempotencyKey } });
+    if (log && (log.branchId !== branchId || log.actionType !== 'SALE_RETURN'))
+        throw new ReturnValidationError('مفتاح العملية مستخدم لعملية أخرى.');
+    return !!log;
 }
 
 function duplicateResponse(idempotencyKey: string) {
@@ -21,61 +26,15 @@ function duplicateResponse(idempotencyKey: string) {
     });
 }
 
-/**
- * Returnable quantity per drug = sold − already returned. Prices always come
- * from the original sale lines, never from the client.
- */
-function validateReturnItems(
-    saleItems: { drugId: string; quantity: number; price: number }[],
-    priorReturns: { items: { drugId: string; quantity: number }[] }[],
-    requested: { drugId: string; quantity: number }[],
-) {
-    const returnable: Record<string, number> = {};
-    const prices: Record<string, number> = {};
-    for (const item of saleItems) {
-        returnable[item.drugId] = (returnable[item.drugId] ?? 0) + item.quantity;
-        prices[item.drugId] = item.price;
-    }
-    for (const r of priorReturns) {
-        for (const item of r.items) {
-            if (returnable[item.drugId] !== undefined) returnable[item.drugId] -= item.quantity;
-        }
-    }
-
-    let totalReturnAmount = 0;
-    const returnItemsData: { drugId: string; quantity: number; price: number }[] = [];
-    const seen = new Set<string>();
-    for (const { drugId, quantity } of requested) {
-        if (!Number.isInteger(quantity) || quantity <= 0) {
-            throw new ReturnValidationError('كمية الإرجاع غير صالحة.');
-        }
-        if (returnable[drugId] === undefined) {
-            throw new ReturnValidationError('أحد الأصناف ليس ضمن هذه الفاتورة.');
-        }
-        if (seen.has(drugId)) {
-            throw new ReturnValidationError('الصنف مكرر في طلب الإرجاع.');
-        }
-        seen.add(drugId);
-        if (quantity > returnable[drugId]) {
-            throw new ReturnValidationError(
-                returnable[drugId] <= 0
-                    ? 'هذا الصنف أُرجع بالكامل مسبقاً.'
-                    : `لا يمكن إرجاع ${quantity}؛ المتاح للإرجاع ${returnable[drugId]} فقط.`,
-            );
-        }
-        totalReturnAmount += prices[drugId] * quantity;
-        returnItemsData.push({ drugId, quantity, price: prices[drugId] });
-    }
-    return { totalReturnAmount, returnItemsData };
-}
-
 export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     let idempotencyKey = '';
+    let returnBranchId = '';
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
         const { user } = tenantCtx;
+        returnBranchId = user.branchId || '';
 
         if (!tenantCtx.userPermissions.canProcessReturn) {
             return NextResponse.json({ message: 'ليس لديك صلاحية لمعالجة المرتجعات.' }, { status: 403 });
@@ -96,7 +55,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
         // A retried request (e.g. the response was lost after the server
         // committed) carries the same key and must not create a second return.
         idempotencyKey = String(request.headers.get('x-idempotency-key') || body.clientActionId || '').trim();
-        if (idempotencyKey && await isProcessedReturn(idempotencyKey)) {
+        if (idempotencyKey && await isProcessedReturn(idempotencyKey, returnBranchId)) {
             return duplicateResponse(idempotencyKey);
         }
 
@@ -124,27 +83,39 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
             //    the key and re-read previous returns inside the lock so two
             //    concurrent requests can never both pass validation.
             await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${saleId} FOR UPDATE`;
-            if (idempotencyKey && await tx.syncActionLog.findUnique({ where: { idempotencyKey } })) {
-                throw new DuplicateReturnError();
+            if (idempotencyKey) {
+                const log = await tx.syncActionLog.findUnique({ where: { idempotencyKey } });
+                if (log && (log.branchId !== returnBranchId || log.actionType !== 'SALE_RETURN')) throw new ReturnValidationError('مفتاح العملية مستخدم لعملية أخرى.');
+                if (log) throw new DuplicateReturnError();
             }
+            const sale = await tx.sale.findUnique({ where: { id: saleId }, include: { items: true, payment: true } });
+            if (!sale || sale.branchId !== user.branchId) throw new ReturnValidationError('الفاتورة غير موجودة ضمن الفرع.');
             const priorReturns = await tx.saleReturn.findMany({
                 where: { saleId },
-                select: { items: { select: { drugId: true, quantity: true } } },
+                select: { total: true, items: { select: { drugId: true, quantity: true } } },
             });
-            const { totalReturnAmount, returnItemsData } = validateReturnItems(sale.items, priorReturns, items);
+            let refund;
+            try { refund = calculateRefund({ ...sale, returns: priorReturns }, items); }
+            catch (e) { throw new ReturnValidationError((e as Error).message); }
+            const totalReturnAmount = refund.total;
+            const returnItemsData = await restoreSaleReturnStock(tx, sale.branchId, sale.items, priorReturns, refund.items);
 
+            const refundSafeId = safeId || sale.safeId;
+            if (refundSafeId && !await tx.safe.findFirst({ where: { id: refundSafeId, branchId: sale.branchId }, select: { id: true } }))
+                throw new ReturnValidationError('الصندوق لا يتبع فرع الفاتورة.');
             // 1. Create SaleReturn record
             const saleReturn = await tx.saleReturn.create({
                 data: {
                     saleId: sale.id,
                     branchId: user.branchId!,
-                    safeId: safeId || sale.safeId, // Use provided safe or original sale's safe
+                    userId: user.id,
+                    safeId: refundSafeId, // Use provided safe or original sale's safe
                     total: totalReturnAmount,
                     notes: notes || null,
                     items: {
                         create: returnItemsData
                     }
-                }
+                }, include: { items: true }
             });
 
             // 2. Adjust Financials
@@ -179,39 +150,6 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 });
             }
 
-            // 3. Increment Stock (FIFO reverse / put back to the longest-expiry batch)
-            for (const item of returnItemsData) {
-                const inventory = await tx.inventory.findFirst({
-                    where: { branchId: user.branchId!, drugId: item.drugId },
-                    include: { batches: { orderBy: { expiryDate: 'desc' }, take: 1 } }
-                });
-
-                if (inventory) {
-                    if (inventory.batches.length > 0) {
-                        const batch = inventory.batches[0];
-                        await tx.batch.update({
-                            where: { id: batch.id },
-                            data: { quantity: batch.quantity + item.quantity }
-                        });
-                    } else {
-                        // If no batch exists somehow (rare), we could create a dummy batch, 
-                        // but let's assume one exists or we just create a new one with a default distant expiry.
-                        const distantExpiry = new Date();
-                        distantExpiry.setFullYear(distantExpiry.getFullYear() + 2);
-
-                        await tx.batch.create({
-                            data: {
-                                inventoryId: inventory.id,
-                                quantity: item.quantity,
-                                initialQuantity: item.quantity,
-                                expiryDate: distantExpiry,
-                                batchNumber: `RET-${Date.now()}`,
-                            }
-                        });
-                    }
-                }
-            }
-
             // 4. Record the key in the same transaction as the return itself
             if (idempotencyKey) {
                 await tx.syncActionLog.create({
@@ -229,7 +167,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
         return NextResponse.json({
             success: true,
             saleReturn: result,
-            message: 'Return processed successfully',
+            message: result.items.some(i => i.stockStatus === 'QUARANTINED') ? 'تم رد المبلغ. اعزل الأصناف غير الموثقة؛ تنتظر فحص المدير في صفحة المرتجعات قبل إعادتها للبيع.' : 'تم الإرجاع إلى دفعات البيع الأصلية.',
             ack: { status: 'processed', idempotencyKey: idempotencyKey || null },
         });
 
@@ -242,7 +180,10 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
         }
         // The same key reused for a different sale loses the race on the log's primary key.
         if (idempotencyKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-            return duplicateResponse(idempotencyKey);
+            try {
+                if (await isProcessedReturn(idempotencyKey, returnBranchId)) return duplicateResponse(idempotencyKey);
+            } catch { /* A foreign key collision is never an acknowledgement. */ }
+            return NextResponse.json({ message: 'تعارض مفتاح العملية؛ راجع سجل الإرجاع.' }, { status: 409 });
         }
         console.error('API Sale Return Error:', error);
         return NextResponse.json(

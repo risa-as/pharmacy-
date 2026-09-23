@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { validateSyncUser } from '@/app/lib/sync-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,17 +11,13 @@ export async function GET(req: NextRequest) {
 
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) {
-            // Desktop app: no session cookie — resolve org from branchId query param
-            const branchId = req.nextUrl.searchParams.get('branchId');
-            if (!branchId) return tenantCtx; // genuine 401
-
-            const branch = await prisma.branch.findUnique({
-                where: { id: branchId },
-                select: { organizationId: true },
-            });
-            if (!branch) return NextResponse.json({ message: 'Branch not found' }, { status: 403 });
-
-            tenantWhere = { organizationId: branch.organizationId };
+            // Desktop app: no session cookie. It must still prove itself with its
+            // sync token or device license (sent on every request by fetchWithRetry);
+            // knowing a branch id alone no longer reveals the organization's branches.
+            const syncUser = await validateSyncUser(req);
+            if (syncUser instanceof NextResponse) return syncUser;
+            if (!syncUser.organizationId) return NextResponse.json({ message: 'Organization not found' }, { status: 403 });
+            tenantWhere = { organizationId: syncUser.organizationId };
         } else {
             tenantWhere = tenantCtx.branchModelWhere;
         }
@@ -35,8 +32,9 @@ export async function GET(req: NextRequest) {
             orderBy: { name: 'asc' },
         });
 
+        // Tenant-specific data: never cacheable by a shared CDN or proxy.
         const response = NextResponse.json(branches);
-        response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+        response.headers.set('Cache-Control', 'private, no-store');
         return response;
     } catch (error) {
         console.error('API Branches Error:', error);

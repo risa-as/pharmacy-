@@ -111,6 +111,12 @@ const GROUPS: { id: string; label: string; icon: LucideIcon; perms: PermMeta[] }
         icon: Truck,
         perms: [
             { key: 'canViewSuppliers', kind: 'page', label: 'صفحات التوريد', desc: 'الموردون والمشتريات' },
+            { key: 'canViewWarehouseOrders', kind: 'page', requires: 'canViewSuppliers', label: 'عرض طلبات المذاخر', desc: 'عرض طلبات المذاخر' },
+            { key: 'canCreateWarehouseOrder', kind: 'action', requires: 'canViewWarehouseOrders', label: 'إنشاء طلب من مذخر', desc: 'إنشاء طلب من مذخر' },
+            { key: 'canApproveWarehouseOrder', kind: 'action', requires: 'canViewWarehouseOrders', label: 'اعتماد ورفض وإلغاء طلب المذخر', desc: 'اعتماد ورفض وإلغاء طلب المذخر' },
+            { key: 'canReceivePurchase', kind: 'action', requires: 'canViewSuppliers', label: 'استلام المشتريات', desc: 'استلام المشتريات' },
+            { key: 'canReturnWarehouseOrder', kind: 'action', requires: 'canViewWarehouseOrders', label: 'إرجاع مشتريات المذخر', desc: 'إرجاع مشتريات المذخر' },
+            { key: 'canReconcileWarehouseOrder', kind: 'action', requires: 'canViewWarehouseOrders', label: 'مطابقة الاستلام والسداد', desc: 'للمدير فقط: ربط الاستلام ومطابقة السداد' },
             { key: 'canCreatePurchase', kind: 'action', requires: 'canViewSuppliers', label: 'إنشاء طلب شراء', desc: 'إنشاء أمر شراء جديد من مورد' },
         ],
     },
@@ -242,7 +248,7 @@ export default function PermissionsEditor({ users }: { users: User[] }) {
             const defaults = getDefaultPermissions(selectedUser.role);
             const overrides: Partial<UserPermissions> = {};
             for (const key of Object.keys(perms) as (keyof UserPermissions)[]) {
-                if (perms[key] !== defaults[key]) overrides[key] = perms[key];
+                if (perms[key] !== defaults[key] || ["canViewWarehouseOrders", "canCreateWarehouseOrder", "canApproveWarehouseOrder", "canReceivePurchase", "canReturnWarehouseOrder", "canReconcileWarehouseOrder"].includes(key)) overrides[key] = perms[key];
             }
             const permsString = Object.keys(overrides).length > 0 ? JSON.stringify(overrides) : null;
 

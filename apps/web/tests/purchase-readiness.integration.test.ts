@@ -1,3 +1,4 @@
+import { getDefaultPermissions } from '../app/lib/permissions';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { NextRequest } from 'next/server';
@@ -29,18 +30,22 @@ beforeEach(async () => {
     const key = randomUUID();
     const org = await db.organization.create({ data: { name: `Test ${key}` } });
     const branch = await db.branch.create({ data: { name: 'Test branch', organizationId: org.id } });
-    const warehouse = await db.warehouse.create({ data: { name: `Test warehouse ${key}` } });
+    const warehouse = await db.warehouse.create({ data: { name: `Test warehouse ${key}`, operatingMode: 'FULL' } });
     const owner = await db.user.create({ data: { email: `${key}@test.invalid`, password: 'not-a-login-password', role: 'WAREHOUSE', warehouseId: warehouse.id, warehouseUserType: 'OWNER' } });
     const supplier = await db.supplier.create({ data: { name: 'Test supplier', organizationId: org.id, warehouseId: warehouse.id } });
-    const drug = await db.globalDrug.create({ data: { barcode: key, tradeName: 'Test drug', scientificName: 'Test', alternatives: [] } });
+    const drug = await db.globalDrug.create({ data: { barcode: key, tradeName: 'Test drug', scientificName: 'Test', alternatives: [], unitsPerPack: 1, unitsPerPackConfirmedAt: new Date() } });
     fixture = { org, branch, warehouse, owner, supplier, drug };
-    state.tenant = { organizationId: org.id, user: { id: owner.id, role: 'ADMIN', branchId: branch.id }, tenantBranchWhere: { branchId: branch.id }, branchModelWhere: { id: branch.id }, userPermissions: { canCreatePurchase: true, canViewSuppliers: true } };
+    state.tenant = { organizationId: org.id, user: { id: owner.id, role: 'ADMIN', branchId: branch.id }, tenantBranchWhere: { branchId: branch.id }, branchModelWhere: { id: branch.id }, userPermissions: getDefaultPermissions('ADMIN') };
     state.warehouse = { warehouseId: warehouse.id, user: { id: owner.id, role: 'WAREHOUSE' } };
 });
 afterAll(() => db.$disconnect());
 
 async function purchase(bonus = false) {
-    return db.purchase.create({ data: { branchId: fixture.branch.id, supplierId: fixture.supplier.id, total: 1000, items: { create: [
+    // A zero-cost bonus is valid only on an approved, shipped warehouse order.
+    const bonusOrder = bonus ? await db.warehouseOrder.create({ data: {
+        warehouseId: fixture.warehouse.id, branchId: fixture.branch.id, status: 'DELIVERED', totalAmount: 1000,
+    } }) : null;
+    return db.purchase.create({ data: { branchId: fixture.branch.id, supplierId: fixture.supplier.id, warehouseOrderId: bonusOrder?.id, total: 1000, items: { create: [
         { drugId: fixture.drug.id, quantity: 10, cost: 100 },
         ...(bonus ? [{ drugId: fixture.drug.id, quantity: 1, cost: 0 }] : []),
     ] } }, include: { items: true } });
@@ -132,7 +137,7 @@ describe('B2B route integration on real PostgreSQL (identity supplied by test)',
         state.tenant.branchModelWhere = { id: 'other-branch' };
         expect(await getPurchaseDetails(p.id)).toBeNull();
         expect(await getPurchases(fixture.branch.id)).toEqual([]);
-        expect(await getLowStockInventory(fixture.branch.id)).toEqual([]);
+        await expect(getLowStockInventory(fixture.branch.id)).rejects.toThrow('الفرع خارج نطاق صلاحياتك');
         expect((await createSmartPurchase(fixture.branch.id, fixture.supplier.id, [{ drugId: fixture.drug.id, quantity: 1, cost: 100 }])).success).toBe(false);
     });
     it('does not disclose another organization supplier through a server action', async () => {
@@ -167,12 +172,13 @@ describe('B2B route integration on real PostgreSQL (identity supplied by test)',
         const order = await quotedOrder();
         const approval = await (await decide(request({ action: 'APPROVED' }), { params: { id: order.id } })).json();
         const p = await db.purchase.findUniqueOrThrow({ where: { id: approval.purchaseId }, include: { items: true } });
+        await db.warehouseOrder.update({ where: { id: order.id }, data: { status: 'DELIVERED' } });
         await receivePurchaseStock(db, p.id, { branchId: fixture.branch.id }, receipt(p));
         expect((await decide(request({ action: 'CANCELLED' }), { params: { id: order.id } })).status).toBe(409);
-        expect((await db.warehouseOrder.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('APPROVED');
+        expect((await db.warehouseOrder.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('DELIVERED');
     });
     it('denies a cashier approval before writes', async () => {
-        const order = await quotedOrder(); state.tenant.userPermissions.canCreatePurchase = false;
+        const order = await quotedOrder(); state.tenant.userPermissions = getDefaultPermissions('CASHIER');
         expect((await decide(request({ action: 'APPROVED' }), { params: { id: order.id } })).status).toBe(403);
         expect(await db.purchase.count({ where: { branchId: fixture.branch.id } })).toBe(0);
     });
@@ -214,7 +220,8 @@ describe('B2B route integration on real PostgreSQL (identity supplied by test)',
         expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
         expect((await db.warehouseBatch.findUniqueOrThrow({ where: { id: batch.id } })).quantity).toBe(19);
         expect((await ship(request({ status: 'DELIVERED' }), { params: { id: order.id } })).status).toBe(200);
-        const p = await db.purchase.findUniqueOrThrow({ where: { id: approval.purchaseId }, include: { items: true } });
+        // Exact quotes may already be auto-approved; the canonical link exists in either flow.
+        const p = await db.purchase.findUniqueOrThrow({ where: { warehouseOrderId: order.id }, include: { items: true } });
         await receivePurchaseStock(db, p.id, { branchId: fixture.branch.id }, receipt(p));
         expect((await db.batch.aggregate({ where: { inventory: { branchId: fixture.branch.id } }, _sum: { quantity: true } }))._sum.quantity).toBe(11);
         expect(p.total).toBe(1000);

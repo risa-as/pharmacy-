@@ -38,7 +38,7 @@ const getRelativeTime = (date: Date) => {
     return `منذ ${diffDays} يوم`;
 };
 
-export default function SettingsPage() {
+export default function SettingsPage({initialTab = "backups"}:{initialTab?: "backups" | "failures"}) {
     const [backups, setBackups] = useState<Backup[]>([]);
     const [loading, setLoading] = useState(false);
     const [creating, setCreating] = useState(false);
@@ -46,7 +46,8 @@ export default function SettingsPage() {
     const [showConfirmRestore, setShowConfirmRestore] = useState<Backup | null>(null);
     const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [showAll, setShowAll] = useState(false);
-    const [activeTab, setActiveTab] = useState<'backups' | 'failures' | 'pos' | 'about'>('backups');
+    const [activeTab, setActiveTab] = useState<'backups' | 'failures' | 'pos' | 'about'>(initialTab);
+    useEffect(()=>{const open=()=>setActiveTab('failures');window.addEventListener('open-sync-settings',open);return()=>window.removeEventListener('open-sync-settings',open);},[]);
 
     // ── About / updates tab state ─────────────────────────────────────────────
     const [appVersion, setAppVersion] = useState('');
@@ -230,7 +231,7 @@ export default function SettingsPage() {
                             onClick={() => setActiveTab('failures')}
                             className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-1.5 transition-all ${activeTab === 'failures' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                            أخطاء المزامنة
+                            المزامنة
                             {failureCount > 0 && (
                                 <span className="bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded-full">{failureCount}</span>
                             )}

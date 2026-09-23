@@ -1,0 +1,24 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+import {NextRequest} from 'next/server';
+import {getUserPermissions} from '../permissions';
+const h=vi.hoisted(()=>({context:vi.fn(),find:vi.fn(),receive:vi.fn()}));
+vi.mock('@/app/lib/tenant-utils',()=>({getTenantContext:h.context}));
+vi.mock('@/app/lib/prisma',()=>({prisma:{warehouseOrder:{findFirst:h.find}}}));
+vi.mock('@/app/lib/notifications/notificationTriggers',()=>({sendAndPersistNotification:vi.fn(),notifyWarehouseUsers:vi.fn()}));
+vi.mock('@/app/lib/purchase-receipt',()=>({receivePurchaseStock:h.receive,PurchaseReceiptError:class extends Error {status=400}}));
+import {GET as reconciliationGet,POST as reconciliationPost} from '../../api/warehouses/orders/[id]/reconciliation/route';
+import {POST as returnPost} from '../../api/warehouses/orders/[id]/returns/route';
+import {POST as receivePost} from '../../api/purchases/[id]/receive/route';
+import {POST as decidePost} from '../../api/warehouses/orders/[id]/route';
+import {GET as ordersGet,POST as createPost} from '../../api/warehouses/orders/route';
+const params={params:Promise.resolve({id:'order-1'})};
+function context(overrides:object,role='MANAGER'){h.context.mockResolvedValue({user:{id:'u',role,branchId:'b'},organizationId:'org',tenantBranchWhere:{branchId:'b'},userPermissions:getUserPermissions({role,permissions:JSON.stringify(overrides)})});}
+const req=()=>new NextRequest('http://local/api/x',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'APPROVED',items:[]})});
+beforeEach(()=>{vi.clearAllMocks();h.find.mockResolvedValue(null)});
+it('denies manager reconciliation reads and writes after permission revocation',async()=>{context({canReconcileWarehouseOrder:false});expect((await reconciliationGet(req(),params)).status).toBe(403);expect((await reconciliationPost(req(),params)).status).toBe(403);expect(h.find).not.toHaveBeenCalled()});
+it('denies warehouse decisions even when ordinary purchase creation is allowed',async()=>{context({canApproveWarehouseOrder:false});expect((await decidePost(req(),params)).status).toBe(403);expect(h.find).not.toHaveBeenCalled()});
+it('denies returns independently of creation',async()=>{context({canReturnWarehouseOrder:false});expect((await returnPost(req(),params)).status).toBe(403);expect(h.find).not.toHaveBeenCalled()});
+it('denies creation independently of ordinary purchase permission',async()=>{context({canCreateWarehouseOrder:false});expect((await createPost(req())).status).toBe(403)});
+it('denies viewing warehouse orders independently of supplier access',async()=>{context({canViewWarehouseOrders:false});expect((await ordersGet(req())).status).toBe(403)});
+it('denies receipt before stock mutation',async()=>{context({canReceivePurchase:false});expect((await receivePost(req(),params)).status).toBe(403);expect(h.receive).not.toHaveBeenCalled()});
+it('allows receipt-only employee through the same endpoint used by mobile and desktop',async()=>{context({canCreatePurchase:false,canReceivePurchase:true},'PHARMACIST');h.receive.mockResolvedValue({branchId:'b',receivedCount:1,createdInventoryCount:0});expect((await receivePost(req(),params)).status).toBe(200);expect(h.receive).toHaveBeenCalledOnce()});

@@ -1,4 +1,6 @@
 "use client";
+import { HandCoins } from "@/app/ui/debts/debt-icon";
+
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -176,7 +178,7 @@ const slides: Slide[] = [
             { icon: Heart, text: "الأمراض المزمنة" },
             { icon: AlertTriangle, text: "تنبيه الحساسية" },
             { icon: ClipboardList, text: "تاريخ الوصفات" },
-            { icon: Wallet, text: "رصيد الديون" },
+            { icon: HandCoins, text: "رصيد الديون" },
         ],
         stats: [
             { value: "فوري", label: "استدعاء الملف" },
@@ -190,7 +192,7 @@ const slides: Slide[] = [
         accentColor: "#a78bfa",
         badge: "إدارة الديون",
         sidebarTitle: "إدارة الديون",
-        mainIcon: CreditCard,
+        mainIcon: HandCoins,
         title: "لا دَين يضيع",
         subtitle: "تتبّع كل مبلغ — من أول فاتورة حتى السداد الكامل",
         description: "كشف حساب تفصيلي لكل مريض ومورّد. سجّل الدفعات الجزئية، تتبّع التواريخ، وأصدر إشعارات للمستحقات. لا مبلغ يُنسى ولا حساب يضيع.",
@@ -483,7 +485,7 @@ const slides: Slide[] = [
         features: [
             { icon: Bell, text: "تنبيه انتهاء الصلاحية" },
             { icon: Package, text: "نقص المخزون" },
-            { icon: Wallet, text: "الديون المستحقة" },
+            { icon: HandCoins, text: "الديون المستحقة" },
             { icon: Activity, text: "لوحة التنبيهات" },
         ],
         stats: [

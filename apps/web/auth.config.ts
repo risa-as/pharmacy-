@@ -62,13 +62,12 @@ export const authConfig = {
         }
 
         return true;
-      } else if (isLoggedIn) {
-        // Redirect logged-in users away from login page to their home
-        if (nextUrl.pathname === "/login") {
-          const home = isWarehouseRole(role || "") ? "/warehouse" : "/dashboard";
-          return Response.redirect(new URL(home, nextUrl));
-        }
       }
+      // No edge redirect away from /login: the edge only decodes the cookie and
+      // cannot tell a revoked session (sessionVersion, disabled account) from a
+      // valid one, so bouncing "logged-in" users to their home created a
+      // /login <-> /dashboard loop. The login form asks the server instead
+      // (useSession) and forwards a still-valid session home.
       return true;
     },
     async jwt({ token, user }) {
@@ -84,6 +83,9 @@ export const authConfig = {
         // this object that isn't declared in types/auth.d.ts (organizationId,
         // permissions, subscriptionState above).
         token.warehouseId = (user as any).warehouseId || null;
+        // Checked on every read by session-refresh.ts (Node only); bumping the
+        // user's sessionVersion revokes this cookie.
+        token.sessionVersion = (user as any).sessionVersion ?? 0;
       }
       return token;
     },

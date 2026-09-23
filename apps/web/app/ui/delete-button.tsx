@@ -11,9 +11,10 @@ interface DeleteButtonProps {
     onConfirm?: () => void;
     description: string;
     className?: string;
+    label?: string;
 }
 
-export function DeleteButton({ action, onConfirm, description, className }: DeleteButtonProps) {
+export function DeleteButton({ action, onConfirm, description, className, label }: DeleteButtonProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -58,6 +59,7 @@ export function DeleteButton({ action, onConfirm, description, className }: Dele
                 type="button"
             >
                 <Trash2 className="w-4 h-4" />
+                {label && <span>{label}</span>}
             </button>
 
             {isOpen && mounted && createPortal(

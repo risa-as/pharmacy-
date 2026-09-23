@@ -54,6 +54,8 @@ export default function EditBatchModal({ batch, suppliers, suppliersLoading, onC
     if (!batch || !mounted) return null;
 
     const handleSave = async () => {
+        const cost = Number(costPrice);
+        if (!costPrice.trim() || !Number.isFinite(cost) || cost < 0 || (cost === 0 && batch.costPrice !== 0)) {setError('تكلفة الشراء يجب أن تكون أكبر من صفر.');return;}
         setSaving(true);
         setError(null);
         try {

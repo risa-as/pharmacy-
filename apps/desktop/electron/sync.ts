@@ -1,3 +1,5 @@
+import {recordSyncSuccess} from "./sync-success";
+import {validateSnapshotBarcodes} from "./product-snapshot-validation";
 import { prisma } from './db';
 import { BrowserWindow, app } from 'electron';
 import fs from 'node:fs';
@@ -98,6 +100,9 @@ function getDeviceAuthHeaders(): Record<string, string> {
         deviceHeaders['x-user-id']     = syncUserId;
         deviceHeaders['x-org-id']      = syncOrgId;
         deviceHeaders['x-user-role']   = syncUserRole;
+        // Tokens issued before versioning have none stored and verify as version 0.
+        const syncSessionVersion = Number(store.get('syncSessionVersion')) || 0;
+        if (syncSessionVersion > 0) deviceHeaders['x-session-version'] = String(syncSessionVersion);
     } else if (licenseKey) {
         // Fallback to device license key
         deviceHeaders['x-device-license-key'] = licenseKey;
@@ -175,6 +180,8 @@ let isOnline = false;
 let wasOffline = true; // tracks previous state to detect reconnection
 const runningSyncTasks = new Set<string>();
 let syncServiceStarted = false;
+
+export function isSyncRunning() { return runningSyncTasks.size > 0; }
 
 export function getConnectionStatus() {
     return isOnline;
@@ -319,6 +326,7 @@ export async function syncSales() {
                 quantity: item.quantity,
                 price: item.price,
                 originalPrice: item.originalPrice ?? null,
+                batchAllocations: item.batchAllocations ?? null,
             })),
             // Include patient snapshot so cloud can upsert before FK check
             patient: sale.patient ? {
@@ -343,7 +351,7 @@ export async function syncSales() {
             })
         });
 
-        const result = await response.json() as { syncedIds?: string[]; invoiceNumbers?: Record<string, number> };
+        const result = await response.json() as { syncedIds?: string[]; invoiceNumbers?: Record<string, number>; conflicts?: { id: string; message: string }[] };
         const syncedIds = result.syncedIds;
 
         // 3. Mark as synced
@@ -352,7 +360,18 @@ export async function syncSales() {
                 where: { id: { in: syncedIds } },
                 data: { synced: true }
             });
+        recordSyncSuccess("المبيعات");
             console.log(`[Sync] Sales sync completed. Marked ${syncedIds.length} sale(s) as synced.`);
+        }
+
+        for (const conflict of result.conflicts ?? []) {
+            const local = unsyncedSales.find((s: any) => s.id === conflict.id);
+            if (!local) continue;
+            await prisma.$transaction(async (tx: any) => {
+                const previous = await tx.syncFailure.findFirst({ where: { entityType: 'SALE', entityId: local.id } });
+                if (!previous) await tx.syncFailure.create({ data: { entityType: 'SALE', entityId: local.id, payload: JSON.stringify(local), errorMessage: conflict.message } });
+                await tx.sale.update({ where: { id: local.id }, data: { synced: true } });
+            });
         }
 
         // 4. Reconcile invoice numbers: for offline sales the cloud allocated the
@@ -453,13 +472,26 @@ export async function syncDebtPayments() {
                 })
             });
 
-            const result = await response.json() as { syncedIds?: string[] };
+            const result = await response.json() as { syncedIds?: string[]; conflicts?: { id: string; message: string }[] };
             if (result.syncedIds && result.syncedIds.length > 0) {
                 await prisma.debtPayment.updateMany({
                     where: { id: { in: result.syncedIds } },
                     data: { synced: true }
                 });
+        recordSyncSuccess("التحصيل");
                 console.log(`[Sync] ${result.syncedIds.length} payments marked as synced.`);
+            }
+
+            // Refused payments go to the sync-failures review list (retryable there),
+            // so they neither retry forever nor block the next batch of 20.
+            for (const conflict of result.conflicts ?? []) {
+                const local = unsyncedPayments.find((p: any) => p.id === conflict.id);
+                if (!local) continue;
+                await prisma.$transaction(async (tx: any) => {
+                    const previous = await tx.syncFailure.findFirst({ where: { entityType: 'DEBT_PAYMENT', entityId: local.id } });
+                    if (!previous) await tx.syncFailure.create({ data: { entityType: 'DEBT_PAYMENT', entityId: local.id, payload: JSON.stringify(local), errorMessage: conflict.message } });
+                    await tx.debtPayment.update({ where: { id: local.id }, data: { synced: true } });
+                });
             }
         }
 
@@ -573,9 +605,10 @@ export async function pushSaleReturnToCloud(payload: SaleReturnCloudPayload) {
     const response = await fetchWithRetry(buildApiUrl('/sync/returns'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branchId: payload.branchId, returns: [payload] }),
+        body: JSON.stringify({ branchId: payload.branchId, returns: [{ ...payload, refundVersion: 2 }] }),
     });
     const result = await response.json() as {
+        records?: Array<{ id: string; total: number; items: Array<{ drugId: string; quantity: number; price: number; stockStatus: string; batchAllocations: string | null }> }>;
         syncedIds?: string[];
         conflicts?: Array<{ id: string; message?: string }>;
     };
@@ -584,7 +617,9 @@ export async function pushSaleReturnToCloud(payload: SaleReturnCloudPayload) {
     if (!result.syncedIds?.includes(payload.id)) {
         return { success: false, error: 'لم يؤكد الخادم تسجيل المرتجع.' };
     }
-    return { success: true };
+    const record = result.records?.find(r => r.id === payload.id);
+    if (!record) return { success: false, error: 'يلزم تحديث الخادم لاستلام تفاصيل المرتجع المعتمدة. لا تعاود الدفع؛ أعد المحاولة بنفس العملية.' };
+    return { success: true, record };
 }
 
 export async function syncSaleReturns() {
@@ -646,6 +681,7 @@ export async function syncSaleReturns() {
                 where: { id: { in: syncedIds } },
                 data: { synced: true }
             });
+        recordSyncSuccess("المرتجعات");
             console.log(`[Sync] Sale returns sync completed. Marked ${syncedIds.length} return(s) as synced.`);
         }
 
@@ -1240,6 +1276,7 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
         };
 
         const drugs = Array.isArray(data?.drugs) ? data.drugs : [];
+        validateSnapshotBarcodes(drugs);
 
         // Safety guard: empty response from cloud should not wipe local inventory.
         // This protects against transient server errors returning an empty snapshot.
@@ -1767,6 +1804,7 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
             });
         } catch { /* non-critical */ }
 
+        recordSyncSuccess("المخزون");
         console.log(`[Sync] Product snapshot sync completed. ${drugs.length} cloud product(s) processed.`);
         return { success: true, count: drugs.length };
     } catch (error: any) {
@@ -2297,8 +2335,12 @@ export async function pushDeleteInventoryFromCloud(inventoryId: string, options?
                 }
 
                 console.error("[CloudSync] Failed to delete inventory from cloud:", errorMessage);
+                // Permission denied: permanent, surface it for review (see _doSyncActions)
+                // rather than silently dropping the delete after repeated attempts.
+                if (response.status === 403) throw new SyncClientError(`Client Error 403: ${errorMessage}`, 403);
                 return false;
             } catch (error: any) {
+                if (error instanceof SyncClientError) throw error;
                 clearTimeout(timeoutId);
                 const shouldRetry = attempt < 3 && (error?.name === 'AbortError' || String(error?.message || '').includes('fetch'));
                 if (shouldRetry) {
@@ -2313,6 +2355,7 @@ export async function pushDeleteInventoryFromCloud(inventoryId: string, options?
         }
         return false;
     } catch (error) {
+        if (error instanceof SyncClientError) throw error;
         console.error("[CloudSync] Error deleting inventory from cloud:", error);
         return false;
     }
@@ -2489,6 +2532,9 @@ export async function pushUpdateInventoryToCloud(data: {
         if (error instanceof Error && /retries|fetch|network|abort|timeout|econnrefused|enotfound/i.test(error.message)) {
             throw error;
         }
+        // A permission denial is permanent: re-throw so the queue routes it to the
+        // sync-failures review list instead of retrying it forever.
+        if (error instanceof SyncClientError && error.status === 403) throw error;
         return false;
     }
 }

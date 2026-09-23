@@ -60,9 +60,14 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
 
     // Suppliers & Purchases
     { path: '/dashboard/suppliers', permission: 'canViewSuppliers' },
-    { path: '/dashboard/purchases', permission: 'canCreatePurchase' },
+    { path: '/dashboard/purchases/warehouse-orders/new', permission: 'canCreateWarehouseOrder' },
+    { path: '/dashboard/purchases/warehouse-orders', permission: 'canViewWarehouseOrders' },
+    { path: '/dashboard/purchases/smart-order', permission: 'canViewInventory' },
+    { path: '/dashboard/purchases/new', permission: 'canCreatePurchase' },
+    { path: '/dashboard/purchases', permission: 'canViewSuppliers' },
 
     // Administration
+    { path: '/dashboard/organizations', permission: 'canChangeSettings' },
     { path: '/dashboard/users', permission: 'canManageUsers' },
     { path: '/dashboard/branches', permission: 'canManageBranches' },
     { path: '/dashboard/settings', permission: 'canChangeSettings' },
@@ -105,6 +110,7 @@ export function canAccessPath(
     pathname: string,
     userPermissions: UserPermissions
 ): boolean {
+    if (/^\/dashboard\/purchases\/[^/]+\/receive(?:\/|$)/.test(pathname)) return userPermissions.canReceivePurchase;
     const perm = getLinkPermission(pathname);
     if (!perm) return true; // No restriction
     return userPermissions[perm];

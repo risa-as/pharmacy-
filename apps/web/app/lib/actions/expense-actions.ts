@@ -19,11 +19,10 @@ export async function getExpenses(branchId?: string) {
         ? { branch: { organizationId } }
         : {};
 
-    // Optional branch narrowing (org admins filtering a specific branch)
-    if (branchId) where.branchId = branchId;
-
+    // Optional branch narrowing (org admins filtering a specific branch). Intersect,
+    // never assign: assignment replaced a branch user's own { branchId } scope.
     return await prisma.expense.findMany({
-        where,
+        where: { AND: [where, ...(branchId ? [{ branchId }] : [])] },
         include: { branch: { select: { name: true } } },
         orderBy: { date: 'desc' }
     });

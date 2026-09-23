@@ -5,14 +5,20 @@
 // قائمة فواتير، ونافذة تسجيل دفعة (OWNER فقط). نفس أسلوب
 // app/warehouse/stock/StockClient.tsx (sonner، فلترة عميل بلا إعادة جلب لأن
 // القائمة الأولية تغطي حتى 300 فاتورة).
-import { useMemo, useRef, useState } from "react";
+import ListPages from "../_components/ListPages";
+import { useWarehouseList } from "../_components/useWarehouseList";
+import { useState } from "react";
 import Link from "next/link";
 import { Printer, FileText } from "lucide-react";
 import { toast } from "sonner";
+import FinancialActivity from './FinancialActivity';
+import ReceivablesLedger from './ReceivablesLedger';
+import PaymentMatch from './PaymentMatch';
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import EmptyState from "@/app/warehouse/_components/EmptyState";
 import SharedStatusChip, { type StatusChipVariant } from "@/app/warehouse/_components/StatusChip";
 import Modal from "@/app/warehouse/_components/Modal";
+import { warehouseMutation } from '@/app/lib/warehouse-mutation-client';
 
 type AgingBucket = "CURRENT" | "D30" | "D60" | "D90" | "D90_PLUS";
 type InvoiceStatus = "UNPAID" | "PARTIAL" | "PAID" | "CANCELLED";
@@ -39,7 +45,7 @@ interface ReceivablesSummary {
     byBucket: Record<AgingBucket, number>;
 }
 
-const money = (n: number) => n.toLocaleString("ar-IQ", { maximumFractionDigits: 2 });
+const money = (n: number) => n.toLocaleString("ar-IQ-u-nu-latn", { maximumFractionDigits: 2 });
 
 // دلالات الحالة/التقادم موحَّدة عبر StatusChip المشترك (app/warehouse/_components/StatusChip.tsx) —
 // هذان غلافان رفيعان يبقيان أسماء المكوّنات ومواقع استدعائها كما كانت (StatusChip/AgingChip
@@ -105,23 +111,19 @@ export default function AccountsClient({
     initialSummary: ReceivablesSummary;
     canRecordPayment: boolean;
 }) {
-    const paymentKey = useRef(crypto.randomUUID());
-    const [invoices, setInvoices] = useState(initialInvoices);
+
+    const [accountView, setAccountView] = useState<'ledger'|'invoices'|'activity'>('ledger');
     const [summary, setSummary] = useState(initialSummary);
     const [statusFilter, setStatusFilter] = useState<"ALL" | InvoiceStatus>("ALL");
     const [search, setSearch] = useState("");
+    const list = useWarehouseList<InvoiceRow>('/api/warehouse-portal/invoices', 'invoices', new URLSearchParams({ search, status: statusFilter === 'ALL' ? '' : statusFilter }).toString(), initialInvoices);
+    const { items: invoices, setItems: setInvoices } = list;
     const [payingId, setPayingId] = useState<string | null>(null);
     const [payForm, setPayForm] = useState({ amount: "", method: "CASH", reference: "", notes: "" });
     const [saving, setSaving] = useState(false);
     const [payError, setPayError] = useState<string | null>(null);
 
-    const filtered = useMemo(() => {
-        return invoices.filter((inv) => {
-            if (statusFilter !== "ALL" && inv.status !== statusFilter) return false;
-            if (search.trim() && !inv.organizationName.toLowerCase().includes(search.trim().toLowerCase())) return false;
-            return true;
-        });
-    }, [invoices, statusFilter, search]);
+    const filtered = invoices;
 
     const bucketTotal = Object.values(summary.byBucket).reduce((a, b) => a + b, 0);
 
@@ -141,22 +143,20 @@ export default function AccountsClient({
 
     const openPay = (inv: InvoiceRow) => {
         setPayingId(inv.id);
-        paymentKey.current = crypto.randomUUID();
         setPayForm({ amount: "", method: "CASH", reference: "", notes: "" });
         setPayError(null);
     };
 
     const submitPayment = async () => {
-        if (!payingId) return;
+        if (!payingId || saving) return;
         setSaving(true);
         setPayError(null);
         try {
-            const res = await fetch(`/api/warehouse-portal/invoices/${payingId}/payments`, {
+            const res = await warehouseMutation(`/api/warehouse-portal/invoices/${payingId}/payments`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     amount: Number(payForm.amount),
-                    idempotencyKey: paymentKey.current,
                     method: payForm.method,
                     reference: payForm.reference || undefined,
                     notes: payForm.notes || undefined,
@@ -181,6 +181,7 @@ export default function AccountsClient({
                 )
             );
             void refreshSummary();
+            void list.refresh();
             toast.success("تم تسجيل الدفعة");
             setPayingId(null);
         } catch (e) {
@@ -192,22 +193,22 @@ export default function AccountsClient({
     };
 
     return (
-        <div className="space-y-6" dir="rtl">
-            <PageHeader title="الحسابات" description="الذمم المدينة على الصيدليات لدى مذخرك، وتقادمها." />
+        <div className="space-y-4" dir="rtl">
+            <PageHeader title="الحسابات" description="متابعة الذمم والتحصيل والسداد والمطابقة. الأرصدة الإجمالية تشمل المنصة والمندوبين والرصيد الافتتاحي." actions={<><Link href="/warehouse/customers" className="rounded-lg border px-3 py-2 text-sm">حسابات العملاء</Link><Link href="/warehouse/settlements" className="rounded-lg border px-3 py-2 text-sm">سندات التسوية</Link></>} />
 
             <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg border bg-card p-5 shadow-sm">
+                <div className="rounded-lg border bg-card p-3 shadow-sm">
                     <div className="text-xs font-medium text-muted-foreground">إجمالي الذمم القائمة</div>
-                    <div className="tabular-nums mt-1 text-2xl font-bold">{money(summary.outstanding)}</div>
+                    <div className="tabular-nums mt-1 text-2xl font-bold">{money(summary.outstanding)} <span className="text-xs font-normal">د.ع</span></div>
                 </div>
-                <div className="rounded-lg border bg-card p-5 shadow-sm">
+                <div className="rounded-lg border bg-card p-3 shadow-sm">
                     <div className="text-xs font-medium text-muted-foreground">المتأخر منها (تجاوز الاستحقاق)</div>
-                    <div className="tabular-nums mt-1 text-2xl font-bold text-destructive">{money(summary.overdue)}</div>
+                    <div className="tabular-nums mt-1 text-2xl font-bold text-destructive">{money(summary.overdue)} <span className="text-xs font-normal">د.ع</span></div>
                 </div>
             </div>
 
-            <div className="rounded-lg border bg-card p-5 shadow-sm">
-                <div className="mb-3 text-sm font-bold">توزيع التقادم</div>
+            <details className="rounded-lg border bg-card p-3 shadow-sm">
+                <summary className="cursor-pointer text-sm font-bold">تفصيل أعمار الديون</summary>
                 {bucketTotal <= 0 ? (
                     <div className="text-sm text-muted-foreground">لا توجد ذمم قائمة حالياً.</div>
                 ) : (
@@ -235,9 +236,11 @@ export default function AccountsClient({
                         </div>
                     </>
                 )}
-            </div>
+            </details>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-2 rounded-lg border bg-card p-2">{([{key:'ledger',label:'دفتر الذمم والتحصيل'},{key:'invoices',label:'فواتير المنصة والدفعات'},{key:'activity',label:'سجل القبض والصرف'}] as const).map(t=><button key={t.key} onClick={()=>setAccountView(t.key)} className={'rounded-lg px-4 py-2 text-sm font-semibold '+(accountView===t.key?'bg-primary text-primary-foreground':'hover:bg-muted')}>{t.label}</button>)}</div>
+            {accountView==='ledger' ? <ReceivablesLedger/> : accountView==='activity' ? <FinancialActivity/> : <>
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3">
                 <div className="flex flex-wrap gap-1">
                     {STATUS_FILTERS.map((f) => (
                         <button
@@ -254,11 +257,12 @@ export default function AccountsClient({
                 <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="بحث باسم الصيدلية…"
+                    placeholder="بحث بالصيدلية أو رقم الفاتورة…"
                     className="mr-auto w-56 rounded-lg border bg-muted px-3 py-1.5 text-sm"
                 />
             </div>
 
+            <ListPages {...list} />
             {invoices.length === 0 ? (
                 <EmptyState icon="🧾" title="لا توجد فواتير بعد" description="تُنشأ الفواتير تلقائياً عند اعتماد الصيدلية لعرضك على الطلب." />
             ) : (
@@ -270,9 +274,9 @@ export default function AccountsClient({
                         <tr className="sticky top-0 z-10 border-b bg-muted">
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">رقم الفاتورة</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">الصيدلية</th>
-                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">الإجمالي</th>
-                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المسدَّد</th>
-                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المتبقي</th>
+                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">الإجمالي (د.ع)</th>
+                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المسدَّد (د.ع)</th>
+                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المتبقي (د.ع)</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">الحالة</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">التقادم</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">الاستحقاق</th>
@@ -304,10 +308,11 @@ export default function AccountsClient({
                                     )}
                                 </td>
                                 <td className="px-4 py-3 text-muted-foreground">
-                                    {inv.dueAt ? new Date(inv.dueAt).toLocaleDateString("ar-IQ") : "نقدي"}
+                                    {inv.dueAt ? new Date(inv.dueAt).toLocaleDateString("ar-IQ-u-nu-latn") : "نقدي"}
                                 </td>
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-1.5">
+                                        {canRecordPayment && inv.status !== "CANCELLED" && <PaymentMatch invoiceId={inv.id} />}
                                         {canRecordPayment && inv.status !== "PAID" && inv.status !== "CANCELLED" && (
                                             <button
                                                 onClick={() => openPay(inv)}
@@ -349,8 +354,9 @@ export default function AccountsClient({
             </div>
             )}
 
+            </>}
             {payingId && (
-                <Modal open={!!payingId} onClose={() => setPayingId(null)} title="تسجيل دفعة" maxWidthClass="max-w-sm">
+                <Modal open={!!payingId} onClose={() => !saving && setPayingId(null)} title="تسجيل دفعة" maxWidthClass="max-w-sm">
                     <div className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-lg">
                         <h3 className="mb-3 font-bold">تسجيل دفعة</h3>
                         {payError && (

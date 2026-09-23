@@ -78,6 +78,7 @@ export function resolveOrderBranch(
 ): { branchId: string } | { needsOrgBranchCheck: string } | null {
     const { branchId } = input;
 
+    if (requestedBranchId && ['ADMIN','MANAGER','SUPER_ADMIN'].includes(input.role)) return { needsOrgBranchCheck: requestedBranchId };
     if (branchId) {
         // Non-admin (or admin with an assigned branch): always use the
         // caller's own branch, regardless of what the request body says.

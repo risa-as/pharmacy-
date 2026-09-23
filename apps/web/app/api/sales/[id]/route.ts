@@ -1,3 +1,4 @@
+import { readAllocations, restoreSaleReturnStock } from '@/app/lib/sale-return-stock';
 import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
@@ -128,6 +129,9 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
         const totalDelta = newTotal - oldTotal; // >0 means customer owes/paid more
 
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${sale.id} FOR UPDATE`;
+            const current = await tx.sale.findUnique({ where: { id: sale.id }, include: { returns: true } });
+            if (!current || current.updatedAt.getTime() !== sale.updatedAt.getTime() || current.returns.length) throw new Error('تغيرت الفاتورة؛ حدّث البيانات قبل تعديلها.');
             let hasPriceOverride = false;
 
             // 1. Reconcile each item: stock + cost + the SaleItem row itself
@@ -143,9 +147,10 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 
                 const inventory = await tx.inventory.findFirst({
                     where: { branchId: sale.branchId, drugId: submitted.drugId },
-                    include: { batches: { orderBy: { expiryDate: 'asc' }, where: { quantity: { gt: 0 } } } },
+                    include: { batches: { orderBy: { expiryDate: 'asc' }, where: { quantity: { gt: 0 }, expiryDate: { gt: new Date() } } } },
                 });
 
+                let allocations = readAllocations(original.batchAllocations);
                 let newCost = original.cost; // unit cost; unchanged when qty drops
 
                 if (qtyDelta > 0 && inventory) {
@@ -156,38 +161,20 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                         if (remaining <= 0) break;
                         const take = Math.min(batch.quantity, remaining);
                         addedCost += take * batch.costPrice;
-                        await tx.batch.update({ where: { id: batch.id }, data: { quantity: { decrement: take } } });
+                        const changed = await tx.batch.updateMany({ where: { id: batch.id, quantity: { gte: take }, expiryDate: { gt: new Date() } }, data: { quantity: { decrement: take } } });
+                        if (changed.count !== 1) throw new Error('تغير المخزون؛ أعد المحاولة.');
+                        allocations.push({ batchId: batch.id, quantity: take });
                         remaining -= take;
                     }
-                    if (remaining > 0) {
-                        // Not enough stock — fall back to average inventory cost
-                        addedCost += remaining * inventory.cost;
-                    }
+                    if (remaining > 0) throw new Error('المخزون الصالح لا يكفي للزيادة.');
                     const totalCost = original.cost * original.quantity + addedCost;
                     newCost = newQty > 0 ? totalCost / newQty : 0;
                 } else if (qtyDelta < 0 && inventory) {
-                    // Returned stock to the longest-expiry batch (mirrors return flow)
-                    const back = -qtyDelta;
-                    const newestBatch = await tx.batch.findFirst({
-                        where: { inventoryId: inventory.id },
-                        orderBy: { expiryDate: 'desc' },
-                    });
-                    if (newestBatch) {
-                        await tx.batch.update({ where: { id: newestBatch.id }, data: { quantity: { increment: back } } });
-                    } else {
-                        const distantExpiry = new Date();
-                        distantExpiry.setFullYear(distantExpiry.getFullYear() + 2);
-                        await tx.batch.create({
-                            data: {
-                                inventoryId: inventory.id,
-                                quantity: back,
-                                initialQuantity: back,
-                                expiryDate: distantExpiry,
-                                batchNumber: `EDIT-${Date.now()}`,
-                            },
-                        });
-                    }
-                }
+                    const restored = await restoreSaleReturnStock(tx, sale.branchId, [original], [{ items: [{ drugId: original.drugId, quantity: newQty }] }], [{ drugId: original.drugId, quantity: -qtyDelta, price: original.price }]);
+                    if (restored[0].stockStatus !== 'RESTOCKED') throw new Error('الدفعة الأصلية غير موثقة أو منتهية. استخدم مراجعة الإرجاع بدل إنقاص الفاتورة.');
+                    let keep = newQty;
+                    allocations = allocations.flatMap(a => { const quantity = Math.min(keep, a.quantity); keep -= quantity; return quantity > 0 ? [{ ...a, quantity }] : []; });
+                } else if (qtyDelta !== 0) throw new Error('مخزون الصنف غير موجود.');
 
                 if (newQty <= 0) {
                     // Item removed from the invoice entirely
@@ -195,7 +182,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                 } else {
                     await tx.saleItem.update({
                         where: { id: original.id },
-                        data: { quantity: newQty, price: newPrice, cost: newCost },
+                        data: { quantity: newQty, price: newPrice, cost: newCost, batchAllocations: original.batchAllocations || qtyDelta !== 0 ? JSON.stringify(allocations) : null },
                     });
                 }
             }
@@ -237,7 +224,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                             amount: Math.abs(totalDelta),
                             referenceType: 'SALE_EDIT',
                             referenceId: sale.id,
-                            description: `تعديل فاتورة #${sale.invoiceNumber ?? sale.id.slice(0, 8)}`,
+                            description: `تعديل فاتورة #${sale.invoiceNumber ?? sale.documentNumber}`,
                             userId: user.id,
                         },
                     });

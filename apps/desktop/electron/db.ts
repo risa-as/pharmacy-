@@ -290,6 +290,12 @@ export async function runMigrations(): Promise<void> {
     await addColumn('Sale', 'hasPriceOverride', 'BOOLEAN NOT NULL DEFAULT false');
     await addColumn('SaleItem', 'originalPrice', 'REAL');
     await addColumn('User', 'isActive', 'BOOLEAN NOT NULL DEFAULT true');
+    await addColumn('SaleItem', 'batchAllocations', 'TEXT');
+    await addColumn('SaleReturnItem', 'batchAllocations', 'TEXT');
+    await addColumn('SaleReturnItem', 'stockStatus', "TEXT NOT NULL DEFAULT 'LEGACY'");
+    await addColumn('SaleReturnItem', 'stockReviewNote', 'TEXT');
+    await addColumn('SaleReturnItem', 'stockReviewedBy', 'TEXT');
+    await addColumn('SaleReturnItem', 'stockReviewedAt', 'DATETIME');
     await addColumn('SaleReturn', 'userId', 'TEXT');
     await addColumn('DebtPayment', 'userId', 'TEXT');
 

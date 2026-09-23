@@ -15,6 +15,8 @@ interface BranchSelectorProps {
     onSelectBranch: (branchId: string | null) => void;
     /** When true, renders nothing if only one branch exists (filter is meaningless). */
     hideIfSingle?: boolean;
+    /** Keep the branch visible while preventing changes during an operation. */
+    disabled?: boolean;
     /** Offer «كل الفروع» (null). Disable where a concrete branch is required. */
     allowAll?: boolean;
     /** Field label shown beside/above the dropdown. */
@@ -34,7 +36,7 @@ export const ALL_BRANCHES_LABEL = 'كل الفروع';
  * plus the branches the server returns for this user; the parent owns the
  * selection so it survives navigating back (navigation-map §7).
  */
-export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle, allowAll = true, label = 'الفرع', inline }: BranchSelectorProps) => {
+export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle, allowAll = true, label = 'الفرع', inline, disabled = false }: BranchSelectorProps) => {
     const C = usePalette();
     const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
@@ -60,6 +62,8 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle,
     const trigger = (
         <TouchableOpacity
             onPress={() => setOpen(true)}
+            disabled={disabled}
+            accessibilityState={{ disabled }}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={`${label}: ${selectedLabel}`}
@@ -71,7 +75,7 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle,
             }}
         >
             <Text style={{ color: C.foreground, fontSize: 15, fontWeight: '600', flexShrink: 1 }} numberOfLines={1}>{selectedLabel}</Text>
-            {loading ? <ActivityIndicator size="small" color={C.primary} /> : <Ionicons name="chevron-down" size={18} color={C.mutedForeground} />}
+            {loading ? <ActivityIndicator size="small" color={C.primary} /> : !disabled && <Ionicons name="chevron-down" size={18} color={C.mutedForeground} />}
         </TouchableOpacity>
     );
 

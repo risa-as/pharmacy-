@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
+import { isWarehouseRole } from "@/app/lib/warehouse-role";
 import { authenticate } from "@/app/lib/actions";
 import { Button } from "@faramace/ui";
 import { Mail, Lock, AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
@@ -8,6 +10,14 @@ import { Mail, Lock, AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 export default function LoginForm() {
     const [error, setError] = useState<string | undefined>();
     const [pending, setPending] = useState(false);
+
+    // A session the SERVER still accepts goes home; a revoked one resolves to no
+    // session (and Auth.js clears its cookie), so the form stays.
+    const { data: session, status } = useSession();
+    useEffect(() => {
+        if (status !== "authenticated" || !session?.user) return;
+        window.location.replace(isWarehouseRole((session.user as any).role || "") ? "/warehouse" : "/dashboard");
+    }, [status, session]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();

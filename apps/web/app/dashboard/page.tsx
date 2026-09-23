@@ -1,3 +1,5 @@
+import { returnedCost, saleMargin } from '@/app/lib/profit-math';
+import { HandCoins } from "@/app/ui/debts/debt-icon";
 export const dynamic = 'force-dynamic';
 
 import { prisma } from '@/app/lib/prisma';
@@ -5,7 +7,7 @@ import { auth } from '@/auth';
 import {
     Store, Pill, Package, AlertTriangle, Users, Bell,
     BarChart3, TrendingUp, ShoppingCart, Clock,
-    Stethoscope, BookOpen, ClipboardList, Undo2, Building2, Crown,
+    Stethoscope, ClipboardList, Undo2, Building2, Crown,
     Receipt, Banknote, Truck, UserX, CalendarX,
     ChevronLeft, FileText, PackageOpen, Key, Smartphone,
     Activity, ArrowUpRight, Layers
@@ -222,13 +224,13 @@ async function getAdminData(organizationId: string, branchId?: string) {
         new Date(date).toLocaleDateString('ar-IQ', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' });
 
     const [rawWeeklyItems, rawWeeklyReturns, rawWeeklyExpenses] = await Promise.all([
-        prisma.saleItem.findMany({
-            where: { sale: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere } },
-            select: { price: true, cost: true, quantity: true, sale: { select: { createdAt: true } } },
+        prisma.sale.findMany({
+            where: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere },
+            select: { total: true, createdAt: true, items: { select: { cost: true, quantity: true } } },
         }),
         prisma.saleReturn.findMany({
             where: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere },
-            select: { total: true, createdAt: true },
+            select: { total: true, createdAt: true, items: { select: { drugId: true, quantity: true } }, sale: { select: { items: { select: { drugId: true, quantity: true, cost: true } } } } },
         }),
         prisma.expense.findMany({
             where: { date: { gte: sevenDaysAgo }, ...orgBranchWhere },
@@ -243,12 +245,12 @@ async function getAdminData(organizationId: string, branchId?: string) {
         netDayMap[dayKey(dt)] = 0;
     }
     for (const item of rawWeeklyItems) {
-        const label = dayKey(item.sale.createdAt);
-        if (label in netDayMap) netDayMap[label] += (item.price - item.cost) * item.quantity;
+        const label = dayKey(item.createdAt);
+        if (label in netDayMap) netDayMap[label] += saleMargin(item);
     }
     for (const r of rawWeeklyReturns) {
         const label = dayKey(r.createdAt);
-        if (label in netDayMap) netDayMap[label] -= r.total;
+        if (label in netDayMap) netDayMap[label] -= r.total - returnedCost(r.items, r.sale.items);
     }
     for (const e of rawWeeklyExpenses) {
         const label = dayKey(e.date);
@@ -264,7 +266,15 @@ async function getAdminData(organizationId: string, branchId?: string) {
     const monthRevenue = monthSales._sum.total || 0;
     const monthExpenseAmt = monthExpenses._sum.amount || 0;
     const monthReturnsAmt = monthReturns._sum.total || 0;
-    const monthNet = monthRevenue - monthExpenseAmt - monthReturnsAmt;
+    const [monthCostItems, monthReturnItems] = await Promise.all([
+        prisma.saleItem.findMany({ where: { sale: { ...orgBranchWhere, createdAt: { gte: monthStart } } }, select: { cost: true, quantity: true } }),
+        prisma.saleReturn.findMany({ where: { ...orgBranchWhere, createdAt: { gte: monthStart } }, select: {
+            items: { select: { drugId: true, quantity: true } }, sale: { select: { items: { select: { drugId: true, quantity: true, cost: true } } } },
+        } }),
+    ]);
+    const monthCost = monthCostItems.reduce((sum, item) => sum + item.cost * item.quantity, 0);
+    const reversedCost = monthReturnItems.reduce((sum, item) => sum + returnedCost(item.items, item.sale.items), 0);
+    const monthNet = monthRevenue - monthExpenseAmt - monthReturnsAmt - monthCost + reversedCost;
 
     const supplierOwed = (purchaseOutstanding._sum.total || 0) - (purchaseOutstanding._sum.paidAmount || 0);
 
@@ -919,7 +929,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                     <h2 className="text-base font-bold text-foreground mb-3">وصول سريع</h2>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {[
-                            { href: '/dashboard/sales', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع جديدة', color: 'bg-primary/10 text-primary' },
+                            { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع جديدة', color: 'bg-primary/10 text-primary' },
                             { href: '/dashboard/purchases', icon: Receipt, label: 'المشتريات', desc: 'تسجيل فاتورة شراء', color: 'bg-info/10 text-info' },
                             { href: '/dashboard/inventory', icon: Package, label: 'المخزون', desc: 'إدارة الأصناف والكميات', color: 'bg-cyan-500/10 text-cyan-500' },
                             { href: '/dashboard/reports/profit', icon: TrendingUp, label: 'تقرير الأرباح', desc: 'صافي الربح والخسارة', color: 'bg-success/10 text-success' },
@@ -927,7 +937,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                             { href: '/dashboard/suppliers', icon: Truck, label: 'الموردين', desc: 'إدارة الموردين والمدفوعات', color: 'bg-purple-500/10 text-purple-500' },
                             { href: '/dashboard/expenses', icon: Banknote, label: 'المصروفات', desc: 'تسجيل المصروفات التشغيلية', color: 'bg-warning/10 text-warning' },
                             { href: '/dashboard/reports', icon: BarChart3, label: 'التقارير', desc: 'جميع التقارير والتحليلات', color: 'bg-amber-500/10 text-amber-500' },
-                            { href: '/dashboard/debts', icon: BookOpen, label: 'دفتر الديون', desc: 'متابعة ديون المرضى', color: 'bg-orange-500/10 text-orange-500' },
+                            { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'متابعة ديون المرضى', color: 'bg-orange-500/10 text-orange-500' },
                             { href: '/dashboard/alerts', icon: Bell, label: 'التنبيهات', desc: 'انتهاء الصلاحية ونقص المخزون', color: 'bg-destructive/10 text-destructive' },
                             { href: '/dashboard/reports/branch-comparison', icon: Store, label: 'مقارنة الفروع', desc: 'مقارنة أداء الفروع', color: 'bg-teal-500/10 text-teal-500' },
                             { href: '/dashboard/users', icon: Users, label: 'المستخدمين', desc: 'إدارة الموظفين والصلاحيات', color: 'bg-violet-500/10 text-violet-500' },
@@ -1053,16 +1063,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                 <h2 className="text-sm font-bold text-muted-foreground mb-3">الإجراءات السريعة</h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {(role === 'PHARMACIST' ? [
-                        { href: '/dashboard/sales', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', gradient: 'from-primary to-primary/80' },
+                        { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', gradient: 'from-primary to-primary/80' },
                         { href: '/dashboard/drugs', icon: Pill, label: 'قاعدة الأدوية', desc: `${d.drugCount} دواء مسجل`, gradient: 'from-info to-info/80' },
                         { href: '/dashboard/patients', icon: Stethoscope, label: 'المرضى', desc: 'إدارة بيانات المرضى', gradient: 'from-success to-success/80' },
-                        { href: '/dashboard/debts', icon: BookOpen, label: 'دفتر الديون', desc: 'الديون والسداد', gradient: 'from-warning to-warning/80' },
+                        { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'الديون والسداد', gradient: 'from-warning to-warning/80' },
                         { href: '/dashboard/inventory/stocktakes', icon: ClipboardList, label: 'جرد المخزون', desc: `${d.inventoryCount} صنف`, gradient: 'from-cyan-500 to-cyan-500/80' },
                         { href: '/dashboard/returns', icon: Undo2, label: 'المرتجعات', desc: 'إرجاع فواتير', gradient: 'from-rose-500 to-rose-500/80' },
                     ] : [
-                        { href: '/dashboard/sales', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', gradient: 'from-primary to-primary/80' },
+                        { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', gradient: 'from-primary to-primary/80' },
                         { href: '/dashboard/returns', icon: Undo2, label: 'المرتجعات', desc: 'إرجاع فواتير', gradient: 'from-info to-info/80' },
-                        { href: '/dashboard/debts', icon: BookOpen, label: 'دفتر الديون', desc: 'الديون والسداد', gradient: 'from-success to-success/80' },
+                        { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'الديون والسداد', gradient: 'from-success to-success/80' },
                         { href: '/dashboard/patients', icon: Stethoscope, label: 'المرضى', desc: 'بحث عن مريض', gradient: 'from-warning to-warning/80' },
                     ]).map((action: any) => {
                         const Icon = action.icon;

@@ -1,3 +1,4 @@
+import { previewRefund } from '../../../packages/shared/src/returns';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     View, Text, ScrollView, TouchableOpacity, RefreshControl, Modal, Alert, ActivityIndicator,
@@ -342,8 +343,8 @@ export default function SalesHistoryScreen() {
     }, [returnTarget]);
 
     const returnTotal = useMemo(
-        () => modalItems.reduce((sum, it) => sum + (returnQty[it.drugId] ?? 0) * it.price, 0),
-        [modalItems, returnQty],
+        () => previewRefund(returnTarget, returnQty),
+        [returnTarget, returnQty],
     );
     const previouslyReturned = useMemo(
         () => (returnTarget?.returns ?? []).reduce((sum, r) => sum + (r.total ?? 0), 0),
@@ -391,14 +392,14 @@ export default function SalesHistoryScreen() {
         const saleId = returnTarget.id;
         const returnsBefore = returnTarget.returns?.length ?? 0;
         try {
-            const res = await request<{ duplicate?: boolean }>(`/sales/${saleId}/return`, {
+            const res = await request<{ duplicate?: boolean; message?: string }>(`/sales/${saleId}/return`, {
                 method: 'POST',
                 headers: { 'x-idempotency-key': returnKey },
                 body: JSON.stringify({ items, notes: returnNotes.trim() || undefined }),
             });
             finishReturn(saleId, res?.duplicate
                 ? 'هذا الإرجاع مسجّل مسبقاً، ولم يُكرَّر.'
-                : 'تمت معالجة المرتجع وإعادة الكميات إلى المخزون.');
+                : res?.message || 'تمت معالجة المرتجع.');
         } catch (err: any) {
             console.error('SalesHistoryScreen return:', err);
             if (isNetworkError(err)) {
@@ -658,7 +659,7 @@ export default function SalesHistoryScreen() {
                             </View>
 
                             <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                                <AppButton label="تأكيد الإرجاع" icon="return-down-back-outline" variant="danger" compact loading={submittingReturn} disabled={returnTotal <= 0} style={{ flex: 2 }} onPress={submitReturn} />
+                                <AppButton permission="canProcessReturn" label="تأكيد الإرجاع" icon="return-down-back-outline" variant="danger" compact loading={submittingReturn} disabled={!Object.values(returnQty).some(q => q > 0)} style={{ flex: 2 }} onPress={submitReturn} />
                                 <AppButton label="إلغاء" variant="outline" compact disabled={submittingReturn} style={{ flex: 1 }} onPress={() => setReturnTarget(null)} />
                             </View>
                         </View>

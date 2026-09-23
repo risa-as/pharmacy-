@@ -11,7 +11,7 @@ import type { GlobalDrug } from '@prisma/client';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { resolveCatalogDrug, EMPTY_BARCODE_MESSAGE, NEEDS_NAME_MESSAGE } from '@/app/lib/warehouse-catalog';
-import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
+import { requireWarehousePermission, hasWarehousePermission } from '@/app/lib/warehouse-permission-guard';
 import { validateCostPrice, validateMinStock } from '@/app/lib/warehouse-pricing';
 
 interface ImportRow {
@@ -30,14 +30,7 @@ interface ImportRow {
     minStock?: number;
 }
 
-// Phase 3 (الأدوار والصلاحيات): canImportCatalog فقط — علماً أن هذا المسار
-// (مثل POST/PATCH الفردي في catalog/route.ts) يكتب أسعاراً لأصناف قد تكون
-// موجودة فعلاً، فحساب يملك canImportCatalog بلا canEditPricing (مثل
-// INVENTORY حسب المصفوفة) يستطيع تقنياً استبدال أسعار كتالوج كاملة عبر ملف
-// استيراد. هذا تطبيق حرفي لتخصيص الصلاحية في المواصفة (canImportCatalog
-// وحدها تكفي لهذا المسار) لا سهواً — تُرِك دون تغيير عمداً؛ إن أُريد سدّه
-// لاحقاً فالحل هو اشتراط canEditPricing أيضاً حين يختلف السعر عن المخزَّن،
-// بنفس أسلوب catalog POST.
+// Import permission allows the workflow; edited fields retain their own permissions.
 export async function POST(req: NextRequest) {
     const ctx = await getWarehouseContext();
     if (ctx instanceof NextResponse) return ctx;
@@ -129,6 +122,12 @@ export async function POST(req: NextRequest) {
 
             const isAvailable = row.isAvailable === false ? false : true;
 
+            if (!existingDrug && (!hasWarehousePermission(gate.actor, 'canEditCatalog') || !hasWarehousePermission(gate.actor, 'canEditPricing'))) {
+                failed++;
+                errors.push({ row: i + 2, barcode, message: 'إنشاء صنف بسعر يتطلب صلاحية الكتالوج والتسعير.' });
+                continue;
+            }
+
             // كل التحقق نجح — الآن فقط يُنشأ صف الدواء تحت نطاق المذخر إن لزم.
             const drug =
                 existingDrug ??
@@ -153,23 +152,43 @@ export async function POST(req: NextRequest) {
                         barcode: drug.barcode,
                     },
                 },
-                select: { id: true },
+                select: { id: true, price: true, costPrice: true, isAvailable: true, minStock: true },
             });
 
             if (existing) {
-                const updateData: { price: number; isAvailable: boolean; drugId: string; costPrice?: number; minStock?: number } = {
-                    price,
-                    isAvailable,
-                    drugId: drug.id,
+                if ((price !== existing.price || (costPrice !== undefined && costPrice !== existing.costPrice)) &&
+                    !hasWarehousePermission(gate.actor, 'canEditPricing')) {
+                    failed += 1;
+                    errors.push({ row: i + 2, barcode, message: 'تغيير السعر أو التكلفة يتطلب صلاحية تغيير الأسعار.' });
+                    continue;
+                }
+                if ((isAvailable !== existing.isAvailable || (minStock !== undefined && minStock !== existing.minStock)) &&
+                    !hasWarehousePermission(gate.actor, 'canEditCatalog')) {
+                    failed += 1;
+                    errors.push({ row: i + 2, barcode, message: 'تغيير التوفر أو حد المخزون يتطلب صلاحية تعديل الكتالوج.' });
+                    continue;
+                }
+                // Never write fields the actor cannot edit, even if a concurrent
+                // edit occurs after the comparison above.
+                const updateData = {
+                    ...(hasWarehousePermission(gate.actor, 'canEditPricing') ? { price, ...(costPrice !== undefined ? { costPrice } : {}) } : {}),
+                    ...(hasWarehousePermission(gate.actor, 'canEditCatalog') ? { isAvailable, drugId: drug.id, ...(minStock !== undefined ? { minStock } : {}) } : {}),
                 };
-                if (costPrice !== undefined) updateData.costPrice = costPrice;
-                if (minStock !== undefined) updateData.minStock = minStock;
-                await prisma.warehouseCatalogItem.update({
-                    where: { id: existing.id },
-                    data: updateData,
+                await prisma.$transaction(async tx => {
+                    await tx.$queryRaw`SELECT id FROM "WarehouseCatalogItem" WHERE id = ${existing.id} FOR UPDATE`;
+                    const before = await tx.warehouseCatalogItem.findUniqueOrThrow({ where: { id: existing.id } });
+                    await tx.warehouseCatalogItem.update({ where: { id: existing.id }, data: updateData });
+                    await tx.auditLog.create({ data: { userId: ctx.user.id, userName: ctx.user.name ?? ctx.user.email ?? ctx.user.id,
+                        action: 'UPDATE', entity: 'WAREHOUSE_CATALOG', entityId: existing.id,
+                        details: JSON.stringify({ warehouseId: ctx.warehouseId, source: 'IMPORT', before: { price: before.price, costPrice: before.costPrice }, changes: updateData }) } });
                 });
                 updated += 1;
             } else {
+                if (!hasWarehousePermission(gate.actor, 'canEditCatalog') || !hasWarehousePermission(gate.actor, 'canEditPricing')) {
+                    failed += 1;
+                    errors.push({ row: i + 2, barcode, message: 'إضافة صنف تتطلب صلاحية تعديل الكتالوج.' });
+                    continue;
+                }
                 const createData: {
                     warehouseId: string;
                     drugId: string;

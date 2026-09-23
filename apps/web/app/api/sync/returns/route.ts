@@ -1,3 +1,5 @@
+import { calculateRefund } from '@faramace/shared';
+import { restoreSaleReturnStock } from '@/app/lib/sale-return-stock';
 export const dynamic = 'force-dynamic';
 
 import { Prisma } from '@prisma/client';
@@ -6,9 +8,11 @@ import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser } from '@/app/lib/sync-auth';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
 import { z } from "zod";
+import { getUserPermissions } from '@/app/lib/permissions';
 
 
 const SyncReturnSchema = z.object({
+    refundVersion: z.literal(2).optional(),
     id: z.string(),
     saleId: z.string(),
     safeId: z.string().nullable().optional(),
@@ -29,49 +33,6 @@ const SyncPayloadSchema = z.object({
 });
 
 class ReturnConflictError extends Error {}
-
-function validateSyncedReturn(
-    saleItems: { drugId: string; quantity: number; price: number }[],
-    priorReturns: { items: { drugId: string; quantity: number }[] }[],
-    requested: { drugId: string; quantity: number }[],
-) {
-    const returnable: Record<string, number> = {};
-    const prices: Record<string, number> = {};
-    for (const item of saleItems) {
-        returnable[item.drugId] = (returnable[item.drugId] ?? 0) + item.quantity;
-        prices[item.drugId] = item.price;
-    }
-    for (const prior of priorReturns) {
-        for (const item of prior.items) {
-            if (returnable[item.drugId] !== undefined) returnable[item.drugId] -= item.quantity;
-        }
-    }
-
-    const seen = new Set<string>();
-    const items: { drugId: string; quantity: number; price: number }[] = [];
-    let total = 0;
-    for (const item of requested) {
-        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-            throw new ReturnConflictError('كمية الإرجاع غير صالحة.');
-        }
-        if (seen.has(item.drugId)) throw new ReturnConflictError('الصنف مكرر في طلب الإرجاع.');
-        if (returnable[item.drugId] === undefined) {
-            throw new ReturnConflictError('أحد الأصناف ليس ضمن هذه الفاتورة.');
-        }
-        if (item.quantity > returnable[item.drugId]) {
-            throw new ReturnConflictError(
-                returnable[item.drugId] <= 0
-                    ? 'هذا الصنف أُرجع بالكامل مسبقاً.'
-                    : `لا يمكن إرجاع ${item.quantity}؛ المتاح للإرجاع ${returnable[item.drugId]} فقط.`,
-            );
-        }
-        seen.add(item.drugId);
-        const price = prices[item.drugId];
-        items.push({ drugId: item.drugId, quantity: item.quantity, price });
-        total += price * item.quantity;
-    }
-    return { items, total };
-}
 
 export async function POST(req: NextRequest) {
     try {
@@ -107,13 +68,14 @@ export async function POST(req: NextRequest) {
             try {
                 const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                     const existing = await tx.saleReturn.findUnique({ where: { id: ret.id } });
-                    if (existing) return { status: 'duplicate' as const }; // Already synced — idempotent
+                    if (existing) { if (existing.branchId !== branchId || existing.saleId !== ret.saleId) throw new ReturnConflictError('معرف المرتجع مستخدم لعملية أخرى.'); return { status: 'duplicate' as const }; } // Already synced — idempotent
 
                     // Serialize all returns for this invoice. The second device
                     // must re-read prior returns after waiting for the first one.
                     await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${ret.saleId} FOR UPDATE`;
                     const existingAfterLock = await tx.saleReturn.findUnique({ where: { id: ret.id } });
-                    if (existingAfterLock) return { status: 'duplicate' as const };
+                    if (existingAfterLock) { if (existingAfterLock.branchId !== branchId || existingAfterLock.saleId !== ret.saleId) throw new ReturnConflictError('معرف المرتجع مستخدم لعملية أخرى.'); return { status: 'duplicate' as const }; }
+                    if (ret.refundVersion !== 2) throw new ReturnConflictError('يتطلب هذا المرتجع تحديث تطبيق سطح المكتب لدعم الخصم ودفعات الإرجاع. إذا سبق دفعه فاحتفظ به للمراجعة ولا تكرر الدفع.');
                     const sale = await tx.sale.findUnique({
                         where: { id: ret.saleId },
                         include: { items: true, returns: { include: { items: true } }, payment: true },
@@ -121,8 +83,15 @@ export async function POST(req: NextRequest) {
                     if (!sale) throw new ReturnConflictError('الفاتورة غير موجودة على الخادم.');
                     if (sale.branchId !== branchId) throw new ReturnConflictError('الفاتورة لا تتبع هذا الفرع.');
 
-                    const validated = validateSyncedReturn(sale.items, sale.returns, ret.items);
+                    let validated;
+                    try { validated = calculateRefund(sale, ret.items); } catch (e) { throw new ReturnConflictError((e as Error).message); }
+                    const stockItems = await restoreSaleReturnStock(tx, branchId, sale.items, sale.returns, validated.items);
                     const returnSafeId = ret.safeId || sale.safeId;
+                    if (returnSafeId && !await tx.safe.findFirst({ where: { id: returnSafeId, branchId }, select: { id: true } }))
+                        throw new ReturnConflictError('الصندوق لا يتبع فرع المرتجع.');
+                    const actor = await tx.user.findFirst({ where: { id: ret.userId || syncUser.id, branchId, isActive: true }, select: { id: true, role: true, permissions: true } });
+                    if (!actor || !getUserPermissions(actor).canProcessReturn)
+                        throw new ReturnConflictError('منفذ المرتجع غير مخول في هذا الفرع؛ تتطلب العملية مراجعة المدير.');
 
                     await tx.saleReturn.create({
                         data: {
@@ -135,35 +104,10 @@ export async function POST(req: NextRequest) {
                             createdAt: new Date(ret.createdAt),
                             notes: ret.notes || null,
                             items: {
-                                create: validated.items.map((item) => ({
-                                    drugId: item.drugId,
-                                    quantity: item.quantity,
-                                    price: item.price
-                                }))
+                                create: stockItems
                             }
                         }
                     });
-
-                    // Restore inventory: add returned quantities back to the most recent batch
-                    for (const item of validated.items) {
-                        const inv = await tx.inventory.findFirst({
-                            where: { branchId, drugId: item.drugId },
-                            include: {
-                                batches: {
-                                    orderBy: { expiryDate: 'desc' },
-                                    take: 1,
-                                    where: { quantity: { gte: 0 } }
-                                }
-                            }
-                        });
-
-                        if (inv?.batches.length) {
-                            await tx.batch.update({
-                                where: { id: inv.batches[0].id },
-                                data: { quantity: { increment: item.quantity } }
-                            });
-                        }
-                    }
 
                     if (sale?.payment?.method === 'CREDIT' && sale.patientId) {
                         await tx.patient.updateMany({
@@ -222,7 +166,8 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: conflicts.length === 0, syncedIds: processedIds, conflicts });
+        const records = await prisma.saleReturn.findMany({ where: { id: { in: processedIds }, branchId }, include: { items: true } });
+        return NextResponse.json({ success: conflicts.length === 0, syncedIds: processedIds, conflicts, records });
 
     } catch (error) {
         console.error("Sync Returns Error:", error);

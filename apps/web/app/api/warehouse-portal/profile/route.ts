@@ -9,7 +9,7 @@ import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
 
-const EDITABLE_STRING_FIELDS = ['name', 'phone', 'address', 'city', 'contactPerson', 'email', 'notes'] as const;
+const EDITABLE_STRING_FIELDS = ['name', 'phone', 'salesPhone', 'followupPhone', 'managementPhone', 'address', 'city', 'contactPerson', 'email', 'notes'] as const;
 
 export async function PATCH(req: NextRequest) {
     const ctx = await getWarehouseContext();
@@ -31,6 +31,12 @@ export async function PATCH(req: NextRequest) {
             if (value !== null && typeof value !== 'string') {
                 return NextResponse.json({ error: `الحقل ${field} غير صالح` }, { status: 400 });
             }
+            if (typeof value === 'string' && value.length > (field === 'notes' ? 2000 : 200)) {
+                return NextResponse.json({ error: 'النص أطول من الحد المسموح.' }, { status: 400 });
+            }
+            if (['phone', 'salesPhone', 'followupPhone', 'managementPhone'].includes(field) && value?.trim() && !/^[+\d٠-٩۰-۹() .-]{5,30}$/.test(value.trim())) {
+                return NextResponse.json({ error: 'رقم الهاتف غير صالح؛ أدخل الرقم دون وصف.' }, { status: 400 });
+            }
             data[field] = value === null ? null : value.trim() || null;
         }
 
@@ -45,7 +51,7 @@ export async function PATCH(req: NextRequest) {
 
         const warehouse = await prisma.warehouse.update({ where: { id: ctx.warehouseId }, data });
 
-        return NextResponse.json({ warehouse });
+        return NextResponse.json({ warehouse: { id: warehouse.id, name: warehouse.name } });
     } catch (e: any) {
         console.error('warehouse-portal profile PATCH error:', e);
         return NextResponse.json({ error: 'فشل في تحديث بيانات المذخر' }, { status: 500 });

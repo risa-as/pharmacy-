@@ -10,7 +10,7 @@ const counts = { all: 51, 'low-stock': 0, out: 0, 'near-expiry': 0, expired: 0 }
 describe('paginated mobile inventory route', () => {
     beforeEach(() => {
         vi.resetAllMocks();
-        mocks.tenant.mockResolvedValue({ tenantBranchWhere: { branchId: 'own' } });
+        mocks.tenant.mockResolvedValue({ tenantBranchWhere: { branchId: 'own' }, userPermissions: { canViewInventory: true } });
     });
 
     it('returns authorization failures without querying inventory', async () => {

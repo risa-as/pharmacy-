@@ -1,3 +1,4 @@
+import { previewRefund } from '@faramace/shared';
 import { useState, useMemo, useRef, useEffect } from "react";
 import { X, Undo2, AlertCircle, Search, Hash, Pill } from "lucide-react";
 import { showAlert, showConfirm } from "../lib/dialog";
@@ -14,13 +15,14 @@ interface SaleReturnModalProps {
     isOpen: boolean;
     onClose: () => void;
     user: any;
+    initialSale?: any;
 }
 
-export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnModalProps) {
+export default function SaleReturnModal({ isOpen, onClose, user, initialSale }: SaleReturnModalProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [searchMode, setSearchMode] = useState<"invoice" | "drug">("invoice");
     const [searchQuery, setSearchQuery] = useState("");
-    const [sale, setSale] = useState<any>(null);
+    const [sale, setSale] = useState<any>(initialSale || null);
     const [drugSearchResults, setDrugSearchResults] = useState<any[] | null>(null);
     const [notes, setNotes] = useState("");
     const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
@@ -106,10 +108,7 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
         setReturnQuantities(prev => ({ ...prev, [drugId]: qty }));
     };
 
-    const totalReturnAmount = sale?.items?.reduce((acc: number, item: any) => {
-        const returnQty = returnQuantities[item.drugId] || 0;
-        return acc + (returnQty * item.price);
-    }, 0) || 0;
+    const totalReturnAmount = previewRefund(sale, returnQuantities);
 
     const hasItemsToReturn = Object.values(returnQuantities).some(qty => qty > 0);
 
@@ -178,7 +177,8 @@ export default function SaleReturnModal({ isOpen, onClose, user }: SaleReturnMod
                 void showAlert({
                     variant: "success",
                     title: res.duplicate ? "تم تسجيل هذا الإرجاع مسبقاً" : "تم الإرجاع بنجاح",
-                    autoCloseMs: 2000,
+                    message: res.message || "تم تحديث سجل المرتجعات.",
+                    autoCloseMs: res.message ? 10000 : 2000,
                 });
                 setReturnId(newReturnId());
                 setReturnQuantities({});

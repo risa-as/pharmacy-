@@ -286,8 +286,8 @@ export default function CatalogClient({
             toast.error(d.error ?? "فشل في الحذف");
             return;
         }
-        setItems((prev) => prev.filter((p) => p.id !== id));
-        toast.success("حُذف الصنف من الكتالوج");
+        setItems((prev) => prev.map((p) => p.id === id ? { ...p, isAvailable: false } : p));
+        toast.success("أُوقف عرض الصنف مع الاحتفاظ بالمخزون والسجل");
     };
 
     const downloadTemplate = async () => {
@@ -653,7 +653,7 @@ export default function CatalogClient({
                                         <PriceCell value={it.price} onCommit={(v) => updateFinanceItem(it.id, { price: v })} />
                                         {/* المرحلة ب: الرصيد القابل للبيع فعلياً (يستثني المنتهي) — بجانب السعر مباشرة. */}
                                         <div className="mt-0.5 text-xs text-muted-foreground">
-                                            القابل للبيع: {it.sellableQuantity.toLocaleString("ar-IQ")}
+                                            القابل للبيع: {it.sellableQuantity.toLocaleString("ar-IQ-u-nu-latn")}
                                         </div>
                                         {canEditPricing && (
                                             <button
@@ -699,7 +699,7 @@ export default function CatalogClient({
                                                               : "text-success"
                                                     }`}
                                                 >
-                                                    {it.marginPercent.toLocaleString("ar-IQ")}%
+                                                    {it.marginPercent.toLocaleString("ar-IQ-u-nu-latn")}%
                                                 </span>
                                             )}
                                         </td>
@@ -755,9 +755,10 @@ export default function CatalogClient({
                                     <td className="px-4 py-3 text-left">
                                         <button
                                             onClick={() => deleteItem(it.id)}
+                                            disabled={!it.isAvailable}
                                             className="text-xs text-destructive hover:underline"
                                         >
-                                            حذف
+                                            إيقاف العرض
                                         </button>
                                     </td>
                                 </tr>
@@ -878,7 +879,7 @@ function TierPricesModal({ item, onClose }: { item: CatalogItem; onClose: () => 
                     </button>
                 </div>
                 <p className="mb-3 text-xs text-muted-foreground">
-                    سعر القائمة الحالي: {item.price.toLocaleString("ar-IQ")} د.ع — يُطبَّق تلقائياً لأي صيدلية بلا شريحة أو بشريحة بلا سعر هنا.
+                    سعر القائمة الحالي: {item.price.toLocaleString("ar-IQ-u-nu-latn")} د.ع — يُطبَّق تلقائياً لأي صيدلية بلا شريحة أو بشريحة بلا سعر هنا.
                 </p>
 
                 {rows === null && <LoadingBlock />}
@@ -890,7 +891,7 @@ function TierPricesModal({ item, onClose }: { item: CatalogItem; onClose: () => 
                         {rows.map((r) => (
                             <li key={r.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
                                 <span className="font-medium">{r.tier}</span>
-                                <span>{r.price.toLocaleString("ar-IQ")} د.ع</span>
+                                <span>{r.price.toLocaleString("ar-IQ-u-nu-latn")} د.ع</span>
                                 <button onClick={() => remove(r.id)} className="text-xs text-destructive hover:underline">
                                     حذف
                                 </button>
@@ -959,7 +960,7 @@ function BulkPriceModal({
             <div className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-lg">
                 <h3 className="mb-1 font-bold">تعديل سعر جماعي</h3>
                 <p className="mb-3 text-xs text-muted-foreground">
-                    سيُطبَّق على {scopeCount.toLocaleString("ar-IQ")} صنف. أي صنف ينتج عنه سعر صفري أو سالب يوقف العملية كاملة.
+                    سيُطبَّق على {scopeCount.toLocaleString("ar-IQ-u-nu-latn")} صنف. أي صنف ينتج عنه سعر صفري أو سالب يوقف العملية كاملة.
                 </p>
                 <div className="space-y-3">
                     <div className="flex gap-2">
@@ -1015,7 +1016,7 @@ function PriceCell({ value, onCommit }: { value: number; onCommit: (v: number) =
                 className="font-medium hover:underline"
                 title="انقر لتعديل السعر"
             >
-                {value.toLocaleString("ar-IQ")}
+                {value.toLocaleString("ar-IQ-u-nu-latn")}
             </button>
         );
     }
@@ -1066,7 +1067,7 @@ function BonusRuleCell({
     if (!editable) {
         return hasRule ? (
             <span className="text-sm">
-                اشترِ {threshold.toLocaleString("ar-IQ")} خذ {quantity.toLocaleString("ar-IQ")} مجاناً
+                اشترِ {threshold.toLocaleString("ar-IQ-u-nu-latn")} خذ {quantity.toLocaleString("ar-IQ-u-nu-latn")} مجاناً
             </span>
         ) : (
             <span className="text-xs text-muted-foreground">—</span>
@@ -1085,7 +1086,7 @@ function BonusRuleCell({
                 title="انقر لتعديل قاعدة البونص"
             >
                 {hasRule
-                    ? `اشترِ ${threshold.toLocaleString("ar-IQ")} خذ ${quantity.toLocaleString("ar-IQ")} مجاناً`
+                    ? `اشترِ ${threshold.toLocaleString("ar-IQ-u-nu-latn")} خذ ${quantity.toLocaleString("ar-IQ-u-nu-latn")} مجاناً`
                     : "بلا قاعدة — انقر للإضافة"}
             </button>
         );
@@ -1140,7 +1141,7 @@ function BonusRuleCell({
  * إرسال طلب سيُرفَض أصلاً بلا داعٍ.
  *
  * emptyLabel: لكلفة الشراء تحديداً — 0/سالب تعني "لم تُدخَل بعد" (نفس تعريف
- * catalogMarginPercent)، فعرضها كرقم "٠" خام يوهم بأن الكلفة الفعلية صفر
+ * catalogMarginPercent)، فعرضها كرقم "0" خام يوهم بأن الكلفة الفعلية صفر
  * دينار، وهو بالضبط الرقم المضلِّل الذي تحظره هذه الميزة أصلاً في عمود
  * الهامش المجاور. حين يُمرَّر emptyLabel وvalue <= 0 يُعرَض النص بدل الرقم
  * (لا يزال قابلاً للنقر والتعديل، والمسودة تبدأ فارغة لا "0").
@@ -1170,7 +1171,7 @@ function NumberCell({
                 className={isEmpty ? "text-xs text-muted-foreground hover:underline" : "hover:underline"}
                 title="انقر للتعديل"
             >
-                {isEmpty ? emptyLabel : value.toLocaleString("ar-IQ")}
+                {isEmpty ? emptyLabel : value.toLocaleString("ar-IQ-u-nu-latn")}
             </button>
         );
     }

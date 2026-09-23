@@ -13,7 +13,7 @@
 //   فحص يدوي لمصدرها يبقى صحيحاً إلى الأبد.
 // - عزل ورقة الطباعة عن صدفة التطبيق: القسم الأيسر (بحث/اختيار) بأكمله
 //   print:hidden؛ ورقة الملصقات ذاتها تُبنى بشبكة CSS مُقاسة لورقة A4 شائعة
-//   (ملصق ثابت ٥٨×٣٢مم، أعمدة auto-fill — انظر تعليق الشبكة أدناه للحساب
+//   (ملصق ثابت 58×32مم، أعمدة auto-fill — انظر تعليق الشبكة أدناه للحساب
 //   والسبب) مع break-inside-avoid لكل ملصق كي لا يُقطَع نصفين بين صفحتين.
 //   تصريف قصّ الصدفة (الشريط الجانبي الثابت وoverflow-hidden على الحاوية)
 //   الحتمي موجود في app/globals.css (@media print) لا هنا — انظر تعليقه
@@ -141,7 +141,7 @@ export default function LabelsClient({ initialItems }: { initialItems: CatalogIt
                                     <div>
                                         <div className="font-medium text-foreground">{item.tradeName}</div>
                                         <div className="font-mono text-xs text-muted-foreground">
-                                            {item.barcode || "بلا باركود"} · {item.price.toLocaleString("ar-IQ")} د.ع
+                                            {item.barcode || "بلا باركود"} · {item.price.toLocaleString("ar-IQ-u-nu-latn")} د.ع
                                         </div>
                                     </div>
                                     <Plus className="h-4 w-4 shrink-0 text-primary" />
@@ -155,7 +155,7 @@ export default function LabelsClient({ initialItems }: { initialItems: CatalogIt
                     <div className="rounded-lg border bg-card p-4 shadow-sm">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                             <h2 className="font-semibold text-foreground">
-                                الأصناف المحددة ({selected.length} صنف · {totalLabels.toLocaleString("ar-IQ")} ملصق)
+                                الأصناف المحددة ({selected.length} صنف · {totalLabels.toLocaleString("ar-IQ-u-nu-latn")} ملصق)
                             </h2>
                             <label className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <input
@@ -177,7 +177,7 @@ export default function LabelsClient({ initialItems }: { initialItems: CatalogIt
                                     <div className="min-w-0">
                                         <div className="truncate font-medium text-foreground">{s.item.tradeName}</div>
                                         <div className="font-mono text-xs text-muted-foreground">
-                                            {s.item.barcode || "بلا باركود"} · {s.item.price.toLocaleString("ar-IQ")} د.ع
+                                            {s.item.barcode || "بلا باركود"} · {s.item.price.toLocaleString("ar-IQ-u-nu-latn")} د.ع
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -239,8 +239,8 @@ export default function LabelsClient({ initialItems }: { initialItems: CatalogIt
                         هامش "عادي" في متصفحات/طابعات أخرى قد يبلغ 25.4مم لكل جهة
                         ≈ 159مم صافي فقط) — بلا @page مفروضة هنا عمداً (كانت
                         ستُغيّر سلوك طباعة كل صفحات التطبيق الأخرى، لا هذه الصفحة
-                        وحدها). ٣ أعمدة × ٥٨مم + فجوتان (gap-2 = 8px ≈ 2.1مم) ≈
-                        ١٧٨مم تصلح ضمن الهامش الافتراضي الشائع؛ auto-fill يضمن
+                        وحدها). 3 أعمدة × 58مم + فجوتان (gap-2 = 8px ≈ 2.1مم) ≈
+                        178مم تصلح ضمن الهامش الافتراضي الشائع؛ auto-fill يضمن
                         أنه إن ضاق الهامش الفعلي عن ذلك فالشبكة تعرض عمودين بدل
                         قصّ عمود ثالث خارج حافة الورقة بصمت. */}
                     <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, 58mm)" }}>
@@ -289,7 +289,7 @@ function Label({
                 {barcode || "بلا باركود"}
             </p>
             <p className="text-[12px] font-bold text-foreground print:text-black">
-                {price.toLocaleString("ar-IQ")} د.ع
+                {price.toLocaleString("ar-IQ-u-nu-latn")} د.ع
             </p>
         </div>
     );

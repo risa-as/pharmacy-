@@ -1,9 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import { routePermission } from '../../utils/route-access';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { router, useFocusEffect, Href } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon as Ionicons } from '../../components/ui/AppIcon';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
-import { backgroundRequest } from '../../services/api';
+import { apiService, backgroundRequest } from '../../services/api';
 import { Radius } from '../../constants/colors';
 import { usePalette, Surface, SectionTitle, ListRow, Tone } from '../../components/ui/Kit';
 import { initials } from '../../utils/format';
@@ -22,6 +24,10 @@ interface MoreItem {
 
 interface MoreSection { title: string; items: MoreItem[] }
 
+const MULTI_BRANCH_KEY_PREFIX = 'more:hasOtherBranches:';
+/** Session cache of the multi-branch check, keyed like the AsyncStorage entry. */
+const multiBranchMemo = new Map<string, boolean>();
+
 /**
  * «المزيد» (navigation-map §3–4): every function that is not a bottom tab has
  * a reachable, role-appropriate entry here. Access is still enforced by the
@@ -29,8 +35,52 @@ interface MoreSection { title: string; items: MoreItem[] }
  */
 export default function MoreScreen() {
     const C = usePalette();
-    const { user, shell } = useAuth();
+    const { user, shell, can, features, isAdmin, branchId } = useAuth();
     const [unread, setUnread] = useState(0);
+    const transfersEnabled = features.interBranchTransfers && can('canTransferStock');
+    const multiBranchKey = `${MULTI_BRANCH_KEY_PREFIX}${branchId ?? (isAdmin ? 'org' : 'none')}`;
+    // null = unknown → entry stays hidden, so it never appears and then vanishes.
+    const [hasOtherBranches, setHasOtherBranches] = useState<boolean | null>(
+        () => multiBranchMemo.get(multiBranchKey) ?? null,
+    );
+
+    // Transfers are meaningless with a single branch, so hide the entry. Non-admin
+    // users only see their own branch from /branches, so ask the transfer
+    // destinations endpoint (other branches in the org) instead. The answer is
+    // cached (memory + AsyncStorage) so later opens render the final state at once.
+    useEffect(() => {
+        if (!transfersEnabled) return;
+        let active = true;
+        const apply = (value: boolean) => {
+            multiBranchMemo.set(multiBranchKey, value);
+            if (active) setHasOtherBranches(value);
+        };
+        let known = multiBranchMemo.has(multiBranchKey);
+        if (known) setHasOtherBranches(multiBranchMemo.get(multiBranchKey)!);
+        else {
+            AsyncStorage.getItem(multiBranchKey)
+                .then(saved => { if (saved !== null && !multiBranchMemo.has(multiBranchKey)) { known = true; apply(saved === '1'); } })
+                .catch(() => {});
+        }
+        const check: Promise<number | null> = branchId
+            ? backgroundRequest<{ branches: unknown[] }>(`/inventory/transfers?branchId=${encodeURIComponent(branchId)}&type=destinations`)
+                .then(res => Array.isArray(res?.branches) ? res.branches.length + 1 : null)
+            : isAdmin
+                ? apiService.getBranches().then(list => Array.isArray(list) && list.length ? list.length : null)
+                : Promise.resolve(null);
+        check
+            .catch(() => null)
+            .then(count => {
+                if (count !== null) {
+                    apply(count > 1);
+                    AsyncStorage.setItem(multiBranchKey, count > 1 ? '1' : '0').catch(() => {});
+                } else if (!known && !multiBranchMemo.has(multiBranchKey)) {
+                    // Offline with no cached answer: fall back to showing the entry.
+                    if (active) setHasOtherBranches(true);
+                }
+            });
+        return () => { active = false; };
+    }, [transfersEnabled, multiBranchKey, branchId, isAdmin]);
 
     useFocusEffect(
         useCallback(() => {
@@ -54,12 +104,12 @@ export default function MoreScreen() {
                 title: 'المبيعات والعملاء',
                 items: [
                     { title: 'سجل المبيعات', subtitle: 'الفواتير والتفاصيل والإرجاع', icon: 'receipt-outline', tone: 'primary', href: '/sales-history' as Href },
-                    { title: 'الديون', subtitle: 'أرصدة المدينين وتحصيل الدفعات', icon: 'wallet-outline', tone: 'danger', href: '/(tabs)/debts' as Href },
+                    { title: 'الديون', subtitle: 'أرصدة المدينين وتحصيل الدفعات', icon: 'hand-coins', tone: 'danger', href: '/(tabs)/debts' as Href },
                     { title: 'المرضى', subtitle: 'الملفات والمعلومات الصحية المسجلة', icon: 'people-outline', tone: 'primary', href: '/crm' as Href },
                 ],
             },
             {
-                title: 'التوريد',
+                title: 'المشتريات والمخزون',
                 items: [
                     { title: 'المشتريات', subtitle: 'طلبات الشراء والاستلام', icon: 'bag-handle-outline', tone: 'primary', href: '/(tabs)/purchases' as Href },
                     { title: 'الطلبات الذكية', subtitle: 'النواقص المتوقعة وإنشاء الطلبات', icon: 'list-outline', tone: 'success', href: '/(tabs)/smart-orders' as Href },
@@ -94,6 +144,21 @@ export default function MoreScreen() {
             { title: 'التطبيق', items: [settingsItem] },
         ];
 
+    const operational = [
+        ...(features.warehouseManagement && can('canViewWarehouseOrders') ? [{title:'طلبات المذاخر',subtitle:'العروض والشحن والاستلام والمرتجعات',icon:'business-outline',tone:'primary',href:'/warehouse-orders'}] : []),
+        ...(can('canDoStocktake') ? [{title:'الجرد',subtitle:'عد الدفعات ومراجعة الفروقات',icon:'clipboard-outline',tone:'primary',href:'/stocktakes'}] : []),
+        ...(transfersEnabled && hasOtherBranches === true ? [{title:'التحويلات',subtitle:'إرسال واستلام المخزون بين الفروع',icon:'swap-horizontal-outline',tone:'primary',href:'/transfers'}] : []),
+        ...(shell === 'pharmacist' && can('canViewSuppliers') ? [{title:'المشتريات',subtitle:'طلبات الموردين والاستلام',icon:'bag-handle-outline',tone:'primary',href:'/(tabs)/purchases'}] : []),
+        ...(shell === 'pharmacist' && can('canViewInventory') && can('canCreatePurchase') ? [{title:'الشراء الذكي',subtitle:'تحديد احتياج المخزون',icon:'list-outline',tone:'primary',href:'/(tabs)/smart-orders'}] : []),
+    ] as MoreItem[];
+    const inventorySection = sections.find(section => section.title === 'المشتريات والمخزون');
+    if (inventorySection) {
+        const existingRoutes = new Set(inventorySection.items.map(item => String(item.href)));
+        inventorySection.items.push(...operational.filter(item => !existingRoutes.has(String(item.href))));
+    } else if (operational.length) {
+        sections.unshift({title:'المشتريات والمخزون',items:operational});
+    }
+    const visibleSections = sections.map(section => ({...section,items:section.items.filter(item => {const p=routePermission(String(item.href));return !p || can(p);})})).filter(s=>s.items.length);
     return (
         <ScrollView style={{ flex: 1, backgroundColor: C.background }} contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 20 }}>
             <Surface style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 14 }}>
@@ -108,7 +173,7 @@ export default function MoreScreen() {
                 </View>
             </Surface>
 
-            {sections.map(section => (
+            {visibleSections.map(section => (
                 <View key={section.title}>
                     <SectionTitle title={section.title} />
                     <Surface padded={false} style={{ overflow: 'hidden' }}>

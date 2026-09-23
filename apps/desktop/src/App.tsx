@@ -1,4 +1,9 @@
+import StaffSalesPage from "./components/StaffSalesPage";
+import StaffSupplyPage from "./components/StaffSupplyPage";
+import StaffAlertsPage from "./components/StaffAlertsPage";
+import StaffSyncStatus from "./components/StaffSyncStatus";
 import { useState, useMemo, useEffect } from 'react';
+import CloudOperationsPage from './components/CloudOperationsPage';
 import DashboardPage from './components/DashboardPage';
 import POSLayout from './components/POSLayout';
 import DebtsPage from './components/DebtsPage';
@@ -8,19 +13,25 @@ import LoginScreen from './components/LoginScreen';
 import LicenseScreen, { SubscriptionLockReason } from './components/LicenseScreen';
 import UpdateBanner from './components/UpdateBanner';
 
-import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, BookOpen, Moon, Sun, Loader2 } from 'lucide-react';
+import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, HandCoins, ClipboardList, PackageCheck, ReceiptText, ArrowLeftRight, Bell, Moon, Sun, Loader2 } from 'lucide-react';
 import logoUrl from './assets/logo.png';
 
 
 
 
-type Page = 'dashboard' | 'pos' | 'settings' | 'inventory' | 'debts';
+type Page = 'dashboard' | 'pos' | 'settings' | 'inventory' | 'debts' | 'receipts' | 'stocktake' | 'sales' | 'transfers' | 'orders' | 'alerts';
 
 const allNavItems: { id: Page; icon: any; label: string; roles: string[] }[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'لوحة المعلومات', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
     { id: 'pos', icon: ShoppingCart, label: 'نقطة البيع', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
-    { id: 'debts', icon: BookOpen, label: 'الديون', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
-    { id: 'inventory', icon: Package, label: 'المخزن', roles: ['ADMIN', 'PHARMACIST'] },
+    { id: 'debts', icon: HandCoins, label: 'الديون', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
+    { id: 'inventory', icon: Package, label: 'المخزن', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
+    { id: 'receipts', icon: PackageCheck, label: 'استلام المذاخر', roles: ['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER'] },
+    { id: 'stocktake', icon: ClipboardList, label: 'جرد المخزون', roles: ['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER'] },
+    { id: 'sales', icon: ReceiptText, label: 'سجل المبيعات', roles: ['ADMIN','PHARMACIST','CASHIER'] },
+    { id: 'transfers', icon: ArrowLeftRight, label: 'تحويلات الفروع', roles: ['ADMIN','PHARMACIST','CASHIER'] },
+    { id: 'orders', icon: PackageCheck, label: 'متابعة المذاخر', roles: ['ADMIN','PHARMACIST','CASHIER'] },
+    { id: 'alerts', icon: Bell, label: 'تنبيهات العمل', roles: ['ADMIN','PHARMACIST','CASHIER'] },
     { id: 'settings', icon: Settings, label: 'الإعدادات', roles: ['ADMIN'] },
 ];
 
@@ -56,6 +67,14 @@ type LicenseStatus = 'checking' | 'valid' | 'invalid' | 'no-key';
 
 function App() {
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [operationsAccess, setOperationsAccess] = useState<any>(null);
+    useEffect(() => {
+        let active=true; setOperationsAccess(null);
+        if(currentUser) window.ipcRenderer.invoke('operations:access').then((result:any)=>{if(active && result?.success)setOperationsAccess(result);}).catch(()=>{});
+        return ()=>{active=false;};
+    },[currentUser?.id]);
+    const [alertTarget, setAlertTarget] = useState<{page:string,id:string}|null>(null);
+    const [settingsTab,setSettingsTab] = useState<"backups"|"failures">("backups");
     const [sessionLoading, setSessionLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState<Page>('dashboard');
     const [isDark, setIsDark] = useState(false);
@@ -191,8 +210,19 @@ function App() {
 
     // Filter nav items based on user role
     const navItems = useMemo(() => {
-        return allNavItems.filter(item => item.roles.includes(userRole));
-    }, [userRole]);
+        return allNavItems.filter(item => {
+            if(!item.roles.includes(userRole === 'MANAGER' ? 'ADMIN' : userRole)) return false;
+            if(item.id === 'transfers') return !!(operationsAccess?.branchCount > 1 && operationsAccess?.permissions?.canTransferStock && operationsAccess?.features?.interBranchTransfers);
+            if(operationsAccess) {
+                const permission: Record<string,string> = {sales:'canViewSales',inventory:'canViewInventory',debts:'canViewDebts',pos:'canSell'};
+                if(permission[item.id] && !operationsAccess.permissions[permission[item.id]]) return false;
+                if(item.id === 'orders') return operationsAccess.permissions.canViewWarehouseOrders && operationsAccess.features.warehouseManagement;
+            }
+            if(item.id === 'stocktake'  && operationsAccess) return operationsAccess.permissions.canDoStocktake;
+            if(item.id === 'receipts' && operationsAccess) return operationsAccess.permissions.canViewSuppliers && operationsAccess.features.warehouseManagement;
+            return true;
+        });
+    }, [userRole, operationsAccess]);
 
     // Auto-redirect to allowed page if current page is not accessible
     useEffect(() => {
@@ -270,24 +300,22 @@ function App() {
                 <div className="w-8 h-px bg-zinc-800 mb-1" />
 
                 {/* Nav Items — filtered by role */}
+                <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1">
                 {navItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = currentPage === item.id;
                     return (
                         <button
                             key={item.id}
-                            onClick={() => setCurrentPage(item.id)}
-                            className={`relative group p-2.5 rounded-xl transition-all duration-200 ${isActive
+                            title={item.label}
+                            aria-label={item.label}
+                            onClick={() => {setAlertTarget(null);setCurrentPage(item.id);}}
+                            className={`relative group shrink-0 p-2 rounded-lg transition-all duration-200 ${isActive
                                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30'
                                 : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
                                 }`}
                         >
                             <Icon className="w-5 h-5" />
-                            {/* Tooltip */}
-                            <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-zinc-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap shadow-lg scale-90 group-hover:scale-100">
-                                {item.label}
-                                <div className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-zinc-800" />
-                            </div>
                             {/* Active Indicator */}
                             {isActive && (
                                 <div className="absolute -left-[2px] top-1/2 -translate-y-1/2 w-1 h-5 bg-blue-400 rounded-r-full" />
@@ -296,9 +324,9 @@ function App() {
                     );
                 })}
 
-                {/* Spacer */}
-                <div className="flex-1" />
+                </div>
 
+                <StaffSyncStatus key={currentUser.id} onDetails={navItems.some(item=>item.id==='settings')?()=>{setSettingsTab("failures");setCurrentPage("settings");window.dispatchEvent(new Event("open-sync-settings"));}:undefined}/>
                 {/* Theme Toggle */}
                 <button
                     onClick={toggleTheme}
@@ -333,12 +361,20 @@ function App() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-hidden relative">
-                {currentPage === 'dashboard' && <DashboardPage user={currentUser} />}
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden relative">
+                <div className="flex-1 min-h-0 overflow-auto">
+                {currentPage === 'dashboard'  && <DashboardPage user={currentUser} />}
                 {currentPage === 'pos' && <POSLayout user={currentUser} />}
                 {currentPage === 'debts' && <DebtsPage />}
-                {currentPage === 'inventory' && <InventoryPage user={currentUser} />}
-                {currentPage === 'settings' && <SettingsPage />}
+                {currentPage === 'inventory' && <InventoryPage key={currentUser.id+String(alertTarget?.id)} user={currentUser} initialSearch={alertTarget?.page==='inventory'?alertTarget.id:undefined} />}
+                {currentPage === 'receipts' && <CloudOperationsPage key={currentUser.id+'-receipts'} mode="receipts" initialId={alertTarget?.page==='receipts'?alertTarget.id:undefined} />}
+                {currentPage === 'stocktake' && <CloudOperationsPage key={currentUser.id+'-stocktake'} mode="stocktake" initialId={alertTarget?.page==='stocktake'?alertTarget.id:undefined} />}
+                {currentPage === 'sales' && <StaffSalesPage key={currentUser.id} user={currentUser} />}
+                {currentPage === 'transfers' && <StaffSupplyPage key={currentUser.id+'-transfers'} mode="transfers" initialId={alertTarget?.page==='transfers'?alertTarget.id:undefined} onReceive={()=>setCurrentPage('receipts')} />}
+                {currentPage === 'orders' && <StaffSupplyPage key={currentUser.id+'-orders'} mode="orders" onReceive={()=>setCurrentPage('receipts')} />}
+                {currentPage === 'alerts' && <StaffAlertsPage key={currentUser.id} navigate={(page,id)=>{setAlertTarget(id?{page,id}:null);setCurrentPage(page);}} />}
+                {currentPage === 'settings'  && <SettingsPage key={settingsTab} initialTab={settingsTab} />}
+                </div>
             </div>
         </div>
     );

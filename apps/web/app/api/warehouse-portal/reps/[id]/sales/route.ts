@@ -1,9 +1,10 @@
+import { nextDocumentReference } from "@/app/lib/document-reference";
 export const dynamic = 'force-dynamic';
 
 // المندوبون (مذاخر B2B): تسجيل فاتورة بيع ميدانية من بضاعة سيارة مندوب.
 // الفرق الجوهري عن WarehouseOrder/WarehouseInvoice: لا طلب سابق ولا تفاوض —
-// بيع فوري، وcustomerName نصي حر إلزامي دائماً (المندوب يكتب اسم الصيدلية كما
-// يعرفها)؛ organizationId اختياري فقط حين تكون تلك الصيدلية فعلاً على منصّتنا.
+// بيع فوري مرتبط الآن بحساب مؤسسة إلزامي؛ الاسم النهائي من الحساب نفسه.
+// أوقف البيع باسم حر لمنع تجاوز حظر العميل وحده الائتماني.
 //
 // أصل البضاعة: بنود الفاتورة تُخصَم من WarehouseRepStock (بضاعة سيارة هذا
 // المندوب تحديداً) حصراً — لا من WarehouseBatch الرئيسي مباشرة (ذلك يحدث فقط
@@ -27,6 +28,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
+import { warehouseCommand, warehouseReplay, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { customerOutstanding } from '@/app/lib/warehouse-receivables';
+import { checkCreditLimit } from '@/app/lib/warehouse-accounts';
 import { allocateFEFO, expiryBucket, type BatchLike } from '@/app/lib/warehouse-stock';
 import { totalUnitsLeavingStock } from '@/app/lib/warehouse-bonus';
 import { computeFieldSaleProfit, repStockAvailable } from '@/app/lib/warehouse-reps';
@@ -75,11 +79,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         }
 
         const body = await req.json().catch(() => null);
+        const command = warehouseCommand(ctx.warehouseId, `rep-sale:${params.id}`, body);
+        const replay = await warehouseReplay(prisma, command);
+        if (replay) return NextResponse.json({ fieldSale: replay });
         if (!body || typeof body !== 'object' || Array.isArray(body)) {
             return NextResponse.json({ error: 'طلب غير صالح' }, { status: 400 });
         }
 
-        const customerName = typeof body.customerName === 'string' ? body.customerName.trim() : '';
+        let customerName = typeof body.customerName === 'string' ? body.customerName.trim() : '';
         if (!customerName) {
             return NextResponse.json({ error: 'اسم الصيدلية (العميل) مطلوب' }, { status: 400 });
         }
@@ -95,16 +102,22 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             soldAt = d;
         }
 
+        // Every credit sale requires a canonical customer. Free-text names cannot
+        // bypass a blocked account or create unbounded unassigned debt.
+        if (typeof body.organizationId !== 'string' || !body.organizationId.trim()) {
+            return NextResponse.json({ error: 'اختر عميلاً مسجلاً؛ البيع باسم حر دون ربط حساب العميل غير مسموح.' }, { status: 400 });
+        }
         let organizationId: string | null = null;
         if (body.organizationId !== undefined && body.organizationId !== null && body.organizationId !== '') {
             if (typeof body.organizationId !== 'string') {
                 return NextResponse.json({ error: 'organizationId غير صالح' }, { status: 400 });
             }
-            const org = await prisma.organization.findUnique({ where: { id: body.organizationId }, select: { id: true } });
+            const org = await prisma.organization.findUnique({ where: { id: body.organizationId }, select: { id: true, name: true } });
             if (!org) {
                 return NextResponse.json({ error: 'الصيدلية (المنظمة) المحدَّدة غير موجودة.' }, { status: 404 });
             }
             organizationId = org.id;
+            customerName = org.name;
         }
 
         const rawLines: RawLine[] = Array.isArray(body.lines) ? body.lines : [];
@@ -288,7 +301,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             decrementByBatch.set(item.batchId, (decrementByBatch.get(item.batchId) ?? 0) + leaving);
         }
 
-        const created = await prisma.$transaction(async (tx) => {
+        const created = await prisma.$transaction(async (tx) => runWarehouseOperation(tx, command, async () => {
+            if (organizationId) {
+                const customer = await tx.warehouseCustomer.upsert({
+                    where: { warehouseId_organizationId: { warehouseId: ctx.warehouseId, organizationId } },
+                    create: { warehouseId: ctx.warehouseId, organizationId }, update: {},
+                });
+                await tx.$queryRaw`SELECT id FROM "WarehouseCustomer" WHERE id = ${customer.id} FOR UPDATE`;
+                const terms = await tx.warehouseCustomer.findUniqueOrThrow({ where: { id: customer.id } });
+                if (terms.isBlocked) throw new WarehouseOperationError('العميل موقوف عن التعامل.', 403);
+                const outstanding = await customerOutstanding(tx, ctx.warehouseId, organizationId, terms.openingBalance);
+                const credit = checkCreditLimit({ creditLimit: terms.creditLimit, outstanding, newOrderTotal: total });
+                if (!credit.ok) throw new WarehouseOperationError(credit.error);
+            }
             for (const [batchId, decrement] of Array.from(decrementByBatch)) {
                 // الحارس: نفس نمط compare-and-swap في deductStockForShipment —
                 // decrement مشروط بـ quantity >= المطلوب في شرط WHERE، فبيعان
@@ -304,18 +329,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 }
             }
 
-            let invoiceNumber: string | null = null;
-            for (let attempt = 0; attempt < 5; attempt++) {
-                const candidate = `FS-${Date.now().toString(36).toUpperCase()}${attempt ? `-${attempt}` : ''}`;
-                const exists = await tx.warehouseFieldSale.findUnique({ where: { invoiceNumber: candidate } });
-                if (!exists) {
-                    invoiceNumber = candidate;
-                    break;
-                }
-            }
-            if (invoiceNumber === null) {
-                throw new InvoiceNumberGenerationError('تعذّر توليد رقم فاتورة فريد — أعد المحاولة.');
-            }
+            const invoiceNumber = await nextDocumentReference(tx, "FSL");
 
             const sale = await tx.warehouseFieldSale.create({
                 data: {
@@ -344,10 +358,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             });
 
             return sale;
-        });
+        }), { maxWait: 20000, timeout: 20000 });
 
         return NextResponse.json({ fieldSale: created }, { status: 201 });
     } catch (e: any) {
+        if (e instanceof WarehouseOperationError) return NextResponse.json({ error: e.message }, { status: e.status });
         if (e instanceof ConcurrentRepStockError) {
             return NextResponse.json({ error: e.message }, { status: 409 });
         }

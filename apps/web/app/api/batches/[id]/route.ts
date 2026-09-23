@@ -36,8 +36,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             updateData.batchNumber = String(body.batchNumber).trim();
         }
         if (body.costPrice !== undefined) {
-            const cost = parseFloat(body.costPrice);
-            if (isNaN(cost) || cost < 0) {
+            const cost = Number(body.costPrice);
+            if (!Number.isFinite(cost) || cost < 0 || cost > 1000000000 || (cost === 0 && batch.costPrice !== 0)) {
                 return NextResponse.json({ error: 'سعر الشراء غير صالح' }, { status: 400 });
             }
             updateData.costPrice = cost;

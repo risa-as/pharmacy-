@@ -37,20 +37,21 @@ export async function GET(req: Request) {
 
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewReports) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
         const { tenantBranchWhere } = tenantCtx;
 
         const baseWhere: any = { createdAt: { gte: startDate }, ...tenantBranchWhere };
-        if (branchId) baseWhere.branchId = branchId;
+        if (branchId) baseWhere.AND = [tenantBranchWhere, { branchId }];
 
         const expenseWhere: any = { date: { gte: startDate }, ...tenantBranchWhere };
-        if (branchId) expenseWhere.branchId = branchId;
+        if (branchId) expenseWhere.AND = [tenantBranchWhere, { branchId }];
 
         const [totalSales, salesCount, totalExpenses, saleSeries] = await Promise.all([
             prisma.sale.aggregate({ _sum: { total: true }, where: baseWhere }),
             prisma.sale.count({ where: baseWhere }),
             prisma.expense.aggregate({ _sum: { amount: true }, where: expenseWhere }).catch(() => {
                 const fw: any = { createdAt: { gte: startDate }, ...tenantBranchWhere };
-                if (branchId) fw.branchId = branchId;
+                if (branchId) fw.AND = [tenantBranchWhere, { branchId }];
                 return prisma.expense.aggregate({ _sum: { amount: true }, where: fw });
             }),
             prisma.sale.findMany({

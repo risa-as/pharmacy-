@@ -3,33 +3,32 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { auth } from '@/auth';
+import { getTenantContext } from '@/app/lib/tenant-utils';
 
 // POST: Send push notification to specific users or a branch
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user || session.user.role !== 'ADMIN') {
+        const ctx = await getTenantContext();
+        if (ctx instanceof NextResponse) return ctx;
+        if (ctx.user.role !== 'ADMIN' || !ctx.organizationId) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const body = await req.json();
-        const { title, body: messageBody, targetUserIds, targetBranchId, targetAll } = body;
+        const { title, body: messageBody, targetUserIds, targetBranchId } = body;
 
         if (!title || !messageBody) {
             return NextResponse.json({ error: "title and body are required" }, { status: 400 });
         }
 
-        // Get target users' push tokens
-        let where: any = { pushEnabled: true, expoPushToken: { not: null } };
-        if (targetUserIds?.length > 0) {
-            where.id = { in: targetUserIds };
-        } else if (targetBranchId) {
-            where.branchId = targetBranchId;
-        }
-        // If targetAll, no additional filter
+        // Every target set (explicit users, a branch, or "all") is intersected with
+        // the admin's own organization; previously "all" meant every user on the platform.
+        const target = Array.isArray(targetUserIds) && targetUserIds.length > 0
+            ? { id: { in: targetUserIds } }
+            : targetBranchId ? { branchId: targetBranchId } : {};
 
         const users = await prisma.user.findMany({
-            where,
+            where: { AND: [{ pushEnabled: true, expoPushToken: { not: null } }, { branch: { organizationId: ctx.organizationId } }, target] },
             select: { id: true, expoPushToken: true, name: true }
         });
 
@@ -97,22 +96,22 @@ export async function POST(req: NextRequest) {
 // GET: Get notification status (tokens count per branch)
 export async function GET() {
     try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const ctx = await getTenantContext();
+        if (ctx instanceof NextResponse) return ctx;
+
+        // Counts are scoped to the caller's tenant (previously platform-wide).
+        const scope = { branch: ctx.branchModelWhere };
+        const enabled = { AND: [scope, { pushEnabled: true, expoPushToken: { not: null } }] };
 
         const stats = await prisma.user.groupBy({
             by: ['branchId'],
-            where: { pushEnabled: true, expoPushToken: { not: null } },
+            where: enabled,
             _count: true
         });
 
-        const totalEnabled = await prisma.user.count({
-            where: { pushEnabled: true, expoPushToken: { not: null } }
-        });
+        const totalEnabled = await prisma.user.count({ where: enabled });
 
-        const totalUsers = await prisma.user.count();
+        const totalUsers = await prisma.user.count({ where: scope });
 
         return NextResponse.json({
             totalUsers,

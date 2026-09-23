@@ -1,181 +1,88 @@
 export const dynamic = 'force-dynamic';
-
-// المرحلة 5 (الصقل التجاري) §Part 4: طلب إرجاع/إشعار دائن من الصيدلية على
-// طلب مذخر مُسلَّم أو قيد التسليم. الكمية والسعر يُشتقّان دائماً من الخادم —
-// عبر effectiveLine() (نفس مصدر الحقيقة المستخدم لعرض السعر وجسر الفاتورة
-// وخصم المخزون) وvalidateReturnQuantity() (app/lib/warehouse-returns.ts) —
-// لا يُقبَل أي سعر أو سقف كمية من جسم الطلب: وإلا حدّدت الصيدلية بنفسها قيمة
-// إشعارها الدائن.
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { warehouseOrderScope } from '@/app/lib/warehouse-access';
-import { effectiveLine } from '@/app/lib/warehouse-quote';
-import { validateReturnQuantity } from '@/app/lib/warehouse-returns';
+import { warehouseCommand, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { requestWarehouseReturn, restorePharmacyReservation } from '@/app/lib/warehouse-return-settlement';
 
-const RETURNABLE_STATUSES = new Set(['SHIPPED', 'DELIVERED']);
-
-// POST: { items: [{ barcode, quantity }], reason? }
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const params = await props.params;
     try {
-        const tenantCtx = await getTenantContext();
-        if (tenantCtx instanceof NextResponse) return tenantCtx;
+        const ctx = await getTenantContext();
+        if (ctx instanceof NextResponse) return ctx;
+        if (!ctx.userPermissions.canReturnWarehouseOrder) return NextResponse.json({error:'ليس لديك صلاحية إدارة المشتريات'}, {status:403});
+        if (!ctx.userPermissions.canViewWarehouseOrders) return NextResponse.json({error:'غير مصرح'}, {status:403});
+        const { id } = await props.params;
+        const scope = warehouseOrderScope({ role: ctx.user.role, organizationId: ctx.organizationId, branchId: ctx.user.branchId });
+        if (!scope) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        const order = await prisma.warehouseOrder.findFirst({ where: { AND: [{ id }, scope] }, select: { warehouseId: true } });
+        if (!order) return NextResponse.json({ error: 'الطلب غير موجود في نطاقك' }, { status: 404 });
+        const body = await req.json();
+        const command = warehouseCommand(order.warehouseId, `pharmacy-return:${ctx.organizationId}:${id}`, body);
+        const result = await prisma.$transaction(tx => runWarehouseOperation(tx, command,
+            () => requestWarehouseReturn(tx, id, scope, body, ctx.user.name ?? ctx.user.email ?? null)), { maxWait: 20000, timeout: 30000 });
+        return NextResponse.json(result, { status: 201 });
+    } catch (error) {
+        if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });
+        console.error('warehouse return request failed', error);
+        return NextResponse.json({ error: 'تعذر إنشاء طلب الإرجاع؛ أعد المحاولة بنفس البيانات.' }, { status: 500 });
+    }
+}
 
-        const scope = warehouseOrderScope({
-            role: tenantCtx.user.role,
-            organizationId: tenantCtx.organizationId,
-            branchId: tenantCtx.user.branchId,
-        });
-        if (!scope) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+// Read and confirm physical custody from the pharmacy, never from the warehouse.
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+    const ctx = await getTenantContext();
+    if (ctx instanceof NextResponse) return ctx;
+        if (!ctx.userPermissions.canViewWarehouseOrders) return NextResponse.json({error:'غير مصرح'}, {status:403});
+    const { id } = await props.params;
+    const scope = warehouseOrderScope({ role: ctx.user.role, organizationId: ctx.organizationId, branchId: ctx.user.branchId });
+    if (!scope) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const order = await prisma.warehouseOrder.findFirst({ where: { AND: [{ id }, scope] }, include: { events: { where: { type: { in: ['RETURN_REJECTED', 'RETURN_PHARMACY_RESTORED', 'RETURN_DISPATCHED'] } } } } });
+    if (!order) return NextResponse.json({ error: 'الطلب غير موجود' }, { status: 404 });
+    const rows = await prisma.warehouseReturn.findMany({ where: { orderId: id, warehouseId: order.warehouseId }, include: { items: true }, orderBy: { createdAt: 'desc' } });
+    return NextResponse.json({ returns: rows.map(row => ({ ...row,
+        restored: order.events.some(e => (e.payload as any)?.returnId === row.id && (e.type === 'RETURN_PHARMACY_RESTORED' || (e.payload as any)?.stockDisposition === 'RESTORED_TO_PHARMACY')),
+        dispatched: order.events.some(e => e.type === 'RETURN_DISPATCHED' && (e.payload as any)?.returnId === row.id),
+    })) });
+}
 
-        const order = await prisma.warehouseOrder.findFirst({
-            where: { id: params.id, ...scope },
-            include: {
-                items: {
-                    select: {
-                        drugId: true,
-                        quantity: true,
-                        unitPrice: true,
-                        quotedPrice: true,
-                        quotedQuantity: true,
-                        status: true,
-                        drug: { select: { barcode: true, tradeName: true } },
-                    },
-                },
-                branch: { select: { organizationId: true } },
-            },
-        });
-        if (!order) {
-            return NextResponse.json({ error: 'الطلب غير موجود في نطاقك' }, { status: 404 });
-        }
-
-        if (!RETURNABLE_STATUSES.has(order.status)) {
-            return NextResponse.json(
-                { error: 'الإرجاع متاح فقط للطلبات المشحونة أو المُسلَّمة.' },
-                { status: 400 }
-            );
-        }
-
-        const body = await req.json().catch(() => null);
-        if (!body || typeof body !== 'object' || !Array.isArray(body.items) || body.items.length === 0) {
-            return NextResponse.json({ error: 'حدِّد صنفاً واحداً على الأقل للإرجاع' }, { status: 400 });
-        }
-        const reason = typeof body.reason === 'string' ? body.reason.trim() || null : null;
-
-        // الكمية الفعلية المشحونة فعلاً لكل باركود — effectiveLine() هي القاعدة
-        // الوحيدة (بند طلبين لنفس الباركود نادر لكن يُجمَّع بأمان تحسّباً).
-        const shippedByBarcode = new Map<
-            string,
-            { quantity: number; unitPrice: number; tradeName: string; drugId: string }
-        >();
-        for (const it of order.items) {
-            const eff = effectiveLine({
-                status: it.status,
-                quantity: it.quantity,
-                quotedQuantity: it.quotedQuantity,
-                unitPrice: it.unitPrice,
-                quotedPrice: it.quotedPrice,
-            });
-            const existing = shippedByBarcode.get(it.drug.barcode);
-            if (existing) {
-                existing.quantity += eff.quantity;
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+    try {
+        const ctx = await getTenantContext();
+        if (ctx instanceof NextResponse) return ctx;
+        if (!ctx.userPermissions.canReturnWarehouseOrder) return NextResponse.json({error:'ليس لديك صلاحية إدارة المشتريات'}, {status:403});
+        if (!ctx.userPermissions.canViewWarehouseOrders) return NextResponse.json({error:'غير مصرح'}, {status:403});
+        if (!['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(ctx.user.role)) return NextResponse.json({ error: 'تأكيد الاستلام يتطلب مدير الصيدلية.' }, { status: 403 });
+        const { id } = await props.params;
+        const scope = warehouseOrderScope({ role: ctx.user.role, organizationId: ctx.organizationId, branchId: ctx.user.branchId });
+        if (!scope) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        const body = await req.json();
+        if (!['DISPATCH', 'RESTORE'].includes(body.action) || typeof body.returnId !== 'string' || typeof body.note !== 'string' || body.note.trim().length < 5) throw new WarehouseOperationError('حدد المرتجع واكتب مرجع التسليم أو نتيجة الفحص.', 400);
+        const result = await prisma.$transaction(async tx => {
+            await tx.$queryRaw`SELECT id FROM "WarehouseOrder" WHERE id = ${id} FOR UPDATE`;
+            const order = await tx.warehouseOrder.findFirst({ where: { AND: [{ id }, scope] } });
+            if (!order) throw new WarehouseOperationError('الطلب غير موجود', 404);
+            const record = await tx.warehouseReturn.findFirst({ where: { id: body.returnId, orderId: id, warehouseId: order.warehouseId }, include: { items: true } });
+            if (!record) throw new WarehouseOperationError('المرتجع غير موجود', 404);
+            const events = await tx.warehouseOrderEvent.findMany({ where: { orderId: id, type: { in: ['RETURN_REJECTED', 'RETURN_PHARMACY_RESTORED', 'RETURN_DISPATCHED'] } } });
+            const relevant = events.filter(e => (e.payload as any)?.returnId === record.id);
+            const type = body.action === 'DISPATCH' ? 'RETURN_DISPATCHED' : 'RETURN_PHARMACY_RESTORED';
+            if (relevant.some(e => e.type === type || (body.action === 'RESTORE' && (e.payload as any)?.stockDisposition === 'RESTORED_TO_PHARMACY'))) return { replayed: true };
+            if (body.action === 'DISPATCH') {
+                if (record.status !== 'PENDING') throw new WarehouseOperationError('لا يمكن إرسال مرتجع اتُخذ قراره.');
             } else {
-                shippedByBarcode.set(it.drug.barcode, {
-                    quantity: eff.quantity,
-                    unitPrice: eff.unitPrice,
-                    tradeName: it.drug.tradeName,
-                    drugId: it.drugId,
-                });
+                if (record.status !== 'REJECTED' || body.confirmedPresentAndSaleable !== true) throw new WarehouseOperationError('أكد استلام وفحص المرتجع المرفوض وصلاحيته للبيع.');
+                if (record.items.some(i => !Array.isArray(i.pharmacyAllocations) || !i.pharmacyAllocations.length)) throw new WarehouseOperationError('المرتجع القديم بلا حجز موثق؛ يحتاج تسوية ولا يجوز زيادة المخزون.');
+                await restorePharmacyReservation(tx, record.items);
             }
-        }
-
-        // إرجاعات سابقة **مقبولة فقط** على نفس الطلب — تحدّ من المتاح للإرجاع الآن.
-        const priorAccepted = await prisma.warehouseReturn.findMany({
-            where: { orderId: order.id, status: 'ACCEPTED' },
-            include: { items: { select: { barcode: true, quantity: true } } },
-        });
-        const alreadyAcceptedByBarcode = new Map<string, number>();
-        for (const r of priorAccepted) {
-            for (const it of r.items) {
-                alreadyAcceptedByBarcode.set(it.barcode, (alreadyAcceptedByBarcode.get(it.barcode) ?? 0) + it.quantity);
-            }
-        }
-
-        const errors: string[] = [];
-        const returnItems: Array<{ drugId: string; barcode: string; quantity: number; unitPrice: number }> = [];
-        let totalAmount = 0;
-        const seenBarcodes = new Set<string>();
-
-        for (const raw of body.items) {
-            const barcode = typeof raw?.barcode === 'string' ? raw.barcode.trim() : '';
-            const quantity = Number(raw?.quantity);
-
-            if (!barcode) {
-                errors.push('صنف بلا باركود صالح في طلب الإرجاع.');
-                continue;
-            }
-            if (seenBarcodes.has(barcode)) {
-                errors.push(`الصنف ${barcode} مُكرَّر في طلب الإرجاع — أرسله مرة واحدة بالكمية الإجمالية.`);
-                continue;
-            }
-            seenBarcodes.add(barcode);
-
-            const shipped = shippedByBarcode.get(barcode);
-            if (!shipped) {
-                errors.push(`الصنف بالباركود ${barcode} غير موجود ضمن هذا الطلب.`);
-                continue;
-            }
-
-            const check = validateReturnQuantity({
-                shippedQuantity: shipped.quantity,
-                alreadyAcceptedQuantity: alreadyAcceptedByBarcode.get(barcode) ?? 0,
-                requestedQuantity: quantity,
-            });
-            if (!check.ok) {
-                errors.push(`${shipped.tradeName}: ${check.error}`);
-                continue;
-            }
-
-            returnItems.push({ drugId: shipped.drugId, barcode, quantity, unitPrice: shipped.unitPrice });
-            totalAmount += quantity * shipped.unitPrice;
-        }
-
-        if (errors.length > 0) {
-            return NextResponse.json({ error: 'تعذّر إنشاء طلب الإرجاع', details: errors }, { status: 400 });
-        }
-        if (returnItems.length === 0) {
-            return NextResponse.json({ error: 'لم يُحدَّد أي صنف صالح للإرجاع' }, { status: 400 });
-        }
-
-        const created = await prisma.warehouseReturn.create({
-            data: {
-                warehouseId: order.warehouseId,
-                orderId: order.id,
-                organizationId: order.branch.organizationId,
-                reason,
-                totalAmount,
-                actorName: tenantCtx.user.name ?? tenantCtx.user.email ?? null,
-                items: { create: returnItems },
-            },
-            include: { items: true },
-        });
-
-        await prisma.warehouseOrderEvent.create({
-            data: {
-                orderId: order.id,
-                actorType: 'PHARMACY',
-                actorName: tenantCtx.user.name ?? tenantCtx.user.email ?? null,
-                type: 'RETURN_REQUESTED',
-                payload: { returnId: created.id, totalAmount, reason },
-            },
-        });
-
-        return NextResponse.json({ return: created }, { status: 201 });
-    } catch (e: any) {
-        console.error('warehouse order return POST error:', e);
-        return NextResponse.json({ error: 'فشل في إنشاء طلب الإرجاع' }, { status: 500 });
+            await tx.warehouseOrderEvent.create({ data: { orderId: id, actorType: 'PHARMACY', actorName: ctx.user.name ?? ctx.user.email,
+                type, payload: { returnId: record.id, note: body.note.trim(), actorId: ctx.user.id, confirmedPresentAndSaleable: body.action === 'RESTORE' } } });
+            return { success: true };
+        }, { maxWait: 20000, timeout: 30000 });
+        return NextResponse.json(result);
+    } catch (error) {
+        if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });
+        console.error('pharmacy return custody failed', error);
+        return NextResponse.json({ error: 'تعذر تسجيل حركة المرتجع' }, { status: 500 });
     }
 }

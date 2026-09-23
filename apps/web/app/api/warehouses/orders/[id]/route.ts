@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
-        if (!tenantCtx.userPermissions.canCreatePurchase) return NextResponse.json({ error: 'ليس لديك صلاحية إدارة المشتريات.' }, { status: 403 });
+        if (!tenantCtx.userPermissions.canApproveWarehouseOrder) return NextResponse.json({ error: 'ليس لديك صلاحية إدارة المشتريات.' }, { status: 403 });
 
         const body = await req.json();
         const action = body?.action as Action;
@@ -82,6 +82,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
             const updated = await prisma.$transaction(async (tx) => {
                 await lockWarehouseOrder(tx, order.id, order.status);
+                if (action === 'CANCELLED') {
+                    const approved = await tx.warehouseOrderEvent.findFirst({where:{orderId:order.id,type:'APPROVED'},orderBy:{createdAt:'desc'}});
+                    const legacyId = (approved?.payload as {purchaseId?: string} | null)?.purchaseId;
+                    const purchases = await tx.purchase.findMany({where:{branchId:order.branchId,OR:[{warehouseOrderId:order.id},...(legacyId ? [{id:legacyId}] : [])]},select:{id:true}});
+                    if (order.status === 'APPROVED' && !purchases.length) throw new Error('انتقال غير شرعي: فاتورة الشراء المرتبطة غير موجودة؛ يلزم تدقيق الطلب.');
+                    for (const purchase of purchases) {
+                        // A conditional write serializes with receipt and payment, even if the warehouse invoice is missing.
+                        const cancelled = await tx.purchase.updateMany({where:{id:purchase.id,status:'PENDING',paidAmount:0},data:{status:'CANCELLED'}});
+                        if (cancelled.count !== 1) throw new Error('انتقال غير شرعي: تم استلام فاتورة الشراء أو سدادها؛ استخدم طلب الإرجاع بدل الإلغاء.');
+                    }
+                }
                 const u = await tx.warehouseOrder.update({ where: { id: order.id }, data: { status: action } });
                 if (existingInvoice) {
                     const cancelled = await tx.warehouseInvoice.updateMany({
@@ -89,16 +100,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                         data: { status: 'CANCELLED' },
                     });
                     if (cancelled.count !== 1) throw new Error('انتقال غير شرعي: تغيرت الفاتورة أو سُجّلت عليها دفعة.');
-                    const approved = await tx.warehouseOrderEvent.findFirst({
-                        where: { orderId: order.id, type: 'APPROVED' }, orderBy: { createdAt: 'desc' },
-                    });
-                    const payload = approved?.payload as { purchaseId?: string } | null;
-                    if (!payload?.purchaseId) throw new Error('انتقال غير شرعي: رابط فاتورة الشراء غير موجود؛ يلزم مراجعتها.');
-                    const purchaseCancelled = await tx.purchase.updateMany({
-                        where: { id: payload.purchaseId, branchId: order.branchId, status: 'PENDING', paidAmount: 0 },
-                        data: { status: 'CANCELLED' },
-                    });
-                    if (purchaseCancelled.count !== 1) throw new Error('انتقال غير شرعي: تم استلام فاتورة الشراء أو سدادها؛ يلزم تسوية المرتجع.');
+
                 }
                 await tx.warehouseOrderEvent.create({
                     data: {
@@ -217,4 +219,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         console.error('warehouse order decision error:', e);
         return NextResponse.json({ error: 'فشل في تنفيذ القرار' }, { status: 500 });
     }
+}
+
+export async function GET(_req: NextRequest, props: {params:Promise<{id:string}>}) {
+ const ctx=await getTenantContext();if(ctx instanceof NextResponse)return ctx;
+ if(!ctx.userPermissions.canViewWarehouseOrders)return NextResponse.json({error:'غير مصرح'},{status:403});
+ const scope=warehouseOrderScope({role:ctx.user.role,organizationId:ctx.organizationId,branchId:ctx.user.branchId});
+ if(!scope)return NextResponse.json({error:'غير مصرح'},{status:403});
+ const {id}=await props.params;
+ const order=await prisma.warehouseOrder.findFirst({where:{AND:[scope,{id}]},include:{warehouse:{select:{name:true,phone:true}},branch:{select:{name:true}},items:{include:{drug:{select:{tradeName:true,barcode:true}}}},events:{orderBy:{createdAt:'asc'}}}});
+ if(!order)return NextResponse.json({error:'الطلب غير موجود'},{status:404});
+ const purchaseId=order.events.map(e=>(e.payload as any)?.purchaseId).find(Boolean);
+ const purchase=await prisma.purchase.findFirst({where:{AND:[ctx.tenantBranchWhere,{OR:[...(purchaseId?[{id:purchaseId}]:[]),{warehouseOrderId:id}]}]},select:{id:true,status:true,total:true}});
+ return NextResponse.json({order,purchase});
 }

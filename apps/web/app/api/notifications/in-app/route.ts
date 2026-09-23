@@ -18,10 +18,10 @@ import { jwtVerify } from 'jose';
  * Callers return empty data (not 401) on null so the mobile polling loop
  * never triggers a spurious auto-logout.
  */
-async function resolveIdentity(req: NextRequest): Promise<string | null> {
-    // 1. NextAuth session (web dashboard)
+async function resolveIdentity(req: NextRequest): Promise<{ id: string; version: number | null } | null> {
+    // 1. NextAuth session (web dashboard) — version already checked in auth.ts
     const session = await auth();
-    if (session?.user?.id) return session.user.id as string;
+    if (session?.user?.id) return { id: session.user.id as string, version: null };
 
     // 2. Mobile Bearer token — verified JWT signed with AUTH_SECRET
     const authHeader = req.headers.get('authorization') ?? '';
@@ -31,16 +31,18 @@ async function resolveIdentity(req: NextRequest): Promise<string | null> {
     try {
         const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
         const { payload } = await jwtVerify(token, secret);
-        return (payload.userId as string) ?? null;
+        return payload.userId ? { id: payload.userId as string, version: Number(payload.sessionVersion) || 0 } : null;
     } catch {
         return null;
     }
 }
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-    const id = await resolveIdentity(req);
-    if (typeof id !== 'string' || !id) return null;
-    const user = await prisma.user.findUnique({ where: { id }, select: { isActive: true, role: true, warehouse: { select: { isActive: true } } } });
+    const identity = await resolveIdentity(req);
+    if (!identity?.id) return null;
+    const { id } = identity;
+    const user = await prisma.user.findUnique({ where: { id }, select: { isActive: true, role: true, sessionVersion: true, warehouse: { select: { isActive: true } } } });
+    if (identity.version !== null && identity.version !== user?.sessionVersion) return null;
     return user?.isActive && (user.role !== 'WAREHOUSE' || user.warehouse?.isActive) ? id : null;
 }
 

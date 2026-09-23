@@ -1,3 +1,4 @@
+import { getDefaultPermissions } from '../app/lib/permissions';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { NextRequest } from 'next/server';
@@ -29,13 +30,13 @@ beforeEach(async () => {
  const key=randomUUID();
  const org=await db.organization.create({data:{name:key}});
  const branch=await db.branch.create({data:{name:'Branch',organizationId:org.id}});
- const warehouse=await db.warehouse.create({data:{name:key}});
+ const warehouse=await db.warehouse.create({data:{name:key,operatingMode:'FULL'}});
  const owner=await db.user.create({data:{email:key+'@test.invalid',password:'unused',role:'WAREHOUSE',warehouseId:warehouse.id,warehouseUserType:'OWNER'}});
  const supplier=await db.supplier.create({data:{name:'Supplier',organizationId:org.id}});
- const drug=await db.globalDrug.create({data:{barcode:key,tradeName:'Drug '+key,scientificName:'Test 100mg',alternatives:[]}});
+ const drug=await db.globalDrug.create({data:{barcode:key,tradeName:'Drug '+key,scientificName:'Test 100mg',alternatives:[],unitsPerPack:1,unitsPerPackConfirmedAt:new Date()}});
  const local=await db.globalDrug.create({data:{barcode:key,tradeName:drug.tradeName,scientificName:drug.scientificName,organizationId:org.id,alternatives:[]}});
  f={org,branch,warehouse,owner,supplier,drug,local};
- state.tenant={organizationId:org.id,user:{id:owner.id,role:'ADMIN',branchId:branch.id},userPermissions:{canCreatePurchase:true,canViewSuppliers:true}};
+ state.tenant={organizationId:org.id,user:{id:owner.id,role:'ADMIN',branchId:branch.id},userPermissions:getDefaultPermissions('ADMIN')};
  state.warehouse={warehouseId:warehouse.id,user:{id:owner.id,role:'WAREHOUSE'}};
  state.session={user:{id:owner.id,role:'SUPER_ADMIN',name:'Test admin'}};
 });
@@ -108,6 +109,7 @@ describe('need-list data and lifecycle on isolated PostgreSQL',()=>{
    const purchase=await db.purchase.findUniqueOrThrow({where:{id:approval.purchaseId},include:{items:true}});
    expect(purchase.supplierId).toBe(f.supplier.id);
    expect(purchase.total).toBe(240);
+   await db.warehouseOrder.update({ where: { id: purchase.warehouseOrderId! }, data: { status: 'DELIVERED' } });
    await receivePurchaseStock(db,purchase.id,{branchId:f.branch.id},purchase.items.map(i=>({itemId:i.id,quantity:i.quantity,expiryDate:expiry(),batchNumber:randomUUID()})));
    const prices=await (await compare(req({drugIds:[f.local.id],verifiedUnitDrugIds:[f.local.id]}))).json();
    expect(prices.comparisons[f.local.id].cheapest.price).toBe(120);

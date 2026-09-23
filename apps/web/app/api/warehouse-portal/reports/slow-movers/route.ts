@@ -1,3 +1,4 @@
+import { prisma } from '@/app/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 // المرحلة 4 من نظام المذاخر B2B (التقارير والأداء): الأصناف الراكدة — في
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest) {
     try {
         const gate = await requireWarehousePermission(ctx, 'canViewReports');
         if (!gate.ok) return gate.response;
+        const mode = await prisma.warehouse.findUnique({where:{id:ctx.warehouseId},select:{operatingMode:true}});
+        if(mode?.operatingMode === 'ORDER_PORTAL') return NextResponse.json({error:'هذا التقرير يحتاج مخزون المذخر وتكاليفه المسجلة في وضع الإدارة الكاملة.'},{status:403});
 
         const { searchParams } = new URL(req.url);
         const daysParam = Number(searchParams.get('days'));

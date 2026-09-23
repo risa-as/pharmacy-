@@ -129,7 +129,7 @@ export async function getSupplierLedger(supplierId: string) {
             amount: p.total,
             description: p.invoiceNumber === 'OPENING-BALANCE'
                 ? `رصيد افتتاحي${p.signature ? ' — ' + p.signature : ''}`
-                : `فاتورة شراء ${p.invoiceNumber || '#' + p.id.slice(0, 8)}`,
+                : `فاتورة شراء ${p.invoiceNumber || '#' + p.documentNumber}`,
             branch: p.branch?.name || '',
             reference: p.invoiceNumber === 'OPENING-BALANCE' ? null : p.invoiceNumber,
             isOpening: p.invoiceNumber === 'OPENING-BALANCE',

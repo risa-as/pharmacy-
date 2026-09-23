@@ -32,6 +32,9 @@ function round1(n: number): number {
  * الإلزامي فعلياً)، فيُترك اختيارياً هنا للتساهل مع بيانات ناقصة مستقبلاً.
  */
 export interface SoldLine {
+  orderId?: string;
+  isReturn?: boolean;
+  costTotal?: number;
   barcode: string;
   tradeName: string;
   quantity: number;
@@ -81,6 +84,7 @@ function isoWeekKey(date: Date): string {
 }
 
 function periodKey(date: Date, period: "day" | "week" | "month"): string {
+  date = new Date(date.getTime() + 3 * 60 * 60 * 1000); // Business calendar: Asia/Baghdad.
   if (period === "week") return isoWeekKey(date);
 
   const y = date.getUTCFullYear();
@@ -91,19 +95,14 @@ function periodKey(date: Date, period: "day" | "week" | "month"): string {
   return `${y}-${m}-${d}`;
 }
 
-/**
- * مفتاح "طلب" اصطناعي للعدّ التقريبي لعدد الطلبات ضمن كل فترة/عميل: SoldLine
- * لا يحمل orderId (انظر تعليق الواجهة أعلاه)، لكن كل بنود نفس الطلب تتشارك
- * حرفياً نفس organizationId ونفس shippedAt (كلاهما مُشتق من نفس صف الطلب
- * وحدث الشحن الوحيد له — انظر warehouse-report-data.ts)، فتجميعهما يميّز
- * الطلبات فعلياً بدقة كافية لتقرير إحصائي دون الحاجة لعمود إضافي.
- */
+/** Production data carries the actual order/sale ID. Timestamp fallback is for legacy callers only. */
 function orderKey(line: SoldLine): string {
+  if (line.orderId) return line.orderId;
   return `${line.organizationId}::${normalizeDate(line.shippedAt).getTime()}`;
 }
 
 /**
- * إجمالي المبيعات مجمّعاً بفترة (يوم/أسبوع/شهر) — بالـ UTC دائماً لتفادي
+ * إجمالي المبيعات مجمّعاً بفترة (يوم/أسبوع/شهر) — حسب تقويم بغداد لتفادي
  * انزياح المنطقة الزمنية، والنتيجة مرتّبة تصاعدياً حسب المفتاح (وهو مصمَّم
  * ليكون قابلاً للترتيب نصياً: YYYY-MM-DD / YYYY-Www / YYYY-MM).
  */
@@ -121,7 +120,7 @@ export function salesByPeriod(
     const entry = byKey.get(key) ?? { total: 0, quantity: 0, orderKeys: new Set<string>() };
     entry.total += line.lineTotal;
     entry.quantity += line.quantity;
-    entry.orderKeys.add(orderKey(line));
+    if (!line.isReturn) entry.orderKeys.add(orderKey(line));
     byKey.set(key, entry);
   }
 
@@ -156,7 +155,7 @@ export function topSellers(
     };
     entry.quantity += line.quantity;
     entry.total += line.lineTotal;
-    entry.tradeName = line.tradeName;
+    if (line.tradeName && line.tradeName !== line.barcode) entry.tradeName = line.tradeName;
     byBarcode.set(line.barcode, entry);
   }
 
@@ -193,6 +192,7 @@ export function slowMovers(
 
   const lastSoldByBarcode = new Map<string, Date>();
   for (const line of lines) {
+    if (line.isReturn) continue;
     const shippedAt = normalizeDate(line.shippedAt);
     const existing = lastSoldByBarcode.get(line.barcode);
     if (!existing || shippedAt.getTime() > existing.getTime()) {
@@ -269,6 +269,7 @@ export function fulfilmentRate(items: FulfilmentInputItem[]): FulfilmentRateResu
 // ── هامش الربح لكل صنف ────────────────────────────────────────────────────────
 
 export interface MarginByItemEntry {
+  costComplete: boolean;
   barcode: string;
   tradeName: string;
   revenue: number;
@@ -298,6 +299,7 @@ export function marginByItem(lines: SoldLine[]): MarginByItemEntry[] {
     revenue: number;
     cost: number;
     costKnown: boolean;
+    missingCost: boolean;
   }
 
   const byBarcode = new Map<string, Acc>();
@@ -308,17 +310,23 @@ export function marginByItem(lines: SoldLine[]): MarginByItemEntry[] {
       revenue: 0,
       cost: 0,
       costKnown: false,
+      missingCost: false,
     };
-    acc.tradeName = line.tradeName;
+    if (line.tradeName && line.tradeName !== line.barcode) acc.tradeName = line.tradeName;
     acc.revenue += line.lineTotal;
 
-    if (typeof line.costPrice === "number" && Number.isFinite(line.costPrice) && line.costPrice > 0) {
+    if (typeof line.costTotal === 'number' && Number.isFinite(line.costTotal)) {
+      acc.cost += line.costTotal;
+      acc.costKnown = true;
+    } else if (typeof line.costPrice === "number" && Number.isFinite(line.costPrice) && line.costPrice > 0) {
       const unitsLeavingStock = totalUnitsLeavingStock({
         soldQuantity: line.quantity,
         bonusQuantity: line.bonusQuantity ?? 0,
       });
       acc.cost += line.costPrice * unitsLeavingStock;
       acc.costKnown = true;
+    } else {
+      acc.missingCost = true;
     }
 
     byBarcode.set(line.barcode, acc);
@@ -326,8 +334,8 @@ export function marginByItem(lines: SoldLine[]): MarginByItemEntry[] {
 
   return Array.from(byBarcode.entries()).map(([barcode, acc]) => {
     const margin = acc.revenue - acc.cost;
-    const marginPercent = acc.costKnown && acc.revenue > 0 ? round1((margin / acc.revenue) * 100) : null;
-    return { barcode, tradeName: acc.tradeName, revenue: acc.revenue, cost: acc.cost, margin, marginPercent };
+    const marginPercent = acc.costKnown && !acc.missingCost && acc.revenue > 0 ? round1((margin / acc.revenue) * 100) : null;
+    return { barcode, tradeName: acc.tradeName, revenue: acc.revenue, cost: acc.cost, costComplete: acc.costKnown && !acc.missingCost, margin, marginPercent };
   });
 }
 
@@ -412,6 +420,7 @@ export function salesByCustomer(lines: SoldLine[]): SalesByCustomerEntry[] {
   const byOrg = new Map<string, Acc>();
 
   for (const line of lines) {
+    if (!line.organizationId) continue; // Inventory cost-only movements are not customer sales.
     const shippedAt = normalizeDate(line.shippedAt);
     const acc = byOrg.get(line.organizationId) ?? {
       pharmacyName: line.pharmacyName ?? "",
@@ -421,7 +430,7 @@ export function salesByCustomer(lines: SoldLine[]): SalesByCustomerEntry[] {
     };
     acc.pharmacyName = line.pharmacyName ?? acc.pharmacyName;
     acc.total += line.lineTotal;
-    acc.orderKeys.add(orderKey(line));
+    if (!line.isReturn) acc.orderKeys.add(orderKey(line));
     if (shippedAt.getTime() > acc.lastOrderAt.getTime()) acc.lastOrderAt = shippedAt;
     byOrg.set(line.organizationId, acc);
   }

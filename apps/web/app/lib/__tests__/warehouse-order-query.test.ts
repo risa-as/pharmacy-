@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { warehouseInboxQuery } from '../warehouse-order-query';
 
 describe('warehouse inbox query', () => {
+    it('review dashboard includes both new and in-review orders and preserves the limit', () => {
+        expect(warehouseInboxQuery('REVIEW','20')).toEqual({status:{in:['SENT','UNDER_REVIEW']},take:20});
+        expect(()=>warehouseInboxQuery('REVIEW','101')).toThrow();
+    });
     it('always hides pharmacy drafts', () => {
         expect(warehouseInboxQuery().status).toEqual({ not: 'DRAFT' });
         expect(() => warehouseInboxQuery('DRAFT')).toThrow();

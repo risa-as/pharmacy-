@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { withSessionRevocation } from "./session-revocation";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -42,6 +43,9 @@ function createPrismaClient(): PrismaClient {
             }
         }
     });
+
+    // Password change or disabling revokes all of the user's sessions (N14).
+    client.$use(async (params: any, next: (params: any) => Promise<any>) => next(withSessionRevocation(params)));
 
     return client;
 }

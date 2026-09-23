@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useCallback, useEffect } from "react";
-import { Calendar, Clock } from "lucide-react";
+import { useState, useCallback, useEffect, useTransition } from "react";
+import { Calendar, Clock, Loader2 } from "lucide-react";
 
 type Preset = "today" | "yesterday" | "last7" | "thisMonth" | "lastMonth" | "custom";
 
@@ -83,6 +83,7 @@ interface Props {
 
 export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, currentFromTime, currentToTime, extraParams, allowedPresets, showTimeFilter, defaultPreset }: Props) {
     const router = useRouter();
+    const [isPending, startTransition] = useTransition();
     const [mounted, setMounted] = useState(false);
     const [activePreset, setActivePreset] = useState<Preset | null>(defaultPreset ?? null);
     const [customFrom, setCustomFrom] = useState(currentFrom || "");
@@ -97,6 +98,8 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
 
     useEffect(() => {
         setActivePreset(resolveActive(currentFrom, currentTo));
+        setCustomFrom(currentFrom || "");
+        setCustomTo(currentTo || "");
         setMounted(true);
     }, [currentFrom, currentTo, defaultPreset]);
 
@@ -110,7 +113,7 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
             Object.entries(extraParams).forEach(([k, v]) => { if (v) params.set(k, v); });
         }
         const qs = params.toString();
-        router.push(qs ? `${baseUrl}?${qs}` : baseUrl);
+        startTransition(() => router.push(qs ? `${baseUrl}?${qs}` : baseUrl));
     }, [baseUrl, extraParams, router]);
 
     const handlePreset = (preset: Preset) => {
@@ -161,7 +164,8 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
     const hasTimeFilter = !!(currentFromTime || currentToTime);
 
     return (
-        <div className="bg-card border rounded-xl p-4 space-y-3">
+        <fieldset disabled={isPending} aria-busy={isPending} className="min-w-0 bg-card border rounded-xl p-4 space-y-3 disabled:opacity-70">
+            {isPending && <p role="status" className="flex items-center gap-2 text-sm text-primary"><Loader2 className="h-4 w-4 animate-spin" />جاري تحديث النتائج…</p>}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
                     <Calendar className="w-4 h-4" />
@@ -215,7 +219,7 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
                     />
                     <button
                         onClick={handleCustomApply}
-                        disabled={!customFrom || !customTo}
+                        disabled={!customFrom || !customTo || customFrom > customTo}
                         className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold disabled:opacity-40 hover:bg-primary/90"
                     >
                         تطبيق
@@ -266,6 +270,6 @@ export default function DateRangeFilter({ baseUrl, currentFrom, currentTo, curre
                     </div>
                 </div>
             )}
-        </div>
+        </fieldset>
     );
 }

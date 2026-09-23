@@ -57,6 +57,7 @@ export async function updateOrganization(
 ) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canChangeSettings) return { message: "ليس لديك صلاحية تعديل إعدادات المؤسسة." };
     if (tenantCtx.user.role !== 'SUPER_ADMIN' && tenantCtx.user.organizationId !== id) {
         return { message: "غير مصرح: لا يمكنك تعديل منظمة أخرى." };
     }

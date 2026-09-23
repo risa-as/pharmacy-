@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 export default async function Page() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect("/login");
+    if (!tenantCtx.userPermissions.canChangeSettings) redirect('/dashboard?denied=1');
 
     // Scope: SUPER_ADMIN sees all orgs; ADMIN sees only their own org
     const orgWhere = tenantCtx.user.role === 'SUPER_ADMIN' ? {} : { id: tenantCtx.organizationId };
@@ -24,10 +25,10 @@ export default async function Page() {
         <div className="glass-card w-full p-6" suppressHydrationWarning>
             <div className="flex w-full items-center justify-between mb-8">
                 <h1 className="text-2xl font-bold font-cairo text-foreground">المنظمات</h1>
-                <Link href="/dashboard/organizations/create" className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">
+                {tenantCtx.user.role === 'SUPER_ADMIN' && <Link href="/dashboard/organizations/create" className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">
                     <PlusIcon className="h-4 w-4" />
                     <span className="hidden md:block">إضافة منظمة</span>
-                </Link>
+                </Link>}
             </div>
 
             <div className="mt-4 flow-root">
@@ -64,7 +65,7 @@ export default async function Page() {
                                         <td className="whitespace-nowrap px-6 py-4 text-right">
                                             <div className="flex gap-2">
                                                 <UpdateOrganization id={org.id} />
-                                                <DeleteOrganization id={org.id} />
+                                                {tenantCtx.user.role === 'SUPER_ADMIN' && <DeleteOrganization id={org.id} />}
                                             </div>
                                         </td>
                                     </tr>

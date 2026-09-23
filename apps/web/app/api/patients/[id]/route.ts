@@ -9,6 +9,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewPatients) return NextResponse.json({error:'غير مصرح'},{status:403});
 
         const patient = await prisma.patient.findFirst({
             where: { id: params.id, ...tenantCtx.tenantBranchWhere },
@@ -82,6 +83,7 @@ export async function DELETE(req: Request, props: { params: Promise<{ id: string
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canEditPatient) return NextResponse.json({error:'غير مصرح'},{status:403});
 
         const { user } = tenantCtx;
         if (!['ADMIN', 'SUPER_ADMIN'].includes(user?.role ?? '')) {

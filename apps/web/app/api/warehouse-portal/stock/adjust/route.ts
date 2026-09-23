@@ -64,6 +64,9 @@ export async function POST(req: NextRequest) {
         }
 
         if (hasNewQuantity) {
+            if (!Number.isSafeInteger(body.expectedQuantity) || body.expectedQuantity !== batch.quantity) {
+                throw new ConcurrentStockChangeError('تغيّر المخزون منذ فتح نموذج الجرد. حدّث الصفحة وأعد العد.');
+            }
             // ── تصحيح جرد (ADJUSTMENT) ───────────────────────────────────────
             const newQuantity = Number(body.newQuantity);
             if (!Number.isInteger(newQuantity) || newQuantity < 0) {
@@ -84,16 +87,15 @@ export async function POST(req: NextRequest) {
             // ضمن reason بادئة صريحة كي يبقى سجل التدقيق قابلاً للقراءة.
             const directedReason = `${delta > 0 ? 'زيادة' : 'نقص'}: ${reason}`;
 
-            // ملاحظة تصميم: تصحيح الجرد يضبط رصيداً **مطلقاً** (truth من عدّ
-            // فعلي)، فهو يتعمّد الكتابة فوق أي تغيّر متزامن آخر (مثل شحن يُنقِص
-            // نفس الدفعة أثناء الجرد) — بخلاف الإتلاف أدناه الذي يُصرَف كفارق
-            // نسبي ويحتاج حارس تزامن صريح. WarehouseStockMove الخاص بذلك التغيّر
-            // المتزامن يبقى في السجل حتى لو "كتبت" فوقه هذه العملية رصيد الدفعة.
+            // Reject changes after both opening the form and reading the row.
             const updated = await prisma.$transaction(async (tx) => {
-                const b = await tx.warehouseBatch.update({
-                    where: { id: batch.id },
+                const applied = await tx.warehouseBatch.updateMany({
+                    where: { id: batch.id, quantity: batch.quantity },
                     data: { quantity: newQuantity },
                 });
+                if (applied.count !== 1) {
+                    throw new ConcurrentStockChangeError('تغيّر المخزون منذ قراءة الجرد. حدّث الرصيد وأعد العد قبل اعتماد التصحيح.');
+                }
                 await tx.warehouseStockMove.create({
                     data: {
                         catalogItemId: batch.catalogItemId,
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest) {
                         actorName: ctx.user.name ?? ctx.user.email ?? null,
                     },
                 });
-                return b;
+                return tx.warehouseBatch.findUniqueOrThrow({ where: { id: batch.id } });
             });
 
             return NextResponse.json({ batch: updated });

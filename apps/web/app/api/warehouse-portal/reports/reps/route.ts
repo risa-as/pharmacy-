@@ -1,3 +1,4 @@
+import { prisma } from '@/app/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 // المندوبون (مذاخر B2B): تقرير أداء المندوبين — مبيعات/ربح/تحصيل وعمولة
@@ -22,6 +23,8 @@ export async function GET(req: NextRequest) {
     try {
         const gate = await requireWarehousePermission(ctx, ['canViewReports', 'canViewReps']);
         if (!gate.ok) return gate.response;
+        const mode = await prisma.warehouse.findUnique({where:{id:ctx.warehouseId},select:{operatingMode:true}});
+        if(mode?.operatingMode === 'ORDER_PORTAL') return NextResponse.json({error:'هذا التقرير يحتاج مخزون المذخر وتكاليفه المسجلة في وضع الإدارة الكاملة.'},{status:403});
 
         const { searchParams } = new URL(req.url);
         const range = resolveReportDateRange(searchParams.get('from'), searchParams.get('to'));

@@ -55,7 +55,7 @@ export async function fetchReportData(
             const flattenedData = data.flatMap((sale: any) =>
                 sale.items.map((item: any) => ({
                     "التاريخ": sale.createdAt.toISOString().split("T")[0],
-                    "رقم الفاتورة": sale.id.substring(0, 8), // Shorten ID for display
+                    "رقم الفاتورة": sale.documentNumber,
                     "اسم البائع": sale.user?.name || "غير محدد",
                     "اسم المريض": sale.patient?.name || "زائر",
                     "اسم الدواء": item.drug.tradeName,
@@ -86,7 +86,7 @@ export async function fetchReportData(
             const flattenedData = data.flatMap((purchase: any) =>
                 purchase.items.length > 0 ? purchase.items.map((item: any) => ({
                     "التاريخ": purchase.createdAt.toISOString().split("T")[0],
-                    "رقم الفاتورة": purchase.invoiceNumber || purchase.id.substring(0, 8),
+                    "رقم الفاتورة": purchase.invoiceNumber || purchase.documentNumber,
                     "المورد": purchase.supplier.name,
                     "اسم الدواء": item.drug.tradeName,
                     "الكمية": item.quantity,
@@ -96,7 +96,7 @@ export async function fetchReportData(
                     "الحالة": purchase.status === "COMPLETED" ? "مكتمل" : "قيد الانتظار",
                 })) : [{
                     "التاريخ": purchase.createdAt.toISOString().split("T")[0],
-                    "رقم الفاتورة": purchase.invoiceNumber || purchase.id.substring(0, 8),
+                    "رقم الفاتورة": purchase.invoiceNumber || purchase.documentNumber,
                     "المورد": purchase.supplier.name,
                     "اسم الدواء": "-",
                     "الكمية": 0,

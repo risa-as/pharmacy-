@@ -54,7 +54,7 @@ export default async function Page(
         ];
     }
 
-    const baseWhere = branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere;
+    const baseWhere = branchId ? { AND: [tenantBranchWhere, { branchId }] } : tenantBranchWhere;
     const finalWhere = { ...baseWhere, ...searchWhere, ...dateWhere };
 
     const [invoices, totalCount, statsRaw] = await Promise.all([

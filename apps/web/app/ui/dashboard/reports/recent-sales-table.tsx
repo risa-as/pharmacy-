@@ -33,7 +33,7 @@ export default function RecentSalesTable({ sales }: RecentSalesTableProps) {
                             onClick={() => setSelectedSale(sale)}
                         >
                             <td className="px-6 py-4 font-mono text-sm text-muted-foreground">
-                                {sale.id.slice(0, 8)}...
+                                {sale.documentNumber}
                             </td>
                             <td className="px-6 py-4 text-foreground">
                                 {format(new Date(sale.createdAt), 'dd MMMM yyyy - hh:mm a', { locale: ar })}

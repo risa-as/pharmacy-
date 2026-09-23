@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon as Ionicons } from '../ui/AppIcon';
 import { useRouter, Href } from 'expo-router';
 import { apiService, request } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -101,7 +101,7 @@ export function PharmacistDashboard() {
                 </View>
                 <View style={{ flexDirection: 'row-reverse', gap: 12 }}>
                     <QuickTile label="فحص الوصفة" icon="scan-outline" onPress={() => go('/scan-prescription' as Href)} />
-                    <QuickTile label="سجل الديون" icon="wallet-outline" tone="warning" onPress={() => go('/(tabs)/debts' as Href)} />
+                    <QuickTile label="سجل الديون" icon="hand-coins" tone="warning" onPress={() => go('/(tabs)/debts' as Href)} />
                 </View>
             </View>
 

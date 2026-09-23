@@ -22,6 +22,8 @@ export async function GET() {
     try {
         const gate = await requireWarehousePermission(ctx, ['canViewFinance', 'canViewPurchases']);
         if (!gate.ok) return gate.response;
+        const mode = await prisma.warehouse.findUnique({where:{id:ctx.warehouseId},select:{operatingMode:true}});
+        if(mode?.operatingMode === 'ORDER_PORTAL') return NextResponse.json({error:'هذا التقرير يحتاج مخزون المذخر وتكاليفه المسجلة في وضع الإدارة الكاملة.'},{status:403});
 
         const purchases = await prisma.warehousePurchase.findMany({
             where: { warehouseId: ctx.warehouseId, status: { in: ['UNPAID', 'PARTIAL'] } },

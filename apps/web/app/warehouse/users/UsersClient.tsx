@@ -356,7 +356,7 @@ export default function UsersClient({
                                                 className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                                 title="تعديل الصلاحيات"
                                             >
-                                                <Settings2 className="h-4 w-4" />
+                                                <Settings2 className="inline h-4 w-4" /> <span className="text-xs">الصلاحيات</span>
                                             </button>
                                             {isToggling ? (
                                                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -370,7 +370,7 @@ export default function UsersClient({
                                                     }`}
                                                     title={u.isActive ? "إيقاف" : "تفعيل"}
                                                 >
-                                                    {u.isActive ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                                                    {u.isActive ? <PowerOff className="inline h-4 w-4" /> : <Power className="inline h-4 w-4" />} <span className="text-xs">{u.isActive ? "إيقاف" : "تفعيل"}</span>
                                                 </button>
                                             )}
                                         </div>

@@ -168,7 +168,7 @@ export default function DebtsScreen() {
 
                 {!loading && !failed && (
                     <Surface style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                        <IconTile icon="wallet-outline" tone="danger" />
+                        <IconTile icon="hand-coins" tone="danger" />
                         <View style={{ flex: 1 }}>
                             <Text style={{ color: C.mutedForeground, fontSize: 13.5, textAlign: 'right' }}>إجمالي الديون</Text>
                             <Text style={{ color: C.primary, fontSize: 26, fontWeight: '900', textAlign: 'right' }}>

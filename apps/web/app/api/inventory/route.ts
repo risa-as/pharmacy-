@@ -10,6 +10,7 @@ export async function GET(req: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewInventory) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
         const { tenantBranchWhere } = tenantCtx;
 
         const url = new URL(req.url);

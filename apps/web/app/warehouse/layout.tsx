@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/app/lib/prisma";
 import { decideWarehouseContext } from "@/app/lib/warehouse-context";
+import OperatingModeNotice from './_components/OperatingModeNotice';
 import WarehouseNotifications from '@/app/ui/warehouse-notifications';
 import {
     getWarehousePermissions,
@@ -86,7 +87,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
     const [warehouse, actor] = await Promise.all([
         prisma.warehouse.findUnique({
             where: { id: decision.warehouseId },
-            select: { name: true },
+            select: { name: true, operatingMode: true },
         }),
         // استعلام حي عن الفاعل — warehouseUserType/permissions ليسا في
         // الجلسة (انظر warehouse-context.ts)، فتخفيض دور أو سحب صلاحية عرض
@@ -100,7 +101,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
     const permissions = getWarehousePermissions(actor ?? { warehouseUserType: null, permissions: null });
     // نفس تعبير الفلترة حرفياً كما كان قبل هذا التعديل — التجميع البصري
     // (أدناه) يُطبَّق على نتيجتها، لا يُغيّرها.
-    const visibleTabs = TABS.filter((t) => !t.requires || permissions[t.requires]);
+    const visibleTabs = TABS.filter((t) => (!t.requires || permissions[t.requires]) && (warehouse?.operatingMode !== 'ORDER_PORTAL' || !['/warehouse/stock','/warehouse/purchases','/warehouse/reps'].includes(t.href)));
 
     const groups = GROUP_ORDER.map((label) => ({
         label,
@@ -128,7 +129,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
             />
             <main className="warehouse-shell-main min-w-0 flex-1 overflow-x-hidden px-4 py-6 md:overflow-y-auto md:px-10 md:py-8 lg:px-12">
                 {permissions.canViewOrders && <div className="mb-4 flex justify-end"><WarehouseNotifications portal /></div>}
-                <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+                <div className="mx-auto w-full max-w-[1600px]"><OperatingModeNotice mode={warehouse?.operatingMode === "ORDER_PORTAL" ? "ORDER_PORTAL" : "FULL"}>{children}</OperatingModeNotice></div>
             </main>
         </div>
     );

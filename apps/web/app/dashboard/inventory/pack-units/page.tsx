@@ -139,7 +139,48 @@ export default function PackUnitsPage() {
         }
     };
 
+    /** يحفظ كل الصفوف التي كتب لها المستخدم رقماً، حتى لو كانت الأرقام مختلفة. */
+    const confirmDrafts = async () => {
+        const items = rows
+            .filter((row) => !doneIds.has(row.drugId))
+            .map((row) => ({ drugId: row.drugId, unitsPerPack: parseInt(draft[row.drugId] ?? '', 10) }))
+            .filter((item) => Number.isInteger(item.unitsPerPack) && item.unitsPerPack > 0);
+        if (items.length === 0) {
+            setError('اكتب عدد الأشرطة لدواء واحد على الأقل قبل التأكيد الجماعي.');
+            return;
+        }
+        setError('');
+        setBulkSaving(true);
+        try {
+            const res = await fetch('/api/inventory/pack-units', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items }),
+            });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error ?? 'فشل التأكيد الجماعي'); return; }
+            setDoneIds((prev) => {
+                const next = new Set(prev);
+                for (const item of items) next.add(item.drugId);
+                return next;
+            });
+            setTotal((t) => Math.max(0, t - (data.confirmed ?? items.length)));
+            setDraft((prev) => {
+                const next = { ...prev };
+                for (const item of items) delete next[item.drugId];
+                return next;
+            });
+            setSelected(new Set());
+        } finally {
+            setBulkSaving(false);
+        }
+    };
+
     const pending = useMemo(() => rows.filter((r) => !doneIds.has(r.drugId)).length, [rows, doneIds]);
+    const draftedIds = useMemo(
+        () => rows.filter((r) => !doneIds.has(r.drugId) && Number.isInteger(parseInt(draft[r.drugId] ?? '', 10)) && parseInt(draft[r.drugId] ?? '', 10) > 0).map((r) => r.drugId),
+        [rows, draft, doneIds],
+    );
 
     return (
         <div dir="rtl" className="space-y-4">
@@ -220,6 +261,22 @@ export default function PackUnitsPage() {
                         className="mr-auto rounded-md bg-primary px-3 py-1 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                     >
                         {bulkSaving ? 'جارٍ…' : `تأكيد المحدد كتعبئة 1`}
+                    </button>
+                </div>
+            )}
+
+            {draftedIds.length > 1 && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-success/30 bg-success/5 px-3 py-2">
+                    <Check className="h-4 w-4 text-success" />
+                    <span className="text-xs text-muted-foreground">
+                        تمت كتابة التعبئة لـ <b className="text-foreground tabular-nums">{draftedIds.length}</b> أدوية
+                    </span>
+                    <button
+                        onClick={confirmDrafts}
+                        disabled={bulkSaving}
+                        className="mr-auto rounded-md bg-success px-3 py-1.5 text-xs font-bold text-success-foreground hover:bg-success/90 disabled:opacity-50"
+                    >
+                        {bulkSaving ? 'جارٍ الحفظ…' : `تأكيد الكل (${draftedIds.length})`}
                     </button>
                 </div>
             )}

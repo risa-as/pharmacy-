@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
+import MoreActions from '@/app/ui/order-more-actions';
 import { getPurchases } from "@/app/lib/actions/purchase-actions";
 import Link from "next/link";
 import {
@@ -41,6 +44,8 @@ export default async function PurchasesPage(
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
   }
 ) {
+  const ctx = await getTenantContext();
+  if (ctx instanceof NextResponse || !ctx.userPermissions.canViewSuppliers) return <div>غير مصرح</div>;
   const searchParams = await props.searchParams;
   const session = await auth();
   const branchId = session?.user?.branchId;
@@ -261,7 +266,7 @@ export default async function PurchasesPage(
                         className="px-6 py-4 font-mono text-right text-xs text-muted-foreground"
                         dir="ltr"
                       >
-                        {purchase.id.slice(0, 8)}
+                        {purchase.documentNumber}
                       </td>
                       <td className="px-6 py-4 text-muted-foreground">
                         {purchase.branch?.name || "غير معروف"}
@@ -293,13 +298,13 @@ export default async function PurchasesPage(
                         <div className="flex items-center justify-center gap-2">
                           <Link
                             href={`/dashboard/purchases/${purchase.id}`}
-                            className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted transition-colors"
+                            className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                           >
-                            عرض
+                            تفاصيل الفاتورة
                           </Link>
                           {(purchase.status === "PENDING" ||
-                            purchase.status === "CANCELLED") && (
-                            <DeletePurchaseButton purchaseId={purchase.id} />
+                            purchase.status === "CANCELLED") && ctx.userPermissions.canCreatePurchase && (
+                            <MoreActions label="إجراءات فاتورة الشراء"><DeletePurchaseButton purchaseId={purchase.id} /></MoreActions>
                           )}
                         </div>
                       </td>

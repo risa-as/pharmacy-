@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, ArrowRight, ArrowLeft, BookOpen, Banknote, User, Users, Printer, X, RefreshCw, CheckCircle2, Cloud, CloudOff, Wallet, ReceiptText, TrendingUp, CalendarDays } from 'lucide-react';
+import { Search, ArrowRight, ArrowLeft, BookOpen, HandCoins, Banknote, User, Users, Printer, X, RefreshCw, CheckCircle2, Cloud, CloudOff, Wallet, ReceiptText, TrendingUp, CalendarDays } from 'lucide-react';
 import { showAlert } from '../lib/dialog';
 
 interface Debtor {
@@ -56,6 +56,7 @@ export default function DebtsPage() {
     const [view, setView] = useState<'list' | 'detail'>('list');
     const [selectedDebtorId, setSelectedDebtorId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
+    const [loadError, setLoadError] = useState("");
     const [debtors, setDebtors] = useState<Debtor[]>([]);
     const [loading, setLoading] = useState(false);
     const [details, setDetails] = useState<DebtorDetails | null>(null);
@@ -142,9 +143,11 @@ export default function DebtsPage() {
             setLoading(true);
             try {
                 const data = await window.ipcRenderer.invoke('get-debtors', { term: searchTerm });
+                if(data?.success===false) throw new Error(data.error);
+                setLoadError("");
                 setDebtors(data);
             } catch (err) {
-                console.error("Failed to fetch debtors", err);
+                setLoadError(err instanceof Error?err.message:"تعذر تحميل الديون");
             } finally {
                 setLoading(false);
             }
@@ -461,6 +464,7 @@ export default function DebtsPage() {
     // LIST VIEW
     return (
         <div className="p-6 h-full flex flex-col bg-background" dir="rtl">
+            {loadError && <p role="alert" className="mb-3 rounded-lg border border-destructive/30 text-destructive p-3">{loadError}<button className="mr-3 underline" onClick={()=>void fetchDebtors()}>إعادة المحاولة</button></p>}
 
             {/* Sync Toast */}
             {syncToast && (
@@ -481,7 +485,7 @@ export default function DebtsPage() {
             <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center">
-                        <BookOpen className="w-5 h-5 text-primary" />
+                        <HandCoins className="w-5 h-5 text-primary" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-foreground leading-tight">دفتر الديون</h1>

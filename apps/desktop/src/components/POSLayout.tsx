@@ -655,7 +655,7 @@ export default function POSLayout({ user }: { user: any }) {
 
     // ─── Render ──────────────────────────────────────────────────────────────
     return (
-        <div dir="rtl" className="flex h-screen max-h-screen overflow-hidden bg-background text-foreground font-sans">
+        <div dir="rtl" className="flex h-full min-h-0 max-h-full overflow-hidden bg-background text-foreground font-sans">
             <HotkeyHelpPanel open={showHelpPanel} onClose={() => setShowHelpPanel(false)} />
 
             <AppAlertModal

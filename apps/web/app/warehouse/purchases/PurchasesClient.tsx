@@ -1,10 +1,14 @@
 "use client";
+import MoreActions from '@/app/ui/order-more-actions';
+import { warehouseMutation } from '@/app/lib/warehouse-mutation-client';
 
 // مشتريات المذخر وذممه الدائنة: العميل التفاعلي لصفحة «المشتريات» — إدارة
 // الموردين، تسجيل فواتير شراء جديدة (تُنشئ دفعات مخزون مباشرة)، وتسجيل دفعات
 // سداد للموردين. نفس أسلوب app/warehouse/accounts/AccountsClient.tsx حرفياً
 // بالاتجاه المعاكس (بطاقات ذمم + شريط تقادم + جدول + نافذة دفعة)، زائداً
 // قسمَي إدارة الموردين وإنشاء فاتورة شراء ببنود متعددة.
+import ListPages from "../_components/ListPages";
+import { useWarehouseList } from "../_components/useWarehouseList";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
@@ -88,7 +92,7 @@ interface CatalogSearchItem {
     drug: { tradeName: string; scientificName: string | null };
 }
 
-const money = (n: number) => n.toLocaleString("ar-IQ", { maximumFractionDigits: 2 });
+const money = (n: number) => n.toLocaleString("ar-IQ-u-nu-latn", { maximumFractionDigits: 2 });
 
 const STATUS_VARIANT: Record<PurchaseStatus, StatusChipVariant> = {
     UNPAID: "danger",
@@ -179,11 +183,13 @@ export default function PurchasesClient({
     canPaySupplier: boolean;
 }) {
     const [suppliers, setSuppliers] = useState(initialSuppliers);
-    const [purchases, setPurchases] = useState(initialPurchases);
+
     const [summary, setSummary] = useState(initialSummary);
 
     const [statusFilter, setStatusFilter] = useState<"ALL" | PurchaseStatus>("ALL");
     const [search, setSearch] = useState("");
+    const list = useWarehouseList<PurchaseRow>('/api/warehouse-portal/purchases', 'purchases', new URLSearchParams({ search, status: statusFilter === 'ALL' ? '' : statusFilter }).toString(), initialPurchases);
+    const { items: purchases, setItems: setPurchases } = list;
 
     // ── نافذة مورّد جديد ──────────────────────────────────────────────────
     const [supplierModalOpen, setSupplierModalOpen] = useState(false);
@@ -472,6 +478,7 @@ export default function PurchasesClient({
             };
             setPurchases((prev) => [newRow, ...prev]);
             void refreshSummary();
+            void list.refresh();
             toast.success("تم تسجيل فاتورة الشراء وإضافة الدفعات إلى المخزون");
             setPurchaseModalOpen(false);
         } catch (e) {
@@ -504,7 +511,7 @@ export default function PurchasesClient({
         setPaySaving(true);
         setPayError(null);
         try {
-            const res = await fetch(`/api/warehouse-portal/purchases/${payingId}/payments`, {
+            const res = await warehouseMutation(`/api/warehouse-portal/purchases/${payingId}/payments`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -533,6 +540,7 @@ export default function PurchasesClient({
                 )
             );
             void refreshSummary();
+            void list.refresh();
             toast.success("تم تسجيل الدفعة للمورّد");
             setPayingId(null);
         } catch (e) {
@@ -543,16 +551,7 @@ export default function PurchasesClient({
         }
     };
 
-    const filtered = useMemo(() => {
-        return purchases.filter((p) => {
-            if (statusFilter !== "ALL" && p.status !== statusFilter) return false;
-            if (search.trim()) {
-                const q = search.trim().toLowerCase();
-                if (!p.supplierName.toLowerCase().includes(q) && !p.invoiceNumber.toLowerCase().includes(q)) return false;
-            }
-            return true;
-        });
-    }, [purchases, statusFilter, search]);
+    const filtered = purchases;
 
     const bucketTotal = Object.values(summary.byBucket).reduce((a, b) => a + b, 0);
 
@@ -565,7 +564,7 @@ export default function PurchasesClient({
     ];
 
     return (
-        <div className="space-y-6" dir="rtl">
+        <div className="space-y-4" dir="rtl">
             <PageHeader
                 title="المشتريات"
                 description="فواتير الشراء من الموردين، وذمم المذخر الدائنة تجاههم."
@@ -592,18 +591,19 @@ export default function PurchasesClient({
             />
 
             <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg border bg-card p-5 shadow-sm">
+                <div className="rounded-lg border bg-card p-3 shadow-sm">
                     <div className="text-xs font-medium text-muted-foreground">إجمالي الذمم الدائنة القائمة</div>
                     <div className="tabular-nums mt-1 text-2xl font-bold">{money(summary.outstanding)}</div>
                 </div>
-                <div className="rounded-lg border bg-card p-5 shadow-sm">
+                <div className="rounded-lg border bg-card p-3 shadow-sm">
                     <div className="text-xs font-medium text-muted-foreground">المتأخر منها (تجاوز الاستحقاق)</div>
                     <div className="tabular-nums mt-1 text-2xl font-bold text-destructive">{money(summary.overdue)}</div>
                 </div>
             </div>
 
-            <div className="rounded-lg border bg-card p-5 shadow-sm">
-                <div className="mb-3 text-sm font-bold">توزيع التقادم</div>
+            <details className="rounded-lg border bg-card p-3 shadow-sm">
+                <summary className="cursor-pointer text-sm font-bold">توزيع تقادم الذمم</summary>
+                <div className="mt-3">
                 {bucketTotal <= 0 ? (
                     <div className="text-sm text-muted-foreground">لا توجد ذمم دائنة قائمة حالياً.</div>
                 ) : (
@@ -632,6 +632,7 @@ export default function PurchasesClient({
                     </>
                 )}
             </div>
+            </details>
 
             {/* الموردون */}
             <div className="rounded-lg border bg-card shadow-sm">
@@ -666,10 +667,10 @@ export default function PurchasesClient({
                                         </td>
                                         {canCreatePurchase && (
                                             <td className="px-4 py-2">
-                                                <div className="flex items-center gap-1.5">
+                                                <MoreActions label={`إجراءات المورد ${s.name}`}>
                                                     <button
                                                         onClick={() => toggleSupplierActive(s)}
-                                                        className="rounded-lg border px-2.5 py-1 text-xs hover:bg-muted"
+                                                        className="inline-flex h-9 items-center rounded-lg border px-3 text-xs font-medium hover:bg-muted"
                                                     >
                                                         {s.isActive ? "إيقاف" : "تفعيل"}
                                                     </button>
@@ -683,7 +684,7 @@ export default function PurchasesClient({
                                                     >
                                                         {deletingSupplierId === s.id ? "..." : "حذف"}
                                                     </button>
-                                                </div>
+                                                </MoreActions>
                                             </td>
                                         )}
                                     </tr>
@@ -717,6 +718,7 @@ export default function PurchasesClient({
                 />
             </div>
 
+            <ListPages {...list} />
             {purchases.length === 0 ? (
                 <EmptyState
                     icon="🧾"
@@ -766,7 +768,7 @@ export default function PurchasesClient({
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-muted-foreground">
-                                        {p.dueAt ? new Date(p.dueAt).toLocaleDateString("ar-IQ") : "نقدي"}
+                                        {p.dueAt ? new Date(p.dueAt).toLocaleDateString("ar-IQ-u-nu-latn") : "نقدي"}
                                     </td>
                                     <td className="px-4 py-3">
                                         {/* فاتورة بونص كامل إجماليها صفر تبقى UNPAID (computeInvoiceStatus
@@ -780,7 +782,7 @@ export default function PurchasesClient({
                                                 p.total - p.paidAmount > 0.01 && (
                                                 <button
                                                     onClick={() => openPay(p)}
-                                                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                                                    className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                                                 >
                                                     تسجيل دفعة
                                                 </button>
@@ -790,9 +792,9 @@ export default function PurchasesClient({
                                                 أيٌّ منها هنا. */}
                                             <button
                                                 onClick={() => openDetail(p.id)}
-                                                className="rounded-lg border px-2.5 py-1 text-xs hover:bg-muted"
+                                                className="inline-flex h-9 items-center rounded-lg border px-3 text-xs font-medium hover:bg-muted"
                                             >
-                                                تفصيل
+                                                تفاصيل الفاتورة
                                             </button>
                                         </div>
                                     </td>
@@ -1056,8 +1058,8 @@ export default function PurchasesClient({
                             <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
                                 {[
                                     { label: "المورّد", value: detail.supplierName },
-                                    { label: "تاريخ الإصدار", value: new Date(detail.issuedAt).toLocaleDateString("ar-IQ") },
-                                    { label: "الاستحقاق", value: detail.dueAt ? new Date(detail.dueAt).toLocaleDateString("ar-IQ") : "نقدي" },
+                                    { label: "تاريخ الإصدار", value: new Date(detail.issuedAt).toLocaleDateString("ar-IQ-u-nu-latn") },
+                                    { label: "الاستحقاق", value: detail.dueAt ? new Date(detail.dueAt).toLocaleDateString("ar-IQ-u-nu-latn") : "نقدي" },
                                     { label: "الإجمالي", value: `${money(detail.total)} د.ع` },
                                     { label: "المسدَّد", value: `${money(detail.paidAmount)} د.ع` },
                                     { label: "المتبقي", value: `${money(detail.remaining)} د.ع` },
@@ -1091,7 +1093,7 @@ export default function PurchasesClient({
                                                 </td>
                                                 <td className="px-3 py-2 font-mono text-[11px]" dir="ltr">{it.batchNumber}</td>
                                                 <td className="px-3 py-2 text-muted-foreground">
-                                                    {new Date(it.expiryDate).toLocaleDateString("ar-IQ")}
+                                                    {new Date(it.expiryDate).toLocaleDateString("ar-IQ-u-nu-latn")}
                                                 </td>
                                                 <td className="tabular-nums px-3 py-2">{it.quantity}</td>
                                                 <td className="tabular-nums px-3 py-2">{it.bonusQuantity > 0 ? it.bonusQuantity : "—"}</td>
@@ -1109,7 +1111,7 @@ export default function PurchasesClient({
                                     <ul className="space-y-1 text-[11px]">
                                         {detail.payments.map((pm) => (
                                             <li key={pm.id} className="flex justify-between gap-3 text-muted-foreground">
-                                                <span>{new Date(pm.paidAt).toLocaleDateString("ar-IQ")} — {pm.method}</span>
+                                                <span>{new Date(pm.paidAt).toLocaleDateString("ar-IQ-u-nu-latn")} — {pm.method}</span>
                                                 <span className="tabular-nums">{money(pm.amount)} د.ع</span>
                                             </li>
                                         ))}

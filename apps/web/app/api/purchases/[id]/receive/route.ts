@@ -11,7 +11,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     try {
         const ctx = await getTenantContext();
         if (ctx instanceof NextResponse) return ctx;
-        if (!ctx.userPermissions.canCreatePurchase) return NextResponse.json({ message: 'ليس لديك صلاحية استلام المشتريات.' }, { status: 403 });
+        if (!ctx.userPermissions.canReceivePurchase) return NextResponse.json({ message: 'ليس لديك صلاحية استلام المشتريات.' }, { status: 403 });
         const body = await req.json().catch(() => null);
         if (!body || (body.isPaid !== undefined && typeof body.isPaid !== 'boolean')) {
             return NextResponse.json({ message: 'بيانات الاستلام غير صالحة.' }, { status: 400 });

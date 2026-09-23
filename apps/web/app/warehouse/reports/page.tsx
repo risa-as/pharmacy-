@@ -55,7 +55,7 @@ export default async function WarehouseReportsPage() {
     const canViewReps = belongsAndActive && hasWarehousePermission(actor!, "canViewReps");
 
     return (
-        <ReportsClient
+        <ReportsClient portalMode={(await prisma.warehouse.findUniqueOrThrow({where:{id:ctx.warehouseId},select:{operatingMode:true}})).operatingMode === "ORDER_PORTAL"}
             canViewFinance={canViewFinance}
             canViewCustomers={canViewCustomers}
             canViewPayables={canViewPayables}

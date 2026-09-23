@@ -21,7 +21,7 @@ export async function getWebProducts(searchTerm: string = "") {
             include: {
                 drug: true,
                 batches: {
-                    where: { quantity: { gt: 0 } },
+                    where: { quantity: { gt: 0 }, expiryDate: { gt: new Date() } },
                     orderBy: { expiryDate: 'asc' }
                 }
             }
@@ -110,12 +110,17 @@ export async function processWebSale(data: {
 
     if (!user || !user.id || !branchId) return { success: false, error: "جلسة المستخدم غير صالحة" };
 
+    if (!tenantCtx.userPermissions.canSell) return { success: false, error: 'ليس لديك صلاحية البيع.' };
+    if (!Number.isFinite(data.total) || data.total < 0 || !Number.isFinite(data.discount) || data.discount < 0 || (data.discount > 0 && !tenantCtx.userPermissions.canApplyDiscount)) return { success: false, error: 'قيمة أو صلاحية الخصم غير صالحة.' };
+    if (!['CASH','CARD','CREDIT'].includes(data.paymentMethod)) return { success: false, error: 'طريقة الدفع غير صالحة.' };
+    if (!Array.isArray(data.items) || data.items.length > 500 || new Set(data.items.map(i => String(i.id))).size !== data.items.length || data.items.some(i => !Number.isInteger(i.quantity) || i.quantity <= 0 || !Number.isFinite(i.price) || i.price < 0)) return { success: false, error: 'أصناف البيع غير صالحة.' };
     try {
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const validPatient = data.patientId
-                ? await tx.patient.findUnique({ where: { id: data.patientId } })
+                ? await tx.patient.findFirst({ where: { id: data.patientId, branchId } })
                 : null;
 
+            if (data.patientId && !validPatient) throw new Error('العميل خارج نطاق الفرع.');
             const isCredit = data.paymentMethod === "CREDIT";
             if (isCredit && !validPatient) {
                 throw new Error("يجب تحديد عميل للبيع بالآجل");
@@ -130,6 +135,7 @@ export async function processWebSale(data: {
 
             // FEFO inventory deduction
             for (const item of incomingItems) {
+                const allocations: { batchId: string; quantity: number }[] = [];
                 let itemTotalCost = 0;
                 let remainingToDeduct = item.quantity;
 
@@ -144,6 +150,7 @@ export async function processWebSale(data: {
                     },
                 });
 
+                if (inventory && Math.abs(Number(item.price) - inventory.price) > .01 && !tenantCtx.userPermissions.canEditPrice && !(item.price < inventory.price && tenantCtx.userPermissions.canApplyDiscount)) throw new Error('تغيير السعر يحتاج صلاحية.');
                 if (inventory) {
                     if (inventory.batches && inventory.batches.length > 0) {
                         for (const batch of inventory.batches) {
@@ -152,11 +159,13 @@ export async function processWebSale(data: {
                             itemTotalCost += deduction * (batch as any).costPrice;
 
                             if (deduction > 0) {
-                                await tx.batch.update({
-                                    where: { id: batch.id },
+                                const deducted = await tx.batch.updateMany({
+                                    where: { id: batch.id, quantity: { gte: deduction }, expiryDate: { gt: new Date() } },
                                     data: { quantity: { decrement: deduction } },
                                 });
-                                remainingToDeduct -= deduction;
+                                if (deducted.count !== 1) throw new Error('تغير المخزون؛ حدّث البيانات.');
+                                allocations.push({ batchId: batch.id, quantity: deduction });
+                        remainingToDeduct -= deduction;
                             }
                         }
                     }
@@ -169,12 +178,14 @@ export async function processWebSale(data: {
                     throw new Error(`لم يتم العثور على مخزون للمنتج ${item.name}`);
                 }
 
+                if (remainingToDeduct > 0) throw new Error('الكمية الصالحة المتاحة لا تكفي للبيع.');
                 const unitCost = item.quantity > 0 ? itemTotalCost / item.quantity : 0;
 
                 saleItemsData.push({
                     drugId: String(item.id),
                     quantity: item.quantity,
                     price: Number(item.price),
+                    batchAllocations: JSON.stringify(allocations),
                     cost: unitCost,
                 });
             }
@@ -212,17 +223,18 @@ export async function processWebSale(data: {
             // For Web POS Temporary: Just find the first safe for this branch
             if (!isCredit && data.paymentMethod === "CASH") {
                 const availableSafe = await tx.safe.findFirst({
-                    where: { branchId: branchId }
+                    where: { branchId: branchId, type: "CASH_DRAWER" }
                 });
 
                 if (availableSafe) {
+                    await tx.sale.update({ where: { id: sale.id }, data: { safeId: availableSafe.id } });
                     await tx.transaction.create({
                         data: {
                             safeId: availableSafe.id,
                             type: "IN",
                             amount: data.total,
                             referenceType: "SALE",
-                            description: `مبيعات نقدية ويب فاتورة #${sale.id.slice(0, 8)}`,
+                            description: `مبيعات نقدية ويب فاتورة #${sale.documentNumber}`,
                         },
                     });
 
@@ -264,7 +276,7 @@ export async function processWebSale(data: {
                                 accountId: loyaltyAccount.id,
                                 points: -data.pointsRedeemed,
                                 type: "REDEMPTION",
-                                description: `استبدال لنقاط البيع #${sale.id.slice(0, 8)}`,
+                                description: `استبدال لنقاط البيع #${sale.documentNumber}`,
                             },
                         });
                     }
@@ -300,7 +312,7 @@ export async function processWebSale(data: {
                                 accountId: loyaltyAccount.id,
                                 points: pointsEarned,
                                 type: "EARN",
-                                description: `نقاط مكتسبة من فاتورة #${sale.id.slice(0, 8)}`,
+                                description: `نقاط مكتسبة من فاتورة #${sale.documentNumber}`,
                             },
                         });
                     }

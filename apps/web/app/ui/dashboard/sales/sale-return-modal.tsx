@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X, Undo2, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 // sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
 // sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
 import { toast } from "sonner";
+import { previewRefund } from "@faramace/shared";
 
 interface SaleReturnModalProps {
     sale: any;
@@ -19,6 +20,8 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
     const [isLoading, setIsLoading] = useState(false);
     const [notes, setNotes] = useState("");
     const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
+    const returnAttempt = useRef({ signature: "", key: "" });
+    const busy = useRef(false);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
@@ -49,21 +52,20 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
         }));
     };
 
-    const totalReturnAmount = sale.items.reduce((acc: number, item: any) => {
-        const returnQty = returnQuantities[item.drugId] || 0;
-        return acc + (returnQty * item.price);
-    }, 0);
+    const totalReturnAmount = previewRefund(sale, returnQuantities);
 
     const hasItemsToReturn = Object.values(returnQuantities).some((qty: any) => qty > 0);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (busy.current) return;
 
         if (!hasItemsToReturn) {
             toast.error("يرجى تحديد عنصر واحد على الأقل للإرجاع");
             return;
         }
 
+        busy.current = true;
         setIsLoading(true);
         try {
             const itemsToReturn = Object.keys(returnQuantities)
@@ -74,9 +76,11 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
                     price: sale.items.find((i: any) => i.drugId === drugId)?.price || 0
                 }));
 
+            const signature = JSON.stringify({ saleId: sale.id, items: itemsToReturn, notes });
+            if (signature !== returnAttempt.current.signature) returnAttempt.current = { signature, key: crypto.randomUUID() };
             const res = await fetch(`/api/sales/${sale.id}/return`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "x-idempotency-key": returnAttempt.current.key },
                 body: JSON.stringify({
                     items: itemsToReturn,
                     notes,
@@ -89,7 +93,8 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
                 throw new Error(data.message || "حدث خطأ أثناء معالجة الإرجاع");
             }
 
-            toast.success("تم إرجاع المواد بنجاح");
+            toast.success(data.message || "تم إرجاع المواد بنجاح", { duration: 8000 });
+            returnAttempt.current = { signature: "", key: "" };
             setReturnQuantities({});
             setNotes("");
             onClose();
@@ -97,6 +102,7 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
         } catch (error: any) {
             toast.error(error.message || "حدث خطأ غير متوقع");
         } finally {
+            busy.current = false;
             setIsLoading(false);
         }
     };
@@ -113,7 +119,7 @@ export default function SaleReturnModal({ sale, isOpen, onClose }: SaleReturnMod
                             <Undo2 className="w-6 h-6" />
                             إرجاع مواد من الفاتورة
                         </h2>
-                        <p className="text-sm mt-1 opacity-80">رقم الفاتورة: <span className="font-mono font-bold">{sale.id}</span></p>
+                        <p className="text-sm mt-1 opacity-80">رقم الفاتورة: <span className="font-mono font-bold">{sale.documentNumber || "—"}</span></p>
                     </div>
                     <button
                         onClick={onClose}

@@ -152,26 +152,40 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json().catch(() => ({}));
-        // دواء واحد ({drugId}) أو دفعة ({drugIds}) بنفس العدد. الدفعة لحالة
-        // واحدة محددة: الأشكال الوحدوية رقمها 1 معروف سلفاً، فالمراجعة تدقيق.
+        // دواء واحد ({drugId}) أو دفعة ({drugIds}) بنفس العدد، أو دفعة بقيم
+        // مختلفة ({items: [{ drugId, unitsPerPack }]}). الصيغة الأخيرة تسمح
+        // للمراجع بإدخال تعبئة مختلفة لكل دواء ثم حفظها بضغطة واحدة.
+        const rawItems: unknown = Array.isArray(body?.items) ? body.items : [];
+        const itemMap = new Map<string, number>();
+        for (const item of rawItems as unknown[]) {
+            if (!item || typeof item !== 'object') continue;
+            const drugId = (item as { drugId?: unknown }).drugId;
+            const value = Number((item as { unitsPerPack?: unknown }).unitsPerPack);
+            if (typeof drugId === 'string' && drugId.length > 0) itemMap.set(drugId, value);
+        }
         const rawIds: unknown = Array.isArray(body?.drugIds)
             ? body.drugIds
             : typeof body?.drugId === 'string'
                 ? [body.drugId]
                 : [];
-        const drugIds = Array.from(new Set(
+        const uniformIds = Array.from(new Set(
             (rawIds as unknown[]).filter((v): v is string => typeof v === 'string' && v.length > 0)
         ));
-        const unitsPerPack = Number(body?.unitsPerPack);
+        const drugIds = itemMap.size > 0 ? Array.from(itemMap.keys()) : uniformIds;
+        const uniformUnits = Number(body?.unitsPerPack);
         if (drugIds.length === 0) return NextResponse.json({ error: 'drugId مطلوب.' }, { status: 400 });
         if (drugIds.length > 500) {
             return NextResponse.json({ error: 'الحد الأقصى 500 دواء في الدفعة الواحدة.' }, { status: 400 });
         }
-        if (!Number.isInteger(unitsPerPack) || unitsPerPack <= 0) {
+        if (itemMap.size === 0 && (!Number.isInteger(uniformUnits) || uniformUnits <= 0)) {
             return NextResponse.json(
                 { error: 'عدد الأشرطة يجب أن يكون عدداً صحيحاً أكبر من صفر.' },
                 { status: 400 }
             );
+        }
+        const values = drugIds.map((id) => itemMap.size > 0 ? itemMap.get(id) : uniformUnits);
+        if (values.some((value) => !Number.isInteger(value) || (value as number) <= 0)) {
+            return NextResponse.json({ error: 'كل أعداد الأشرطة يجب أن تكون أعداداً صحيحة أكبر من صفر.' }, { status: 400 });
         }
 
         // الكتابة تمسّ صفاً عالمياً تراه كل المؤسسات، فيُشترط أن يكون الدواء في
@@ -192,15 +206,19 @@ export async function POST(req: NextRequest) {
 
         // الشرط على unitsPerPackConfirmedAt: null يمنع دهس تأكيد سابق — لو أكّد
         // صيدلاني آخر رقماً بين فتح الصفحة والحفظ، فتأكيده أولى من دفعة جماعية.
-        const written = await prisma.globalDrug.updateMany({
-            where: { id: { in: ownedIds }, unitsPerPackConfirmedAt: null },
-            data: { unitsPerPack, unitsPerPackConfirmedAt: new Date() },
-        });
+        const valuesById = new Map(drugIds.map((id, index) => [id, values[index] as number]));
+        const now = new Date();
+        const counts = await prisma.$transaction(
+            ownedIds.map((id) => prisma.globalDrug.updateMany({
+                where: { id, unitsPerPackConfirmedAt: null },
+                data: { unitsPerPack: valuesById.get(id)!, unitsPerPackConfirmedAt: now },
+            })),
+        );
+        const writtenCount = counts.reduce((sum, result) => sum + result.count, 0);
         return NextResponse.json({
             ok: true,
-            unitsPerPack,
-            confirmed: written.count,
-            skipped: drugIds.length - written.count,
+            confirmed: writtenCount,
+            skipped: drugIds.length - writtenCount,
         });
     } catch (e) {
         console.error('inventory pack-units POST error:', e);

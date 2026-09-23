@@ -40,7 +40,7 @@ export default function DocumentHeader({
                 {lines.map((l) => (
                     <div key={l.label} className="flex gap-1.5">
                         <dt className="shrink-0 text-muted-foreground">{l.label}:</dt>
-                        <dd className="min-w-0 truncate font-medium text-foreground">{l.value}</dd>
+                        <dd className="min-w-0 break-all font-medium text-foreground">{l.value}</dd>
                     </div>
                 ))}
             </dl>

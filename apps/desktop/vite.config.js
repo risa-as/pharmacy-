@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, __dirname, '');
 
     return {
+        resolve: { alias: { '@faramace/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts') } },
         plugins: [
             react(),
             electron({

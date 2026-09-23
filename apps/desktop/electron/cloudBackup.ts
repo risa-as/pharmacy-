@@ -35,7 +35,7 @@ export async function uploadBackup(filePath: string, branchId: string = "default
         const targetUrl = `${cloudBase}/backup/upload`;
 
         const legacySecret = (typeof __BACKUP_SECRET_KEY__ !== "undefined" && __BACKUP_SECRET_KEY__)
-            || process.env.BACKUP_SECRET_KEY || "R$i1999s$a";
+            || process.env.BACKUP_SECRET_KEY || "";
         const licenseKey = store.get('licenseKey') as string | undefined;
 
         // Each attempt needs a fresh form — the file read-stream is single-use.

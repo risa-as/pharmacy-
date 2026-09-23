@@ -2,30 +2,13 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
-import { getTenantContext } from '@/app/lib/tenant-utils';
-import { checkFeatureAccess } from '@/app/lib/saas-guards';
-
-async function checkMarketplaceAccess() {
-    const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null; // unauthenticated — let existing auth handle
-    if (!tenantCtx.organizationId) return null; // SUPER_ADMIN — allow
-    const access = await checkFeatureAccess(tenantCtx.organizationId, 'marketplace');
-    if (!access.allowed) {
-        return NextResponse.json({
-            error: 'هذه الميزة متاحة في باقة الشركات فقط.',
-            code: 'FEATURE_NOT_IN_PLAN',
-            requiredPlan: 'ENTERPRISE'
-        }, { status: 403 });
-    }
-    return null;
-}
+import { getMarketplaceContext, resolveMarketplaceBranch } from '@/app/lib/marketplace-access';
 
 // GET: Browse marketplace listings
 export async function GET(req: NextRequest) {
     try {
-        const guard = await checkMarketplaceAccess();
-        if (guard) return guard;
+        const ctx = await getMarketplaceContext();
+        if (ctx instanceof NextResponse) return ctx;
 
         const { searchParams } = new URL(req.url);
         const search = searchParams.get('search') || '';
@@ -61,21 +44,19 @@ export async function GET(req: NextRequest) {
 // POST: Create a new listing (sell surplus stock)
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const guard = await checkMarketplaceAccess();
-        if (guard) return guard;
+        const ctx = await getMarketplaceContext();
+        if (ctx instanceof NextResponse) return ctx;
 
         const body = await req.json();
         const { drugId, quantity, unitPrice, minOrderQty, description, expiryDate, batchNumber, branchId } = body;
 
-        if (!drugId || !quantity || !unitPrice) {
-            return NextResponse.json({ error: "drugId, quantity, and unitPrice are required" }, { status: 400 });
+        if (!drugId || !Number.isInteger(quantity) || quantity <= 0 || !(unitPrice > 0)) {
+            return NextResponse.json({ error: "drugId, a positive integer quantity, and a positive unitPrice are required" }, { status: 400 });
         }
 
-        const sellerId = branchId || session.user.branchId;
-        if (!sellerId) return NextResponse.json({ error: "Branch ID required" }, { status: 400 });
+        // The seller is always a branch inside the caller's tenant scope.
+        const sellerId = await resolveMarketplaceBranch(ctx, branchId);
+        if (!sellerId) return NextResponse.json({ error: "Branch not in scope" }, { status: 403 });
 
         const listing = await prisma.marketplaceListing.create({
             data: {

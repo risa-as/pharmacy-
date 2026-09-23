@@ -29,7 +29,7 @@ export default async function ShortagesPage(
     const selectedBranchId = searchParams?.branch;
 
     const branchFilter = selectedBranchId
-        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        ? { AND: [tenantBranchWhere, { branchId: selectedBranchId }] }
         : tenantBranchWhere;
 
     const inventory = await prisma.inventory.findMany({

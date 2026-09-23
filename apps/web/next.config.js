@@ -2,6 +2,14 @@
 const nextConfig = {
     // Keep CI/readiness builds isolated from a concurrently running dev server.
     distDir: process.env.NEXT_BUILD_DIR || '.next',
+    // Development chunks have stable filenames. Keep them outside old
+    // immutable browser caches left by the former global static header.
+    assetPrefix: process.env.NODE_ENV === 'development' ? '/__dev_assets' : undefined,
+    async rewrites() {
+        return process.env.NODE_ENV === 'development'
+            ? [{ source: '/__dev_assets/_next/:path*', destination: '/_next/:path*' }]
+            : [];
+    },
     transpilePackages: ["@faramace/ui"],
 
     // ── Standalone build (portable, no node_modules needed on target machine)
@@ -55,13 +63,8 @@ const nextConfig = {
                     },
                 ],
             },
-            // Static assets — long-lived immutable cache
-            {
-                source: '/_next/static/:path*',
-                headers: [
-                    { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-                ],
-            },
+            // Next owns chunk cache headers: no-store in development and
+            // immutable content-hashed files in production.
             // Fonts — long-lived cache
             {
                 source: '/fonts/:path*',

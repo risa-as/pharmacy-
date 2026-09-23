@@ -1,3 +1,4 @@
+import ContactFooter from '@/app/warehouse/print/_components/ContactFooter';
 // فاتورة الشحن — الورقة الواحدة التي تسافر مع البضاعة من المخزن إلى الصيدلية:
 // عامل المخزن يُجهّز بها، والصيدلاني يستلم ويتحقق بها (فحص 2026-09-17، فجوة
 // G2؛ أُعيد تصميمها 2026-09-19 لتصبح فاتورة بيع فعلية لا مجرد قائمة تجهيز).
@@ -95,7 +96,7 @@ export default async function PrintShippingInvoicePage(props: {
                     },
                 },
             },
-            warehouse: { select: { name: true, phone: true } },
+            warehouse: { select: { name: true, city: true, phone: true, salesPhone: true, followupPhone: true, managementPhone: true } },
         },
     });
 
@@ -257,7 +258,7 @@ export default async function PrintShippingInvoicePage(props: {
         ],
         [
             // لا مفهوم "كاشير" في نظام مذاخر B2B (لا صندوق نقدي لكل فاتورة) — «—».
-            { label: 'الكاشير', value: '—' },
+            { label: 'رقم الطلب', value: order.orderNumber ?? '—' },
             // اسم المستخدم الذي يطبع الورقة فعلياً (صاحب صلاحية canShipOrders) —
             // لا اسم مندوب مُختلَق؛ هذا هو المجهّز الحقيقي الوحيد المعروف.
             { label: 'المجهز', value: ctx.user.name ?? '—' },
@@ -324,7 +325,7 @@ export default async function PrintShippingInvoicePage(props: {
                             <th className="border border-border p-1 font-bold">السعر</th>
                             <th className="border border-border p-1 font-bold">الاجمالي</th>
                             <th className="border border-border p-1 font-bold">تاريخ الصلاحية</th>
-                            <th className="border border-border p-1 font-bold">رقم الوجبة</th>
+                            <th className="border border-border p-1 font-bold">مرجع الشحنة</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -334,7 +335,7 @@ export default async function PrintShippingInvoicePage(props: {
                                 <tr key={l.id} className="border-b border-border align-top">
                                     <td className="border border-border p-1 tabular-nums text-muted-foreground">{i + 1}</td>
                                     <td className="border border-border p-1">
-                                        <div className="truncate font-medium text-foreground">{l.tradeName}</div>
+                                        <div className="break-words font-medium text-foreground">{l.tradeName}</div>
                                         <div className="truncate font-mono text-[9px] text-muted-foreground" dir="ltr">{l.barcode}</div>
                                         {l.note && (
                                             <div className="mt-0.5 truncate text-[9px] text-muted-foreground">ملاحظة: {l.note}</div>
@@ -405,7 +406,7 @@ export default async function PrintShippingInvoicePage(props: {
                 </table>
 
                 <p className="mt-2 text-[9px] leading-relaxed text-muted-foreground">
-                    «رقم الوجبة» مرجع شحنة يُصدره النظام آلياً لتتبّع السطر، لا رقم دفعة
+                    «مرجع الشحنة» مرجع شحنة يُصدره النظام آلياً لتتبّع السطر، لا رقم دفعة
                     حقيقياً من المصنع؛ «تاريخ الصلاحية» المُعلَن وعدٌ أدخله المذخر وقت
                     التسعير لا إثبات. دفعات إرشاد FEFO أسفل كل سطر لحظة الطباعة ولا تحجز
                     شيئاً — الخصم الفعلي من المخزون يحدث عند تسجيل الشحن؛ راجع الكمية
@@ -470,6 +471,7 @@ export default async function PrintShippingInvoicePage(props: {
                     <div className="flex-1 border-t border-border pt-1.5">توقيع المجهز</div>
                 </div>
             </div>
+            <ContactFooter phones={order.warehouse} />
         </PrintFrame>
     );
 }

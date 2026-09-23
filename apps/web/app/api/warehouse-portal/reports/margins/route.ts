@@ -1,3 +1,4 @@
+import { prisma } from '@/app/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 // المرحلة 4 من نظام المذاخر B2B (التقارير والأداء): هامش الربح لكل صنف.
@@ -7,9 +8,8 @@ export const dynamic = 'force-dynamic';
 // التقرير تحديداً رغم امتلاكهما التبويب العام. requireWarehousePermission
 // يقبل مصفوفة مفاتيح (AND) فتُطلَب الاثنتان معاً باستعلام واحد.
 //
-// costPrice المستخدَم هنا هو تكلفة الكتالوج **الحالية** وقت توليد التقرير،
-// لا تكلفة الشراء الفعلية وقت كل عملية بيع تاريخياً (لا عمود تأريخ لتكلفة
-// الكتالوج) — فالهامش لأي صنف تغيّرت تكلفته لاحقاً تقريبي، لا سجل تاريخي دقيق.
+// تعتمد التكلفة على الحركات المثبتة وقت الشحن والبيع؛ الحركات القديمة
+// التي لا تحمل تكلفة تبقى غير مكتملة ولا تُستبدل بتكلفة الكتالوج الحالية.
 import { NextRequest, NextResponse } from 'next/server';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
     try {
         const gate = await requireWarehousePermission(ctx, ['canViewReports', 'canViewFinance']);
         if (!gate.ok) return gate.response;
+        const mode = await prisma.warehouse.findUnique({where:{id:ctx.warehouseId},select:{operatingMode:true}});
+        if(mode?.operatingMode === 'ORDER_PORTAL') return NextResponse.json({error:'هذا التقرير يحتاج مخزون المذخر وتكاليفه المسجلة في وضع الإدارة الكاملة.'},{status:403});
 
         const { searchParams } = new URL(req.url);
         const range = resolveReportDateRange(searchParams.get('from'), searchParams.get('to'));

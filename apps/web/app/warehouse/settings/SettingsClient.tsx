@@ -13,6 +13,9 @@ import PageHeader from "@/app/warehouse/_components/PageHeader";
 interface ProfileForm {
     name: string;
     phone: string;
+    salesPhone: string;
+    followupPhone: string;
+    managementPhone: string;
     address: string;
     city: string;
     contactPerson: string;
@@ -151,47 +154,6 @@ export default function WarehouseSettingsPage({
         <div className="space-y-6" dir="rtl">
             <PageHeader title="الإعدادات" description="إدارة إعدادات حسابك وملف مذخرك التجاري." />
 
-            <SectionCard
-                icon={TrendingUp}
-                title="نسبة التلبية (آخر 30 يوماً)"
-                description="هذا ما تحكم عليك الصيدليات به عند اختيار مذخر — نسبة الأصناف المتوفرة كاملةً من كل ما طُلب منك."
-            >
-                {hasData ? (
-                    <div className="grid gap-5 sm:grid-cols-[auto,1fr] sm:items-center sm:gap-8">
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-4xl font-bold tabular-nums text-success">{fulfilment.ratePercent}</span>
-                            <span className="text-xl font-bold text-success">٪</span>
-                        </div>
-
-                        <div className="min-w-0">
-                            <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" role="presentation">
-                                {breakdown.map((b) => (
-                                    <div key={b.label} className={b.bar} style={{ width: `${pct(b.value)}%` }} />
-                                ))}
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-                                {breakdown.map((b) => (
-                                    <div key={b.label} className="flex items-center gap-2 text-xs">
-                                        <span className={`h-2 w-2 shrink-0 rounded-full ${b.dot}`} aria-hidden="true" />
-                                        <span className="text-muted-foreground">{b.label}</span>
-                                        <span className="font-bold tabular-nums text-foreground">{b.value}</span>
-                                    </div>
-                                ))}
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span>من</span>
-                                    <span className="font-bold tabular-nums text-foreground">{total}</span>
-                                    <span>بنداً</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ) : (
-                    <p className="rounded-lg border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-                        لا توجد بنود مطلوبة خلال آخر 30 يوماً بعد — تظهر نسبتك هنا بمجرد وصول أول طلب.
-                    </p>
-                )}
-            </SectionCard>
-
             {canEditProfile && (
                 <SectionCard
                     icon={Building2}
@@ -262,6 +224,16 @@ export default function WarehouseSettingsPage({
                                 onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                             />
                         </div>
+                        <fieldset className="sm:col-span-2 lg:col-span-12 rounded-lg border p-4">
+                            <legend className="px-2 text-sm font-bold">أرقام التواصل في أسفل الفاتورة</legend>
+                            <p className="mb-3 text-sm text-muted-foreground">اختيارية؛ يظهر الرقم المحفوظ فقط، ولا تُطبع الحقول الفارغة.</p>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                {([{key:'salesPhone',label:'المبيعات'}, {key:'followupPhone',label:'المتابعة'}, {key:'managementPhone',label:'الإدارة'}] as const).map(({key,label}) => <div key={key}>
+                                    <label htmlFor={key} className={labelClass}>{label}</label>
+                                    <input id={key} type="tel" dir="ltr" maxLength={30} className={inputClass} value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})}/>
+                                </div>)}
+                            </div>
+                        </fieldset>
                         <div className="sm:col-span-2 lg:col-span-12">
                             <label className={labelClass}>ملاحظات</label>
                             <textarea
@@ -359,6 +331,47 @@ export default function WarehouseSettingsPage({
                     </div>
                 </div>
             </SectionCard>
+            <SectionCard
+                icon={TrendingUp}
+                title="نسبة التلبية (آخر 30 يومًا)"
+                description="هذا ما تحكم عليك الصيدليات به عند اختيار مذخر — نسبة الأصناف المتوفرة كاملةً من كل ما طُلب منك."
+            >
+                {hasData ? (
+                    <div className="grid gap-5 sm:grid-cols-[auto,1fr] sm:items-center sm:gap-8">
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-4xl font-bold tabular-nums text-success">{fulfilment.ratePercent.toLocaleString("ar-IQ-u-nu-latn")}</span>
+                            <span className="text-xl font-bold text-success">٪</span>
+                        </div>
+
+                        <div className="min-w-0">
+                            <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" role="presentation">
+                                {breakdown.map((b) => (
+                                    <div key={b.label} className={b.bar} style={{ width: `${pct(b.value)}%` }} />
+                                ))}
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+                                {breakdown.map((b) => (
+                                    <div key={b.label} className="flex items-center gap-2 text-xs">
+                                        <span className={`h-2 w-2 shrink-0 rounded-full ${b.dot}`} aria-hidden="true" />
+                                        <span className="text-muted-foreground">{b.label}</span>
+                                        <span className="font-bold tabular-nums text-foreground">{b.value.toLocaleString("ar-IQ-u-nu-latn")}</span>
+                                    </div>
+                                ))}
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>من</span>
+                                    <span className="font-bold tabular-nums text-foreground">{total.toLocaleString("ar-IQ-u-nu-latn")}</span>
+                                    <span>بنداً</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="rounded-lg border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+                        لا توجد بنود مطلوبة خلال آخر 30 يومًا بعد — تظهر نسبتك هنا بمجرد وصول أول طلب.
+                    </p>
+                )}
+            </SectionCard>
+
         </div>
     );
 }

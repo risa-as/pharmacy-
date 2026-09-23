@@ -51,11 +51,13 @@ describe("applyReturnCredit — أثر قبول الإرجاع على فاتور
     expect(r).toEqual({ ok: true, newTotal: 400, newStatus: "PAID" });
   });
 
-  it("الحارس الجوهري: خصم يُنزل الإجمالي دون المسدَّد فعلاً يُرفض", () => {
-    // إجمالي 1000، مسدَّد 400. خصم 700 → إجمالي جديد 300 < 400 المسدَّد فعلاً — مرفوض.
+  it("يقبل إرجاع الفاتورة المدفوعة ويترك الفرق كسند رصيد دائن في معاملة القبول", () => {
     const r = applyReturnCredit({ invoiceTotal: 1000, invoicePaidAmount: 400, invoiceStatus: "PARTIAL", creditAmount: 700 });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/ردّ|رد/);
+    expect(r).toEqual({ ok: true, newTotal: 300, newStatus: 'PAID' });
+  });
+
+  it('يرفض تخفيض الفاتورة إلى قيمة سالبة', () => {
+    expect(applyReturnCredit({ invoiceTotal: 100, invoicePaidAmount: 100, invoiceStatus: 'PAID', creditAmount: 101 }).ok).toBe(false);
   });
 
   it("فاتورة CANCELLED مرفوضة دائماً بصرف النظر عن المبلغ", () => {

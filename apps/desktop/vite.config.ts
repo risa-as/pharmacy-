@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, path.resolve(__dirname), '')
 
     return {
+        // Bundle the workspace TypeScript entry in the renderer. Its CommonJS
+        // dist entry is consumed by Node, and is not a browser ESM entry.
+        resolve: { alias: { '@faramace/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts') } },
         plugins: [
             react(),
             electron({

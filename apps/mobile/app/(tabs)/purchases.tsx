@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Href } from 'expo-router';
+import { useRouter, Href, useFocusEffect } from 'expo-router';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Radius } from '../../constants/colors';
@@ -24,7 +24,7 @@ const purchaseState = (purchase: any) => String(purchase?.status ?? '').toUpperC
 export default function PurchasesScreen() {
     const router = useRouter();
     const C = usePalette();
-    const { isAdmin, branchId: authBranchId } = useAuth();
+    const { isAdmin, can, features, branchId: authBranchId } = useAuth();
     const { triggerSync } = useSyncStatus();
 
     const [purchases, setPurchases]           = useState<any[]>([]);
@@ -47,7 +47,7 @@ export default function PurchasesScreen() {
         }
     }, [selectedBranch]);
 
-    useEffect(() => { setLoading(true); fetchPurchases(); }, [fetchPurchases]);
+    useFocusEffect(useCallback(() => { void fetchPurchases(); }, [fetchPurchases]));
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -105,7 +105,7 @@ export default function PurchasesScreen() {
         const state = purchaseState(purchase);
         const status = purchaseStatus(state);
         const isPending = state === 'PENDING';
-        const refId = purchase.id.slice(0, 8).toUpperCase();
+        const refId = purchase.documentNumber || "—";
         const dateStr = formatDate(purchase.createdAt, { weekday: 'long', day: 'numeric', month: 'long' });
 
         return (
@@ -127,12 +127,13 @@ export default function PurchasesScreen() {
                         <StatusBadge label={status.label} tone={status.tone} />
                         <Text style={{ color: C.mutedForeground, fontSize: 12.5 }}>{dateStr}</Text>
                         <Text style={{ color: C.primary, fontSize: 18, fontWeight: '900' }}>
-                            {formatNumber(purchase.totalAmount ?? 0)} <Text style={{ fontSize: 12, color: C.mutedForeground }}>{CURRENCY}</Text>
+                            {formatNumber(purchase.total ?? purchase.totalAmount ?? 0)} <Text style={{ fontSize: 12, color: C.mutedForeground }}>{CURRENCY}</Text>
                         </Text>
                     </View>
                 </TouchableOpacity>
 
-                {isPending && (
+                {purchase.warehouseOrderId&&<AppButton label="متابعة طلب المذخر" compact variant="outline" onPress={()=>router.push({pathname:'/warehouse-orders' as any,params:{orderId:purchase.warehouseOrderId}})}/>}
+                {isPending && !purchase.warehouseOrderId && (
                     <View style={{ flexDirection: 'row-reverse', gap: 8, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 }}>
                         <AppButton
                             label="تفاصيل الطلب"
@@ -143,7 +144,7 @@ export default function PurchasesScreen() {
                             onPress={() => router.push(`/purchases/${purchase.id}` as Href)}
                         />
                         <AppButton
-                            label="استلام المواد"
+                            permission="canReceivePurchase" label="استلام المواد"
                             icon="cube-outline"
                             variant="soft"
                             compact
@@ -151,7 +152,7 @@ export default function PurchasesScreen() {
                             onPress={() => router.push(`/purchases/${purchase.id}/receive` as Href)}
                         />
                         <AppButton
-                            label="إلغاء الطلب"
+                            permission="canCreatePurchase" label="إلغاء الطلب"
                             icon="close-circle-outline"
                             variant="dangerOutline"
                             compact
@@ -170,7 +171,7 @@ export default function PurchasesScreen() {
             <ScreenHeader
                 title="المشتريات"
                 hideBack
-                action={
+                action={can('canCreatePurchase') &&
                     <TouchableOpacity
                         onPress={() => router.push('/(tabs)/smart-orders' as Href)}
                         activeOpacity={0.8}
@@ -189,6 +190,7 @@ export default function PurchasesScreen() {
             />
 
             <View style={{ paddingHorizontal: 16, paddingBottom: 8, gap: 10 }}>
+                {features.warehouseManagement&&can('canViewWarehouseOrders')&&<AppButton label="طلبات المذاخر والعروض" compact variant="outline" onPress={()=>router.push('/warehouse-orders' as any)}/>}
                 {isAdmin && <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle />}
 
                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: Radius.control, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12 }}>

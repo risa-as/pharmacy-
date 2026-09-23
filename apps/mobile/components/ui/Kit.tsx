@@ -1,3 +1,4 @@
+import { useAuth } from '../../context/AuthContext';
 /**
  * Mobile redesign 012 — shared building blocks.
  * Flat colours, cards 8px, controls 6px, badges 5px (constants/colors Radius).
@@ -8,7 +9,7 @@ import {
     ViewStyle, StyleProp, Pressable, TextStyle, TextProps,
     Animated, Easing, AccessibilityInfo,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon as Ionicons } from './AppIcon';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors, Palette, Radius } from '../../constants/colors';
 
@@ -300,12 +301,14 @@ export function ListRow({ icon, tone = 'primary', title, subtitle, onPress, trai
 }
 
 // ── Buttons ──────────────────────────────────────────────────────────────────
-export function AppButton({ label, onPress, icon, variant = 'primary', loading, disabled, style, compact }: {
-    label: string; onPress?: () => void; icon?: IconName;
+export function AppButton({ label, onPress, icon, variant = 'primary', loading, disabled, style, compact, permission }: {
+    permission?: string; label: string; onPress?: () => void; icon?: IconName;
     variant?: 'primary' | 'outline' | 'danger' | 'dangerOutline' | 'soft';
     loading?: boolean; disabled?: boolean; style?: StyleProp<ViewStyle>; compact?: boolean;
 }) {
     const C = usePalette();
+    const { can } = useAuth();
+    if (permission && !can(permission)) return null;
     const isDisabled = disabled || loading;
     const palette = {
         primary: { bg: C.primary, fg: '#FFFFFF', border: C.primary },

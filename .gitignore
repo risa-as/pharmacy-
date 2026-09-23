@@ -74,3 +74,7 @@ artifacts/
 
 # AI & Tooling
 .claude/
+
+# Review / audit documents: kept local, never pushed (owner decision 2026-09-23)
+/docs/quality/
+/warehouse-remediation.md

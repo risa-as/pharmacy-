@@ -114,6 +114,10 @@ export async function getWarehouseContext(): Promise<WarehouseContext | NextResp
     const { NextResponse } = await import('next/server');
 
     const session = await auth();
+    // Same outage rule as getTenantContext: never proceed on unverified claims,
+    // and throw rather than 401 so pages don't redirect-loop through /login.
+    const { SESSION_REFRESH_UNAVAILABLE, SessionUnavailableError } = await import('@/app/lib/session-refresh');
+    if ((session as any)?.error === SESSION_REFRESH_UNAVAILABLE) throw new SessionUnavailableError();
     if (!session?.user) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

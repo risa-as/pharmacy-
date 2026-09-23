@@ -26,6 +26,8 @@ import {
     UsersRound,
     Settings,
     Circle,
+    Truck,
+    ShoppingBag,
     Tag,
     type LucideIcon,
 } from "lucide-react";
@@ -42,6 +44,8 @@ import { ThemeToggle } from "@/app/ui/theme-toggle";
 const NAV_ICONS: Record<string, LucideIcon> = {
     "/warehouse": LayoutDashboard,
     "/warehouse/orders": ClipboardList,
+    "/warehouse/reps": Truck,
+    "/warehouse/purchases": ShoppingBag,
     "/warehouse/returns": RotateCcw,
     "/warehouse/catalog": Pill,
     "/warehouse/stock": Boxes,
@@ -65,6 +69,7 @@ interface NavGroup {
 
 /** الرئيسية (/warehouse) مطابقة تامة فقط — بادئة كل مسار آخر، فلا تُميَّز نشطة على كل صفحة. */
 function isTabActive(pathname: string, href: string): boolean {
+    if (href === "/warehouse/accounts" && pathname === "/warehouse/settlements") return true;
     if (href === "/warehouse") return pathname === "/warehouse";
     return pathname === href || pathname.startsWith(href + "/");
 }

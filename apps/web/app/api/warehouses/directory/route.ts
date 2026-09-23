@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewWarehouseOrders) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
 
         if (tenantCtx.organizationId) {
             const access = await checkFeatureAccess(tenantCtx.organizationId, 'warehouseManagement');

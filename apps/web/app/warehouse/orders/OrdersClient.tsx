@@ -2,13 +2,15 @@
 
 // المرحلة 3 من ميزة المذاخر: عميل صندوق الطلبات — قائمة بفلترة الحالة +
 // شاشة التسعير/المراجعة (لكل صنف: متوفر/جزئي/نافد + السعر النهائي) + إرسال العرض.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Printer, Phone } from "lucide-react";
+import { Printer, Phone, Loader2, ClipboardList } from "lucide-react";
 import { useRouter } from "next/navigation";
 // sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
 // sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
 import { toast } from "sonner";
+import PortalShipment from './PortalShipment';
+import type { ShipmentLot } from '@/app/lib/warehouse-operating-mode';
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import EmptyState from "@/app/warehouse/_components/EmptyState";
 import StatusChip, { type StatusChipVariant } from "@/app/warehouse/_components/StatusChip";
@@ -145,27 +147,41 @@ interface CatalogOption {
 }
 
 export default function OrdersClient({
-    initialOrders,
+    initialOrders, operatingMode,
+    initialStatus = "ALL",
+    pageNumber, totalOrders, statusCounts,
     canShipOrders,
     canQuoteOrders,
 }: {
-    initialOrders: Order[];
+    initialOrders: Order[]; operatingMode: string;
+    initialStatus?: string;
+    pageNumber: number; totalOrders: number; statusCounts: Record<string, number>;
     canShipOrders: boolean;
     canQuoteOrders: boolean;
 }) {
+    const [shippingOrder,setShippingOrder] = useState<Order|null>(null);
     const router = useRouter();
     const [orders, setOrders] = useState<Order[]>(initialOrders);
-    const [statusFilter, setStatusFilter] = useState<string>("ALL");
+    const [filterPending, startFilterTransition] = useTransition();
+    const [requestedFilter, setRequestedFilter] = useState(initialStatus);
+    const activeFilter = filterPending ? requestedFilter : initialStatus;
+    const navigateOrders = (status: string, page = 1) => {
+        if (filterPending) return;
+        setRequestedFilter(status);
+        startFilterTransition(() => router.push('/warehouse/orders?' + new URLSearchParams({...(status === 'ALL' ? {} : {status}), ...(page === 1 ? {} : {page:String(page)})})));
+    };
+    const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
     const [reviewOrder, setReviewOrder] = useState<Order | null>(null);
 
     // router.refresh() يعيد بيانات الخادم إلى initialOrders، لكن useState لا
     // ينسخ props الجديدة وحده؛ هذا الربط هو الذي يجعل التحديث الدوري مرئياً.
     useEffect(() => {
         setOrders(initialOrders);
-    }, [initialOrders]);
+        setStatusFilter(initialStatus);
+    }, [initialOrders, initialStatus]);
 
     const visible = useMemo(
-        () => (statusFilter === "ALL" ? orders : orders.filter((o) => o.status === statusFilter)),
+        () => orders,
         [orders, statusFilter]
     );
 
@@ -197,19 +213,20 @@ export default function OrdersClient({
         setReviewOrder({ ...order, status: "UNDER_REVIEW" });
     };
 
-    const updateShipping = async (order: Order, status: "SHIPPED" | "DELIVERED") => {
+    const updateShipping = async (order: Order, status: "SHIPPED" | "DELIVERED", lots?: ShipmentLot[]) => {
         const res = await fetch(`/api/warehouse-portal/orders/${order.id}/shipping`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status }),
+            body: JSON.stringify({ status, lots }),
         });
         const data = await res.json();
         if (!res.ok) {
             toast.error(data.error ?? "تعذر تحديث حالة الشحن");
-            return;
+            return false;
         }
         setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status } : o)));
         toast.success(status === "SHIPPED" ? "تم تسجيل شحن الطلب" : "تم تسجيل تسليم الطلب");
+        return true;
     };
 
     // ── طلب هاتفي: يدخله المذخر نيابةً عن صيدلية طلبت بالهاتف/واتساب ──────
@@ -351,92 +368,103 @@ export default function OrdersClient({
 
     return (
         <div className="space-y-6" dir="rtl">
+            {shippingOrder && <PortalShipment order={shippingOrder} onClose={()=>setShippingOrder(null)} onSave={lots=>updateShipping(shippingOrder,"SHIPPED",lots)}/>}
             <PageHeader
                 title="الطلبات الواردة"
                 description="طلبات الصيدليات من أدويتك — راجع الأصناف والأسعار ثم أرسل العرض."
                 actions={
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div className="flex items-center gap-2">
                         {canQuoteOrders && (
                             <button
                                 onClick={() => setPhoneOpen(true)}
-                                className="mr-1 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                                title="تسجيل طلب وصل عبر الهاتف أو واتساب وإرساله للصيدلية لاعتماده"
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                             >
                                 <Phone className="h-3.5 w-3.5" /> طلب هاتفي
                             </button>
                         )}
+
+                    </div>
+                }
+            />
+
+            <div role="group" aria-label="تصفية طلبات المذخر حسب الحالة" className="grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-5 2xl:grid-cols-10">
                         {[
                             ["ALL", "الكل"],
+                            ["REVIEW", "للمراجعة والتسعير"],
                             ["SENT", "جديدة"],
                             ["UNDER_REVIEW", "قيد المراجعة"],
                             ["QUOTED", "بانتظار الصيدلية"],
                             ["APPROVED", "معتمدة"],
                             ["SHIPPED", "قيد التسليم"],
                             ["DELIVERED", "مُسلَّمة"],
+                            ["CANCELLED", "ملغاة"],
+                            ["REJECTED", "مرفوضة"],
                         ].map(([v, l]) => (
                             <button
                                 key={v}
-                                onClick={() => setStatusFilter(v)}
-                                className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                                    statusFilter === v ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70"
+                                type="button"
+                                aria-pressed={activeFilter === v}
+                                aria-busy={filterPending && requestedFilter === v}
+                                disabled={filterPending}
+                                onClick={() => { if (v !== statusFilter) navigateOrders(v); }}
+                                className={`flex min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-medium transition-colors disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                                    activeFilter === v ? "border-primary bg-primary text-primary-foreground shadow-sm" : "border-transparent bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
                                 }`}
                             >
-                                {l}
+                                <span className="whitespace-nowrap leading-5">{l}</span>
+                                <span className={`inline-flex h-6 min-w-8 items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold tabular-nums ${activeFilter === v ? "bg-primary-foreground/15 text-primary-foreground" : "border border-border/60 bg-background text-foreground"}`}>
+                                    {filterPending && requestedFilter === v ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : (statusCounts[v] ?? 0).toLocaleString("en-US")}
+                                </span>
                             </button>
                         ))}
-                    </div>
-                }
-            />
+            </div>
 
-            {visible.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3" aria-live="polite" aria-busy={filterPending}>
+                <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><ClipboardList className="h-4 w-4" aria-hidden="true" /></span>
+                    <div><p className="text-xs text-muted-foreground">الطلبات المطابقة للفلتر</p>
+                        {filterPending ? <p className="mt-1 flex items-center gap-2 text-sm"><Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />جارٍ تحميل النتائج…</p> : <p className="mt-0.5 text-sm"><span className="text-xl font-bold tabular-nums">{totalOrders.toLocaleString('en-US')}</span> <span className="text-muted-foreground">طلب</span></p>}
+                    </div>
+                </div>
+                {totalOrders > 50 && <div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">صفحة {pageNumber} من {Math.ceil(totalOrders/50)}</span>{[pageNumber-1,pageNumber+1].map((p,i)=><button key={i} disabled={filterPending || p<1 || (p-1)*50>=totalOrders} className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40" onClick={()=>navigateOrders(statusFilter,p)}>{i===0?'السابق':'التالي'}</button>)}</div>}
+            </div>
+            {filterPending ? (
+                <div role="status" aria-label="جارٍ تحميل الطلبات" className="space-y-3">
+                    {[0,1,2].map(n => <div key={n} className="space-y-3 rounded-lg border bg-card p-4 motion-safe:animate-pulse"><div className="h-4 w-40 rounded-md bg-muted" /><div className="h-3 w-2/3 rounded-md bg-muted" /><div className="h-3 w-1/3 rounded-md bg-muted" /></div>)}
+                </div>
+            ) : visible.length === 0 ? (
                 <EmptyState icon="📭" title="لا توجد طلبات بهذه الحالة بعد." />
             ) : (
                 <div className="space-y-3">
                     {visible.map((o) => (
-                        <div key={o.id} className="rounded-lg border bg-card p-4 shadow-sm">
-                            <div className="flex flex-wrap items-center gap-3">
-                                <span className="font-mono text-sm font-bold">{o.orderNumber ?? o.id.slice(0, 8)}</span>
-                                {/* اسم المؤسسة (الصيدلية) هو الجزء المميِّز، لا الفرع: كل
-                                    الصيدليات الست في الإنتاج تسمّي فرعها الافتراضي «الفرع
-                                    الرئيسي» بالحرف — فعرض الفرع وحده كان يجعل كل الطلبات
-                                    تبدو من نفس العميل. المؤسسة بلون النص الافتراضي (كما
-                                    رقم الطلب) والفرع ثانوي مكتوم بجانبها بين قوسين. */}
-                                <span className="text-sm font-medium text-foreground">
-                                    من: {o.branch.organization?.name ?? "—"}
-                                    <span className="mr-1 text-xs font-normal text-muted-foreground">
-                                        ({o.branch.name})
-                                    </span>
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                    {new Date(o.createdAt).toLocaleString("ar-IQ")}
-                                </span>
-                                <span className="mr-auto">
-                                    <StatusChip variant={STATUS_VARIANT[o.status]} label={STATUS_LABEL[o.status]} />
-                                </span>
+                        <div key={o.id} className="rounded-lg border bg-card p-4 shadow-sm sm:p-5">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0"><span dir="ltr" className="inline-block font-mono text-sm font-bold text-primary">{o.orderNumber ?? o.id.slice(0,8)}</span><h3 className="mt-1 break-words font-semibold">{o.branch.organization?.name ?? o.branch.name}</h3><p className="mt-0.5 text-xs text-muted-foreground">{o.branch.name}</p></div>
+                                <StatusChip variant={STATUS_VARIANT[o.status]} label={STATUS_LABEL[o.status]} />
                             </div>
-                            <div className="tabular-nums mt-2 text-sm text-muted-foreground">
-                                {o.items.length} صنف — الإجمالي الحالي: {o.totalAmount.toLocaleString("ar-IQ")} د.ع
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="my-4"><p className="text-xs text-muted-foreground">إجمالي الطلب</p><p className="mt-1 text-2xl font-bold tabular-nums">{o.totalAmount.toLocaleString('en-US')} <span className="text-xs font-medium text-muted-foreground">د.ع</span></p><p className="mt-1.5 text-xs text-muted-foreground">{o.items.length} أصناف · <time dateTime={o.createdAt} title={new Date(o.createdAt).toLocaleString('ar-IQ-u-nu-latn')}>{new Date(o.createdAt).toLocaleDateString('ar-IQ-u-nu-latn',{day:'numeric',month:'short',year:'numeric'})}</time></p></div>
+                            <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                                 {(o.status === "SENT") && (
                                     <button
                                         onClick={() => startReview(o)}
-                                        className="rounded-lg bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
+                                        className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                                     >
                                         بدء المراجعة
                                     </button>
                                 )}
-                                {(o.status === "UNDER_REVIEW" || o.status === "QUOTED" || o.status === "APPROVED") && (
+                                {o.status !== "SENT" && (
                                     <button
                                         onClick={() => setReviewOrder(o)}
-                                        className="rounded-lg border px-3 py-1.5 text-sm hover:bg-muted"
+                                        className="inline-flex h-9 items-center justify-center rounded-lg border px-3 text-xs font-medium hover:bg-muted"
                                     >
-                                        {o.status === "UNDER_REVIEW" ? "متابعة المراجعة والتسعير" : "عرض التفاصيل"}
+                                        {o.status === "UNDER_REVIEW" ? "متابعة المراجعة والتسعير" : "تفاصيل الطلب"}
                                     </button>
                                 )}
                                 {o.status === "APPROVED" && (
                                     <button
-                                        onClick={() => updateShipping(o, "SHIPPED")}
-                                        className="rounded-lg bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
+                                        onClick={() => operatingMode === "ORDER_PORTAL" ? setShippingOrder(o) : updateShipping(o, "SHIPPED")}
+                                        className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                                     >
                                         تم الشحن
                                     </button>
@@ -444,7 +472,7 @@ export default function OrdersClient({
                                 {o.status === "SHIPPED" && (
                                     <button
                                         onClick={() => updateShipping(o, "DELIVERED")}
-                                        className="rounded-lg bg-success px-3 py-1.5 text-sm text-success-foreground hover:bg-success/90"
+                                        className="inline-flex h-9 items-center justify-center rounded-lg bg-success px-3 text-xs font-medium text-success-foreground hover:bg-success/90"
                                     >
                                         تم التسليم
                                     </button>
@@ -458,7 +486,7 @@ export default function OrdersClient({
                                     (o.status === "APPROVED" || o.status === "SHIPPED") && (
                                     <Link
                                         href={`/warehouse/print/picking/${o.id}`}
-                                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                                     >
                                         <Printer className="h-3.5 w-3.5" /> فاتورة الشحن
                                     </Link>
@@ -471,20 +499,26 @@ export default function OrdersClient({
 
             <Modal
                 open={phoneOpen}
-                onClose={() => setPhoneOpen(false)}
+                onClose={() => { if (!phoneSaving) setPhoneOpen(false); }}
                 title="طلب هاتفي نيابةً عن صيدلية"
                 maxWidthClass="max-w-3xl"
             >
-                <div className="space-y-4">
-                    <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                <div className="flex max-h-[90dvh] flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-xl">
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
+                        <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><Phone className="h-5 w-5" aria-hidden="true" /></span><div><h2 className="font-bold">طلب هاتفي</h2><p className="mt-0.5 text-xs text-muted-foreground">أدخل طلب الصيدلية وأرسل عرض السعر لاعتماده</p></div></div>
+                        <button type="button" disabled={phoneSaving} aria-label="إغلاق الطلب الهاتفي" onClick={() => setPhoneOpen(false)} className="rounded-lg px-2.5 py-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50">✕</button>
+                    </div>
+                    <div className="min-h-0 space-y-4 overflow-y-auto p-4 sm:p-5">
+                    <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-6 text-muted-foreground">
                         يُنشأ الطلب مسعَّراً وبانتظار <b>اعتماد الصيدلية</b> من شاشتها — لا تُسجَّل أي
                         فاتورة ولا ذمّة قبل اعتمادها. تُشعَر الصيدلية تلقائياً.
                     </p>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
                         <div>
-                            <label className="mb-1 block text-xs text-muted-foreground">الصيدلية</label>
+                            <label htmlFor="phone-order-customer" className="mb-1.5 block text-xs font-medium">الصيدلية</label>
                             <select
+                                id="phone-order-customer"
                                 value={orgId}
                                 onChange={(e) => void chooseOrg(e.target.value)}
                                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
@@ -496,8 +530,9 @@ export default function OrdersClient({
                             </select>
                         </div>
                         <div>
-                            <label className="mb-1 block text-xs text-muted-foreground">فرع الاستلام</label>
+                            <label htmlFor="phone-order-branch" className="mb-1.5 block text-xs font-medium">فرع الاستلام</label>
                             <select
+                                id="phone-order-branch"
                                 value={branchId}
                                 onChange={(e) => setBranchId(e.target.value)}
                                 disabled={branches.length === 0}
@@ -515,13 +550,15 @@ export default function OrdersClient({
                         <div>
                             <label className="mb-1 block text-xs text-muted-foreground">أضف صنفاً من كتالوجك</label>
                             <input
+                                aria-label="البحث عن دواء بالاسم أو الباركود"
                                 value={catalogSearch}
                                 onChange={(e) => setCatalogSearch(e.target.value)}
                                 placeholder="ابحث بالاسم أو الباركود…"
                                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                             />
                             {catalogSearch.trim().length > 1 && (
-                                <ul className="mt-1 max-h-44 overflow-y-auto rounded-lg border border-border">
+                                <ul className="mt-2 max-h-44 divide-y overflow-y-auto rounded-lg border border-border">
+                                    {!catalog.some(it => it.drug.tradeName.toLowerCase().includes(catalogSearch.trim().toLowerCase()) || it.barcode.includes(catalogSearch.trim())) && <li className="px-3 py-4 text-center text-xs text-muted-foreground">لا توجد أصناف مطابقة في الكتالوج المحمّل.</li>}
                                     {catalog
                                         .filter(
                                             (it) =>
@@ -537,10 +574,7 @@ export default function OrdersClient({
                                                     disabled={!it.isAvailable}
                                                     className="flex w-full items-center justify-between gap-3 px-3 py-2 text-right text-xs hover:bg-muted disabled:opacity-40"
                                                 >
-                                                    <span className="min-w-0 flex-1 truncate">
-                                                        {it.drug.tradeName}
-                                                        <span className="mr-2 font-mono text-[10px] text-muted-foreground" dir="ltr">{it.barcode}</span>
-                                                    </span>
+                                                    <span className="min-w-0 flex-1"><span className="block truncate font-medium"><bdi>{it.drug.tradeName}</bdi></span><bdi dir="ltr" title={it.barcode} className="mt-1 block max-w-[22ch] truncate font-mono text-[10px] text-muted-foreground">{it.barcode}</bdi></span>
                                                     <span className="tabular-nums shrink-0">{it.price.toLocaleString("en-US")}</span>
                                                     {!it.isAvailable && <span className="shrink-0 text-[10px]">موقوف</span>}
                                                 </button>
@@ -553,7 +587,7 @@ export default function OrdersClient({
 
                     {phoneLines.length > 0 && (
                         <div className="overflow-x-auto rounded-lg border">
-                            <table className="w-full text-xs">
+                            <table className="w-full min-w-[620px] text-xs">
                                 <thead className="bg-muted/40 text-right text-muted-foreground">
                                     <tr>
                                         <th className="px-3 py-2 font-medium">الصنف</th>
@@ -568,8 +602,8 @@ export default function OrdersClient({
                                     {phoneLines.map((l, i) => (
                                         <tr key={l.catalogItemId} className="border-t">
                                             <td className="px-3 py-2">
-                                                <div className="font-medium">{l.tradeName}</div>
-                                                <div className="font-mono text-[10px] text-muted-foreground" dir="ltr">{l.barcode}</div>
+                                                <div className="max-w-48 break-words font-medium"><bdi>{l.tradeName}</bdi></div>
+                                                <div title={l.barcode} className="max-w-[20ch] truncate font-mono text-[10px] text-muted-foreground" dir="ltr">{l.barcode}</div>
                                             </td>
                                             {([
                                                 ["quantity", "1", "1"],
@@ -589,7 +623,8 @@ export default function OrdersClient({
                                                                 )
                                                             )
                                                         }
-                                                        className="tabular-nums w-20 rounded border border-border bg-background px-2 py-1"
+                                                        aria-label={`${field === "quantity" ? "الكمية" : field === "unitPrice" ? "السعر" : "البونص"} — ${l.tradeName}`}
+                                                        className="tabular-nums w-20 rounded-lg border border-border bg-background px-2 py-2"
                                                     />
                                                 </td>
                                             ))}
@@ -600,7 +635,8 @@ export default function OrdersClient({
                                                 <button
                                                     type="button"
                                                     onClick={() => setPhoneLines((prev) => prev.filter((_, xi) => xi !== i))}
-                                                    className="text-destructive hover:underline"
+                                                    aria-label={`حذف ${l.tradeName}`}
+                                                    className="rounded-lg px-2 py-1.5 text-destructive hover:bg-destructive/10"
                                                 >
                                                     حذف
                                                 </button>
@@ -622,14 +658,16 @@ export default function OrdersClient({
                         />
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-4 py-3 sm:px-5">
                         <p className="text-sm">
                             <span className="text-muted-foreground">إجمالي العرض: </span>
                             <b className="tabular-nums">{phoneTotal.toLocaleString("en-US")} د.ع</b>
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                             <button
                                 onClick={() => setPhoneOpen(false)}
+                                disabled={phoneSaving}
                                 className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
                             >
                                 إلغاء
@@ -637,7 +675,7 @@ export default function OrdersClient({
                             <button
                                 onClick={submitPhoneOrder}
                                 disabled={phoneSaving || !branchId || phoneLines.length === 0}
-                                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold sm:flex-none text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                             >
                                 {phoneSaving ? "جارٍ الإنشاء…" : "إنشاء الطلب وإشعار الصيدلية"}
                             </button>
@@ -649,6 +687,7 @@ export default function OrdersClient({
             {reviewOrder && (
                 <ReviewModal
                     order={reviewOrder}
+                    canQuoteOrders={canQuoteOrders}
                     onClose={() => setReviewOrder(null)}
                     onQuoted={async (orderId, newTotal, autoApproved, predictedAutoApprove, autoApproveReason) => {
                         setReviewOrder(null);
@@ -685,10 +724,12 @@ export default function OrdersClient({
 
 function ReviewModal({
     order,
+    canQuoteOrders,
     onClose,
     onQuoted,
 }: {
     order: Order;
+    canQuoteOrders: boolean;
     onClose: () => void;
     // autoApproved: ميزة الاعتماد الآلي (قرار صاحب النظام 2026-09) — يحملها
     // /api/warehouse-portal/orders/[id]/quote في استجابته حين يطابق العرض
@@ -704,7 +745,7 @@ function ReviewModal({
         autoApproveReason?: string | null
     ) => void;
 }) {
-    const canQuote = order.status === "UNDER_REVIEW" || order.status === "SENT";
+    const canQuote = canQuoteOrders && (order.status === "UNDER_REVIEW" || order.status === "SENT");
     const [rows, setRows] = useState(() =>
         order.items.map((it) => {
             // ميزة البونص: بونص مخزَّن فعلاً على السطر (مراجعة سابقة) له الأولوية؛
@@ -757,7 +798,7 @@ function ReviewModal({
     // لا "علامة" أو بادئة ثابتة تُقرأ لاحقاً آلياً على جانب الصيدلية عمداً: أي
     // تعديل يدوي على النص كان سيكسر عقداً غير موثَّق بصمت — العرض هناك نصّي بحت.
     const applyAlternativeSuggestion = (itemId: string, alt: AlternativeOption) => {
-        const suggestion = `بديل متاح: ${alt.tradeName} — ${alt.price.toLocaleString("ar-IQ")} د.ع (المتوفر: ${alt.sellableQuantity.toLocaleString("ar-IQ")})`;
+        const suggestion = `بديل متاح: ${alt.tradeName} — ${alt.price.toLocaleString("ar-IQ-u-nu-latn")} د.ع (المتوفر: ${alt.sellableQuantity.toLocaleString("ar-IQ-u-nu-latn")})`;
         setRows((prev) =>
             prev.map((r) => {
                 if (r.itemId !== itemId) return r;
@@ -808,6 +849,7 @@ function ReviewModal({
         decisionPreview.ok && shouldAutoApprove(decisionPreview.summary, order.items.length);
 
     const submit = async () => {
+        if (!canQuote || saving) return;
         setSaving(true);
         try {
             const res = await fetch(`/api/warehouse-portal/orders/${order.id}/quote`, {
@@ -861,19 +903,18 @@ function ReviewModal({
     return (
         <Modal
             open
-            onClose={onClose}
+            onClose={() => { if (!saving) onClose(); }}
             // نفس تبرير سطر القائمة: هذه شاشة التسعير التي يُلتزَم فيها بعميل
             // فعلياً، فلا يجوز أن يظهر اسم الفرع («الفرع الرئيسي» في كل
             // الصيدليات) وحده بلا اسم المؤسسة.
-            title={`مراجعة الطلب ${order.orderNumber ?? ""} — ${order.branch.organization?.name ?? "—"} (${order.branch.name})`}
+            title={`${canQuote ? "مراجعة الطلب" : "تفاصيل الطلب"} ${order.orderNumber ?? ""}`}
             maxWidthClass="max-w-4xl"
         >
-            <div className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-card p-6 shadow-xl" dir="rtl">
-                <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-bold">
-                        مراجعة الطلب {order.orderNumber ?? ""} — {order.branch.organization?.name ?? "—"} ({order.branch.name})
-                    </h3>
-                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground">✕</button>
+            <div className="max-h-[85vh] w-full overflow-auto rounded-lg border bg-card p-4 shadow-xl" dir="rtl">
+                <div className="mb-4 flex items-start justify-between gap-3 border-b pb-3">
+                    <div><h3 className="text-lg font-bold">{canQuote ? "مراجعة الطلب" : "تفاصيل الطلب"} <bdi>{order.orderNumber}</bdi></h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{order.branch.organization?.name ?? "—"} · {order.branch.name}</p></div>
+                    <button aria-label="إغلاق تفاصيل الطلب" disabled={saving} onClick={onClose} className="rounded-md border px-2 py-1 text-muted-foreground">×</button>
                 </div>
 
                 {/* تلميح مكتوم واحد فوق القائمة كلها، لا لكل سطر — تاريخ الانتهاء
@@ -909,7 +950,7 @@ function ReviewModal({
                                         </span>
                                     </div>
                                     <span className="text-xs text-muted-foreground">
-                                        مطلوب: {it.quantity} × توقع {it.unitPrice.toLocaleString("ar-IQ")} د.ع
+                                        مطلوب: {it.quantity} × توقع {it.unitPrice.toLocaleString("ar-IQ-u-nu-latn")} د.ع
                                     </span>
                                 </div>
 
@@ -925,6 +966,7 @@ function ReviewModal({
                                     ).map(([v, l]) => (
                                         <button
                                             key={v}
+                                            disabled={!canQuote || saving}
                                             onClick={() => setRows((prev) => prev.map((r) => (r.itemId === it.id ? { ...r, decision: v } : r)))}
                                             className={`rounded-full px-3 py-1 text-xs font-medium ${
                                                 row.decision === v ? "bg-primary text-primary-foreground" : "bg-muted"
@@ -947,6 +989,7 @@ function ReviewModal({
                                                 السعر
                                             </label>
                                             <input
+                                                disabled={!canQuote || saving}
                                                 id={`price-${it.id}`}
                                                 type="number"
                                                 min={1}
@@ -966,6 +1009,7 @@ function ReviewModal({
                                                     الكمية المتاحة
                                                 </label>
                                                 <input
+                                                disabled={!canQuote || saving}
                                                     id={`partial-${it.id}`}
                                                     type="number"
                                                     min={1}
@@ -989,6 +1033,7 @@ function ReviewModal({
                                                 )}
                                             </label>
                                             <input
+                                                disabled={!canQuote || saving}
                                                 id={`bonus-${it.id}`}
                                                 type="number"
                                                 min={0}
@@ -1020,6 +1065,7 @@ function ReviewModal({
                                                 تاريخ الانتهاء (شهر/يوم/سنة)
                                             </label>
                                             <input
+                                                disabled={!canQuote || saving}
                                                 id={`expiry-${it.id}`}
                                                 type="date"
                                                 dir="ltr"
@@ -1046,7 +1092,7 @@ function ReviewModal({
                                                 dir="ltr"
                                                 title="يُصدره النظام تلقائياً عند إرسال العرض — ليس رقم الدفعة المطبوع على العلبة"
                                             >
-                                                {shipmentRefs.get(it.id) ?? "—"}
+                                                {(!canQuote ? it.batchNumber : null) ?? shipmentRefs.get(it.id) ?? "—"}
                                             </span>
                                         </div>
                                     </div>
@@ -1059,6 +1105,7 @@ function ReviewModal({
                                             ملاحظة للصيدلية (اختياري)
                                         </label>
                                         <input
+                                                disabled={!canQuote || saving}
                                             id={`note-${it.id}`}
                                             value={row.note}
                                             onChange={(e) =>
@@ -1086,14 +1133,15 @@ function ReviewModal({
                                                     {it.alternatives.map((alt) => (
                                                         <button
                                                             key={alt.barcode}
+                                                            disabled={!canQuote || saving}
                                                             type="button"
                                                             onClick={() => applyAlternativeSuggestion(it.id, alt)}
                                                             className="rounded-lg border bg-muted px-3 py-1.5 text-right text-xs hover:bg-muted/70"
                                                         >
                                                             <span className="font-medium">{alt.tradeName}</span>
                                                             <span className="mr-1 text-muted-foreground">
-                                                                — {alt.price.toLocaleString("ar-IQ")} د.ع · متوفر{" "}
-                                                                {alt.sellableQuantity.toLocaleString("ar-IQ")}
+                                                                — {alt.price.toLocaleString("ar-IQ-u-nu-latn")} د.ع · متوفر{" "}
+                                                                {alt.sellableQuantity.toLocaleString("ar-IQ-u-nu-latn")}
                                                             </span>
                                                         </button>
                                                     ))}
@@ -1105,6 +1153,7 @@ function ReviewModal({
                                             </p>
                                         )}
                                         <textarea
+                                            disabled={!canQuote || saving}
                                             value={row.note}
                                             onChange={(e) =>
                                                 setRows((prev) =>
@@ -1125,7 +1174,7 @@ function ReviewModal({
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                     <div>
                         <span className="text-sm text-muted-foreground">إجمالي العرض: </span>
-                        <span className="tabular-nums text-xl font-bold">{total.toLocaleString("ar-IQ")} د.ع</span>
+                        <span className="tabular-nums text-xl font-bold">{total.toLocaleString("ar-IQ-u-nu-latn")} د.ع</span>
                         {/* إصلاح صدق الواجهة (2026-09): سطر مكتوم واحد يشرح لماذا سيتغيّر
                             نص الزر — بصيغة "في الحالة العادية" لا وعداً مؤكَّداً، لأن
                             الخادم يبقى المرجع الوحيد وقد يرفض الاعتماد الآلي لسبب لا
@@ -1146,7 +1195,7 @@ function ReviewModal({
                         )}
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm hover:bg-muted">
+                        <button disabled={saving} onClick={onClose} className="rounded-lg border px-4 py-2 text-sm hover:bg-muted">
                             إغلاق
                         </button>
                         {canQuote && (
@@ -1168,7 +1217,7 @@ function ReviewModal({
                         <p className="mb-2 font-bold text-foreground">سجل الأحداث</p>
                         {order.events.map((ev) => (
                             <div key={ev.id}>
-                                {new Date(ev.createdAt).toLocaleString("ar-IQ")} — {ev.type}
+                                {new Date(ev.createdAt).toLocaleString("ar-IQ-u-nu-latn")} — {STATUS_LABEL[ev.type as OrderStatus] ?? ({RETURN_REQUESTED:"طلب إرجاع",RETURN_APPROVED:"اعتماد الإرجاع",RETURN_REJECTED:"رفض الإرجاع",RETURN_REFUNDED:"رد قيمة المرتجع"} as Record<string,string>)[ev.type] ?? "تحديث الطلب"}
                                 {ev.actorName ? ` (${ev.actorName})` : ""}
                             </div>
                         ))}

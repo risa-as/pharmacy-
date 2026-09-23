@@ -4,6 +4,9 @@
 // لعرض الدفعات (إضافة/تعديل/إتلاف)، وسجل حركات لكل صنف. نفس أسلوب
 // app/warehouse/catalog/CatalogClient.tsx (sonner للتنبيهات، إعادة الجلب الخفيف
 // بعد كل عملية كتابة بدل تعديل متفائل معقّد).
+import MoreActions from '@/app/ui/order-more-actions';
+import ListPages from "../_components/ListPages";
+import { useWarehouseList } from "../_components/useWarehouseList";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
@@ -20,7 +23,7 @@ interface StockBatch {
     expiryDate: string;
     quantity: number;
     initialQuantity: number;
-    costPrice: number;
+    costPrice: number | null;
     supplierName: string | null;
     bucket: ExpiryBucket;
 }
@@ -31,7 +34,7 @@ interface StockItem {
     tradeName: string;
     scientificName: string | null;
     price: number;
-    costPrice: number;
+    costPrice: number | null;
     minStock: number;
     isAvailable: boolean;
     availability: boolean;
@@ -91,22 +94,19 @@ function ExpiryChip({ bucket }: { bucket: ExpiryBucket | null }) {
 function formatDate(iso: string | null): string {
     if (!iso) return "—";
     try {
-        return new Date(iso).toLocaleDateString("ar-IQ");
+        return new Date(iso).toLocaleDateString("ar-IQ-u-nu-latn");
     } catch {
         return iso;
     }
 }
 
-async function fetchStock(): Promise<StockItem[]> {
-    const res = await fetch("/api/warehouse-portal/stock");
-    const data = await res.json();
-    return data.items ?? [];
-}
 
 export default function StockClient({ initialItems }: { initialItems: StockItem[] }) {
-    const [items, setItems] = useState<StockItem[]>(initialItems);
+
     const [search, setSearch] = useState("");
     const [filter, setFilter] = useState<FilterKey>("all");
+    const list = useWarehouseList<StockItem>('/api/warehouse-portal/stock', 'items', new URLSearchParams({ search, filter }).toString(), initialItems);
+    const { items, setItems } = list;
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [receiptOpenFor, setReceiptOpenFor] = useState<string | null>(null);
     const [receiptForm, setReceiptForm] = useState({
@@ -120,7 +120,7 @@ export default function StockClient({ initialItems }: { initialItems: StockItem[
     const [movesFor, setMovesFor] = useState<StockItem | null>(null);
     const [moves, setMoves] = useState<MoveRow[]>([]);
     const [loadingMoves, setLoadingMoves] = useState(false);
-    const [editingBatch, setEditingBatch] = useState<{ batchId: string; mode: "adjust" | "damage" } | null>(null);
+    const [editingBatch, setEditingBatch] = useState<{ batchId: string; mode: "adjust" | "damage"; expectedQuantity: number } | null>(null);
     const [editForm, setEditForm] = useState({ value: "", reason: "" });
 
     const filtered = useMemo(() => {
@@ -137,7 +137,7 @@ export default function StockClient({ initialItems }: { initialItems: StockItem[
     }, [items, search, filter]);
 
     const refresh = async () => {
-        const fresh = await fetchStock();
+        const fresh = await list.refresh();
         setItems(fresh);
         // أبقِ الصف المفتوح والحوارات مرتبطة بأحدث نسخة من نفس الصنف.
         if (movesFor) {
@@ -193,7 +193,7 @@ export default function StockClient({ initialItems }: { initialItems: StockItem[
         try {
             const body =
                 mode === "adjust"
-                    ? { batchId, newQuantity: value, reason: editForm.reason.trim() }
+                    ? { batchId, newQuantity: value, expectedQuantity: editingBatch.expectedQuantity, reason: editForm.reason.trim() }
                     : { batchId, quantity: value, reason: editForm.reason.trim() };
             const res = await fetch("/api/warehouse-portal/stock/adjust", {
                 method: "POST",
@@ -262,11 +262,13 @@ export default function StockClient({ initialItems }: { initialItems: StockItem[
                 ))}
             </div>
 
+            <ListPages {...list} />
             {filtered.length === 0 ? (
                 <EmptyState
                     icon="🗃️"
-                    title={items.length === 0 ? "لا توجد أصناف في كتالوجك بعد." : "لا نتائج مطابقة لهذا الفلتر/البحث."}
-                    description={items.length === 0 ? "أضف أصنافك من تبويب «أدويتي» أولاً، ثم سجّل دفعاتها هنا." : undefined}
+                    title={search.trim() || filter !== "all" ? "لا توجد أصناف مطابقة" : "لا توجد أصناف في كتالوجك بعد"}
+                    description={search.trim() || filter !== "all" ? "جرّب تغيير البحث أو الفلتر لعرض أصناف أخرى." : "أضف أصنافك من تبويب أدويتي أولاً، ثم سجّل دفعاتها هنا."}
+                    action={<a href="/warehouse/catalog" className="rounded-lg border px-3 py-2 text-sm font-medium text-primary">فتح أدويتي</a>}
                 />
             ) : (
                 /* max-h + overflow-auto — انظر التعليق المطابق في CatalogClient.tsx:
@@ -295,7 +297,7 @@ export default function StockClient({ initialItems }: { initialItems: StockItem[
                                     onOpenReceipt={() => setReceiptOpenFor(it.id)}
                                     onOpenMoves={() => openMoves(it)}
                                     onEditBatch={(batchId, mode) => {
-                                        setEditingBatch({ batchId, mode });
+                                        setEditingBatch({ batchId, mode, expectedQuantity: it.batches.find((b) => b.id === batchId)?.quantity ?? 0 });
                                         setEditForm({ value: mode === "adjust" ? String(it.batches.find((b) => b.id === batchId)?.quantity ?? 0) : "", reason: "" });
                                     }}
                                 />
@@ -492,7 +494,7 @@ function StockRow({
                     {item.isTracked ? (
                         <>
                             <div className="flex items-center gap-1.5">
-                                <span className="font-medium">{item.sellableQuantity.toLocaleString("ar-IQ")}</span>
+                                <span className="font-medium">{item.sellableQuantity.toLocaleString("ar-IQ-u-nu-latn")}</span>
                                 {item.isLowStock && <StatusChip variant="warning" label="منخفض" />}
                                 {item.sellableQuantity === 0 && <StatusChip variant="danger" label="نافد" />}
                             </div>
@@ -510,15 +512,15 @@ function StockRow({
                 <td className="px-4 py-3">
                     <ExpiryChip bucket={item.nearestExpiryBucket} />
                 </td>
-                <td className="tabular-nums px-4 py-3">{item.price.toLocaleString("ar-IQ")}</td>
-                <td className="tabular-nums px-4 py-3 text-muted-foreground">{item.costPrice.toLocaleString("ar-IQ")}</td>
+                <td className="tabular-nums px-4 py-3">{item.price.toLocaleString("ar-IQ-u-nu-latn")}</td>
+                <td className="tabular-nums px-4 py-3 text-muted-foreground">{item.costPrice?.toLocaleString("ar-IQ-u-nu-latn") ?? '—'}</td>
                 <td className="px-4 py-3 text-left">
                     <div className="flex items-center justify-end gap-2">
-                        <button onClick={onOpenMoves} className="text-xs text-muted-foreground hover:underline">
+                        <button onClick={onOpenMoves} className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90">
                             الحركات
                         </button>
-                        <button onClick={onOpenReceipt} className="text-xs text-primary hover:underline">
-                            + دفعة
+                        <button onClick={onOpenReceipt} className="inline-flex h-9 items-center rounded-lg border px-3 text-xs font-medium text-primary hover:bg-primary/5">
+                            إضافة دفعة
                         </button>
                     </div>
                 </td>
@@ -550,23 +552,23 @@ function StockRow({
                                                 <ExpiryChip bucket={b.bucket} />
                                             </td>
                                             <td className="tabular-nums px-2 py-1.5">{b.quantity}</td>
-                                            <td className="tabular-nums px-2 py-1.5">{b.costPrice.toLocaleString("ar-IQ")}</td>
+                                            <td className="tabular-nums px-2 py-1.5">{b.costPrice?.toLocaleString("ar-IQ-u-nu-latn") ?? '—'}</td>
                                             <td className="px-2 py-1.5 text-muted-foreground">{b.supplierName ?? "—"}</td>
                                             <td className="px-2 py-1.5 text-left">
-                                                <div className="flex items-center justify-end gap-2">
+                                                <MoreActions label={`إجراءات الدفعة ${b.batchNumber}`}>
                                                     <button
                                                         onClick={() => onEditBatch(b.id, "adjust")}
-                                                        className="text-primary hover:underline"
+                                                        className="flex items-center px-3 py-2 text-xs text-primary hover:bg-muted"
                                                     >
                                                         تعديل كمية
                                                     </button>
                                                     <button
                                                         onClick={() => onEditBatch(b.id, "damage")}
-                                                        className="text-destructive hover:underline"
+                                                        className="flex items-center px-3 py-2 text-xs text-destructive hover:bg-destructive/10"
                                                     >
                                                         إتلاف
                                                     </button>
-                                                </div>
+                                                </MoreActions>
                                             </td>
                                         </tr>
                                     ))}

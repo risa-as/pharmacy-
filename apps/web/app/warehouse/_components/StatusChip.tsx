@@ -43,7 +43,7 @@ export default function StatusChip({
     return (
         <span
             className={[
-                "inline-flex items-center rounded-full px-2.5 py-1 text-xs",
+                "inline-flex items-center rounded-md px-2.5 py-1 text-xs",
                 VARIANT_CLASSES[variant],
                 emphasis ? "font-semibold" : "font-medium",
                 bordered ? VARIANT_BORDER_CLASSES[variant] : "",

@@ -108,7 +108,7 @@ export function AdminDashboard() {
                         <SectionTitle title="نظرة سريعة" />
                         <PressableCard onPress={() => go('/(tabs)/debts')} containerStyle={{ marginBottom: 12 }} accessibilityLabel="إجمالي الديون المستحقة">
                                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                                    <IconTile icon="wallet-outline" tone="danger" size={46} />
+                                    <IconTile icon="hand-coins" tone="danger" size={46} />
                                     <View style={{ flex: 1 }}>
                                         <LinkLabel label="إجمالي الديون المستحقة" style={{ color: C.foreground, fontSize: 16, fontWeight: '800' }} />
                                         <Text style={{ color: C.mutedForeground, fontSize: 12.5, textAlign: 'right', marginTop: 2 }}>المبالغ غير المسددة</Text>

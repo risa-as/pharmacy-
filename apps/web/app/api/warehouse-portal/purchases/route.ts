@@ -19,6 +19,28 @@ import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
 import { computeInvoiceStatus, computeDueDate } from '@/app/lib/warehouse-accounts';
 import { computePurchaseTotal, purchaseStockUnits, validatePurchaseLine } from '@/app/lib/warehouse-purchases';
+import { warehousePage } from '@/app/lib/warehouse-pagination';
+import { agingBucket } from '@/app/lib/warehouse-accounts';
+import type { Prisma } from '@prisma/client';
+
+export async function GET(req: NextRequest) {
+    const ctx = await getWarehouseContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const gate = await requireWarehousePermission(ctx, 'canViewPurchases');
+    if (!gate.ok) return gate.response;
+    const params = new URL(req.url).searchParams;
+    const pagination = warehousePage(params);
+    const status = params.get('status'), search = params.get('search')?.trim();
+    if (status && !['UNPAID', 'PARTIAL', 'PAID', 'CANCELLED'].includes(status)) return NextResponse.json({ error: 'حالة غير صالحة' }, { status: 400 });
+    const where: Prisma.WarehousePurchaseWhereInput = { warehouseId: ctx.warehouseId,
+        ...(status ? { status: status as any } : {}),
+        ...(search ? { OR: [{ supplier: { name: { contains: search, mode: 'insensitive' } } }, { invoiceNumber: { contains: search, mode: 'insensitive' } }] } : {}) };
+    const [rows, total] = await prisma.$transaction([prisma.warehousePurchase.findMany({ where,
+        include: { supplier: { select: { name: true } }, _count: { select: { payments: true, items: true } } },
+        orderBy: [{ issuedAt: 'desc' }, { id: 'desc' }], take: pagination.take, skip: pagination.skip }), prisma.warehousePurchase.count({ where })]);
+    return NextResponse.json({ purchases: rows.map(p => ({ ...p, supplierName: p.supplier.name, remaining: Math.max(p.total-p.paidAmount,0),
+        aging: agingBucket(p.dueAt, new Date()), itemsCount: p._count.items, paymentsCount: p._count.payments })), total, page: pagination.page, pageSize: pagination.pageSize });
+}
 
 interface RawLine {
     catalogItemId?: unknown;
@@ -194,7 +216,7 @@ export async function POST(req: NextRequest) {
                         expiryDate: line.expiryDate,
                         quantity: stockUnits,
                         initialQuantity: stockUnits,
-                        costPrice: line.unitCost,
+                        costPrice: stockUnits > 0 ? line.quantity * line.unitCost / stockUnits : 0,
                         supplierName: supplier.name,
                         purchaseItemId: purchaseItem.id,
                     },

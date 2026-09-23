@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 
+import { getTenantContext } from '@/app/lib/tenant-utils';
+import { NextResponse } from 'next/server';
 import { getPurchaseDetails } from '@/app/lib/actions/purchase-actions';
 import { prisma } from '@/app/lib/prisma';
 import { Button } from '@/components/ui/button';
@@ -14,6 +16,8 @@ import CancelPurchaseButton from './components/cancel-button';
 import PrintHeader from '@/app/ui/components/print-header';
 
 export default async function PurchaseDetailsPage(props: { params: Promise<{ id: string }> }) {
+    const ctx = await getTenantContext();
+    if (ctx instanceof NextResponse) return <div>غير مصرح</div>;
     const params = await props.params;
     const purchase = await getPurchaseDetails(params.id);
 
@@ -53,7 +57,7 @@ export default async function PurchaseDetailsPage(props: { params: Promise<{ id:
             <PrintHeader />
             <div className="flex justify-between items-center bg-card p-4 rounded-lg shadow print:shadow-none print:border print:border-border print:rounded-none">
                 <div>
-                    <h1 className="text-2xl font-bold">فاتورة مشتريات #{purchase.id.slice(0, 8)}</h1>
+                    <h1 className="text-2xl font-bold">فاتورة مشتريات #{purchase.documentNumber}</h1>
                     <p className="text-muted-foreground">المورد: <span className="font-semibold text-foreground">{purchase.supplier.name}</span></p>
                     <p className="text-muted-foreground">التاريخ: {format(new Date(purchase.createdAt), 'PPP', { locale: ar })}</p>
                 </div>
@@ -66,10 +70,10 @@ export default async function PurchaseDetailsPage(props: { params: Promise<{ id:
                     <PurchasePrintButton />
                     {purchase.status === 'PENDING' && (
                         <>
-                            <Link href={`/dashboard/purchases/${params.id}/receive`}>
+                            {ctx.userPermissions.canReceivePurchase && <Link href={`/dashboard/purchases/${params.id}/receive`}>
                                 <Button>استلام المواد</Button>
-                            </Link>
-                            <CancelPurchaseButton purchaseId={params.id} size="default" />
+                            </Link>}
+                            {ctx.userPermissions.canCreatePurchase && !purchase.warehouseOrderId && <CancelPurchaseButton purchaseId={params.id} size="default" />}
                         </>
                     )}
                 </div>

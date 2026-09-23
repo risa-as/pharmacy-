@@ -2,9 +2,23 @@
 
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { getTenantContext } from '@/app/lib/tenant-utils';
+import { getTenantContext, TenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
+
+// Sale scope for debt queries: the tenant scope, optionally narrowed to one
+// branch. A client-supplied branchId (URL ?branch= or a direct server-action
+// call) is intersected with the scope; it previously replaced it, exposing any
+// organization's debtors.
+function saleScope(tenantCtx: TenantContext, branchId?: string) {
+    // Pre-existing debt-page scope kept as-is: only ADMIN (and SUPER_ADMIN) see the
+    // whole organization; MANAGER and below see their own branch.
+    const { user } = tenantCtx;
+    const base = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || !user.branchId
+        ? tenantCtx.tenantBranchWhere
+        : { branchId: user.branchId };
+    return { AND: [base, ...(branchId ? [{ branchId }] : [])] };
+}
 
 // جلب جميع المدينين
 export async function getAllDebtors(branchId?: string) {
@@ -15,14 +29,7 @@ export async function getAllDebtors(branchId?: string) {
     // Filter by the SALE's branch, not the patient's registration branch.
     // A patient may have branchId=null (created before tenant isolation) but still owe
     // money via a credit sale that IS scoped to this org/branch.
-    const saleFilter: any = { payment: { method: "CREDIT" } };
-    if (branchId) {
-        saleFilter.branchId = branchId;
-    } else if (user.role === 'ADMIN' && organizationId) {
-        saleFilter.branch = { organizationId };
-    } else if (user.branchId) {
-        saleFilter.branchId = user.branchId;
-    }
+    const saleFilter: any = { payment: { method: "CREDIT" }, ...saleScope(tenantCtx, branchId) };
 
     const patients = await prisma.patient.findMany({
         where: {
@@ -74,14 +81,7 @@ export async function getDebtStats(branchId?: string) {
     const { user, organizationId } = tenantCtx;
 
     // Filter patients by SALE branch (not patient.branchId) to include null-branchId patients
-    const saleFilter: any = { payment: { method: 'CREDIT' } };
-    if (branchId) {
-        saleFilter.branchId = branchId;
-    } else if (user.role === 'ADMIN' && organizationId) {
-        saleFilter.branch = { organizationId };
-    } else if (user.branchId) {
-        saleFilter.branchId = user.branchId;
-    }
+    const saleFilter: any = { payment: { method: 'CREDIT' }, ...saleScope(tenantCtx, branchId) };
 
     const wherePatients: any = {
         balance: { gt: 0 },
@@ -89,14 +89,7 @@ export async function getDebtStats(branchId?: string) {
     };
 
     // For today's payments: scope via the sale's branch
-    const saleBranchFilter: any = {};
-    if (branchId) {
-        saleBranchFilter.branchId = branchId;
-    } else if (user.role === 'ADMIN' && organizationId) {
-        saleBranchFilter.branch = { organizationId };
-    } else if (user.branchId) {
-        saleBranchFilter.branchId = user.branchId;
-    }
+    const saleBranchFilter: any = saleScope(tenantCtx, branchId);
 
     const wherePayments: any = {
         createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },

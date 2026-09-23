@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { pharmacyDrugScope } from '@/app/lib/drug-scope';
-import { validateSyncUser, isBranchInSyncScope } from '@/app/lib/sync-auth';
+import { validateSyncUser, isBranchInSyncScope, hasSyncPermission } from '@/app/lib/sync-auth';
 
 // GET /api/inventory/quick-sale?branchId=X
 // Returns all isQuickSale=true drugs for the branch, sorted by total units sold (desc)
@@ -12,6 +12,7 @@ export async function GET(req: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewInventory) return NextResponse.json({error:'غير مصرح'},{status:403});
         const { tenantBranchWhere } = tenantCtx;
 
         const url = new URL(req.url);
@@ -21,11 +22,11 @@ export async function GET(req: Request) {
         const drugs = await prisma.globalDrug.findMany({
             where: { isQuickSale: true, isActive: true, ...pharmacyDrugScope(tenantCtx.organizationId) },
             include: {
+                // Both relations are intersected with the tenant scope: a spread
+                // client branchId would replace it, and an empty saleItems filter
+                // summed every organization's sales of a shared global drug.
                 inventories: {
-                    where: {
-                        ...tenantBranchWhere,
-                        ...(branchId ? { branchId } : {}),
-                    },
+                    where: { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] },
                     include: {
                         batches: {
                             where: { quantity: { gt: 0 } },
@@ -34,9 +35,7 @@ export async function GET(req: Request) {
                     },
                 },
                 saleItems: {
-                    where: branchId
-                        ? { sale: { branchId } }
-                        : {},
+                    where: { sale: { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] } },
                     select: { quantity: true },
                 },
             },
@@ -73,6 +72,10 @@ export async function PATCH(req: Request) {
     try {
         const syncUser = await validateSyncUser(req);
         if (syncUser instanceof NextResponse) return syncUser;
+
+        if (!hasSyncPermission(syncUser, 'canEditDrug')) {
+            return NextResponse.json({ message: 'ليس لديك صلاحية لتعديل المخزون.' }, { status: 403 });
+        }
 
         const { drugId, isQuickSale } = await req.json();
 

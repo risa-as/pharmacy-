@@ -62,7 +62,7 @@ export default async function PurchaseDetailPage(
             <p className="text-muted-foreground text-sm flex items-center gap-1">
               <Hash className="w-3.5 h-3.5" />
               {purchase.invoiceNumber ||
-                `${purchase.id.slice(0, 8).toUpperCase()}`}
+                `${purchase.documentNumber}`}
             </p>
           </div>
           <div className="text-left">

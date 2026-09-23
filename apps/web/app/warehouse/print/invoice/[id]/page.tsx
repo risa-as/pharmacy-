@@ -1,3 +1,4 @@
+import ContactFooter from '@/app/warehouse/print/_components/ContactFooter';
 // فاتورة بيع قابلة للطباعة — الورقة التي تسافر مع البضاعة (فحص 2026-09-17،
 // فجوة G2).
 //
@@ -57,7 +58,7 @@ export default async function PrintInvoicePage(props: { params: Promise<{ id: st
             // لا هاتف على Organization ولا على Branch في المخطط — فهوية العميل
             // على الورقة هي الاسم والفرع فقط.
             organization: { select: { name: true } },
-            warehouse: { select: { name: true, city: true, phone: true } },
+            warehouse: { select: { name: true, city: true, phone: true, salesPhone: true, followupPhone: true, managementPhone: true } },
             payments: { orderBy: { receivedAt: 'asc' } },
         },
     });
@@ -92,6 +93,8 @@ export default async function PrintInvoicePage(props: { params: Promise<{ id: st
         .filter((l) => l.quantity > 0 || l.bonusQuantity > 0);
 
     const itemsTotal = lines.reduce((s, l) => s + l.lineTotal, 0);
+    const creditNotes = await prisma.warehouseReturn.findMany({ where: { orderId: invoice.orderId, warehouseId: ctx.warehouseId, status: 'ACCEPTED' }, include: { items: true }, orderBy: { createdAt: 'asc' } });
+    const returnedTotal = creditNotes.reduce((sum, r) => sum + r.totalAmount, 0);
     const remaining = Math.max(invoice.total - invoice.paidAmount, 0);
 
     return (
@@ -150,15 +153,15 @@ export default async function PrintInvoicePage(props: { params: Promise<{ id: st
             <div className="mt-4 flex justify-end">
                 <dl className="w-64 space-y-1 text-xs">
                     <div className="flex justify-between">
-                        <dt className="text-muted-foreground">مجموع البنود</dt>
+                        <dt className="text-muted-foreground">الفاتورة الأصلية قبل المرتجعات</dt>
                         <dd className="tabular-nums">{money(itemsTotal)} د.ع</dd>
                     </div>
                     <div className="flex justify-between border-t border-border pt-1 font-bold">
-                        <dt>إجمالي الفاتورة</dt>
+                        <dt>صافي الفاتورة بعد المرتجعات</dt>
                         <dd className="tabular-nums">{money(invoice.total)} د.ع</dd>
                     </div>
                     <div className="flex justify-between">
-                        <dt className="text-muted-foreground">المسدَّد</dt>
+                        <dt className="text-muted-foreground">صافي المسدَّد بعد الرد النقدي</dt>
                         <dd className="tabular-nums">{money(invoice.paidAmount)} د.ع</dd>
                     </div>
                     <div className="flex justify-between font-bold">
@@ -170,12 +173,23 @@ export default async function PrintInvoicePage(props: { params: Promise<{ id: st
 
             {/* مجموع البنود قد يختلف عن total المخزَّن لو عُدِّل الطلب بعد
                 الاعتماد — يُعلَن بدل أن يُخفى، فالفاتورة سند مالي. */}
-            {Math.abs(itemsTotal - invoice.total) > 0.01 && (
+            {Math.abs(itemsTotal - returnedTotal - invoice.total) > 0.01 && (
                 <p className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-warning">
                     تنبيه: مجموع البنود ({money(itemsTotal)}) لا يطابق إجمالي الفاتورة المخزَّن
                     ({money(invoice.total)}) — راجع الطلب قبل تسليم هذه الورقة.
                 </p>
             )}
+
+            {creditNotes.length > 0 && <section className="mt-5 text-xs">
+                <h2 className="font-bold">الإشعارات الدائنة — الإجمالي {money(returnedTotal)} د.ع</h2>
+                {creditNotes.map(note => <div key={note.id} className="mt-2 border p-2">
+                    <p>إشعار <bdi>{note.creditNoteNumber ?? 'بانتظار الترقيم'}</bdi> · {day(note.acceptedAt)} · {money(note.totalAmount)} د.ع</p>
+                    <p>{note.reason ?? 'إرجاع بضاعة'}</p>
+                    {note.items.map(item => <p key={item.id}>{item.barcode}: {item.quantity} × {money(item.unitPrice)} = {money(item.quantity * item.unitPrice)}</p>)}
+                    <p>رصيد دائن غير مردود: {money(Math.max(note.creditBalance - note.refundedAmount, 0))} د.ع</p>
+                    <p>مبلغ مردود للعميل: {money(note.refundedAmount)} د.ع</p>
+                </div>)}
+            </section>}
 
             {invoice.payments.length > 0 && (
                 <div className="mt-5">
@@ -211,6 +225,7 @@ export default async function PrintInvoicePage(props: { params: Promise<{ id: st
                 <div className="flex-1 border-t border-border pt-1.5">توقيع المُستلِم</div>
                 <div className="flex-1 border-t border-border pt-1.5">توقيع المذخر</div>
             </div>
+            <ContactFooter phones={invoice.warehouse} />
         </PrintFrame>
     );
 }

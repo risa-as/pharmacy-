@@ -1,4 +1,5 @@
 'use client';
+import { prepareSmartOrderDraft } from '@/app/lib/actions/purchase-actions';
 
 // المرحلة 3 و4 من خطة «طلب الأدوية حسب الاحتياج»: قائمة الاحتياج ثم المراجعة والإرسال.
 //
@@ -63,6 +64,11 @@ export default function NeedListClient({
     fixedBranchId: string | null;
     branches: Array<{ id: string; name: string }>;
 }) {
+    const [smartDraft, setSmartDraft] = useState<{branchId:string;lines:{drugId:string;quantity:number;unitsPerPack:number}[]}|null>(null);
+    const [importingSmart, setImportingSmart] = useState(false);
+    const [smartImportedBranch, setSmartImportedBranch] = useState<string|null>(null);
+    const smartKey = `smart-purchasing-handoff:${userId}:${organizationId}`;
+    useEffect(()=>{try {const raw=sessionStorage.getItem(smartKey);if(raw){const d=JSON.parse(raw);if(d.version===1&&Array.isArray(d.lines)&&branches.some(b=>b.id===d.branchId)&&(!fixedBranchId||fixedBranchId===d.branchId))setSmartDraft(d);}}catch{toast.error('تعذر قراءة مسودة الشراء الذكي');}},[smartKey,branches,fixedBranchId]);
     const [branchId, setBranchId] = useState<string>(fixedBranchId ?? (branches.length === 1 ? branches[0].id : ''));
     const [lines, setLines] = useState<NeedLine[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(false);
@@ -123,6 +129,7 @@ export default function NeedListClient({
             if ((saved.draft !== undefined && !Array.isArray(saved.draft)) ||
                 (saved.originalLines !== undefined && !Array.isArray(saved.originalLines))) throw new Error('قائمة الجلسة غير صالحة');
             const recovered = restoreSendGroups(saved.groups, branchId);
+            if (saved.source === 'SMART') setSmartImportedBranch(branchId);
             setGroups(recovered);
             originalLines.current = saved.originalLines ?? [];
             setLines(saved.draft ?? saved.blocked);
@@ -189,6 +196,31 @@ export default function NeedListClient({
         },
         []
     );
+
+    useEffect(()=>{
+        if(smartImportedBranch!==branchId || stage!=='BUILD' || groups.length || importingSmart || recoveryError) return;
+        try {
+            if(!lines.length) { sessionStorage.removeItem(storageKey);setSmartImportedBranch(null);return; }
+            sessionStorage.setItem(storageKey,JSON.stringify({version:2,source:'SMART',groups:[],blocked:[],draft:lines.map(l=>({...l,comparison:null})),notes,originalLines:lines.map(l=>({...l,comparison:null}))}));
+        } catch {toast.error('تعذر حفظ تعديلات مسودة الشراء');}
+    },[smartImportedBranch,branchId,stage,groups.length,importingSmart,recoveryError,lines,notes,storageKey]);
+
+    async function importSmartDraft() {
+        if (!smartDraft || importingSmart || sending) return;
+        if (lines.length || groups.length || recoveryError || sessionStorage.getItem(`wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`) || sessionStorage.getItem(`wh-need-send:${userId}:${organizationId}:${smartDraft.branchId}`)) {
+            toast.error('توجد مسودة أو عملية سابقة؛ راجعها أولاً حتى لا تُستبدل مختاراتك.'); return;
+        }
+        setImportingSmart(true);
+        try {
+            const prepared = await prepareSmartOrderDraft(smartDraft.branchId,smartDraft.lines);
+            sessionStorage.setItem(`wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`,JSON.stringify({version:2,source:'SMART',groups:[],blocked:[],draft:prepared,notes:{},originalLines:prepared}));
+            setSmartImportedBranch(smartDraft.branchId);setBranchId(smartDraft.branchId);setLines(prepared);setStage('BUILD');
+            sessionStorage.removeItem(smartKey);setSmartDraft(null);
+            await fetchComparisons(prepared);
+            toast.success('نُقلت الكميات بالباكيت؛ راجع الموردين والأسعار قبل الإرسال');
+        } catch(error) {toast.error(error instanceof Error?error.message:'تعذر استيراد المسودة');}
+        finally {setImportingSmart(false);}
+    }
 
     const addDrug = (d: DrugSearchResult) => {
         const existing = lines.find((l) => l.drugId === d.id || (d.barcode && l.barcode === d.barcode));
@@ -493,6 +525,11 @@ export default function NeedListClient({
                     ثم نقسّم الطلب مذخراً مذخراً.
                 </p>
             </div>
+
+            {smartDraft && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                <div><b className="text-sm">مسودة من الشراء الذكي · {smartDraft.lines.length} صنف</b><p className="mt-1 text-xs text-muted-foreground">{branches.find(b=>b.id===smartDraft.branchId)?.name} — الكميات بالباكيت. تُراجع التعبئة والصلاحيات قبل الاستيراد.</p></div>
+                <button onClick={importSmartDraft} disabled={importingSmart || sending} className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50">{importingSmart?'جاري التحقق…':'استيراد ومراجعة الطلب'}</button>
+            </div>}
 
             {/* فرع الاستلام */}
             <div className="rounded-xl border border-border bg-card p-4 print:hidden">

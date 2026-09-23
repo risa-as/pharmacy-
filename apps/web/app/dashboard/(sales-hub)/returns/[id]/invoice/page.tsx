@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
-import { notFound } from 'next/navigation';
+import { getReturnInvoice } from '@/app/lib/return-invoice-data';
+import PrintReturnButton from '@/app/ui/sales/print-return-button';
 
 export default async function ReturnInvoicePage(
     props: {
@@ -10,22 +10,7 @@ export default async function ReturnInvoicePage(
     }
 ) {
     const params = await props.params;
-    const session = await auth();
-
-    const returnData = await prisma.saleReturn.findUnique({
-        where: { id: params.id },
-        include: {
-            items: {
-                include: {
-                    drug: { select: { tradeName: true, barcode: true } }
-                }
-            },
-            sale: { select: { id: true, total: true, createdAt: true } },
-            branch: { select: { name: true, organizationId: true } }
-        }
-    });
-
-    if (!returnData) notFound();
+    const returnData = await getReturnInvoice(params.id);
 
     // Get company settings for header — scoped to this record's organization
     const settings = await prisma.companySettings.findFirst({
@@ -44,12 +29,7 @@ export default async function ReturnInvoicePage(
         <div className="p-6" dir="rtl">
             {/* Print Button */}
             <div className="flex justify-end mb-4 print:hidden">
-                <button
-                    onClick={() => { if (typeof window !== 'undefined') window.print(); }}
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-                >
-                    🖨️ طباعة
-                </button>
+                <PrintReturnButton />
             </div>
 
             {/* Invoice */}
@@ -71,7 +51,7 @@ export default async function ReturnInvoicePage(
                 <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
                     <div>
                         <span className="text-muted-foreground">رقم المرتجع:</span>
-                        <span className="font-bold text-foreground mr-2">{returnData.returnNumber || returnData.id.slice(0, 8)}</span>
+                        <span className="font-bold text-foreground mr-2">{returnData.documentNumber}</span>
                     </div>
                     <div>
                         <span className="text-muted-foreground">التاريخ:</span>
@@ -83,7 +63,7 @@ export default async function ReturnInvoicePage(
                     </div>
                     <div>
                         <span className="text-muted-foreground">رقم الفاتورة الأصلية:</span>
-                        <span className="mr-2 text-xs font-mono">{returnData.sale.id.slice(0, 8)}</span>
+                        <span className="mr-2 text-xs font-mono">{returnData.sale.documentNumber}</span>
                     </div>
                 </div>
 

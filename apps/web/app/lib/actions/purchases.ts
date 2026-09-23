@@ -1,5 +1,6 @@
 'use server';
 
+import { nextDocumentReference } from '@/app/lib/document-reference';
 import { prisma } from '@/app/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -38,10 +39,9 @@ export async function getDrugsForPurchase() {
 // ─── توليد رقم فاتورة تلقائي ──────────────────────────────────────────────
 
 export async function generateInvoiceNumber(): Promise<string> {
-    const count = await prisma.purchase.count();
-    const date = new Date();
-    const ymd = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-    return `PO-${ymd}-${String(count + 1).padStart(4, '0')}`;
+    const ctx = await getTenantContext();
+    if (ctx instanceof NextResponse) throw new Error('غير مصرح');
+    return nextDocumentReference(prisma, 'PIN');
 }
 
 // ─── قائمة فواتير مورد معين ───────────────────────────────────────────────

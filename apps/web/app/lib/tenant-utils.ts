@@ -6,6 +6,7 @@ import { cache } from 'react';
 import { getUserPermissions, UserPermissions } from '@/app/lib/permissions';
 import { isWarehouseRole } from '@/app/lib/warehouse-context';
 import { prisma } from '@/app/lib/prisma';
+import { SESSION_REFRESH_UNAVAILABLE, SessionUnavailableError } from '@/app/lib/session-refresh';
 
 export interface TenantContext {
     user: {
@@ -46,8 +47,14 @@ export const getTenantContext = cache(
     async (): Promise<TenantContext | NextResponse> => {
         // Try NextAuth session first (web browser / dashboard)
         const session = await auth();
+        // Database unavailable while verifying the cookie: refuse without falling
+        // back to stale claims. Thrown (not a 401) so pages reach their error
+        // boundary instead of redirect("/login"), which middleware would bounce back.
+        if ((session as any)?.error === SESSION_REFRESH_UNAVAILABLE) throw new SessionUnavailableError();
 
         let role: string;
+        // Mobile Bearer tokens carry the sessionVersion they were issued with (none = 0).
+        let tokenSessionVersion: number | null = null;
         let organizationId: string | undefined;
         let branchId: string | undefined;
         let userId: string;
@@ -73,6 +80,7 @@ export const getTenantContext = cache(
                 role = (payload.role as string) || 'CASHIER';
                 branchId = (payload.branchId as string) || undefined;
                 organizationId = (payload.organizationId as string) || undefined;
+                tokenSessionVersion = Number(payload.sessionVersion) || 0;
             } catch {
                 return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
             }
@@ -83,9 +91,12 @@ export const getTenantContext = cache(
         if (typeof userId !== 'string' || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         const currentUser = await prisma.user.findUnique({
             where: { id: userId },
-            select: { role: true, isActive: true, branchId: true, permissions: true, branch: { select: { organizationId: true } } },
+            select: { role: true, isActive: true, branchId: true, permissions: true, sessionVersion: true, branch: { select: { organizationId: true } } },
         });
         if (!currentUser?.isActive) return NextResponse.json({ error: 'Account disabled or unavailable' }, { status: 403 });
+        // Cookie sessions are version-checked in auth.ts; Bearer tokens here.
+        if (tokenSessionVersion !== null && tokenSessionVersion !== currentUser.sessionVersion)
+            return NextResponse.json({ error: 'Session revoked' }, { status: 401 });
         role = currentUser.role;
         branchId = currentUser.branchId ?? undefined;
         organizationId = currentUser.branch?.organizationId;

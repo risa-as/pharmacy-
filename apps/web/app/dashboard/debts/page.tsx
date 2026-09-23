@@ -1,3 +1,4 @@
+import { HandCoins } from "@/app/ui/debts/debt-icon";
 import {
   getAllDebtors,
   getDebtStats,
@@ -8,9 +9,7 @@ import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import {
-  BookOpen,
   Users,
-  Banknote,
   ArrowDownCircle,
   History,
   CheckCircle2,
@@ -61,7 +60,7 @@ export default async function DebtsPage(
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-destructive" />
+            <HandCoins className="w-6 h-6 text-destructive" />
             دفتر الديون
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -75,7 +74,7 @@ export default async function DebtsPage(
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="glass-card p-5 flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
-            <Banknote className="w-6 h-6 text-destructive" />
+            <HandCoins className="w-6 h-6 text-destructive" />
           </div>
           <div>
             <p className="text-sm text-muted-foreground">إجمالي الديون</p>
@@ -128,7 +127,7 @@ export default async function DebtsPage(
         {debtors.length === 0 ? (
           <div className="py-16 text-center">
             <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <BookOpen className="w-8 h-8 text-muted-foreground opacity-40" />
+              <HandCoins className="w-8 h-8 text-muted-foreground opacity-40" />
             </div>
             <p className="text-foreground font-medium">لا يوجد ديون حالياً</p>
             <p className="text-sm text-muted-foreground mt-1">

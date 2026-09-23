@@ -16,6 +16,7 @@ export default async function WarehouseOrdersTrackPage() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect('/login');
 
+    if (!tenantCtx.userPermissions.canViewWarehouseOrders) redirect('/dashboard');
     const { organizationId } = tenantCtx;
     if (organizationId) {
         const upgrade = await requireFeature(organizationId, 'warehouseManagement');
@@ -51,14 +52,19 @@ export default async function WarehouseOrdersTrackPage() {
           })
         : [];
     const purchaseStatus = new Map(purchases.map((p) => [p.id, p.status]));
+    const returnRequests = orders.length ? await prisma.warehouseReturn.findMany({
+        where: { orderId: { in: orders.map(order => order.id) } },
+        select: { id: true, orderId: true, status: true, totalAmount: true, items: { select: { barcode: true, quantity: true } } },
+    }) : [];
     const withReceipt = orders.map((o) => {
         const purchaseId = linkedPurchaseId(o);
         return {
             ...o,
+            returnRequests: returnRequests.filter(record => record.orderId === o.id),
             purchaseId,
             receiptState: receiptState(o.status, purchaseId, purchaseId ? purchaseStatus.get(purchaseId) ?? null : null),
         };
     });
 
-    return <OrdersTrackClient initialOrders={JSON.parse(JSON.stringify(withReceipt))} />;
+    return <OrdersTrackClient permissions={tenantCtx.userPermissions} canManageCustody={['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(tenantCtx.user.role) && tenantCtx.userPermissions.canReturnWarehouseOrder} initialOrders={JSON.parse(JSON.stringify(withReceipt))} />;
 }

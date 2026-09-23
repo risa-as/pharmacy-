@@ -40,7 +40,7 @@ export default function SaleDetailsModal({ sale, isOpen, onClose, settings }: Sa
                             <p className="text-sm text-muted-foreground">
                                 رقم الفاتورة:
                                 <span className="font-mono font-bold text-primary text-base mr-1">
-                                    #{sale.invoiceNumber != null ? String(sale.invoiceNumber).padStart(4, '0') : sale.id.slice(0, 8)}
+                                    #{sale.invoiceNumber != null ? String(sale.invoiceNumber).padStart(4, '0') : (sale.documentNumber || "—")}
                                 </span>
                             </p>
                             {sale.hasPriceOverride && (

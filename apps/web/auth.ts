@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
 import { prisma } from "@/app/lib/prisma";
 import { getSubscriptionState } from "@/app/lib/subscription-state";
+import { refreshSessionToken, SESSION_REFRESH_UNAVAILABLE } from "@/app/lib/session-refresh";
 
 async function getUser(email: string) {
     try {
@@ -21,6 +22,30 @@ async function getUser(email: string) {
 
 export const { auth, signIn, signOut, handlers } = NextAuth({
     ...authConfig,
+    callbacks: {
+        ...authConfig.callbacks,
+        // Sign-in populates the token from the fresh `authorize()` row; every
+        // later read re-checks the database (see session-refresh.ts). Kept out of
+        // auth.config.ts because the middleware copy of that config runs on the edge.
+        async jwt(params) {
+            const token = await authConfig.callbacks.jwt(params);
+            if (params.user) return token;
+            return refreshSessionToken(token, (id) => prisma.user.findUnique({
+                where: { id },
+                select: { role: true, isActive: true, branchId: true, permissions: true, warehouseId: true, sessionVersion: true, branch: { select: { organizationId: true } } },
+            }));
+        },
+        // An unverifiable session (database unavailable) exposes no user: every
+        // `auth()` caller refuses, and tenant/warehouse helpers throw instead of
+        // redirecting, while the cookie itself survives the outage.
+        async session(params) {
+            const session = await authConfig.callbacks.session(params as any);
+            if ((params as any).token?.refreshFailed) {
+                return { ...session, user: undefined, error: SESSION_REFRESH_UNAVAILABLE } as any;
+            }
+            return session;
+        },
+    },
     providers: [
         Credentials({
             async authorize(credentials) {

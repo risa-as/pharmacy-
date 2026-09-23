@@ -156,6 +156,7 @@ model Patient {
 }
 
 model SaleItem {
+  batchAllocations String? // Immutable batch ids and quantities deducted for this line.
   id            String     @id @default(uuid())
   saleId        String
   sale          Sale       @relation(fields: [saleId], references: [id])
@@ -185,6 +186,11 @@ model SaleReturn {
 }
 
 model SaleReturnItem {
+  batchAllocations String?
+  stockStatus String @default("LEGACY") // RESTOCKED, QUARANTINED, DISPOSED; LEGACY predates tracking.
+  stockReviewNote String?
+  stockReviewedBy String?
+  stockReviewedAt DateTime?
   id           String     @id @default(uuid())
   saleReturnId String
   drugId       String

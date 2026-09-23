@@ -31,10 +31,9 @@ export default async function PatientsPage(
   if (tenantCtx instanceof NextResponse) redirect("/login");
   const { tenantBranchWhere } = tenantCtx;
 
-  const where: any = {
-    ...tenantBranchWhere,
-    ...(branchId ? { branchId } : {}),
-  };
+  // Intersect, never spread: a spread ?branch= would replace a branch-scoped
+  // user's own { branchId } scope and expose another tenant's patients.
+  const where: any = { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] };
   if (search) {
     where.OR = [
       { name: { contains: search, mode: "insensitive" } },

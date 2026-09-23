@@ -4,8 +4,10 @@
 // جدول الصيدليات + تعديل شروط التعامل (OWNER فقط، الخادم يتحقق مجدداً) +
 // نافذة كشف حساب (فواتير كل صيدلية ودفعاتها) — نفس أسلوب
 // app/warehouse/stock/StockClient.tsx (sonner، نوافذ عبر Modal المشترك).
+import MoreActions from '@/app/ui/order-more-actions';
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import OpeningSettlement from './OpeningSettlement';
 import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
@@ -59,7 +61,7 @@ interface PaymentRow {
     actorName: string | null;
 }
 
-const money = (n: number) => n.toLocaleString("ar-IQ", { maximumFractionDigits: 2 });
+const money = (n: number) => n.toLocaleString("ar-IQ-u-nu-latn", { maximumFractionDigits: 2 });
 
 // دلالات الحالة/التقادم موحَّدة عبر StatusChip المشترك — انظر التعليق المطابق
 // في app/warehouse/accounts/AccountsClient.tsx (نفس النمط حرفياً).
@@ -101,10 +103,10 @@ function AgingChip({ aging }: { aging: AgingBucket }) {
 
 export default function CustomersClient({
     initialCustomers,
-    isOwner,
+    isOwner, canRecordPayment,
 }: {
     initialCustomers: CustomerRow[];
-    isOwner: boolean;
+    isOwner: boolean; canRecordPayment: boolean;
 }) {
     const [customers, setCustomers] = useState(initialCustomers);
     const [editing, setEditing] = useState<CustomerRow | null>(null);
@@ -325,11 +327,11 @@ export default function CustomersClient({
                     <thead>
                         <tr className="sticky top-0 z-10 border-b bg-muted">
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">الصيدلية</th>
-                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المتبقي عليها (الكلي)</th>
+                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">المتبقي الكلي (د.ع)</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground" title="دَين موروث من قبل هذا النظام — مُضمَّن أصلاً داخل «المتبقي عليها»، معروض هنا فقط للتوضيح">
-                                منه رصيد سابق
+                                منه رصيد سابق (د.ع)
                             </th>
-                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">حدّ الائتمان</th>
+                            <th className="px-4 py-3 text-right font-bold text-muted-foreground">حدّ الائتمان (د.ع)</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">مهلة السداد</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">الطلبات</th>
                             <th className="px-4 py-3 text-right font-bold text-muted-foreground">آخر طلب</th>
@@ -349,6 +351,7 @@ export default function CustomersClient({
                                     قراءته كدَين مضاعف. */}
                                 <td className="tabular-nums px-4 py-3 text-muted-foreground">
                                     {c.openingBalance > 0 ? money(c.openingBalance) : "—"}
+                                    {c.customerId && <OpeningSettlement customerId={c.customerId} remaining={c.openingBalance} canPay={canRecordPayment} onPaid={remaining => setCustomers(prev => prev.map(row => row.customerId === c.customerId ? { ...row, openingBalance: remaining, outstanding: row.outstanding - row.openingBalance + remaining } : row))} />}
                                 </td>
                                 <td className="tabular-nums px-4 py-3 text-muted-foreground">
                                     {c.creditLimit > 0 ? money(c.creditLimit) : "بلا حد"}
@@ -356,9 +359,9 @@ export default function CustomersClient({
                                 <td className="tabular-nums px-4 py-3 text-muted-foreground">
                                     {c.paymentTermDays > 0 ? `${c.paymentTermDays} يوم` : "نقدي"}
                                 </td>
-                                <td className="tabular-nums px-4 py-3 text-muted-foreground">{c.orderCount}</td>
+                                <td className="tabular-nums px-4 py-3 text-muted-foreground">{c.orderCount.toLocaleString("ar-IQ-u-nu-latn")}</td>
                                 <td className="px-4 py-3 text-muted-foreground">
-                                    {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString("ar-IQ") : "لم يطلب بعد"}
+                                    {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString("ar-IQ-u-nu-latn") : "لم يطلب بعد"}
                                 </td>
                                 <td className="px-4 py-3">
                                     <SharedStatusChip
@@ -371,7 +374,7 @@ export default function CustomersClient({
                                     <div className="flex flex-wrap gap-2">
                                         <button
                                             onClick={() => setStatementFor(c)}
-                                            className="rounded-md px-2 py-1 text-xs text-primary hover:bg-primary/10"
+                                            className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                                         >
                                             كشف حساب
                                         </button>
@@ -381,27 +384,27 @@ export default function CustomersClient({
                                         <Link
                                             href={`/warehouse/print/statement/${c.organizationId}`}
                                             title="طباعة كشف الحساب"
-                                            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs hover:bg-muted"
                                         >
-                                            <Printer className="h-3.5 w-3.5" />
+                                            <Printer className="h-3.5 w-3.5" /> طباعة
                                         </Link>
                                         {isOwner && c.customerId && (
-                                            <>
+                                            <MoreActions label={`إجراءات العميل ${c.name}`}>
                                                 <button
                                                     onClick={() => openEdit(c)}
-                                                    className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                                                    className="rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
                                                 >
                                                     تعديل الشروط
                                                 </button>
                                                 <button
                                                     onClick={() => toggleBlocked(c)}
-                                                    className={`rounded-md px-2 py-1 text-xs ${
+                                                    className={`rounded-lg px-3 py-2 text-xs ${
                                                         c.isBlocked ? "text-success hover:bg-success/10" : "text-destructive hover:bg-destructive/10"
                                                     }`}
                                                 >
                                                     {c.isBlocked ? "استئناف" : "إيقاف"}
                                                 </button>
-                                            </>
+                                            </MoreActions>
                                         )}
                                         {isOwner && !c.customerId && (
                                             <span className="text-xs text-muted-foreground">بانتظار أول اعتماد</span>
@@ -740,8 +743,8 @@ function StatementModal({
                                             {inv.invoiceNumber}
                                         </button>
                                         <div className="mt-1 text-xs text-muted-foreground">
-                                            صدرت {new Date(inv.issuedAt).toLocaleDateString("ar-IQ")}
-                                            {inv.dueAt && <> — تستحق {new Date(inv.dueAt).toLocaleDateString("ar-IQ")}</>}
+                                            صدرت {new Date(inv.issuedAt).toLocaleDateString("ar-IQ-u-nu-latn")}
+                                            {inv.dueAt && <> — تستحق {new Date(inv.dueAt).toLocaleDateString("ar-IQ-u-nu-latn")}</>}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -779,7 +782,7 @@ function StatementModal({
                                                             {money(p.amount)} — {p.method} {p.reference ? `(${p.reference})` : ""}
                                                         </span>
                                                         <span className="text-muted-foreground">
-                                                            {new Date(p.receivedAt).toLocaleString("ar-IQ")}{" "}
+                                                            {new Date(p.receivedAt).toLocaleString("ar-IQ-u-nu-latn")}{" "}
                                                             {p.actorName ? `· ${p.actorName}` : ""}
                                                         </span>
                                                     </li>

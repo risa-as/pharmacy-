@@ -1,3 +1,4 @@
+import ContactFooter from '@/app/warehouse/print/_components/ContactFooter';
 // كشف حساب عميل قابل للطباعة (فحص 2026-09-17، فجوة G2).
 //
 // يقرأ **دفترَي** الذمم معاً — فواتير طلبات المنصة وفواتير البيع الميداني
@@ -51,10 +52,10 @@ export default async function PrintStatementPage(props: {
         );
     }
 
-    const [warehouse, organization, invoices, fieldSales] = await Promise.all([
+    const [warehouse, organization, invoices, fieldSales, customer, settlements] = await Promise.all([
         prisma.warehouse.findUnique({
             where: { id: ctx.warehouseId },
-            select: { name: true, city: true, phone: true },
+            select: { name: true, city: true, phone: true, salesPhone: true, followupPhone: true, managementPhone: true },
         }),
         prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } }),
         // كل الفواتير لا المفتوحة فقط: الكشف سجل حركة، والمسدَّدة جزء من السجل.
@@ -75,6 +76,8 @@ export default async function PrintStatementPage(props: {
             },
             orderBy: { soldAt: 'asc' },
         }),
+        prisma.warehouseCustomer.findUnique({ where: { warehouseId_organizationId: { warehouseId: ctx.warehouseId, organizationId } } }),
+        prisma.warehouseSettlement.findMany({ where: { warehouseId: ctx.warehouseId, organizationId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
     ]);
 
     if (!organization || !warehouse) {
@@ -98,6 +101,7 @@ export default async function PrintStatementPage(props: {
     };
 
     const rows: Row[] = [
+        ...(customer && customer.openingBalance > 0 ? [{ date: customer.createdAt, number: 'OPENING', source: 'الرصيد الافتتاحي', total: customer.openingBalance, paid: 0, dueAt: null }] : []),
         ...invoices.map((i) => ({
             date: i.issuedAt,
             number: i.invoiceNumber,
@@ -121,6 +125,7 @@ export default async function PrintStatementPage(props: {
     const totalBilled = rows.reduce((s, r) => s + r.total, 0);
     const totalPaid = rows.reduce((s, r) => s + r.paid, 0);
     const outstanding = sumOutstanding(rows.map((r) => ({ total: r.total, paidAmount: r.paid })));
+    const creditBalance = rows.reduce((sum, r) => sum + Math.max(r.paid - r.total, 0), 0);
     const now = new Date();
 
     // رصيد جارٍ تصاعدي — العمود الذي يقرأه العميل أولاً في أي كشف.
@@ -145,6 +150,7 @@ export default async function PrintStatementPage(props: {
                     { label: 'إجمالي المفوتر', value: `${money(totalBilled)} د.ع` },
                     { label: 'إجمالي المسدَّد', value: `${money(totalPaid)} د.ع` },
                     { label: 'الرصيد المستحق', value: `${money(outstanding)} د.ع` },
+                    { label: 'رصيد دائن لصالح العميل', value: `${money(creditBalance)} د.ع` },
                 ]}
             />
 
@@ -207,6 +213,7 @@ export default async function PrintStatementPage(props: {
                 )}
             </table>
 
+            {settlements.length > 0 && <section className="mt-5"><h2 className="mb-2 font-bold">سندات السداد والرد والمطابقة</h2><p className="mb-2 text-xs">هذه السندات تفسر الأرصدة أعلاه؛ لا تُضاف مبالغها مرة ثانية إلى الإجمالي. المطابقة ليست دفعًا نقديًا جديدًا.</p><table className="w-full text-xs"><thead><tr><th>التاريخ</th><th>النوع</th><th>المرجع</th><th>المبلغ</th></tr></thead><tbody>{settlements.map(e => <tr key={e.id} className="border-t"><td className="p-2">{day(e.createdAt)}</td><td>{e.kind === 'OPENING_PAYMENT' ? 'سداد رصيد سابق' : e.kind === 'RETURN_REFUND' ? 'رد نقدي' : 'مطابقة'}</td><td>{e.reference}</td><td>{money(e.amount)}</td></tr>)}</tbody></table></section>}
             <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
                 يشمل هذا الكشف فواتير طلبات المنصة ومبيعات المندوبين الميدانية المسجَّلة على هذا
                 العميل. مبيعات ميدانية سُجِّلت باسم نصّي بلا ربط بالمؤسسة لا تظهر هنا.
@@ -216,6 +223,7 @@ export default async function PrintStatementPage(props: {
                 <div className="flex-1 border-t border-border pt-1.5">توقيع العميل</div>
                 <div className="flex-1 border-t border-border pt-1.5">توقيع المذخر</div>
             </div>
+            <ContactFooter phones={warehouse} />
         </PrintFrame>
     );
 }

@@ -7,15 +7,18 @@
 // محسومتان من الخادم (app/warehouse/reports/page.tsx عبر استعلام Prisma حي)
 // لا من تخمين العميل، فإخفاؤهما هنا فعلي لا مجرد CSS. لا مكتبة رسوم بيانية
 // (القيد §8 من هذه المرحلة) — كل التمثيل المرئي أدناه CSS/divs بسيطة.
-import { useEffect, useState, useCallback } from "react";
-import { Download, Info } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Download, Info, LayoutDashboard, TrendingUp, Package, Clock3, CheckCircle2, AlertTriangle, Wallet, UsersRound, Truck, Landmark } from "lucide-react";
 import { exportToExcel } from "@/app/lib/excel-export";
+import { createReportRequestCache, reportDayRange } from "@/app/lib/warehouse-report-client";
+import MonitoringOverview from './MonitoringOverview';
+import { useRouter } from 'next/navigation';
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import LoadingBlock from "@/app/warehouse/_components/Loading";
 import StatusChip, { type StatusChipVariant } from "@/app/warehouse/_components/StatusChip";
 
 type Period = "day" | "week" | "month";
-type TabId = "sales" | "top-sellers" | "slow-movers" | "fulfilment" | "expiry-risk" | "margins" | "customers" | "payables" | "reps";
+type TabId = "overview" | "sales" | "top-sellers" | "slow-movers" | "fulfilment" | "expiry-risk" | "margins" | "customers" | "payables" | "reps";
 
 /**
  * التبويبات المبنية على getSoldLines (طلبات المنصة حصراً) — تحمل وسم نطاق.
@@ -23,7 +26,7 @@ type TabId = "sales" | "top-sellers" | "slow-movers" | "fulfilment" | "expiry-ri
  * المشتريات، ولا علاقة لأيّهما بمصدر المبيعات. و«المندوبون» هو موضع البيع
  * الميداني نفسه.
  */
-const FIELD_SALE_EXCLUDED_TABS: TabId[] = [
+const UNIFIED_SALES_TABS: TabId[] = [
     "sales", "top-sellers", "slow-movers", "fulfilment", "margins", "customers",
 ];
 
@@ -53,6 +56,7 @@ interface FulfilmentResult {
     ratePercent: number;
 }
 interface MarginRow {
+    costComplete: boolean;
     barcode: string;
     tradeName: string;
     revenue: number;
@@ -133,13 +137,11 @@ const RANGE_OPTIONS = [
 ];
 
 function fmt(n: number): string {
-    return Math.round(n).toLocaleString("ar-IQ");
+    return n.toLocaleString("ar-IQ-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 function rangeToFromTo(days: number): { from: string; to: string } {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
+    return reportDayRange(days);
 }
 
 /** عمود بارات عمودية بسيط (CSS) — كل بار مُعنون برقمه الفعلي فوقه، لا بالتلميح فقط. */
@@ -154,20 +156,20 @@ function VerticalBars({
     labelOf: (d: SalesPoint) => string;
     color: string;
 }) {
-    const max = Math.max(1, ...data.map(valueOf));
+    const max = Math.max(1, ...data.map(d=>Math.abs(valueOf(d))));
     if (data.length === 0) {
         return <p className="p-4 text-sm text-muted-foreground">لا توجد بيانات مبيعات ضمن هذه الفترة.</p>;
     }
     return (
         <div className="overflow-x-auto">
-            <div className="flex items-end gap-2 px-1 py-3" style={{ minHeight: 170 }}>
+            <div className="flex items-end justify-center gap-3 px-4 py-3" style={{ minHeight: 170 }}>
                 {data.map((d, i) => {
                     const v = valueOf(d);
-                    const h = Math.max(Math.round((v / max) * 120), v > 0 ? 3 : 0);
+                    const h = Math.max(Math.round((Math.abs(v) / max) * 120), v !== 0 ? 3 : 0);
                     return (
                         <div key={i} className="flex shrink-0 flex-col items-center gap-1" style={{ width: 46 }}>
                             <span className="tabular-nums text-[11px] text-foreground">{fmt(v)}</span>
-                            <div className={`w-6 rounded-t-sm ${color}`} style={{ height: h }} title={`${d.key}: ${fmt(v)}`} />
+                            <div className={`w-6 rounded-t-sm ${v < 0 ? 'bg-destructive' : color}`} style={{ height: h }} title={`${d.key}: ${fmt(v)}`} />
                             <span className="whitespace-nowrap text-[10px] text-muted-foreground">{labelOf(d)}</span>
                         </div>
                     );
@@ -198,14 +200,14 @@ function ExpiryBucketBars({ byBucket }: { byBucket: Record<ExpiryBucketKey, Expi
                 const widthPct = Math.max(Math.round((b.value / max) * 100), b.value > 0 ? 2 : 0);
                 return (
                     <div key={m.key} className="flex items-center gap-3">
-                        <span className="flex w-40 shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="flex w-28 sm:w-40 shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
                             <span className={`h-2 w-2 rounded-full ${m.dot}`} />
                             {m.label}
                         </span>
                         <div className="h-5 flex-1 overflow-hidden rounded bg-muted">
                             <div className={`h-full ${m.bar}`} style={{ width: `${widthPct}%` }} />
                         </div>
-                        <span className="tabular-nums w-52 shrink-0 text-xs text-foreground">
+                        <span className="tabular-nums w-28 sm:w-52 shrink-0 text-xs text-foreground">
                             {fmt(b.value)} د.ع · {fmt(b.quantity)} وحدة
                         </span>
                     </div>
@@ -264,36 +266,45 @@ function ErrorRow({ message }: { message: string }) {
 }
 
 export default function ReportsClient({
-    canViewFinance,
+    canViewFinance, portalMode,
     canViewCustomers,
     canViewPayables,
     canViewReps,
 }: {
-    canViewFinance: boolean;
+    canViewFinance: boolean; portalMode: boolean;
     canViewCustomers: boolean;
     canViewPayables: boolean;
     canViewReps: boolean;
 }) {
+    const router = useRouter();
+    const requests = useRef<Record<string, number>>({});
+    const reportCache = useRef<ReturnType<typeof createReportRequestCache> | null>(null);
+    if (!reportCache.current) reportCache.current = createReportRequestCache();
+    const reportFetch = useCallback((url: string) => reportCache.current!.fetch(url), []);
+    const [refreshVersion, setRefreshVersion] = useState(0);
+    const tabIcons = { overview: LayoutDashboard, sales: TrendingUp, "top-sellers": Package, "slow-movers": Clock3, fulfilment: CheckCircle2, "expiry-risk": AlertTriangle, margins: Wallet, customers: UsersRound, payables: Landmark, reps: Truck };
     const tabs: Array<{ id: TabId; label: string }> = [
+        { id: "overview", label: "لوحة المراقبة" },
         { id: "sales", label: "المبيعات" },
         { id: "top-sellers", label: "الأكثر مبيعاً" },
         { id: "slow-movers", label: "الأصناف الراكدة" },
         { id: "fulfilment", label: "نسبة التلبية" },
         { id: "expiry-risk", label: "مخاطر الصلاحية" },
     ];
-    if (canViewFinance) tabs.push({ id: "margins", label: "الهوامش" });
+    if(portalMode) { for(let i=tabs.length-1;i>=0;i--) if(["overview","slow-movers","expiry-risk"].includes(tabs[i].id)) tabs.splice(i,1); }
+    if (canViewFinance && !portalMode) tabs.push({ id: "margins", label: "الهوامش" });
     if (canViewCustomers) tabs.push({ id: "customers", label: "مبيعات العملاء" });
     // مشتريات المذخر وذممه الدائنة: يتطلب canViewFinance **و** canViewPurchases
     // معاً — canViewPayables محسومة من الخادم في app/warehouse/reports/page.tsx
     // (AND الفعلي)، فهذا الشرط هنا واجهة فقط تطابق البوابة الحقيقية على
     // GET /api/warehouse-portal/reports/payables.
-    if (canViewPayables) tabs.push({ id: "payables", label: "الذمم الدائنة" });
+    if (canViewPayables && !portalMode) tabs.push({ id: "payables", label: "الذمم الدائنة" });
     // المندوبون: يتطلب canViewReports **و** canViewReps معاً — canViewReps هنا
     // محسومة من الخادم في app/warehouse/reports/page.tsx (AND الفعلي)، مطابقة
     // للبوابة الحقيقية على GET /api/warehouse-portal/reports/reps.
-    if (canViewReps) tabs.push({ id: "reps", label: "المندوبون" });
+    if (canViewReps && !portalMode) tabs.push({ id: "reps", label: "المندوبون" });
 
-    const [tab, setTab] = useState<TabId>("sales");
+    const [tab, setTab] = useState<TabId>(portalMode ? "sales" : "overview");
 
     // ── المبيعات بفترة ────────────────────────────────────────────────────
     const [period, setPeriod] = useState<Period>("day");
@@ -303,20 +314,23 @@ export default function ReportsClient({
     const [salesError, setSalesError] = useState<string | null>(null);
 
     const loadSales = useCallback(async () => {
+        const request = (requests.current.Sales ?? 0) + 1; requests.current.Sales = request;
         setSalesLoading(true);
         setSalesError(null);
         try {
             const { from, to } = rangeToFromTo(salesRangeDays);
-            const res = await fetch(
+            const res = await reportFetch(
                 `/api/warehouse-portal/reports/sales?period=${period}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
             );
             const data = await res.json();
+            if (requests.current.Sales !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير المبيعات");
             setSalesData(data.series);
         } catch (e: any) {
+            if (requests.current.Sales !== request) return;
             setSalesError(e?.message || "فشل تحميل تقرير المبيعات");
         } finally {
-            setSalesLoading(false);
+            if (requests.current.Sales === request) setSalesLoading(false);
         }
     }, [period, salesRangeDays]);
 
@@ -328,20 +342,23 @@ export default function ReportsClient({
     const [topError, setTopError] = useState<string | null>(null);
 
     const loadTopSellers = useCallback(async () => {
+        const request = (requests.current.Top ?? 0) + 1; requests.current.Top = request;
         setTopLoading(true);
         setTopError(null);
         try {
             const { from, to } = rangeToFromTo(salesRangeDays);
-            const res = await fetch(
+            const res = await reportFetch(
                 `/api/warehouse-portal/reports/top-sellers?by=${topBy}&limit=${topLimit}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
             );
             const data = await res.json();
+            if (requests.current.Top !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير الأكثر مبيعاً");
             setTopData(data.items);
         } catch (e: any) {
+            if (requests.current.Top !== request) return;
             setTopError(e?.message || "فشل تحميل تقرير الأكثر مبيعاً");
         } finally {
-            setTopLoading(false);
+            if (requests.current.Top === request) setTopLoading(false);
         }
     }, [topBy, topLimit, salesRangeDays]);
 
@@ -352,17 +369,20 @@ export default function ReportsClient({
     const [slowError, setSlowError] = useState<string | null>(null);
 
     const loadSlowMovers = useCallback(async () => {
+        const request = (requests.current.Slow ?? 0) + 1; requests.current.Slow = request;
         setSlowLoading(true);
         setSlowError(null);
         try {
-            const res = await fetch(`/api/warehouse-portal/reports/slow-movers?days=${slowDays}`);
+            const res = await reportFetch(`/api/warehouse-portal/reports/slow-movers?days=${slowDays}`);
             const data = await res.json();
+            if (requests.current.Slow !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير الأصناف الراكدة");
             setSlowData(data.items);
         } catch (e: any) {
+            if (requests.current.Slow !== request) return;
             setSlowError(e?.message || "فشل تحميل تقرير الأصناف الراكدة");
         } finally {
-            setSlowLoading(false);
+            if (requests.current.Slow === request) setSlowLoading(false);
         }
     }, [slowDays]);
 
@@ -373,20 +393,23 @@ export default function ReportsClient({
     const [fulfilmentError, setFulfilmentError] = useState<string | null>(null);
 
     const loadFulfilment = useCallback(async () => {
+        const request = (requests.current.Fulfilment ?? 0) + 1; requests.current.Fulfilment = request;
         setFulfilmentLoading(true);
         setFulfilmentError(null);
         try {
             const { from, to } = rangeToFromTo(fulfilmentRangeDays);
-            const res = await fetch(
+            const res = await reportFetch(
                 `/api/warehouse-portal/reports/fulfilment?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
             );
             const data = await res.json();
+            if (requests.current.Fulfilment !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير نسبة التلبية");
             setFulfilmentData(data);
         } catch (e: any) {
+            if (requests.current.Fulfilment !== request) return;
             setFulfilmentError(e?.message || "فشل تحميل تقرير نسبة التلبية");
         } finally {
-            setFulfilmentLoading(false);
+            if (requests.current.Fulfilment === request) setFulfilmentLoading(false);
         }
     }, [fulfilmentRangeDays]);
 
@@ -396,17 +419,20 @@ export default function ReportsClient({
     const [expiryError, setExpiryError] = useState<string | null>(null);
 
     const loadExpiryRisk = useCallback(async () => {
+        const request = (requests.current.Expiry ?? 0) + 1; requests.current.Expiry = request;
         setExpiryLoading(true);
         setExpiryError(null);
         try {
-            const res = await fetch(`/api/warehouse-portal/reports/expiry-risk`);
+            const res = await reportFetch(`/api/warehouse-portal/reports/expiry-risk`);
             const data = await res.json();
+            if (requests.current.Expiry !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير مخاطر الصلاحية");
             setExpiryData(data);
         } catch (e: any) {
+            if (requests.current.Expiry !== request) return;
             setExpiryError(e?.message || "فشل تحميل تقرير مخاطر الصلاحية");
         } finally {
-            setExpiryLoading(false);
+            if (requests.current.Expiry === request) setExpiryLoading(false);
         }
     }, []);
 
@@ -418,20 +444,23 @@ export default function ReportsClient({
 
     const loadMargins = useCallback(async () => {
         if (!canViewFinance) return;
+        const request = (requests.current.Margin ?? 0) + 1; requests.current.Margin = request;
         setMarginLoading(true);
         setMarginError(null);
         try {
             const { from, to } = rangeToFromTo(marginRangeDays);
-            const res = await fetch(
+            const res = await reportFetch(
                 `/api/warehouse-portal/reports/margins?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
             );
             const data = await res.json();
+            if (requests.current.Margin !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير الهوامش");
             setMarginData(data.items);
         } catch (e: any) {
+            if (requests.current.Margin !== request) return;
             setMarginError(e?.message || "فشل تحميل تقرير الهوامش");
         } finally {
-            setMarginLoading(false);
+            if (requests.current.Margin === request) setMarginLoading(false);
         }
     }, [marginRangeDays, canViewFinance]);
 
@@ -443,20 +472,23 @@ export default function ReportsClient({
 
     const loadCustomers = useCallback(async () => {
         if (!canViewCustomers) return;
+        const request = (requests.current.Customer ?? 0) + 1; requests.current.Customer = request;
         setCustomerLoading(true);
         setCustomerError(null);
         try {
             const { from, to } = rangeToFromTo(customerRangeDays);
-            const res = await fetch(
+            const res = await reportFetch(
                 `/api/warehouse-portal/reports/customers?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
             );
             const data = await res.json();
+            if (requests.current.Customer !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير مبيعات العملاء");
             setCustomerData(data.items);
         } catch (e: any) {
+            if (requests.current.Customer !== request) return;
             setCustomerError(e?.message || "فشل تحميل تقرير مبيعات العملاء");
         } finally {
-            setCustomerLoading(false);
+            if (requests.current.Customer === request) setCustomerLoading(false);
         }
     }, [customerRangeDays, canViewCustomers]);
 
@@ -468,18 +500,21 @@ export default function ReportsClient({
 
     const loadPayables = useCallback(async () => {
         if (!canViewPayables) return;
+        const request = (requests.current.Payables ?? 0) + 1; requests.current.Payables = request;
         setPayablesLoading(true);
         setPayablesError(null);
         try {
-            const res = await fetch(`/api/warehouse-portal/reports/payables`);
+            const res = await reportFetch(`/api/warehouse-portal/reports/payables`);
             const data = await res.json();
+            if (requests.current.Payables !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير الذمم الدائنة");
             setPayablesSummary(data.summary);
             setPayablesSuppliers(data.suppliers);
         } catch (e: any) {
+            if (requests.current.Payables !== request) return;
             setPayablesError(e?.message || "فشل تحميل تقرير الذمم الدائنة");
         } finally {
-            setPayablesLoading(false);
+            if (requests.current.Payables === request) setPayablesLoading(false);
         }
     }, [canViewPayables]);
 
@@ -491,20 +526,23 @@ export default function ReportsClient({
 
     const loadReps = useCallback(async () => {
         if (!canViewReps) return;
+        const request = (requests.current.Reps ?? 0) + 1; requests.current.Reps = request;
         setRepsLoading(true);
         setRepsError(null);
         try {
             const { from, to } = rangeToFromTo(repsRangeDays);
-            const res = await fetch(
+            const res = await reportFetch(
                 `/api/warehouse-portal/reports/reps?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
             );
             const data = await res.json();
+            if (requests.current.Reps !== request) return;
             if (!res.ok) throw new Error(data?.error || "فشل تحميل تقرير المندوبين");
             setRepsData(data.reps);
         } catch (e: any) {
+            if (requests.current.Reps !== request) return;
             setRepsError(e?.message || "فشل تحميل تقرير المندوبين");
         } finally {
-            setRepsLoading(false);
+            if (requests.current.Reps === request) setRepsLoading(false);
         }
     }, [repsRangeDays, canViewReps]);
 
@@ -519,37 +557,43 @@ export default function ReportsClient({
         if (tab === "payables") loadPayables();
         if (tab === "reps") loadReps();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tab, loadSales, loadTopSellers, loadSlowMovers, loadFulfilment, loadExpiryRisk, loadMargins, loadCustomers, loadPayables, loadReps]);
+    }, [tab, refreshVersion, loadSales, loadTopSellers, loadSlowMovers, loadFulfilment, loadExpiryRisk, loadMargins, loadCustomers, loadPayables, loadReps]);
 
     return (
         <div className="space-y-6" dir="rtl">
-            <PageHeader title="التقارير" description="أداء مبيعاتك، أصنافك الراكدة، مخاطر الصلاحية، ونسبة تلبية طلبات صيدلياتك." />
+            <PageHeader title="التقارير" description="أداء مبيعاتك، أصنافك الراكدة، مخاطر الصلاحية، ونسبة تلبية طلبات صيدلياتك." actions={<div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground">نتائج التبويبات محفوظة لمدة دقيقة</span><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { reportCache.current!.clear(); setRefreshVersion(v => v + 1); }}>تحديث البيانات الآن</button></div>} />
 
-            <div className="flex flex-wrap gap-1 border-b">
+            <label className="block rounded-lg border bg-card p-3 text-sm sm:hidden">التقرير المعروض
+                <select value={tab} onChange={e => setTab(e.target.value as TabId)} className="mt-2 w-full rounded-lg border bg-background px-3 py-2">
+                    {tabs.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
+            </label>
+            <div className="hidden gap-2 rounded-lg border bg-card p-2 sm:grid sm:grid-cols-3 xl:grid-cols-5">
                 {tabs.map((t) => (
                     <button
                         key={t.id}
                         onClick={() => setTab(t.id)}
-                        className={`rounded-t-lg px-3.5 py-2 text-sm font-medium transition-colors ${
+                        className={`flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                             tab === t.id
-                                ? "border-b-2 border-primary text-primary"
+                                ? "bg-primary text-primary-foreground"
                                 : "text-muted-foreground hover:text-foreground"
                         }`}
                     >
-                        {t.label}
+                        {(() => { const Icon = tabIcons[t.id]; return <Icon className="h-4 w-4 shrink-0"/>; })()} {t.label}
                     </button>
                 ))}
             </div>
+
+            <div hidden={tab !== "overview"}><MonitoringOverview active={tab === "overview"} refreshToken={refreshVersion} canViewFinance={canViewFinance} canViewPayables={canViewPayables} onInspect={next=>next==='finance'?router.push('/warehouse/accounts'):setTab(next as TabId)} /></div>
 
             {/* نطاق البيانات (فحص 2026-09-17، فجوة G1): getSoldLines تُشتق من
                 WarehouseOrder حصراً، فهذه التبويبات لا تشمل فواتير البيع
                 الميداني للمندوبين — وهي تظهر في تبويب «المندوبون». التسميات
                 المجرّدة («المبيعات») كانت تُقرأ كإجماليات وهي ليست كذلك. */}
-            {FIELD_SALE_EXCLUDED_TABS.includes(tab) && (
+            {UNIFIED_SALES_TABS.includes(tab) && (
                 <p className="flex items-start gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    يشمل هذا التقرير طلبات المنصة المعتمدة فقط. مبيعات المندوبين الميدانية
-                    {canViewReps ? ' في تبويب «المندوبون».' : ' غير محتسبة هنا.'}
+                    يشمل التقرير المبيعات المشحونة ومبيعات المندوبين، ويخصم الإشعارات الدائنة بتاريخ قبولها. التجميع حسب توقيت بغداد.
                 </p>
             )}
 
@@ -780,7 +824,7 @@ export default function ReportsClient({
                                             <td className="p-2.5">{r.tradeName}</td>
                                             <td className="p-2.5">
                                                 {r.lastSoldAt ? (
-                                                    new Date(r.lastSoldAt).toLocaleDateString("ar-IQ")
+                                                    new Date(r.lastSoldAt).toLocaleDateString("ar-IQ-u-nu-latn")
                                                 ) : (
                                                     <span className="font-semibold text-destructive">لم يُبَع أبداً</span>
                                                 )}
@@ -937,7 +981,7 @@ export default function ReportsClient({
                                                     <tr key={i} className="border-t">
                                                         <td className="p-2.5">{it.tradeName}</td>
                                                         <td className="p-2.5">{it.batchNumber}</td>
-                                                        <td className="p-2.5">{new Date(it.expiryDate).toLocaleDateString("ar-IQ")}</td>
+                                                        <td className="p-2.5">{new Date(it.expiryDate).toLocaleDateString("ar-IQ-u-nu-latn")}</td>
                                                         <td className="tabular-nums p-2.5">{fmt(it.quantity)}</td>
                                                         <td className="tabular-nums p-2.5">{fmt(it.value)}</td>
                                                         <td className="p-2.5">
@@ -962,7 +1006,7 @@ export default function ReportsClient({
                             <ExportButton
                                 onClick={() =>
                                     exportToExcel(
-                                        marginData.map((r) => ({ ...r, marginPercent: r.marginPercent === null ? "غير معروف" : r.marginPercent })),
+                                        marginData.map((r) => ({ ...r, margin: !r.costComplete ? 'غير مكتمل' : r.margin, cost: !r.costComplete ? 'غير مكتمل' : r.cost, marginPercent: r.marginPercent === null ? "غير متاح" : r.marginPercent })),
                                         [
                                             { header: "الاسم التجاري", key: "tradeName", width: 26 },
                                             { header: "الباركود", key: "barcode", width: 18 },
@@ -980,7 +1024,7 @@ export default function ReportsClient({
                     }
                 >
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-                        <p className="text-xs text-muted-foreground">التكلفة الحالية المسجَّلة في الكتالوج — تقريبية لأي صنف تغيّرت تكلفته لاحقاً.</p>
+                        <p className="text-xs text-muted-foreground">التكلفة المثبتة عند الشحن أو البيع الميداني. تكلفة الشحنات القديمة غير المثبتة تظهر غير مكتملة؛ المرتجع يبقى بتكلفته حتى إخراجه من الحجر إلى المخزون بعد الفحص.</p>
                         <RangePicker value={marginRangeDays} onChange={setMarginRangeDays} />
                     </div>
                     {marginLoading && <LoadingRow />}
@@ -1012,11 +1056,11 @@ export default function ReportsClient({
                                             <tr key={r.barcode} className="border-t">
                                                 <td className="p-2.5">{r.tradeName}</td>
                                                 <td className="tabular-nums p-2.5">{fmt(r.revenue)}</td>
-                                                <td className="tabular-nums p-2.5">{fmt(r.cost)}</td>
-                                                <td className="tabular-nums p-2.5">{fmt(r.margin)}</td>
+                                                <td className="tabular-nums p-2.5">{r.costComplete ? fmt(r.cost) : 'غير مكتمل'}</td>
+                                                <td className="tabular-nums p-2.5">{r.costComplete ? fmt(r.margin) : 'غير مكتمل'}</td>
                                                 <td className="tabular-nums p-2.5">
                                                     {r.marginPercent === null ? (
-                                                        <span className="text-muted-foreground">غير معروف (لا تكلفة مسجَّلة)</span>
+                                                        <span className="text-muted-foreground">{r.costComplete ? 'غير متاح لصافي إيراد غير موجب' : 'غير معروف (تكلفة غير مكتملة)'}</span>
                                                     ) : (
                                                         `${r.marginPercent}%`
                                                     )}
@@ -1082,7 +1126,7 @@ export default function ReportsClient({
                                             <td className="p-2.5">{r.pharmacyName}</td>
                                             <td className="tabular-nums p-2.5">{fmt(r.total)}</td>
                                             <td className="tabular-nums p-2.5">{fmt(r.orders)}</td>
-                                            <td className="p-2.5">{new Date(r.lastOrderAt).toLocaleDateString("ar-IQ")}</td>
+                                            <td className="p-2.5">{new Date(r.lastOrderAt).toLocaleDateString("ar-IQ-u-nu-latn")}</td>
                                         </tr>
                                     ))}
                                 </tbody>

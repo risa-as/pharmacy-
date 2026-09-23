@@ -1,39 +1,6 @@
-/**
- * warehouse-report-data.ts
- *
- * المرحلة 4 من نظام المذاخر B2B (التقارير والأداء): طبقة استعلام غير نقية
- * (تستورد Prisma) تُنتج المدخلات التي تستهلكها دوال app/lib/warehouse-reports.ts
- * النقية. غير نقية عمداً — بخلاف warehouse-reports.ts الذي يبقى نقياً بالكامل
- * كي يُختبَر وحدوياً تحت إعداد vitest في هذا المستودع (لا يحل alias "@/*")،
- * نفس فلسفة الفصل المتّبعة في warehouse-permission-guard.ts وwarehouse-context.ts.
- *
- * هذا هو الموقع الوحيد الذي يبني SoldLine[] — كل مسارات
- * GET /api/warehouse-portal/reports/* تستدعيه بدل إعادة كتابة نفس الانضمام
- * (order → items → drug، وربط costPrice من الكتالوج) سبع مرات، فلا تتفرّق
- * قاعدة "من أين تأتي بيانات المبيعات؟" بين التقارير كما تفرّقت سابقاً قاعدة
- * "قيمة السطر الفعلية" بين مسار العرض ومسار الاعتماد قبل إصلاح effectiveLine()
- * (انظر التعليق الحرج في warehouse-quote.ts).
- *
- * مصدر بنود المبيعات: طلبات بحالة SHIPPED أو DELIVERED فقط — الطلب يصبح
- * "مبيعاً" فعلياً لحظة الشحن (خصم المخزون يحدث حينها، انظر
- * app/api/warehouse-portal/orders/[id]/shipping/route.ts)؛ DELIVERED لاحقة
- * على نفس الخط الزمني لنفس الطلب ولا تضيف بنوداً جديدة (انظر
- * warehouse-order-state.ts: SHIPPED → DELIVERED هو الانتقال الوحيد الممكن،
- * بلا عودة وبلا CANCELLED بعد الشحن). كمية/قيمة كل سطر تُحسَب **حصراً** عبر
- * effectiveLine() من warehouse-quote.ts — لا حساب مستقل هنا بأي شكل، فسطر
- * OUT_OF_STOCK (كميته الفعلية صفر) يُستبعَد تلقائياً من كل تقرير.
- *
- * تاريخ الشحن (shippedAt): يُؤخَذ من WarehouseOrderEvent بنوع 'SHIPPED' —
- * وليس من order.updatedAt، الذي يتغيّر لاحقاً مرة أخرى عند الانتقال إلى
- * DELIVERED فيُفسِد أي تجميع/ترتيب زمني لو اعتُمِد عليه بدلاً من ذلك. هذا
- * الحدث فريد لكل طلب مُشحَن فعلياً (transition واحد فقط SHIPPED في كامل عمر
- * الطلب)، فـ take:1 آمن هنا.
- *
- * costPrice: يأتي من WarehouseCatalogItem.costPrice المطابق (warehouseId +
- * barcode) **وقت توليد التقرير**، لا سعر التكلفة الفعلي وقت الشحن (لا يوجد
- * عمود تأريخ تكلفة على الكتالوج) — فهامش الربح في التقارير تقريبي لأي صنف
- * تغيّرت تكلفته لاحقاً. موثَّق أيضاً في تعليق GET /reports/margins.
- */
+/** Complete paged sales/return data. Shipment costs use immutable movement snapshots; field sales use their recorded item costs. Unknown historical costs stay unknown. */
+import { readWarehousePages } from './warehouse-pagination';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/app/lib/prisma';
 import { effectiveLine, type OrderLineStatus } from '@/app/lib/warehouse-quote';
 import type { SoldLine } from '@/app/lib/warehouse-reports';
@@ -66,11 +33,11 @@ export function resolveReportDateRange(
     toParam: string | null | undefined,
     now: Date = new Date()
 ): ReportDateRange {
-    const parsedTo = toParam ? new Date(toParam) : null;
+    const parsedTo = toParam ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(toParam) ? `${toParam}T23:59:59.999+03:00` : toParam) : null;
     const to = parsedTo && !Number.isNaN(parsedTo.getTime()) ? parsedTo : now;
 
     const defaultFrom = new Date(to.getTime() - DEFAULT_REPORT_RANGE_DAYS * MS_PER_DAY);
-    const parsedFrom = fromParam ? new Date(fromParam) : null;
+    const parsedFrom = fromParam ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(fromParam) ? `${fromParam}T00:00:00+03:00` : fromParam) : null;
     let from = parsedFrom && !Number.isNaN(parsedFrom.getTime()) ? parsedFrom : defaultFrom;
 
     if (from.getTime() > to.getTime()) from = defaultFrom;
@@ -81,24 +48,18 @@ export function resolveReportDateRange(
     return { from, to };
 }
 
-/**
- * سقف صفوف دفاعي لكل استعلام تقرير — بخلاف MAX_REPORT_RANGE_DAYS (يحدّ نطاق
- * التاريخ)، هذا يحدّ عدد الصفوف بصرف النظر عن النطاق، فمذخر بكتالوج أو سجل
- * مبيعات ضخم جداً استثنائياً لا يُحمَّل بالكامل إلى الذاكرة/المتصفح. بعيد جداً
- * عن أي حجم بيانات فعلي حالي في المنصة (الكتالوج الأكبر ~2700 صنف، إجمالي
- * المبيعات على مستوى المنصة كلها ~10 آلاف)، فلا يقصّ بيانات حقيقية اليوم.
- */
-const REPORT_ROW_CAP = 5000;
+
+
 
 /** كل بنود كتالوج هذا المذخر (باركود + اسم تجاري) — أساس slowMovers الذي يحتاج الكتالوج كاملاً لا المُباع فقط. */
 export async function getWarehouseCatalogForReports(
     warehouseId: string
 ): Promise<Array<{ barcode: string; tradeName: string }>> {
-    const items = await prisma.warehouseCatalogItem.findMany({
+    const items = await readWarehousePages(page => prisma.warehouseCatalogItem.findMany({
+        ...page,
         where: { warehouseId },
-        select: { barcode: true, drug: { select: { tradeName: true } } },
-        take: REPORT_ROW_CAP,
-    });
+        select: { id: true, barcode: true, drug: { select: { tradeName: true } } },
+    }));
     return items.map((it) => ({ barcode: it.barcode, tradeName: it.drug.tradeName }));
 }
 
@@ -107,14 +68,17 @@ export async function getWarehouseCatalogForReports(
  * الأكثر مبيعاً/الراكد/الهامش/العملاء. انظر تعليق رأس الملف لمصدر كل حقل.
  */
 export async function getSoldLines(warehouseId: string, range: ReportDateRange): Promise<SoldLine[]> {
-    const orders = await prisma.warehouseOrder.findMany({
+    return prisma.$transaction(tx => getSoldLinesSnapshot(tx, warehouseId, range), { isolationLevel: 'RepeatableRead', maxWait: 10000, timeout: 60000 });
+}
+async function getSoldLinesSnapshot(db: Prisma.TransactionClient, warehouseId: string, range: ReportDateRange): Promise<SoldLine[]> {
+    const orders = await readWarehousePages(page => db.warehouseOrder.findMany({
+        ...page,
         where: {
             warehouseId,
             status: { in: ['SHIPPED', 'DELIVERED'] },
             events: { some: { type: 'SHIPPED', createdAt: { gte: range.from, lte: range.to } } },
         },
-        take: REPORT_ROW_CAP,
-        select: {
+        select: { id: true,
             updatedAt: true,
             branch: { select: { organizationId: true, organization: { select: { name: true } } } },
             items: {
@@ -135,21 +99,20 @@ export async function getSoldLines(warehouseId: string, range: ReportDateRange):
                 take: 1,
             },
         },
-    });
+    }));
 
-    const barcodes = new Set<string>();
-    for (const order of orders) {
-        for (const item of order.items) barcodes.add(item.drug.barcode);
+    const moves = await readWarehousePages(page => db.warehouseStockMove.findMany({ ...page,
+        where: { catalogItem: { warehouseId }, type: 'SHIPMENT', createdAt: { gte: range.from, lte: range.to } },
+        select: { id: true, orderId: true, quantity: true, unitCost: true, catalogItem: { select: { barcode: true } } } }));
+    const costByLine = new Map<string, number>();
+    const quantityByLine = new Map<string, number>();
+    const unknownCosts = new Set<string>();
+    for (const move of moves) {
+        const key = move.orderId + ':' + move.catalogItem.barcode;
+        quantityByLine.set(key, (quantityByLine.get(key) ?? 0) + Math.abs(move.quantity));
+        if (move.unitCost === null) unknownCosts.add(key);
+        else costByLine.set(key, (costByLine.get(key) ?? 0) + Math.abs(move.quantity) * move.unitCost);
     }
-
-    const catalogItems =
-        barcodes.size > 0
-            ? await prisma.warehouseCatalogItem.findMany({
-                  where: { warehouseId, barcode: { in: Array.from(barcodes) } },
-                  select: { barcode: true, costPrice: true },
-              })
-            : [];
-    const costByBarcode = new Map(catalogItems.map((c) => [c.barcode, c.costPrice]));
 
     const lines: SoldLine[] = [];
     for (const order of orders) {
@@ -168,13 +131,17 @@ export async function getSoldLines(warehouseId: string, range: ReportDateRange):
                 quotedPrice: item.quotedPrice,
             });
             if (eff.quantity <= 0) continue; // OUT_OF_STOCK أو كمية فعلية صفرية — ليس مبيعاً.
+            const costKey = order.id + ':' + item.drug.barcode;
+            const allUnits = order.items.filter(i => i.drug.barcode === item.drug.barcode).reduce((n,i) => n + (effectiveLine(i).quantity > 0 ? effectiveLine(i).quantity + i.bonusQuantity : 0), 0);
+            const costComplete = !unknownCosts.has(costKey) && quantityByLine.get(costKey) === allUnits;
 
             lines.push({
                 barcode: item.drug.barcode,
                 tradeName: item.drug.tradeName,
                 quantity: eff.quantity,
                 lineTotal: eff.lineTotal,
-                costPrice: costByBarcode.get(item.drug.barcode) ?? 0,
+                orderId: order.id,
+                costTotal: costComplete ? costByLine.get(costKey)! * (eff.quantity + item.bonusQuantity) / allUnits : undefined,
                 // ميزة البونص: يصل marginByItem كما هو — لا حساب مستقل هنا. سطر
                 // OUT_OF_STOCK لا يصل هذه النقطة أصلاً (استُبعد أعلاه بـ eff.quantity
                 // <= 0 continue)، فبونصه العالق (إن وُجد) لا يدخل أي تقرير.
@@ -185,6 +152,46 @@ export async function getSoldLines(warehouseId: string, range: ReportDateRange):
             });
         }
     }
+
+    const fieldSales = await readWarehousePages(page => db.warehouseFieldSale.findMany({ ...page,
+        where: { warehouseId, status: { not: 'CANCELLED' }, soldAt: { gte: range.from, lte: range.to } },
+        include: { items: { include: { catalogItem: { include: { drug: true } } } } } }));
+    for (const sale of fieldSales) for (const item of sale.items) lines.push({
+        orderId: 'field:' + sale.id, barcode: item.catalogItem.barcode, tradeName: item.catalogItem.drug.tradeName,
+        quantity: item.quantity, bonusQuantity: item.bonusQuantity, lineTotal: item.quantity * item.unitPrice,
+        costTotal: (item.quantity + item.bonusQuantity) * item.unitCost,
+        organizationId: sale.organizationId ?? ('external:' + sale.customerName), pharmacyName: sale.customerName, shippedAt: sale.soldAt,
+    });
+    // Recognize the credit on its acceptance date, even when the original sale
+    // falls outside the selected range. Quarantined goods have not regained saleable cost.
+    const returns = await readWarehousePages(page => db.warehouseReturn.findMany({ ...page,
+        where: { warehouseId, status: 'ACCEPTED', acceptedAt: { gte: range.from, lte: range.to } }, include: { items: true } }));
+    const returnedBarcodes = Array.from(new Set(returns.flatMap(returned => returned.items.map(item => item.barcode))));
+    const names = returnedBarcodes.length ? await readWarehousePages(page => db.warehouseCatalogItem.findMany({ ...page,
+        where: { warehouseId, barcode: { in: returnedBarcodes } }, select: { id: true, barcode: true, drug: { select: { tradeName: true } } } })) : [];
+    const nameByBarcode = new Map(names.map(item => [item.barcode, item.drug.tradeName]));
+    // Portal/legacy orders can contain drugs that never entered this warehouse's
+    // catalog. Resolve from the original, tenant-scoped orders even when their
+    // shipment date lies outside the selected return-report period.
+    const originalOrders = returns.length ? await readWarehousePages(page => db.warehouseOrder.findMany({ ...page,
+        where: { warehouseId, id: { in: Array.from(new Set(returns.map(item => item.orderId))) } },
+        select: { id: true, items: { select: { drug: { select: { barcode: true, tradeName: true } } } } },
+    })) : [];
+    for (const order of originalOrders) for (const item of order.items) {
+        if (!nameByBarcode.has(item.drug.barcode)) nameByBarcode.set(item.drug.barcode, item.drug.tradeName);
+    }
+    for (const returned of returns) for (const item of returned.items) lines.push({
+        orderId: returned.orderId, isReturn: true, barcode: item.barcode, tradeName: nameByBarcode.get(item.barcode) ?? item.barcode,
+        quantity: -item.quantity, lineTotal: -item.quantity * item.unitPrice, costTotal: 0,
+        organizationId: returned.organizationId, shippedAt: returned.acceptedAt!,
+    });
+    const releasedMoves = await readWarehousePages(page => db.warehouseStockMove.findMany({ ...page,
+        where: { catalogItem: { warehouseId }, type: 'RETURN', createdAt: { gte: range.from, lte: range.to } },
+        include: { catalogItem: { include: { drug: true } } } }));
+    for (const move of releasedMoves) lines.push({ orderId: move.orderId ?? move.id, isReturn: true,
+        barcode: move.catalogItem.barcode, tradeName: move.catalogItem.drug.tradeName, quantity: 0, lineTotal: 0,
+        costTotal: move.unitCost === null ? undefined : -move.quantity * move.unitCost,
+        organizationId: '', shippedAt: move.createdAt });
 
     return lines;
 }
@@ -200,17 +207,17 @@ export async function getFulfilmentItems(
     warehouseId: string,
     range: ReportDateRange
 ): Promise<Array<{ status: string; quantity: number; quotedQuantity: number | null }>> {
-    const orders = await prisma.warehouseOrder.findMany({
+    const orders = await readWarehousePages(page => prisma.warehouseOrder.findMany({
+        ...page,
         where: {
             warehouseId,
             status: { notIn: ['DRAFT', 'SENT', 'UNDER_REVIEW', 'CANCELLED'] },
             createdAt: { gte: range.from, lte: range.to },
         },
-        take: REPORT_ROW_CAP,
-        select: {
+        select: { id: true,
             items: { select: { status: true, quantity: true, quotedQuantity: true } },
         },
-    });
+    }));
 
     const items: Array<{ status: string; quantity: number; quotedQuantity: number | null }> = [];
     for (const order of orders) {
@@ -226,17 +233,17 @@ export async function getFulfilmentItems(
 export async function getWarehouseBatchesForReports(warehouseId: string): Promise<
     Array<{ quantity: number; expiryDate: Date; costPrice: number; tradeName: string; batchNumber: string }>
 > {
-    const batches = await prisma.warehouseBatch.findMany({
+    const batches = await readWarehousePages(page => prisma.warehouseBatch.findMany({
+        ...page,
         where: { catalogItem: { warehouseId }, quantity: { gt: 0 } },
-        take: REPORT_ROW_CAP,
-        select: {
+        select: { id: true,
             quantity: true,
             expiryDate: true,
             costPrice: true,
             batchNumber: true,
             catalogItem: { select: { drug: { select: { tradeName: true } } } },
         },
-    });
+    }));
     return batches.map((b) => ({
         quantity: b.quantity,
         expiryDate: b.expiryDate,
@@ -277,17 +284,17 @@ export async function getRepPerformance(
 
     const [sales, collections] = repIds.length > 0
         ? await Promise.all([
-              prisma.warehouseFieldSale.findMany({
-                  where: { repId: { in: repIds }, soldAt: { gte: range.from, lte: range.to } },
-                  take: REPORT_ROW_CAP,
-                  select: {
+              readWarehousePages(page => prisma.warehouseFieldSale.findMany({
+        ...page,
+                  where: { status: { not: 'CANCELLED' }, repId: { in: repIds }, soldAt: { gte: range.from, lte: range.to } },
+                  select: { id: true,
                       repId: true,
                       items: { select: { quantity: true, bonusQuantity: true, unitPrice: true, unitCost: true } },
                   },
-              }),
+              })),
               prisma.warehouseRepCollection.groupBy({
                   by: ['repId'],
-                  where: { repId: { in: repIds }, collectedAt: { gte: range.from, lte: range.to } },
+                  where: { repId: { in: repIds }, fieldSaleId: { not: null }, collectedAt: { gte: range.from, lte: range.to } },
                   _sum: { amount: true },
               }),
           ])

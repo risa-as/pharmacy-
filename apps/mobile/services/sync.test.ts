@@ -55,7 +55,8 @@ async function loadSyncService(overrides: {
     vi.doMock('@react-native-community/netinfo', () => ({ default: netInfo }));
     vi.doMock('./auth', () => ({ authService: auth }));
     vi.doMock('./db', () => ({ dbService: db }));
-    vi.doMock('./api', () => ({ apiService: api }));
+    const session = {generation:0};
+    vi.doMock('./api', () => ({ apiService: api, getSessionGeneration:()=>session.generation, SessionChangedError:class extends Error{}, request:vi.fn(async(path:string)=>path.startsWith('/debts')?api.getDebts():path.startsWith('/patients')?api.getPatients():api.getLoyaltySettings()) }));
     vi.doMock('@react-native-async-storage/async-storage', () => ({
         default: {
             getItem: vi.fn().mockResolvedValue(null),
@@ -65,7 +66,7 @@ async function loadSyncService(overrides: {
     }));
 
     const module = await import('./sync');
-    return { syncService: module.syncService, auth, netInfo, db, api };
+    return { syncService: module.syncService, auth, netInfo, db, api, session };
 }
 
 describe('syncService locking', () => {
@@ -150,3 +151,7 @@ describe('syncService locking', () => {
         expect(syncService.isSyncing).toBe(false);
     });
 });
+
+it('aborts once on account switch without saving old inventory or claiming success',async()=>{const pending=deferred<any[]>();const {syncService,session,db,api}=await loadSyncService({api:{getInventory:vi.fn().mockReturnValue(pending.promise)}});const done=vi.fn(),stop=vi.fn();syncService.setCallbacks({onDone:done,onStop:stop});const run=syncService.syncData();await vi.waitFor(()=>expect(api.getInventory).toHaveBeenCalled());session.generation++;pending.resolve([{id:'old'}]);await run;expect(db.saveProducts).not.toHaveBeenCalled();expect(api.getDebts).not.toHaveBeenCalled();expect(done).not.toHaveBeenCalled();expect(stop).toHaveBeenCalledOnce();expect(syncService.isSyncing).toBe(false);});
+it('same-account token rotation does not cancel sync',async()=>{const {syncService,auth,db}=await loadSyncService();auth.getToken.mockResolvedValueOnce('old.jwt.token').mockResolvedValue('new.jwt.token');const done=vi.fn();syncService.setCallbacks({onDone:done});await syncService.syncData();expect(db.saveProducts).toHaveBeenCalled();expect(done).toHaveBeenCalledOnce();});
+it('partial failure stops loading without marking success',async()=>{const {syncService}=await loadSyncService({api:{getInventory:vi.fn().mockRejectedValue(new Error('network'))}});const done=vi.fn(),stop=vi.fn();syncService.setCallbacks({onDone:done,onStop:stop});await syncService.syncData();expect(done).not.toHaveBeenCalled();expect(stop).toHaveBeenCalledOnce();});

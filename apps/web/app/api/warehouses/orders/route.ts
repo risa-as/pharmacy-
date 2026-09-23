@@ -13,23 +13,25 @@ import { warehouseOrderScope, resolveOrderBranch } from '@/app/lib/warehouse-acc
 import { GLOBAL_DRUG_SCOPE } from '@/app/lib/warehouse-catalog';
 import { checkCreditLimit } from '@/app/lib/warehouse-accounts';
 import { notifyWarehouseUsers } from '@/app/lib/notifications/notificationTriggers';
-import { randomUUID, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { ORDER_TRANSITIONS, type OrderStatus } from '@/app/lib/warehouse-order-state';
 
 export async function GET(req: NextRequest) {
     const ctx = await getTenantContext();
     if (ctx instanceof NextResponse) return ctx;
-    if (!ctx.userPermissions.canViewSuppliers) return NextResponse.json({ error: 'غير مصرح بعرض المشتريات.' }, { status: 403 });
+    if (!ctx.userPermissions.canViewWarehouseOrders) return NextResponse.json({ error: 'غير مصرح بعرض المشتريات.' }, { status: 403 });
     const scope = warehouseOrderScope({ role: ctx.user.role, organizationId: ctx.organizationId, branchId: ctx.user.branchId });
     if (!scope) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const branchId = req.nextUrl.searchParams.get("branchId");
     const status = req.nextUrl.searchParams.get('status');
     if (status && !Object.hasOwn(ORDER_TRANSITIONS, status)) return NextResponse.json({ error: 'حالة غير صالحة.' }, { status: 400 });
+    const page = Math.max(1,Math.min(100000,Math.floor(Number(req.nextUrl.searchParams.get('page')))||1));
     const orders = await prisma.warehouseOrder.findMany({
-        where: { AND: [scope, ...(status ? [{ status: status as OrderStatus }] : [])] },
+        where: { AND: [scope, ...(branchId ? [{branchId}] : []), ...(status ? [{ status: status as OrderStatus }] : [])] },
         include: { warehouse: { select: { name: true } }, branch: { select: { name: true } }, items: { include: { drug: { select: { barcode: true, tradeName: true } } } }, events: { orderBy: { createdAt: 'asc' } } },
-        orderBy: { createdAt: 'desc' }, take: 100,
+        orderBy: [{ createdAt: 'desc' },{id:'desc'}], take: 51, skip: (page-1)*50,
     });
-    return NextResponse.json({ orders });
+    return NextResponse.json({ orders:orders.slice(0,50),page,hasMore:orders.length>50 });
 }
 
 // POST: إنشاء طلب لمذخر — { warehouseId, items: [{barcode|drugId, quantity, unitPrice?}], notes?, expectedDate?, branchId? }
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
-        if (!tenantCtx.userPermissions.canCreatePurchase) return NextResponse.json({ error: 'ليس لديك صلاحية إنشاء المشتريات.' }, { status: 403 });
+        if (!tenantCtx.userPermissions.canCreateWarehouseOrder) return NextResponse.json({ error: 'ليس لديك صلاحية إنشاء المشتريات.' }, { status: 403 });
 
         if (!tenantCtx.organizationId && tenantCtx.user.role !== 'SUPER_ADMIN') {
             return NextResponse.json({ error: 'Organization not found' }, { status: 403 });
@@ -335,14 +337,14 @@ export async function POST(req: NextRequest) {
             // المعاملة بـ P2028. والفحص لم يكن يحمي شيئاً أصلاً: العمود فريد في
             // المخطط، فالقاعدة ترفض التكرار وتتراجع المعاملة ويُعيد العميل بنفس
             // مفتاح idempotency فلا يُنشَأ طلب مكرر.
-            const orderNumber = `WO-${randomUUID().toUpperCase()}`;
+
 
             const created = await tx.warehouseOrder.create({
                 data: {
                     warehouseId,
                     branchId,
                     idempotencyKey,
-                    orderNumber,
+
                     status: 'SENT',
                     totalAmount,
                     notes: notes ?? null,
@@ -365,7 +367,7 @@ export async function POST(req: NextRequest) {
                     actorType: 'PHARMACY',
                     actorName: tenantCtx.user.name ?? tenantCtx.user.email ?? null,
                     type: 'SENT',
-                    payload: { itemCount: resolvedItems.length, totalAmount, requestHash },
+                    payload: { itemCount: resolvedItems.length, totalAmount, requestHash, requestedByUserId: tenantCtx.user.id, canAutoApproveQuote: tenantCtx.userPermissions.canApproveWarehouseOrder },
                 },
             });
 

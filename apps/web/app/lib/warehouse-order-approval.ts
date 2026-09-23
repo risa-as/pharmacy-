@@ -1,3 +1,5 @@
+import { canAutomaticallyApproveWarehouseOrder } from './warehouse-auto-approval-permission';
+import { nextDocumentReference } from "@/app/lib/document-reference";
 // المرحلة 5 من ميزة المذاخر (مُستخرَجة لاحقاً لدعم الاعتماد الآلي — انظر
 // app/api/warehouse-portal/orders/[id]/quote/route.ts): جسر الاعتماد الكامل —
 // من عرض المذخر (QUOTED) إلى فاتورة شراء مسودة + فاتورة مذخر (APPROVED).
@@ -92,6 +94,10 @@ export async function approveWarehouseOrder(input: {
         // ليس رفضاً تجارياً — كلا المستدعيين يضمن وجود الطلب قبل النداء (خرق
         // ثابت لا حالة عمل)، فيُرمى كما هو ليُعالَج بنفس catch العام لدى المستدعي.
         throw new Error(`approveWarehouseOrder: الطلب ${input.orderId} غير موجود`);
+    }
+
+    if (input.actorType === 'SYSTEM' && !await canAutomaticallyApproveWarehouseOrder(input.orderId)) {
+        return { ok: false, code: 'MANUAL_APPROVAL_REQUIRED', message: 'العرض بانتظار اعتماد موظف مخوّل من الصيدلية.', status: 403 };
     }
 
     // شرعية الانتقال QUOTED→APPROVED: المسار اليدوي (route.ts) يفحصها فعلاً
@@ -223,6 +229,7 @@ export async function approveWarehouseOrder(input: {
 
     const unitBlocks: string[] = [];
     const pricedItems: DraftPurchaseItem[] = [];
+    const approvedPackUnits = new Map<string, number>();
     for (const it of draftItems) {
         const drug = drugById.get(it.drugId);
         const catalog = catalogByDrug.get(it.drugId);
@@ -273,6 +280,7 @@ export async function approveWarehouseOrder(input: {
                     ? it.bonusQuantity * conversion.unitsPerPack
                     : it.bonusQuantity,
         });
+        approvedPackUnits.set(it.drugId, conversion.unitsPerPack);
     }
     if (unitBlocks.length > 0) {
         return {
@@ -402,6 +410,7 @@ export async function approveWarehouseOrder(input: {
             customer = await tx.warehouseCustomer.findUniqueOrThrow({ where: { id: customer.id } });
             const purchase = await tx.purchase.create({
                 data: {
+                    warehouseOrderId: order.id,
                     branchId: order.branchId,
                     supplierId,
                     total: plan.total,
@@ -428,20 +437,8 @@ export async function approveWarehouseOrder(input: {
             // جديد بقاعدة مختلفة؛ هذا هو الثابت الذي يبقي فاتورة الشراء (جانب
             // الصيدلية) وفاتورة المذخر (جانب المذخر) متفقتين ماليّاً دوماً.
             //
-            // رقم الفاتورة: طابع زمني base-36 + محاولات فحص تفرّد + فشل صريح
-            // بدل مرور رقم null بصمت.
-            let invoiceNumber: string | null = null;
-            for (let attempt = 0; attempt < 5; attempt++) {
-                const candidate = `WI-${Date.now().toString(36).toUpperCase()}${attempt ? `-${attempt}` : ''}`;
-                const exists = await tx.warehouseInvoice.findUnique({ where: { invoiceNumber: candidate } });
-                if (!exists) {
-                    invoiceNumber = candidate;
-                    break;
-                }
-            }
-            if (invoiceNumber === null) {
-                throw new Error('WI_NUMBER_GENERATION_FAILED');
-            }
+            // تسلسل ذري من قاعدة البيانات؛ لا يعتمد على الوقت أو عدد الفواتير.
+            const invoiceNumber = await nextDocumentReference(tx, "WIN");
 
             // orderId فريد على WarehouseInvoice: لو دخل طلبان متزامنان هذه المعاملة
             // معاً بنفس order.id (كلاهما قرأ الحالة QUOTED قبل أن يُحدِّث أيّهما)،
@@ -493,6 +490,9 @@ export async function approveWarehouseOrder(input: {
             });
 
             await tx.warehouseOrder.update({ where: { id: order.id }, data: { status: 'APPROVED' } });
+            for (const [drugId, unitsPerPack] of Array.from(approvedPackUnits)) {
+                await tx.warehouseOrderItem.updateMany({ where: { warehouseOrderId: order.id, drugId }, data: { unitsPerPack } });
+            }
 
             await tx.warehouseOrderEvent.create({
                 data: {

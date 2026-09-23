@@ -39,26 +39,37 @@ export default async function WarehouseReturnsPage() {
         where: { warehouseId: ctx.warehouseId },
         include: { items: true },
         orderBy: { createdAt: "desc" },
-        take: 200,
+        take: 50,
     });
 
+    const shipmentOrders = await prisma.warehouseOrder.findMany({where:{id:{in:returns.map(r=>r.orderId)},warehouseId:ctx.warehouseId},select:{id:true,shipmentMode:true}});
+    const shipmentModes = new Map(shipmentOrders.map(o=>[o.id,o.shipmentMode]));
     const orgIds = Array.from(new Set(returns.map((r) => r.organizationId)));
     const orgs = orgIds.length
         ? await prisma.organization.findMany({ where: { id: { in: orgIds } }, select: { id: true, name: true } })
         : [];
     const orgNameById = new Map(orgs.map((o) => [o.id, o.name]));
+    const drugIds = Array.from(new Set(returns.flatMap(row => row.items.map(item => item.drugId))));
+    const drugs = drugIds.length ? await prisma.globalDrug.findMany({ where: { id: { in: drugIds } }, select: { id: true, tradeName: true } }) : [];
+    const drugNames = new Map(drugs.map(drug => [drug.id, drug.tradeName]));
 
     const initialReturns = returns.map((r) => ({
         id: r.id,
+        shipmentMode: shipmentModes.get(r.orderId) ?? null,
+        creditNoteNumber: r.creditNoteNumber,
         orderId: r.orderId,
         organizationName: orgNameById.get(r.organizationId) ?? r.organizationId,
         reason: r.reason,
         totalAmount: r.totalAmount,
         status: r.status,
+        creditBalance: hasWarehousePermission(actor!, 'canViewFinance') ? r.creditBalance : null,
+        refundedAmount: hasWarehousePermission(actor!, 'canViewFinance') ? r.refundedAmount : null,
         actorName: r.actorName,
         createdAt: r.createdAt.toISOString(),
-        items: r.items.map((it) => ({ id: it.id, barcode: it.barcode, quantity: it.quantity, unitPrice: it.unitPrice })),
+        items: r.items.map((it) => ({ id: it.id, drugName: drugNames.get(it.drugId) ?? null, barcode: it.barcode, quantity: it.quantity, unitPrice: it.unitPrice, disposition: it.disposition })),
     }));
 
-    return <ReturnsClient initialReturns={initialReturns} canDecide={canDecide} />;
+    return <ReturnsClient initialReturns={initialReturns} canDecide={canDecide}
+        canRelease={hasWarehousePermission(actor!, 'canAdjustStock')} canDispose={hasWarehousePermission(actor!, 'canWriteOffStock')}
+        canRefund={hasWarehousePermission(actor!, 'canRecordPayment')} />;
 }

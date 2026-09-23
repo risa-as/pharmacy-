@@ -20,7 +20,7 @@ export default async function PurchasesReportPage(
 
   const selectedBranchId = searchParams?.branch;
   const branchWhere = selectedBranchId
-    ? { ...tenantBranchWhere, branchId: selectedBranchId }
+    ? { AND: [tenantBranchWhere, { branchId: selectedBranchId }] }
     : tenantBranchWhere;
 
   // Last 30 days

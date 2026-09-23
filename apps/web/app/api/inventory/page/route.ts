@@ -10,6 +10,7 @@ export async function GET(req: Request) {
     try {
         const tenant = await getTenantContext();
         if (tenant instanceof NextResponse) return tenant;
+        if (!tenant.userPermissions.canViewInventory) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
         const params = new URL(req.url).searchParams;
         const page = normalizeInventoryDashboardPage(params.get('page'));
         const [summary] = await prisma.$queryRaw<MobileInventorySummary[]>(buildMobileInventoryQuery(params, tenant.tenantBranchWhere));

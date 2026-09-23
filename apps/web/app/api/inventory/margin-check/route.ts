@@ -36,11 +36,8 @@ export async function POST(req: Request) {
         const { tenantBranchWhere } = tenantCtx;
 
         const inventory = await prisma.inventory.findFirst({
-            where: {
-                drugId,
-                ...tenantBranchWhere,
-                ...(bFilter ? { branchId: bFilter } : {})
-            },
+            // Intersect with the tenant scope; a spread would let bFilter replace it.
+            where: { AND: [{ drugId }, tenantBranchWhere, ...(bFilter ? [{ branchId: bFilter }] : [])] },
             select: { cost: true }
         });
 
@@ -100,10 +97,7 @@ export async function GET(req: Request) {
         const { tenantBranchWhere } = tenantCtx;
 
         const inventories = await prisma.inventory.findMany({
-            where: {
-                ...tenantBranchWhere,
-                ...(branchId ? { branchId } : {})
-            },
+            where: { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] },
             include: { drug: { select: { tradeName: true, barcode: true } } }
         });
 

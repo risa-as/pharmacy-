@@ -201,7 +201,7 @@ export default async function SupplierLedgerPage(
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-success/10 text-success">
-                      <CreditCard className="w-3 h-3" /> دفعة
+                      <CreditCard className="w-3 h-3" /> {entry.method === "REFUND" ? "رد نقدي" : "دفعة"}
                     </span>
                   )}
                 </td>

@@ -295,7 +295,7 @@ export default function ExpensesScreen() {
                                 <AppButton label="إلغاء" variant="outline" disabled={submitting} onPress={resetForm} style={{ flex: 1 }} />
                             </View>
                         ) : (
-                            <AppButton label="إضافة مصروف" icon="add" loading={submitting} onPress={reviewAndAdd} />
+                            <AppButton permission="canCreateExpense" label="إضافة مصروف" icon="add" loading={submitting} onPress={reviewAndAdd} />
                         )}
                     </Surface>
                 </View>

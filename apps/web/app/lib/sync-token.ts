@@ -10,8 +10,18 @@ function getSyncSecret(): string {
     return secret;
 }
 
-export function generateSyncToken(userId: string, branchId: string, orgId: string, role: string): string {
+/**
+ * Message signed by a desktop sync token. Version 0 keeps the original format,
+ * so every token issued before sessionVersion existed still verifies as
+ * version 0; later versions sign the version too (sent as x-session-version).
+ */
+export function syncTokenMessage(userId: string, branchId: string, orgId: string, role: string, sessionVersion = 0): string {
+    const base = `${userId}:${branchId}:${orgId}:${role}`;
+    return sessionVersion > 0 ? `${base}:v${sessionVersion}` : base;
+}
+
+export function generateSyncToken(userId: string, branchId: string, orgId: string, role: string, sessionVersion = 0): string {
     return crypto.createHmac('sha256', getSyncSecret())
-        .update(`${userId}:${branchId}:${orgId}:${role}`)
+        .update(syncTokenMessage(userId, branchId, orgId, role, sessionVersion))
         .digest('hex');
 }

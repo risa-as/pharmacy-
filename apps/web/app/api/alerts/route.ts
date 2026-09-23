@@ -16,10 +16,9 @@ export async function GET(req: Request) {
         const today = new Date();
         const ninetyDaysFromNow = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-        const branchFilter = {
-            ...tenantBranchWhere,
-            ...(branchId ? { branchId } : {}),
-        };
+        // Intersect, never spread: a spread client branchId would replace a
+        // branch-scoped user's own { branchId } scope.
+        const branchFilter = { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] };
 
         // ── 1. Expiry alerts: batches expiring within 90 days (including already expired) ──
         const expiringBatches = await prisma.batch.findMany({

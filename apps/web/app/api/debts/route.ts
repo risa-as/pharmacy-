@@ -9,6 +9,7 @@ export async function GET(request: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewDebts) return NextResponse.json({error:'غير مصرح'},{status:403});
         const { tenantBranchWhere } = tenantCtx;
 
         const where: any = {

@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { validateSyncUser, isBranchInSyncScope } from '@/app/lib/sync-auth';
+import { validateSyncUser, isBranchInSyncScope, hasSyncPermission } from '@/app/lib/sync-auth';
 
 /**
  * POST /api/sales/allocate-number
@@ -20,6 +20,10 @@ export async function POST(req: Request) {
     try {
         const syncUser = await validateSyncUser(req);
         if (syncUser instanceof NextResponse) return syncUser;
+
+        if (!hasSyncPermission(syncUser, 'canSell')) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         const body = await req.json().catch(() => ({}));
         const branchId: string | undefined = body?.branchId;

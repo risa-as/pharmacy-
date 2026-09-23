@@ -19,7 +19,6 @@ export const dynamic = 'force-dynamic';
 // Phase 3 (الأدوار والصلاحيات): يتطلب canQuoteOrders — المذخر يسعّر هنا فعلاً،
 // فهي نفس صلاحية مسار quote.
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
@@ -34,7 +33,6 @@ interface IncomingLine {
     bonusQuantity?: unknown;
 }
 
-class OrderNumberError extends Error {}
 
 export async function POST(req: NextRequest) {
     const ctx = await getWarehouseContext();
@@ -168,24 +166,11 @@ export async function POST(req: NextRequest) {
         const totalAmount = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
 
         const created = await prisma.$transaction(async (tx) => {
-            let orderNumber: string | null = null;
-            for (let attempt = 0; attempt < 5; attempt++) {
-                const candidate = `WO-${randomUUID().toUpperCase()}`;
-                const exists = await tx.warehouseOrder.findUnique({ where: { orderNumber: candidate } });
-                if (!exists) {
-                    orderNumber = candidate;
-                    break;
-                }
-            }
-            if (orderNumber === null) {
-                throw new OrderNumberError('تعذّر توليد رقم طلب فريد — أعد المحاولة.');
-            }
-
             const order = await tx.warehouseOrder.create({
                 data: {
                     warehouseId: ctx.warehouseId,
                     branchId: branch.id,
-                    orderNumber,
+
                     // QUOTED: مسعَّر وجاهز لاعتماد الصيدلية — انظر تعليق الرأس.
                     status: 'QUOTED',
                     totalAmount,
@@ -241,9 +226,6 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ order: created }, { status: 201 });
     } catch (e: any) {
-        if (e instanceof OrderNumberError) {
-            return NextResponse.json({ error: e.message }, { status: 409 });
-        }
         console.error('warehouse-portal phone order POST error:', e);
         return NextResponse.json({ error: 'فشل في إنشاء الطلب الهاتفي' }, { status: 500 });
     }

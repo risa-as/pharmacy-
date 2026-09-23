@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser, isBranchInSyncScope } from "@/app/lib/sync-auth";
+import { validateSyncUser, isBranchInSyncScope, hasSyncPermission } from "@/app/lib/sync-auth";
 import { logAudit, resolveUserName } from "@/app/lib/audit";
 
 type AckStatus = "processed" | "duplicate" | "noop";
@@ -33,6 +33,13 @@ export async function POST(req: Request) {
         const idempotencyKey = readIdempotencyKey(req, body);
 
         const { inventoryId, drugId, branchId, price, costPrice, minStock, maxStock } = body;
+
+        if (!hasSyncPermission(syncUser, 'canEditDrug')) {
+            return NextResponse.json(
+                { success: false, message: "ليس لديك صلاحية لتعديل المخزون.", ack: makeAck("noop", idempotencyKey) },
+                { status: 403 }
+            );
+        }
 
         if (!inventoryId && (!drugId || !branchId)) {
             return NextResponse.json(
@@ -83,6 +90,14 @@ export async function POST(req: Request) {
             if (maxStock !== undefined && maxStock !== null) {
                 const parsed = Number.parseInt(String(maxStock), 10);
                 if (!Number.isNaN(parsed)) updateData.maxStock = parsed;
+            }
+
+            // The desktop resends price and cost with every edit, so only an actual
+            // change requires canEditPrice (a min/max-stock edit must still pass).
+            const changesPrice = (updateData.price !== undefined && updateData.price !== inventory.price)
+                || (updateData.cost !== undefined && updateData.cost !== inventory.cost);
+            if (changesPrice && !hasSyncPermission(syncUser, 'canEditPrice')) {
+                throw new ForbiddenError();
             }
 
             // Update inventory

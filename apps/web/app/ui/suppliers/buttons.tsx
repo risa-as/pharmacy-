@@ -18,14 +18,15 @@ export function UpdateSupplier({ id }: { id: string }) {
 
 import { DeleteButton } from "@/app/ui/delete-button";
 
-export function DeleteSupplier({ id }: { id: string }) {
+export function DeleteSupplier({ id, label }: { id: string; label?: string }) {
     const deleteSupplierWithId = deleteSupplier.bind(null, id);
 
     return (
         <DeleteButton
             action={deleteSupplierWithId}
             description="المورد"
-            className="rounded-lg border border-border hover:border-border"
+            label={label}
+            className="inline-flex items-center gap-2 rounded-lg border border-border text-xs hover:border-border"
         />
     );
 }

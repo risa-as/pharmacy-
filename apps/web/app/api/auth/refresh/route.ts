@@ -64,6 +64,10 @@ export async function POST(req: Request) {
     }
 
     // ── Revocation checkpoint ────────────────────────────────────────────────
+    // A revoked token (sessionVersion bumped since issue; none = 0) cannot be renewed.
+    if ((Number(payload.sessionVersion) || 0) !== user.sessionVersion) {
+      return NextResponse.json({ message: "انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً." }, { status: 401 });
+    }
     if ((user as any).isActive === false) {
       return NextResponse.json(
         { message: "تم تعطيل هذا الحساب. يرجى مراجعة مدير الصيدلية." },
@@ -91,6 +95,7 @@ export async function POST(req: Request) {
       role: user.role,
       branchId: user.branchId ?? null,
       organizationId,
+      sessionVersion: user.sessionVersion,
     })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()

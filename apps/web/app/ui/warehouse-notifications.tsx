@@ -8,7 +8,7 @@ import { Bell, BellOff, Check, X } from 'lucide-react';
 // فالسجل كامل)، وكان النوع هنا يُسقطه فقط — فأُضيف لعرض «قبل ٥ دقائق».
 type Notice = { id: string; title: string; body: string; isRead: boolean; createdAt: string };
 
-const relativeFormatter = new Intl.RelativeTimeFormat('ar', { numeric: 'auto' });
+const relativeFormatter = new Intl.RelativeTimeFormat('ar-u-nu-latn', { numeric: 'auto' });
 
 /** «قبل ٣ ساعات» — أكبر وحدة مناسبة، بلا مكتبة تواريخ. */
 function relativeTime(iso: string): string {

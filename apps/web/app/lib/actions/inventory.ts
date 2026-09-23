@@ -178,7 +178,10 @@ export async function addBatch(prevState: any, formData: FormData) {
     const inventoryId = formData.get("inventoryId") as string;
     const batchNumber = generateBatchNumber();
     const quantity = parseInt(formData.get("quantity") as string);
-    const costPrice = parseFloat(formData.get("costPrice") as string) || 0;
+    const costPrice = Number(formData.get("costPrice"));
+    if (!Number.isFinite(costPrice) || costPrice <= 0 || costPrice > 1000000000) return {message:"تكلفة الشراء يجب أن تكون أكبر من صفر."};
+    const scopedInventory = await prisma.inventory.findFirst({where:{AND:[tenantCtx.tenantBranchWhere,{id:inventoryId}]},select:{id:true}});
+    if (!scopedInventory) return {message:"المخزون خارج نطاقك."};
     const expiryDate = new Date(formData.get("expiryDate") as string);
     const supplierId = (formData.get("supplierId") as string) || null;
 

@@ -44,10 +44,8 @@ export async function POST(req: Request) {
         }
 
         // 2. Check if inventory exists for this drug
-        const inventoryWhere: any = { drugId: drug.id, ...tenantBranchWhere };
-        if (branchId) {
-            inventoryWhere.branchId = branchId;
-        }
+        // Intersect, never assign: assigning branchId replaced a branch user's scope.
+        const inventoryWhere: any = { AND: [{ drugId: drug.id }, tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] };
 
         const inventoryRaw = await prisma.inventory.findFirst({
             where: inventoryWhere,

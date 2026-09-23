@@ -1,9 +1,10 @@
 export const dynamic = 'force-dynamic';
 
+import MoreActions from '@/app/ui/order-more-actions';
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { Plus, Users, Mail, Phone, MapPin, FileText, ShoppingCart, TrendingDown, CheckCircle2, Building2 } from "lucide-react";
-import { UpdateSupplier, DeleteSupplier } from "@/app/ui/suppliers/buttons";
+import { DeleteSupplier } from "@/app/ui/suppliers/buttons";
 import SupplierWarehouseLinkCell from "@/app/ui/suppliers/SupplierWarehouseLinkCell";
 import { canRequestSupplierLink } from "@/app/lib/supplier-link-request";
 import { checkFeatureAccess } from "@/app/lib/saas-guards";
@@ -70,7 +71,7 @@ export default async function Page() {
     const totalPurchases = suppliers.reduce((sum: number, s: any) => sum + s._count.purchases, 0);
 
     return (
-        <div className="space-y-6" dir="rtl">
+        <div className="min-w-0 space-y-6" dir="rtl">
             {/* الرأس */}
             <div className="flex items-center justify-between">
                 <div>
@@ -154,68 +155,63 @@ export default async function Page() {
                         </Link>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-foreground">
-                            <thead className="bg-muted/60 text-right text-xs font-semibold text-muted-foreground border-b border-border uppercase tracking-wide">
+                    <div className="min-w-0">
+                        <table className="block w-[100%] min-w-0 text-foreground xl:table xl:table-fixed">
+                            <thead className="hidden border-b border-border bg-muted/60 text-right text-xs font-semibold text-muted-foreground xl:table-header-group">
                                 <tr>
-                                    <th scope="col" className="px-6 py-3.5 font-cairo">المورد</th>
-                                    <th scope="col" className="px-6 py-3.5 font-cairo">معلومات الاتصال</th>
-                                    <th scope="col" className="px-6 py-3.5 font-cairo">الرصيد المستحق</th>
-                                    <th scope="col" className="px-6 py-3.5 font-cairo">الفواتير</th>
+                                    <th scope="col" className="w-[32%] px-4 py-3.5 font-cairo">المورد / معلومات الاتصال</th>
+                                    <th scope="col" className="w-[20%] px-4 py-3.5 font-cairo">الرصيد / الفواتير</th>
                                     {showWarehouseColumn && (
-                                        <th scope="col" className="px-6 py-3.5 font-cairo">المذخر على المنصة</th>
+                                        <th scope="col" className="w-[23%] px-4 py-3.5 font-cairo">المذخر على المنصة</th>
                                     )}
-                                    <th scope="col" className="px-6 py-3.5 font-cairo text-center">الإجراءات</th>
+                                    <th scope="col" className="px-4 py-3.5 font-cairo text-center">الإجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-border bg-card">
+                            <tbody className="block divide-y divide-border bg-card xl:table-row-group">
                                 {suppliers.map((supplier: any) => (
-                                    <tr key={supplier.id} className="hover:bg-muted/40 transition-colors group">
+                                    <tr key={supplier.id} className="grid min-w-0 grid-cols-1 gap-4 p-4 transition-colors hover:bg-muted/40 sm:grid-cols-2 xl:table-row xl:p-0">
                                         {/* اسم المورد */}
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="flex items-center gap-3">
+                                        <td className="block min-w-0 align-top xl:table-cell xl:px-4 xl:py-5">
+                                            <div className="flex min-w-0 items-start gap-3">
                                                 <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
                                                     <Building2 className="w-4 h-4 text-primary" />
                                                 </div>
-                                                <div>
-                                                    <p className="font-semibold text-foreground text-sm">{supplier.name}</p>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="break-words font-semibold text-foreground text-sm">{supplier.name}</p>
                                                     {supplier.address && (
                                                         <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                                                             <MapPin className="w-3 h-3 shrink-0" />
-                                                            <span className="truncate max-w-[160px]">{supplier.address}</span>
+                                                            <span className="[overflow-wrap:anywhere]">{supplier.address}</span>
                                                         </div>
                                                     )}
+                                                    <div className="mt-2 flex min-w-0 flex-col gap-1.5">
+                                                        {supplier.phone && (
+                                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                                <Phone className="w-3.5 h-3.5 shrink-0" />
+                                                                <span dir="ltr" className="min-w-0 [overflow-wrap:anywhere]">{supplier.phone}</span>
+                                                            </div>
+                                                        )}
+                                                        {supplier.email && (
+                                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                                <Mail className="w-3.5 h-3.5 shrink-0" />
+                                                                <span dir="ltr" className="min-w-0 [overflow-wrap:anywhere]">{supplier.email}</span>
+                                                            </div>
+                                                        )}
+                                                        {!supplier.email && !supplier.phone && (
+                                                            <span className="text-muted-foreground/60 text-xs">غير متوفر</span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-
-                                        {/* معلومات الاتصال */}
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="flex flex-col gap-1">
-                                                {supplier.phone && (
-                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                        <Phone className="w-3.5 h-3.5 shrink-0" />
-                                                        <span dir="ltr">{supplier.phone}</span>
-                                                    </div>
-                                                )}
-                                                {supplier.email && (
-                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                        <Mail className="w-3.5 h-3.5 shrink-0" />
-                                                        <span>{supplier.email}</span>
-                                                    </div>
-                                                )}
-                                                {!supplier.email && !supplier.phone && (
-                                                    <span className="text-muted-foreground/60 text-xs">غير متوفر</span>
-                                                )}
                                             </div>
                                         </td>
 
                                         {/* الرصيد */}
-                                        <td className="whitespace-nowrap px-6 py-4">
+                                        <td className="block min-w-0 align-top xl:table-cell xl:px-4 xl:py-5">
+                                            <p className="mb-2 text-xs text-muted-foreground xl:hidden">الرصيد المستحق</p>
                                             {supplier.computedBalance > 0 ? (
-                                                <div className="inline-flex items-center gap-1.5 bg-warning/10 text-warning border border-warning/20 rounded-lg px-3 py-1">
+                                                <div className="inline-flex max-w-full flex-wrap items-center gap-1.5 bg-warning/10 text-warning border border-warning/20 rounded-lg px-3 py-1">
                                                     <TrendingDown className="w-3.5 h-3.5 shrink-0" />
-                                                    <span className="font-bold text-sm" dir="ltr">
+                                                    <span className="min-w-0 break-all font-bold text-sm" dir="ltr">
                                                         {supplier.computedBalance.toLocaleString('en-US')}
                                                     </span>
                                                     <span className="text-xs opacity-80">د.ع</span>
@@ -226,18 +222,17 @@ export default async function Page() {
                                                     <span className="font-bold text-sm">مسدد</span>
                                                 </div>
                                             )}
-                                        </td>
 
-                                        {/* عدد الفواتير */}
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground bg-muted rounded-md px-2.5 py-1">
+                                            {/* عدد الفواتير */}
+                                            <span className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                                                 <ShoppingCart className="w-3.5 h-3.5" />
-                                                {supplier._count.purchases}
+                                                {supplier._count.purchases} فاتورة
                                             </span>
                                         </td>
 
                                         {showWarehouseColumn && (
-                                            <td className="px-6 py-4">
+                                            <td className="block min-w-0 align-top [overflow-wrap:anywhere] xl:table-cell xl:px-4 xl:py-5">
+                                                <p className="mb-2 text-xs text-muted-foreground xl:hidden">المذخر على المنصة</p>
                                                 <SupplierWarehouseLinkCell
                                                     canRequest={canRequestLink}
                                                     supplier={{
@@ -251,24 +246,23 @@ export default async function Page() {
                                         )}
 
                                         {/* الإجراءات */}
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="flex items-center justify-center gap-1.5">
+                                        <td className="block min-w-0 align-top xl:table-cell xl:px-4 xl:py-5">
+                                            <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-stretch">
                                                 <Link
                                                     href={`/dashboard/suppliers/${supplier.id}`}
-                                                    className="rounded-lg border border-border p-2 hover:bg-primary/10 hover:border-primary/50 transition-colors"
+                                                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                                                     title="كشف حساب"
                                                 >
-                                                    <FileText className="w-4 h-4 text-primary" />
+                                                    <FileText className="w-4 h-4" /> كشف الحساب
                                                 </Link>
                                                 <Link
                                                     href={`/dashboard/suppliers/${supplier.id}/purchases`}
-                                                    className="rounded-lg border border-border p-2 hover:bg-success/10 hover:border-success/50 transition-colors"
+                                                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-xs font-medium hover:bg-muted"
                                                     title="فواتير الشراء"
                                                 >
-                                                    <ShoppingCart className="w-4 h-4 text-success" />
+                                                    <ShoppingCart className="w-4 h-4" /> فواتير الشراء
                                                 </Link>
-                                                <UpdateSupplier id={supplier.id} />
-                                                <DeleteSupplier id={supplier.id} />
+                                                <MoreActions label={`إجراءات المورد ${supplier.name}`}><Link href={`/dashboard/suppliers/${supplier.id}/edit`}>تعديل المورد</Link><DeleteSupplier id={supplier.id} label="حذف المورد" /></MoreActions>
                                             </div>
                                         </td>
                                     </tr>

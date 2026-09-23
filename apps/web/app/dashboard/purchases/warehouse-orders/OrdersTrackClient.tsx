@@ -1,9 +1,12 @@
 'use client';
+import type { UserPermissions } from '@/app/lib/permissions';
+import OrderSettlement from './OrderSettlement';
+import { warehouseMutation } from '@/app/lib/warehouse-mutation-client';
 
 // المرحلة 4 من ميزة المذاخر: عميل متابعة طلبات المذاخر — قائمة بفلترة الحالة +
 // تفاصيل الطلب: العرض (المتوفرة/الجزئية/النافدة والأسعار النهائية) + Timeline +
 // اعتماد/رفض العرض وإلغاء الطلب قبل الشحن.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 // النافذتان أدناه تُنقلان إلى document.body عبر بوابة (نفس نمط PriceCompareModal
 // و«إدارة المذاخر» وبقية نوافذ المستودع). صيّرهما داخل الشجرة مباشرةً كان يجعلهما
 // ابنين للحاوية الجذرية `space-y-6`، فتُطبَّق عليها قاعدة `> * + * { margin-top:
@@ -14,7 +17,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Plus, PackageCheck, AlertTriangle } from 'lucide-react';
+import { Plus, PackageCheck, AlertTriangle, FileText, Boxes, RotateCcw, MoreHorizontal, X } from 'lucide-react';
 import type { ReceiptState } from '@/app/lib/warehouse-order-receipt';
 
 type OrderStatus =
@@ -46,7 +49,10 @@ interface TrackEvent {
     createdAt: string;
 }
 
+type ReturnSummary = { id: string; status: string; totalAmount?: number; items: { barcode: string; quantity: number }[] };
+
 interface TrackOrder {
+    returnRequests: ReturnSummary[];
     id: string;
     orderNumber: string | null;
     status: OrderStatus;
@@ -104,10 +110,33 @@ const EVENT_LABEL: Record<string, string> = {
     DELIVERED: 'تم التسليم',
     CANCELLED: 'أُلغي الطلب',
     NOTE: 'ملاحظة',
+    RECEIPT_RECONCILED: 'تم ربط فاتورة ودفعات الاستلام',
+    RETURN_REQUESTED: 'أُرسل طلب الإرجاع',
+    RETURN_ACCEPTED: 'قَبِل المذخر الإرجاع وطُبّق الإشعار الدائن',
+    RETURN_REJECTED: 'رفض المذخر الإرجاع',
+    RETURN_DISPATCHED: 'أُرسلت بضاعة المرتجع للمذخر',
+    RETURN_PHARMACY_RESTORED: 'أُعيد المرتجع المرفوض لمخزون الصيدلية',
+    RETURN_REFUNDED: 'سُجل رد الرصيد الدائن',
+    PAYMENT_MATCH_PROPOSED: 'طلب مطابقة السداد',
+    PAYMENT_MATCH_CONFIRMED: 'اعتُمدت مطابقة السداد',
 };
 
-export default function OrdersTrackClient({ initialOrders }: { initialOrders: TrackOrder[] }) {
+function remainingReturn(order: TrackOrder, item: TrackItem) {
+    const shipped = item.status === 'OUT_OF_STOCK' ? 0 : item.status === 'PARTIAL' ? item.quotedQuantity ?? 0 : item.quantity;
+    const reserved = (order.returnRequests ?? []).filter(r => ['PENDING', 'ACCEPTED'].includes(r.status)).flatMap(r => r.items).filter(i => i.barcode === item.drug.barcode).reduce((sum, i) => sum + i.quantity, 0);
+    return Math.max(0, shipped - reserved);
+}
+function acceptedCredit(order: TrackOrder) {
+    return (order.returnRequests ?? []).filter(r => r.status === 'ACCEPTED').reduce((sum, r) => sum + (r.totalAmount ?? 0), 0);
+}
+export default function OrdersTrackClient({ initialOrders, permissions, canManageCustody }: { initialOrders: TrackOrder[]; permissions: UserPermissions; canManageCustody: boolean }) {
     const router = useRouter();
+    useEffect(() => {
+        const refresh = () => { if (document.visibilityState === 'visible') router.refresh(); };
+        window.addEventListener('focus', refresh);
+        document.addEventListener('visibilitychange', refresh);
+        return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+    }, [router]);
     const [orders, setOrders] = useState<TrackOrder[]>(initialOrders);
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [details, setDetails] = useState<TrackOrder | null>(null);
@@ -187,12 +216,12 @@ export default function OrdersTrackClient({ initialOrders }: { initialOrders: Tr
                         تابع حالة طلباتك من المذاخر — العروض، الشحن، وسجل الأحداث الكامل.
                     </p>
                 </div>
-                <Link
+                {permissions.canCreateWarehouseOrder && <Link
                     href="/dashboard/purchases/warehouse-orders/new"
                     className="flex items-center gap-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                 >
                     <Plus className="h-4 w-4" /> طلب جديد
-                </Link>
+                </Link>}
             </div>
 
             {awaitingReceipt.length > 0 && (
@@ -210,7 +239,7 @@ export default function OrdersTrackClient({ initialOrders }: { initialOrders: Tr
                 </div>
             )}
 
-            <div className="flex flex-wrap gap-1">
+            <div role="group" aria-label="تصفية الطلبات حسب الحالة" className="grid grid-cols-3 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-5 xl:grid-cols-9">
                 {[
                     ['ALL', 'الكل'],
                     ['SENT', 'بانتظار المذخر'],
@@ -224,12 +253,17 @@ export default function OrdersTrackClient({ initialOrders }: { initialOrders: Tr
                 ].map(([v, l]) => (
                     <button
                         key={v}
+                        type="button"
+                        aria-pressed={statusFilter === v}
                         onClick={() => setStatusFilter(v)}
-                        className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                            statusFilter === v ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/70'
+                        className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                            statusFilter === v ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'border-transparent bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground'
                         }`}
                     >
-                        {l}
+                        <span className="whitespace-nowrap leading-5">{l}</span>
+                        <span className={`text-sm font-semibold tabular-nums leading-5 ${statusFilter === v ? 'text-primary-foreground' : 'text-foreground'}`}>
+                            {(v === 'ALL' ? orders.length : orders.filter(order => order.status === v).length).toLocaleString('en-US')}
+                        </span>
                     </button>
                 ))}
             </div>
@@ -238,131 +272,92 @@ export default function OrdersTrackClient({ initialOrders }: { initialOrders: Tr
                 <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground shadow-sm">
                     <p className="text-4xl">🧾</p>
                     <p className="mt-3">لا توجد طلبات بهذه الحالة.</p>
-                    <Link
+                    {permissions.canCreateWarehouseOrder && <Link
                         href="/dashboard/purchases/warehouse-orders/new"
                         className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
                     >
-                        أنشئ طلبك الأول من مذخر
-                    </Link>
+                        {orders.length === 0 ? 'أنشئ طلبك الأول من مذخر' : 'إنشاء طلب جديد'}
+                    </Link>}
                 </div>
             ) : (
                 <div className="space-y-3">
                     {visible.map((o) => (
-                        <div key={o.id} className="rounded-xl border bg-card p-4 shadow-sm">
-                            <div className="flex flex-wrap items-center gap-3">
-                                <span className="font-mono text-sm font-bold">{o.orderNumber ?? o.id.slice(0, 8)}</span>
-                                <span className="text-sm">من: {o.warehouse.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                    {new Date(o.createdAt).toLocaleString('ar-IQ')}
-                                </span>
-                                <span className={`mr-auto rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
-                                    {STATUS_LABEL[o.status]}
+                        <article key={o.id} className="rounded-lg border bg-card p-4 shadow-sm sm:p-5">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0"><span dir="ltr" className="inline-block font-mono text-sm font-bold text-primary">{o.orderNumber ?? o.id.slice(0, 8)}</span><h3 className="mt-1 break-words font-semibold">{o.warehouse.name}</h3></div>
+                                <span className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium ${o.receiptState === 'RECEIVED' ? 'bg-success/10 text-success' : STATUS_STYLE[o.status]}`}>
+                                    {o.receiptState === 'RECEIVED' ? 'استُلم لدى الصيدلية' : STATUS_LABEL[o.status]}
                                 </span>
                             </div>
-                            <div className="mt-2 text-sm text-muted-foreground">
-                                {o.items.length} صنف — الإجمالي الحالي: {o.totalAmount.toLocaleString('ar-IQ')} د.ع
-                                {/* ميزة البونص: مجموع وحدات البونص عبر كل أصناف الطلب — ظاهر في
-                                    القائمة مباشرة، لا داخل التفاصيل فقط، لأنه صلب عرض هذا المذخر. */}
-                                {(() => {
-                                    const totalBonus = o.items.reduce((sum, it) => sum + (it.bonusQuantity || 0), 0);
-                                    return totalBonus > 0 ? (
-                                        <span className="mr-2 font-medium text-success">
-                                            + {totalBonus.toLocaleString('ar-IQ')} بونص مجاني
-                                        </span>
-                                    ) : null;
-                                })()}
+                            <div className="my-4 flex flex-wrap items-end justify-between gap-3">
+                                <div><p className="text-xs text-muted-foreground">{acceptedCredit(o) > 0 ? 'الصافي بعد المرتجعات' : 'إجمالي الطلب'}</p>
+                                    <p className="mt-1 text-2xl font-bold tabular-nums">{Math.max(0, o.totalAmount - acceptedCredit(o)).toLocaleString('ar-IQ')} <span className="text-xs font-medium text-muted-foreground">د.ع</span></p>
+                                    <p className="mt-1.5 text-xs text-muted-foreground">{o.items.length} أصناف <span className="mx-1.5" aria-hidden="true">·</span><time dateTime={o.createdAt} title={new Date(o.createdAt).toLocaleString('ar-IQ')}>{new Date(o.createdAt).toLocaleDateString('ar-IQ', {day:'numeric',month:'short',year:'numeric'})}</time></p>
+                                </div>
+                                {o.items.some(item => item.bonusQuantity > 0) && <span className="rounded-lg border border-success/20 bg-success/5 px-2.5 py-1 text-xs font-medium text-success">+ {o.items.reduce((sum,item)=>sum+(item.bonusQuantity||0),0).toLocaleString('ar-IQ')} بونص مجاني</span>}
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                    onClick={() => setDetails(o)}
-                                    className="rounded-lg border px-3 py-1.5 text-sm hover:bg-muted"
-                                >
-                                    التفاصيل والسجل
-                                </button>
-                                {o.receiptState === 'AWAITING_RECEIPT' && o.purchaseId && (
-                                    <Link
-                                        href={`/dashboard/purchases/${o.purchaseId}/receive?return=warehouse-orders`}
-                                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
-                                    >
-                                        <PackageCheck className="h-4 w-4" />
-                                        استلام البضاعة وإضافتها للمخزون
-                                    </Link>
-                                )}
-                                {o.receiptState === 'RECEIVED' && (
-                                    <Link
-                                        href="/dashboard/batches"
-                                        className="inline-flex items-center gap-1.5 rounded-lg bg-success/10 px-3 py-1.5 text-sm text-success hover:bg-success/15"
-                                    >
-                                        <PackageCheck className="h-4 w-4" />
-                                        استُلمت — عرض الدفعات
-                                    </Link>
-                                )}
-                                {o.receiptState === 'PURCHASE_CANCELLED' && (
-                                    <span className="rounded-lg bg-muted px-3 py-1.5 text-sm text-muted-foreground">
-                                        فاتورة الشراء المرتبطة ملغاة
-                                    </span>
-                                )}
-                                {o.status === 'QUOTED' && (
-                                    <>
-                                        <button
-                                            onClick={() => decide(o, 'APPROVED')}
-                                            disabled={busy}
-                                            className="rounded-lg bg-success px-3 py-1.5 text-sm text-success-foreground hover:bg-success/90 disabled:opacity-50"
-                                        >
-                                            اعتماد العرض
-                                        </button>
-                                        <button
-                                            onClick={() => decide(o, 'REJECTED')}
-                                            disabled={busy}
-                                            className="rounded-lg bg-destructive px-3 py-1.5 text-sm text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-                                        >
-                                            رفض
-                                        </button>
-                                    </>
-                                )}
-                                {['SENT', 'UNDER_REVIEW', 'QUOTED', 'APPROVED'].includes(o.status) && (
-                                    <button
-                                        onClick={() => decide(o, 'CANCELLED')}
-                                        disabled={busy}
-                                        className="rounded-lg border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
-                                    >
-                                        إلغاء الطلب
-                                    </button>
-                                )}
-                                {['SHIPPED', 'DELIVERED'].includes(o.status) && (
-                                    <button
-                                        onClick={() => setReturningFor(o)}
-                                        className="rounded-lg border px-3 py-1.5 text-sm text-primary hover:bg-primary/10"
-                                    >
-                                        طلب إرجاع
-                                    </button>
-                                )}
+                            {o.receiptState === 'RECEIVED' && o.status !== 'DELIVERED' && <p className="mb-3 text-xs text-muted-foreground">تم تسجيل الاستلام في مخزون الصيدلية. آخر حالة لدى المذخر: {STATUS_LABEL[o.status]}.</p>}
+                            <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                <button onClick={() => setDetails(o)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><FileText className="h-4 w-4" aria-hidden="true" />تفاصيل الطلب</button>
+                                {o.receiptState === 'RECEIVED' && <Link href="/dashboard/batches" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium hover:bg-muted"><Boxes className="h-4 w-4" aria-hidden="true" />عرض الدفعات</Link>}
+                                {permissions.canReceivePurchase && o.receiptState === 'AWAITING_RECEIPT' && o.purchaseId && <Link href={`/dashboard/purchases/${o.purchaseId}/receive?return=warehouse-orders`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium text-primary hover:bg-primary/5"><PackageCheck className="h-4 w-4" aria-hidden="true" />استلام البضاعة</Link>}
+                                {!!o.returnRequests?.length && <button onClick={() => setDetails(o)} className="inline-flex min-h-9 flex-wrap items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-primary hover:bg-primary/5"><RotateCcw className="h-4 w-4" aria-hidden="true" />متابعة المرتجعات<span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{o.returnRequests.some(r => r.status === 'PENDING') ? 'قيد المراجعة' : o.returnRequests.some(r => r.status === 'ACCEPTED') ? 'مقبول' : 'مرفوض'}</span></button>}
+                                {permissions.canApproveWarehouseOrder && o.status === 'QUOTED' && <><button onClick={() => decide(o, 'APPROVED')} disabled={busy} className="h-9 rounded-lg border border-success/30 px-3 text-xs font-medium text-success hover:bg-success/10 disabled:opacity-50">اعتماد العرض</button><button onClick={() => decide(o, 'REJECTED')} disabled={busy} className="h-9 rounded-lg border px-3 text-xs text-destructive hover:bg-destructive/5 disabled:opacity-50">رفض العرض</button></>}
+                                {o.receiptState === 'PURCHASE_CANCELLED' && <span className="text-xs text-muted-foreground">فاتورة الشراء ملغاة</span>}
+                                <OrderMoreActions permissions={permissions} order={o} busy={busy} onReturn={() => setReturningFor(o)} onCancel={() => decide(o, 'CANCELLED')} />
                             </div>
-                        </div>
+                        </article>
                     ))}
                 </div>
             )}
 
-            {details && <DetailsModal order={details} onClose={() => setDetails(null)} />}
+            {details && <DetailsModal canManageCustody={canManageCustody} order={details} onClose={() => setDetails(null)} />}
             {returningFor && (
-                <ReturnRequestModal order={returningFor} onClose={() => setReturningFor(null)} />
+                <ReturnRequestModal order={returningFor} onClose={() => setReturningFor(null)} onSubmitted={record => {
+                    setOrders(current => current.map(order => order.id === returningFor.id ? { ...order, returnRequests: [...(order.returnRequests ?? []), record] } : order));
+                    setReturningFor(null);
+                    router.refresh();
+                }} />
             )}
         </div>
     );
 }
 
+function OrderMoreActions({order, busy, onReturn, onCancel, permissions}: {permissions: UserPermissions; order: TrackOrder; busy: boolean; onReturn: () => void; onCancel: () => void}) {
+    const disclosure = useRef<HTMLDetailsElement>(null);
+    const canCancel = permissions.canApproveWarehouseOrder && ['SENT','UNDER_REVIEW','QUOTED','APPROVED'].includes(order.status) && order.receiptState !== 'RECEIVED' && (order.status !== 'APPROVED' || order.receiptState === 'AWAITING_RECEIPT');
+    const canReturn = permissions.canReturnWarehouseOrder && ['SHIPPED','DELIVERED'].includes(order.status) && !order.returnRequests?.some(r => r.status === 'PENDING') && order.items.some(item => remainingReturn(order,item) > 0);
+    useEffect(() => {
+        const outside = (event: PointerEvent) => { if (event.target instanceof Node && !disclosure.current?.contains(event.target)) disclosure.current?.removeAttribute('open'); };
+        const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && disclosure.current?.open) { disclosure.current.removeAttribute('open'); disclosure.current.querySelector('summary')?.focus(); } };
+        document.addEventListener('pointerdown',outside); document.addEventListener('keydown',escape);
+        return () => {document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape);};
+    }, []);
+    if (!canCancel && !canReturn) return null;
+    const run = (action: () => void) => { disclosure.current?.removeAttribute('open'); action(); };
+    return <details ref={disclosure} name="warehouse-order-actions" className="relative mr-auto">
+        <summary aria-label={`المزيد من إجراءات الطلب ${order.orderNumber ?? ''}`} className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-lg border px-2.5 text-xs text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">المزيد<MoreHorizontal className="h-4 w-4" aria-hidden="true" /></summary>
+        <div className="absolute left-0 top-full z-20 mt-1 w-52 max-w-[80vw] space-y-1 rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-lg">
+            {canReturn && <button disabled={busy} onClick={() => run(onReturn)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-right text-xs hover:bg-muted disabled:opacity-50"><RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />{order.returnRequests?.length ? 'إرجاع كمية إضافية' : 'طلب إرجاع'}</button>}
+            {canCancel && <button disabled={busy} onClick={() => run(onCancel)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-right text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"><X className="h-4 w-4 shrink-0" aria-hidden="true" />إلغاء الطلب</button>}
+        </div>
+    </details>;
+}
+
 // المرحلة 5 (الصقل التجاري) §Part 4: طلب إرجاع صنف/أصناف من طلب مُسلَّم أو
 // قيد التسليم. الكمية والسعر يُحسمان على الخادم (effectiveLine) — هذه الواجهة
 // ترسل فقط الباركود والكمية المطلوب إرجاعها.
-function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: () => void }) {
-    const returnable = order.items.filter((it) => it.status !== 'OUT_OF_STOCK');
+function ReturnRequestModal({ order, onClose, onSubmitted }: { order: TrackOrder; onClose: () => void; onSubmitted: (record: ReturnSummary) => void }) {
+    const returnable = order.items.filter(it => remainingReturn(order, it) > 0);
     const [quantities, setQuantities] = useState<Record<string, string>>({});
     const [reason, setReason] = useState('');
     const [saving, setSaving] = useState(false);
+    const sending = useRef(false);
 
-    const maxQuantity = (it: TrackItem) => (it.status === 'PARTIAL' ? it.quotedQuantity ?? 0 : it.quantity);
+    const maxQuantity = (it: TrackItem) => remainingReturn(order, it);
 
     const submit = async () => {
+        if (sending.current) return;
         const items = returnable
             .map((it) => ({ barcode: it.drug.barcode, quantity: Number(quantities[it.id] || 0) }))
             .filter((it) => it.quantity > 0);
@@ -370,9 +365,10 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
             toast.error('حدِّد كمية لصنف واحد على الأقل');
             return;
         }
+        sending.current = true;
         setSaving(true);
         try {
-            const res = await fetch(`/api/warehouses/orders/${order.id}/returns`, {
+            const res = await warehouseMutation(`/api/warehouses/orders/${order.id}/returns`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ items, reason: reason.trim() || undefined }),
@@ -387,8 +383,11 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
                 return;
             }
             toast.success('أُرسل طلب الإرجاع للمذخر — بانتظار قراره');
-            onClose();
+            onSubmitted(data.return);
+        } catch {
+            toast.error('تعذر تأكيد النتيجة. أعد المحاولة بنفس البيانات؛ لن يُسجّل الطلب مرتين.');
         } finally {
+            sending.current = false;
             setSaving(false);
         }
     };
@@ -400,7 +399,7 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
             <div className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl bg-card p-6 shadow-xl">
                 <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-lg font-bold">طلب إرجاع — {order.warehouse.name}</h3>
-                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground">✕</button>
+                    <button disabled={saving} onClick={onClose} aria-label="إغلاق" className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground">✕</button>
                 </div>
 
                 <div className="space-y-2">
@@ -409,10 +408,11 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
                             <div>
                                 <div className="font-medium">{it.drug.tradeName}</div>
                                 <div className="text-xs text-muted-foreground">
-                                    الكمية المشحونة: {maxQuantity(it)}
+                                    المتبقي القابل لطلب الإرجاع: {maxQuantity(it)}
                                 </div>
                             </div>
                             <input
+                                disabled={saving}
                                 type="number"
                                 min={0}
                                 max={maxQuantity(it)}
@@ -427,7 +427,7 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
 
                 <div className="mt-4">
                     <label className="mb-1 block text-xs font-medium text-muted-foreground">سبب الإرجاع (اختياري)</label>
-                    <textarea
+                    <textarea disabled={saving}
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
                         rows={2}
@@ -436,7 +436,7 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
                 </div>
 
                 <div className="mt-4 flex justify-end gap-2">
-                    <button onClick={onClose} className="rounded-lg border px-3 py-2 text-sm hover:bg-muted">
+                    <button disabled={saving} onClick={onClose} className="rounded-lg border px-3 py-2 text-sm hover:bg-muted">
                         إلغاء
                     </button>
                     <button
@@ -453,7 +453,7 @@ function ReturnRequestModal({ order, onClose }: { order: TrackOrder; onClose: ()
     );
 }
 
-function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => void }) {
+function DetailsModal({ order, onClose, canManageCustody }: { order: TrackOrder; onClose: () => void; canManageCustody: boolean }) {
     if (typeof document === 'undefined') return null;
 
     return createPortal(
@@ -467,8 +467,10 @@ function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => vo
                     <h3 className="text-lg font-bold">
                         طلب {order.orderNumber ?? ''} — {order.warehouse.name}
                     </h3>
-                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground">✕</button>
+                    <button onClick={onClose} aria-label="إغلاق" className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground">✕</button>
                 </div>
+
+                {['SHIPPED', 'DELIVERED'].includes(order.status) && <OrderSettlement canManageCustody={canManageCustody} orderId={order.id} items={order.items} />}
 
                 <div className="overflow-x-auto rounded-xl border">
                     <table className="w-full text-sm">
@@ -476,7 +478,7 @@ function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => vo
                             <tr>
                                 <th className="px-3 py-2 font-medium">الصنف</th>
                                 <th className="px-3 py-2 font-medium">المطلوب</th>
-                                <th className="px-3 py-2 font-medium">التوقع</th>
+
                                 <th className="px-3 py-2 font-medium">الحكم</th>
                                 <th className="px-3 py-2 font-medium">السعر النهائي</th>
                                 <th className="px-3 py-2 font-medium">بونص</th>
@@ -505,7 +507,7 @@ function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => vo
                                             ? `${it.quotedQuantity} من ${it.quantity}`
                                             : it.quantity}
                                     </td>
-                                    <td className="px-3 py-2">{it.requestedPrice ?? it.unitPrice}</td>
+
                                     <td className="px-3 py-2">{ITEM_LABEL[it.status] ?? it.status}</td>
                                     <td className="px-3 py-2 font-medium">
                                         {it.status === 'OUT_OF_STOCK' ? '—' : (it.quotedPrice ?? it.requestedPrice ?? it.unitPrice)}
@@ -538,16 +540,16 @@ function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => vo
                 </div>
 
                 <div className="mt-3 text-left font-bold">
-                    الإجمالي النهائي: {order.totalAmount.toLocaleString('ar-IQ')} د.ع
+                    <p>إجمالي الطلب الأصلي: {order.totalAmount.toLocaleString('ar-IQ')} د.ع</p>{acceptedCredit(order) > 0 && <><p className="mt-1 text-sm text-muted-foreground">المرتجعات المقبولة: {acceptedCredit(order).toLocaleString('ar-IQ')} د.ع</p><p className="mt-1">الصافي بعد الإرجاع: {Math.max(0, order.totalAmount - acceptedCredit(order)).toLocaleString('ar-IQ')} د.ع</p></>}
                 </div>
 
-                <div className="mt-5 rounded-xl bg-muted/40 p-4">
-                    <p className="mb-2 text-sm font-bold">سجل الأحداث</p>
+                <details className="mt-5 rounded-lg bg-muted/40 p-4">
+                    <summary className="cursor-pointer text-sm font-bold">سجل الأحداث ({order.events.length})</summary>
                     <div className="space-y-2">
                         {order.events.map((ev) => (
                             <div key={ev.id} className="flex flex-wrap items-center gap-2 text-xs">
                                 <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
-                                    {EVENT_LABEL[ev.type] ?? ev.type}
+                                    {EVENT_LABEL[ev.type] ?? 'تحديث على الطلب'}
                                 </span>
                                 <span className="text-muted-foreground">
                                     {new Date(ev.createdAt).toLocaleString('ar-IQ')}
@@ -562,7 +564,7 @@ function DetailsModal({ order, onClose }: { order: TrackOrder; onClose: () => vo
                             <p className="text-xs text-muted-foreground">لا أحداث مسجلة.</p>
                         )}
                     </div>
-                </div>
+                </details>
             </div>
         </div>,
         document.body

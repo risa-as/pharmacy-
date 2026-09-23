@@ -1,3 +1,4 @@
+import { buildSaleTenantBranchCondition } from '@/app/lib/report-sales-aggregates';
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/app/lib/prisma";
@@ -10,7 +11,7 @@ import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import BatchSearch from "@/app/ui/batches/batch-search";
 import Link from "next/link";
 
-const PAGE_SIZE = 1000;
+const PAGE_SIZE = 250;
 
 export default async function BatchesPage(
   props: {
@@ -27,7 +28,7 @@ export default async function BatchesPage(
   const currentPage = Math.max(1, parseInt(searchParams?.page ?? "1") || 1);
 
   const inventoryFilter = selectedBranchId
-    ? { ...tenantBranchWhere, branchId: selectedBranchId }
+    ? { AND: [tenantBranchWhere, { branchId: selectedBranchId }] }
     : tenantBranchWhere;
 
   const searchFilter = query
@@ -45,22 +46,15 @@ export default async function BatchesPage(
   const thirtyDaysFromNow = new Date();
   thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-  // Stats: always across all batches for the branch (no search filter)
-  const [totalCount, expiredCount, expiringSoonCount] = await Promise.all([
-    prisma.batch.count({ where: { inventory: inventoryFilter } }),
-    prisma.batch.count({
-      where: { inventory: inventoryFilter, expiryDate: { lt: now } },
-    }),
-    prisma.batch.count({
-      where: {
-        inventory: inventoryFilter,
-        expiryDate: { gte: now, lte: thirtyDaysFromNow },
-      },
-    }),
-  ]);
-
-  // Paginated + filtered batches
-  const [batches, filteredTotal] = await Promise.all([
+  // One scoped aggregate, in parallel with the page. Expiry alerts count stock on hand only.
+  const scope = buildSaleTenantBranchCondition(tenantBranchWhere, selectedBranchId);
+  const [stats, batches, filteredTotal] = await Promise.all([
+    prisma.$queryRaw<{ total: bigint; expired: bigint; expiring: bigint }[]>`
+      SELECT COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE b.quantity > 0 AND b."expiryDate" < ${now}) AS expired,
+        COUNT(*) FILTER (WHERE b.quantity > 0 AND b."expiryDate" >= ${now} AND b."expiryDate" <= ${thirtyDaysFromNow}) AS expiring
+      FROM "Batch" b JOIN "Inventory" s ON s.id = b."inventoryId" JOIN "Branch" br ON br.id = s."branchId"
+      WHERE ${scope}`,
     prisma.batch.findMany({
       where: searchFilter,
       orderBy: { createdAt: "desc" },
@@ -78,6 +72,10 @@ export default async function BatchesPage(
     }),
     prisma.batch.count({ where: searchFilter }),
   ]);
+
+  const totalCount = Number(stats[0]?.total ?? 0);
+  const expiredCount = Number(stats[0]?.expired ?? 0);
+  const expiringSoonCount = Number(stats[0]?.expiring ?? 0);
 
   const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
 

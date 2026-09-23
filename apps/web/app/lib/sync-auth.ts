@@ -10,6 +10,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/app/lib/prisma';
 import { getSubscriptionState } from '@/app/lib/subscription-state';
+import { getUserPermissions, UserPermissions } from '@/app/lib/permissions';
+import { syncTokenMessage } from '@/app/lib/sync-token';
 import { jwtVerify } from 'jose';
 import crypto from 'crypto';
 
@@ -51,6 +53,56 @@ export interface SyncUser {
     organizationId?: string;
     name?: string;
     email?: string;
+    /** Current per-user permission overrides (JSON), re-read from the database. */
+    permissions?: string | null;
+}
+
+/**
+ * Granular permission check for direct sync commands, so a permission removed
+ * on the web is also enforced on desktop. DEVICE (license-key) auth identifies a
+ * machine, not a person, so it has no permissions to check and is allowed here;
+ * that gap is tracked as open in the quality reference (N02).
+ */
+export function hasSyncPermission(syncUser: SyncUser, key: keyof UserPermissions): boolean {
+    if (syncUser.role === 'DEVICE') return true;
+    return getUserPermissions({ role: syncUser.role, permissions: syncUser.permissions ?? null })[key];
+}
+
+type OperatorLookup = { user: { findFirst(args: any): Promise<{ role: string; permissions: string | null } | null> } };
+
+/**
+ * Effective permissions for a synced operation (sale.userId, payment.userId),
+ * read from the database at sync time. The device's clock cannot prove an
+ * operation predates a permission change, so no timestamp is trusted: an
+ * operation that fails the check now becomes a review conflict.
+ *
+ * The operator id is a client-supplied claim. To stop a restricted session from
+ * borrowing a permitted colleague's id, a person-authenticated sync requires the
+ * permission from BOTH the authenticated sync user and the named operator (their
+ * intersection). A shared POS still works: a permitted session may submit other
+ * permitted cashiers' operations. Naming someone else can still misattribute an
+ * operation in the audit log, but can no longer grant a permission.
+ *  - operator given: must be an active user of this branch, else null (conflict)
+ *  - no operator, person-authenticated sync: that person's current permissions
+ *  - no operator, DEVICE auth: 'unattributed' (no person to check; tracked open)
+ *  - operator given, DEVICE auth: the operator's permissions (no session person)
+ */
+export async function operatorPermissions(
+    db: OperatorLookup, operatorId: string | null | undefined, branchId: string, syncUser: SyncUser,
+): Promise<UserPermissions | null | 'unattributed'> {
+    const session = syncUser.role === 'DEVICE' ? null
+        : getUserPermissions({ role: syncUser.role, permissions: syncUser.permissions ?? null });
+    if (operatorId) {
+        const operator = await db.user.findFirst({
+            where: { id: operatorId, branchId, isActive: true },
+            select: { role: true, permissions: true },
+        });
+        if (!operator) return null;
+        const own = getUserPermissions(operator);
+        if (!session) return own;
+        return Object.fromEntries(Object.keys(own).map(k => [k, own[k as keyof UserPermissions] && session[k as keyof UserPermissions]])) as unknown as UserPermissions;
+    }
+    return session ?? 'unattributed';
 }
 
 function getSyncSecret(): string {
@@ -63,9 +115,9 @@ function getSyncSecret(): string {
     return secret;
 }
 
-function verifySyncToken(token: string, userId: string, branchId: string, orgId: string, role: string): boolean {
+function verifySyncToken(token: string, userId: string, branchId: string, orgId: string, role: string, sessionVersion: number): boolean {
     const expected = crypto.createHmac('sha256', getSyncSecret())
-        .update(`${userId}:${branchId}:${orgId}:${role}`)
+        .update(syncTokenMessage(userId, branchId, orgId, role, sessionVersion))
         .digest('hex');
     const tokenBuf = Buffer.from(token);
     const expectedBuf = Buffer.from(expected);
@@ -73,6 +125,49 @@ function verifySyncToken(token: string, userId: string, branchId: string, orgId:
     // is a clean "false" instead of a thrown 500.
     if (tokenBuf.length !== expectedBuf.length) return false;
     return crypto.timingSafeEqual(tokenBuf, expectedBuf);
+}
+
+// Signed claims identify the session; current database state determines access.
+async function currentSyncUser(id: string, expected?: { role: string; branchId?: string; organizationId?: string; sessionVersion: number }): Promise<SyncUser | NextResponse> {
+    if (!id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const user = await prisma.user.findUnique({ where: { id }, select: {
+        id: true, role: true, isActive: true, branchId: true, name: true, email: true, permissions: true, sessionVersion: true,
+        branch: { select: { organizationId: true } },
+    } });
+    if (!user?.isActive || !['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER', 'SUPER_ADMIN'].includes(user.role))
+        return NextResponse.json({ error: 'الحساب غير متاح للمزامنة.' }, { status: 403 });
+    // Revoked token: issued before the user's sessionVersion was bumped. Unlike
+    // isActive, this stays revoked if the account is later re-enabled.
+    if (expected && expected.sessionVersion !== user.sessionVersion)
+        return NextResponse.json({ error: 'تم إبطال الجلسة؛ يلزم تسجيل الدخول مجدداً.' }, { status: 401 });
+    const current = { id: user.id, role: user.role, branchId: user.branchId ?? undefined,
+        organizationId: user.branch?.organizationId, name: user.name ?? undefined, email: user.email,
+        permissions: user.permissions };
+    if (expected && (expected.role !== current.role || expected.branchId !== current.branchId || expected.organizationId !== current.organizationId))
+        return NextResponse.json({ error: 'تغير نطاق الحساب؛ يلزم تسجيل الدخول مجدداً.' }, { status: 401 });
+    if (current.role !== 'SUPER_ADMIN') {
+        if (!current.branchId || !current.organizationId) return NextResponse.json({ error: 'Branch not assigned' }, { status: 403 });
+        const denied = await assertOrgActive(current.organizationId);
+        if (denied) return denied;
+    }
+    return current;
+}
+
+/**
+ * Database unreachable (not an auth failure). The desktop treats any 4xx as a
+ * permanent client error and moves the operation to its failures list, so an
+ * outage must answer 503, which the desktop retries.
+ */
+export function isDatabaseUnavailable(e: unknown): boolean {
+    const err = e as { code?: string; name?: string; message?: string } | null;
+    if (!err) return false;
+    if (err.name === 'PrismaClientInitializationError') return true;
+    if (['P1001', 'P1002', 'P1008', 'P1017', 'P2024'].includes(err.code ?? '')) return true;
+    return /Can't reach database|connection (timeout|refused|reset)|Server has closed the connection/i.test(err.message ?? '');
+}
+
+function verificationUnavailable() {
+    return NextResponse.json({ error: 'تعذّر التحقق مؤقتًا؛ ستُعاد المحاولة.' }, { status: 503, headers: { 'Retry-After': '30' } });
 }
 
 export async function validateSyncUser(request: Request): Promise<SyncUser | NextResponse> {
@@ -87,15 +182,19 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
 
     if (syncToken && userId && branchId && orgId && role) {
         try {
-            if (!verifySyncToken(syncToken, userId, branchId, orgId, role)) {
+            // Verify against the user's CURRENT sessionVersion from the database, not
+            // a client header: desktop builds that predate versioning never send one,
+            // yet must accept a token reissued at v1+. A token signed at an older
+            // version (revoked) no longer matches. Version 0 is the legacy format.
+            const stored = await prisma.user.findUnique({ where: { id: userId }, select: { sessionVersion: true } });
+            if (!stored) return NextResponse.json({ error: 'Invalid sync token' }, { status: 401 });
+            const sessionVersion = stored.sessionVersion;
+            if (!verifySyncToken(syncToken, userId, branchId, orgId, role, sessionVersion)) {
                 return NextResponse.json({ error: 'Invalid sync token' }, { status: 401 });
             }
-            if (role !== 'SUPER_ADMIN') {
-                const suspended = await assertOrgActive(orgId);
-                if (suspended) return suspended;
-            }
-            return { id: userId, role, branchId, organizationId: orgId };
-        } catch {
+            return await currentSyncUser(userId, { role, branchId, organizationId: orgId, sessionVersion });
+        } catch (e) {
+            if (isDatabaseUnavailable(e)) return verificationUnavailable();
             return NextResponse.json({ error: 'Sync token validation failed' }, { status: 401 });
         }
     }
@@ -131,17 +230,11 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
             const { payload } = await jwtVerify(authHeader.slice(7), getAuthJwtSecret());
             const jwtRole = (payload.role as string) || 'CASHIER';
             const jwtOrg = (payload.organizationId as string) || undefined;
-            if (jwtRole !== 'SUPER_ADMIN') {
-                const suspended = await assertOrgActive(jwtOrg);
-                if (suspended) return suspended;
-            }
-            return {
-                id: payload.userId as string,
-                role: jwtRole,
-                branchId: (payload.branchId as string) || undefined,
-                organizationId: jwtOrg,
-            };
-        } catch {
+            return await currentSyncUser(payload.userId as string, { role: jwtRole,
+                branchId: (payload.branchId as string) || undefined, organizationId: jwtOrg,
+                sessionVersion: Number(payload.sessionVersion) || 0 });
+        } catch (e) {
+            if (isDatabaseUnavailable(e)) return verificationUnavailable();
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
     }
@@ -151,14 +244,8 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
     if (!session?.user?.id) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    return {
-        id: session.user.id,
-        role: (session.user as any).role || 'CASHIER',
-        branchId: (session.user as any).branchId,
-        organizationId: (session.user as any).organizationId,
-        name: session.user.name ?? undefined,
-        email: session.user.email ?? undefined,
-    };
+    return currentSyncUser(session.user.id);
+
 }
 
 /**

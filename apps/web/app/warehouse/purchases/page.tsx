@@ -53,7 +53,7 @@ export default async function WarehousePurchasesPage() {
                 _count: { select: { payments: true, items: true } },
             },
             orderBy: { issuedAt: "desc" },
-            take: 300,
+            take: 50,
         }),
         // نفس نمط accounts/page.tsx: الملخّص (البطاقات + شريط التقادم) يُحسب
         // من استعلام غير مقصوص كي لا يقلّ الرقم المعروض زوراً عند تجاوز مذخر

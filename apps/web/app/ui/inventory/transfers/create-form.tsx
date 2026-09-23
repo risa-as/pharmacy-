@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 // sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
 // sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
@@ -26,6 +26,7 @@ export default function CreateTransferForm({
     }[];
 }) {
     const router = useRouter();
+    const transferAttempt = useRef({signature:'',key:''});
     const [toBranchId, setToBranchId] = useState('');
     const [notes, setNotes] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -101,10 +102,12 @@ export default function CreateTransferForm({
         };
 
         try {
+            const signature = JSON.stringify(payload);
+            if (transferAttempt.current.signature !== signature) transferAttempt.current = {signature,key:crypto.randomUUID()};
             const res = await fetch('/api/inventory/transfers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({...payload,idempotencyKey:transferAttempt.current.key})
             });
 
             const data = await res.json();

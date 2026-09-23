@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 // مع صيدلية — حدّ الائتمان، مهلة السداد، شريحة التسعير، والحظر.
 // Phase 3 (الأدوار والصلاحيات): يتطلب canEditCustomerTerms.
 import { NextRequest, NextResponse } from 'next/server';
+import { WarehouseOperationError } from '@/app/lib/warehouse-operation';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
@@ -93,10 +94,22 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ error: 'لا توجد حقول صالحة للتحديث' }, { status: 400 });
         }
 
-        const updated = await prisma.warehouseCustomer.update({ where: { id: existing.id }, data });
+        const updated = await prisma.$transaction(async tx => {
+            await tx.$queryRaw`SELECT id FROM "WarehouseCustomer" WHERE id = ${existing.id} FOR UPDATE`;
+            const before = await tx.warehouseCustomer.findUniqueOrThrow({ where: { id: existing.id } });
+            if (data.openingBalance !== undefined && data.openingBalance !== before.openingBalance) {
+                const payment = await tx.warehouseSettlement.findFirst({ where: { warehouseId: ctx.warehouseId, sourceId: before.id, kind: 'OPENING_PAYMENT' } });
+                if (payment) throw new WarehouseOperationError('سُجل سداد على الرصيد الافتتاحي؛ لا يمكن استبداله من تعديل الشروط. استخدم سندات السداد.');
+                await tx.auditLog.create({ data: { userId: ctx.user.id, userName: ctx.user.name ?? ctx.user.email ?? ctx.user.id,
+                    action: 'OPENING_BALANCE_CHANGED', entity: 'WAREHOUSE_CUSTOMER', entityId: before.id,
+                    details: JSON.stringify({ warehouseId: ctx.warehouseId, before: before.openingBalance, after: data.openingBalance }) } });
+            }
+            return tx.warehouseCustomer.update({ where: { id: existing.id }, data });
+        });
 
         return NextResponse.json({ customer: updated });
     } catch (e: any) {
+        if (e instanceof WarehouseOperationError) return NextResponse.json({ error: e.message }, { status: e.status });
         console.error('warehouse-portal customers PATCH error:', e);
         return NextResponse.json({ error: 'فشل في تحديث بيانات العميل' }, { status: 500 });
     }

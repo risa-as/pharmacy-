@@ -37,10 +37,10 @@ export async function GET(req: Request) {
         const drugIds = drugs.map((d: any) => d.id);
 
         // Find inventory records for these drugs within the tenant scope
+        // Intersect, never spread: a spread client branchId would replace a
+        // branch-scoped user's own { branchId } scope.
         const inventoryWhere: any = {
-            ...tenantBranchWhere,
-            drugId: { in: drugIds },
-            ...(branchId ? { branchId } : {}),
+            AND: [tenantBranchWhere, { drugId: { in: drugIds } }, ...(branchId ? [{ branchId }] : [])],
         };
 
         const inventories = await prisma.inventory.findMany({

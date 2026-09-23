@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { validateSyncUser, isBranchInSyncScope } from '@/app/lib/sync-auth';
+import { validateSyncUser, isBranchInSyncScope, hasSyncPermission } from '@/app/lib/sync-auth';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
 
 type AckStatus = 'processed' | 'already_deleted' | 'noop';
@@ -54,6 +54,12 @@ export async function POST(req: Request) {
                 message: 'Inventory already deleted',
                 ack: makeAck('already_deleted', idempotencyKey),
             });
+        }
+        if (!hasSyncPermission(syncUser, 'canDeleteDrug')) {
+            return NextResponse.json(
+                { success: false, message: 'ليس لديك صلاحية لحذف الأدوية من المخزون.', ack: makeAck('noop', idempotencyKey) },
+                { status: 403 }
+            );
         }
         if (!(await isBranchInSyncScope(syncUser, target.branchId))) {
             return NextResponse.json(

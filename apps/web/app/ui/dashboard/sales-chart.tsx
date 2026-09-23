@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartChange } from '@/app/lib/chart-change';
 
 interface SalesData {
     day: string;
@@ -29,8 +30,8 @@ export default function SalesChart({ data, title = "المبيعات اليوم�
 
     const total = data.reduce((acc: any, d: any) => acc + d.amount, 0);
     const trend = data.length > 1
-        ? ((data[data.length - 1].amount - data[0].amount) / (data[0].amount || 1)) * 100
-        : 0;
+        ? chartChange(data[0].amount, data[data.length - 1].amount)
+        : null;
 
     return (
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm h-[400px] flex flex-col">
@@ -41,10 +42,10 @@ export default function SalesChart({ data, title = "المبيعات اليوم�
                 </div>
                 <div className="text-left">
                     <div className="text-2xl font-bold text-foreground tabular-nums">{total.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                    <div className={`flex items-center gap-1 text-sm ${trend >= 0 ? "text-success" : "text-destructive"}`}>
+                    {trend === null ? <p className="text-xs text-muted-foreground">لا تتوفر نسبة مقارنة مع أول يوم</p> : <div className={`flex items-center gap-1 text-sm ${trend >= 0 ? "text-success" : "text-destructive"}`}>
                         {trend >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                        {Math.abs(trend).toFixed(1)}%
-                    </div>
+                        {Math.abs(trend).toFixed(1)}% <span className="text-xs text-muted-foreground">مقارنة بأول يوم</span>
+                    </div>}
                 </div>
             </div>
 

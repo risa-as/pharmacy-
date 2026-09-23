@@ -1,6 +1,6 @@
 import { Tabs, router } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon as Ionicons } from '../../components/ui/AppIcon';
 import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
@@ -10,6 +10,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSyncStatus } from '../../context/SyncContext';
 import { Colors, Radius } from '../../constants/colors';
+import { routePermission } from '../../utils/route-access';
 import type { AppShell } from '../../utils/roles';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -24,7 +25,7 @@ const TAB: Record<string, TabDef> = {
     alerts:    { route: 'alerts',    label: 'التنبيهات',  icon: 'notifications-outline', iconActive: 'notifications' },
     more:      { route: 'more',      label: 'المزيد',     icon: 'menu-outline',          iconActive: 'menu' },
     sales:     { route: 'sales',     label: 'نقطة البيع', icon: 'cart-outline',          iconActive: 'cart' },
-    debts:     { route: 'debts',     label: 'الديون',     icon: 'wallet-outline',        iconActive: 'wallet' },
+    debts:     { route: 'debts',     label: 'الديون',     icon: 'hand-coins',            iconActive: 'hand-coins' },
 };
 
 /** Order is right-to-left on screen. */
@@ -154,6 +155,7 @@ function CountBadge({ count, color }: { count: number; color: string }) {
 
 // ── Bottom bar — fixed per shell, colour marks the active owner tab ─────────────
 function ShellTabBar({ state, navigation, shell, alertsCount }: BottomTabBarProps & { shell: AppShell; alertsCount: number }) {
+    const {can} = useAuth();
     const { isDarkMode } = useTheme();
     const C = Colors(isDarkMode);
     const insets = useSafeAreaInsets();
@@ -167,7 +169,7 @@ function ShellTabBar({ state, navigation, shell, alertsCount }: BottomTabBarProp
             borderTopWidth: 1, borderTopColor: C.border,
             paddingTop: 8, paddingBottom: insets.bottom + 8,
         }}>
-            {SHELL_TABS[shell].map(tab => {
+            {SHELL_TABS[shell].filter(tab => { const permission=routePermission('/'+tab.route);return !permission||can(permission);}).map(tab => {
                 const active = tab.route === activeKey;
                 const color = active ? C.primary : C.mutedForeground;
                 // Pharmacist alerts live under «المزيد» — its badge moves there too.

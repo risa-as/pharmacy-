@@ -1,6 +1,6 @@
 {
     "name": "desktop",
-    "version": "1.0.13",
+    "version": "1.0.14",
     "description": "Faramace POS — نظام إدارة الصيدليات",
     "author": "Faramace",
     "main": "dist-electron/main.js",

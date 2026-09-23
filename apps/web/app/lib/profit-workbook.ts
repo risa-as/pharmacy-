@@ -12,6 +12,7 @@ export type WbSaleItem = {
 };
 export type WbSale = {
   id: string;
+  documentNumber?: string;
   invoiceNumber: number | null;
   createdAt: Date | string;
   total: number;
@@ -21,6 +22,7 @@ export type WbSale = {
 };
 export type WbReturn = {
   id: string;
+  documentNumber?: string;
   returnNumber: string | null;
   createdAt: Date | string;
   total: number;
@@ -87,7 +89,7 @@ export async function buildProfitWorkbook(opts: {
   let totalDiscount = 0;
 
   for (const sale of sales) {
-    const inv = sale.invoiceNumber ?? sale.id.slice(0, 8);
+    const inv = sale.invoiceNumber ?? sale.documentNumber ?? "—";
     let saleLineRevenue = 0;
     let saleCOGS = 0;
     for (const it of sale.items) {
@@ -148,7 +150,7 @@ export async function buildProfitWorkbook(opts: {
       const lineCost = unitCost * it.quantity;
       const name = it.drug?.tradeName ?? "(غير معروف)";
       returnRows.push({
-        "رقم الإرجاع": ret.returnNumber ?? ret.id.slice(0, 8),
+        "رقم الإرجاع": ret.documentNumber ?? ret.returnNumber ?? "—",
         "رقم الفاتورة الأصلية": ret.sale?.invoiceNumber ?? "",
         التاريخ: fmtDate(ret.createdAt),
         الفرع: bn(ret.branchId),

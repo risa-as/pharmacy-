@@ -1,3 +1,4 @@
+import SyncOverview, {refreshSyncViews} from "./SyncOverview";
 import { useState, useEffect } from "react";
 import { AlertTriangle, Trash2, RefreshCcw, Edit2, Check, AlertCircle, Copy } from "lucide-react";
 
@@ -13,6 +14,7 @@ interface SyncFailure {
 export default function SyncFailuresTab() {
     const [failures, setFailures] = useState<SyncFailure[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadError,setLoadError] = useState("");
     const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [editingPayload, setEditingPayload] = useState<SyncFailure | null>(null);
     const [editValue, setEditValue] = useState("");
@@ -23,8 +25,9 @@ export default function SyncFailuresTab() {
         try {
             const list = await window.ipcRenderer.invoke('get-sync-failures');
             setFailures(list);
+            setLoadError("");
         } catch (e) {
-            console.error("Failed to fetch sync failures:", e);
+            setLoadError("تعذر تحميل العمليات المتعثرة؛ أعد المحاولة.");
         } finally {
             setLoading(false);
         }
@@ -58,6 +61,7 @@ export default function SyncFailuresTab() {
             if (ok) {
                 showToast("تم الحذف والتجاهل بنجاح");
                 setFailures(f => f.filter(x => x.id !== id));
+                refreshSyncViews();
             }
         } catch (e) {
             showToast("فشل الحذف", "error");
@@ -78,6 +82,7 @@ export default function SyncFailuresTab() {
                 showToast("تم إرسال البيانات بنجاح!");
                 setEditingPayload(null);
                 setFailures(f => f.filter(x => x.id !== failure.id));
+                refreshSyncViews();
             } else {
                 showToast("فشلت المحاولة مجدداً. راجع الخطأ.", "error");
                 fetchFailures(); // To get the updated error
@@ -90,8 +95,10 @@ export default function SyncFailuresTab() {
     };
 
     return (
-        <div dir="rtl" className="flex flex-col h-full overflow-hidden bg-white/50 relative">
+        <div dir="rtl" className="flex flex-col h-full overflow-y-auto bg-background relative">
 
+            <div className="p-4"><SyncOverview /></div>
+            {loadError&&<p role="alert" className="mx-4 text-destructive">{loadError}</p>}
             {/* Toolbar */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-white sticky top-0 z-10">
                 <div className="flex items-center gap-3">
@@ -99,8 +106,8 @@ export default function SyncFailuresTab() {
                         <AlertTriangle className="w-5 h-5 text-red-500" />
                     </div>
                     <div>
-                        <h2 className="text-gray-900 font-black text-sm">أخطاء المزامنة المعلقة ({failures.length})</h2>
-                        <p className="text-xs text-gray-400">العمليات التي فشل رفعها للسيرفر بسبب بيانات خاطئة.</p>
+                        <h2 className="text-gray-900 font-black text-sm">عمليات تحتاج مراجعة ({failures.length})</h2>
+                        <p className="text-xs text-gray-400">راجع سبب التعثر قبل إعادة المحاولة.</p>
                     </div>
                 </div>
 
@@ -117,13 +124,7 @@ export default function SyncFailuresTab() {
             {/* List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {failures.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-70">
-                        <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mb-4">
-                            <Check className="w-10 h-10 text-green-500" />
-                        </div>
-                        <h3 className="text-gray-700 font-bold mb-1">لا توجد أخطاء حالياً!</h3>
-                        <p className="text-sm text-gray-500">تم مزامنة جميع البيانات بنجاح.</p>
-                    </div>
+                    <p className="text-sm text-muted-foreground">{loading ? "جارٍ تحميل التفاصيل…" : loadError ? "لم يتسنّ التحقق من السجل." : "لا توجد عمليات في سجل التعثر."}</p>
                 ) : (
                     failures.map(failure => (
                         <div key={failure.id} className="bg-white rounded-xl border border-red-100 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md">
@@ -131,7 +132,7 @@ export default function SyncFailuresTab() {
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-100 text-red-700 uppercase tracking-widest border border-red-200">
-                                            {failure.entityType}
+                                            {({SALE:'فاتورة بيع',SALE_RETURN:'مرتجع بيع',DEBT_PAYMENT:'تحصيل دين','ADD-INVENTORY':'إضافة مخزون','ADD-BATCH':'إضافة دفعة','UPDATE-INVENTORY':'تحديث مخزون'} as Record<string,string>)[failure.entityType] || failure.entityType}
                                         </span>
                                         <span className="text-xs text-gray-400 font-medium">
                                             {new Date(failure.createdAt).toLocaleString('ar-IQ-u-nu-latn')}

@@ -10,6 +10,7 @@ export async function GET(req: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewPatients) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
         const { tenantBranchWhere } = tenantCtx;
 
         const { searchParams } = new URL(req.url);
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canEditPatient) return NextResponse.json({ error: 'ليس لديك صلاحية تعديل المرضى.' }, { status: 403 });
         const { user } = tenantCtx;
 
         if (!user || (!user.branchId && user.role !== 'SUPER_ADMIN')) {

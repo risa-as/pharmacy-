@@ -1,47 +1,32 @@
+import { returnedCost } from '@/app/lib/profit-math';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
+import { baghdadDate, dateStart, DAY } from '@/app/lib/smart-purchasing';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { guardFeature } from '@/app/lib/api-guards';
 
 export async function GET(req: Request) {
     try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        const { searchParams } = new URL(req.url);
-        const branchId = searchParams.get('branchId') || session.user.branchId;
-        const period = searchParams.get('period') || 'daily'; // daily, weekly, monthly, custom
-        const from = searchParams.get('from');
-        const to = searchParams.get('to');
-
-        // Calculate date range
-        const now = new Date();
-        let startDate: Date;
-        let endDate: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-        if (period === 'custom' && from && to) {
-            startDate = new Date(from);
-            endDate = new Date(to);
-            endDate.setHours(23, 59, 59, 999);
-        } else if (period === 'monthly') {
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        } else if (period === 'weekly') {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 7);
-            startDate.setHours(0, 0, 0, 0);
-        } else {
-            // daily
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        }
-
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewProfitReport) return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
         const { tenantBranchWhere, organizationId } = tenantCtx;
+        const { searchParams } = new URL(req.url);
+        const branchId = searchParams.get('branchId') || tenantCtx.user.branchId;
+        const period = searchParams.get('period') || 'daily';
+        const today = baghdadDate();
+        let startDate = dateStart(today);
+        let endDate = new Date(startDate.getTime() + DAY - 1);
+        try {
+            if (period === 'custom') {
+                startDate = dateStart(searchParams.get('from') || '');
+                endDate = new Date(dateStart(searchParams.get('to') || '').getTime() + DAY - 1);
+            } else if (period === 'monthly') startDate = dateStart(today.slice(0, 7) + '-01');
+            else if (period === 'weekly') startDate = new Date(startDate.getTime() - 6 * DAY);
+            if (startDate > endDate) throw new Error('date range');
+        } catch { return NextResponse.json({ error: 'الفترة المحددة غير صالحة.' }, { status: 400 }); }
 
         // Feature gate: advancedReports (Pro+)
         if (organizationId) {
@@ -49,7 +34,7 @@ export async function GET(req: Request) {
             if (denied) return denied;
         }
 
-        const branchFilter = branchId ? { branchId, ...tenantBranchWhere } : { ...tenantBranchWhere };
+        const branchFilter = branchId ? { AND: [tenantBranchWhere, { branchId }] } : tenantBranchWhere;
 
         // 1. Total Sales Revenue
         const salesAgg = await prisma.sale.aggregate({
@@ -110,8 +95,11 @@ export async function GET(req: Request) {
         const totalReturns = returnsAgg._sum.total || 0;
         const totalSupplierPayments = supplierPaymentsAgg._sum.amount || 0;
 
+        const returnedLines = await prisma.saleReturn.findMany({ where: { ...branchFilter, createdAt: { gte: startDate, lte: endDate } },
+            select: { createdAt: true, items: { select: { drugId: true, quantity: true } }, sale: { select: { items: { select: { drugId: true, quantity: true, cost: true } } } } } });
+        const costReversal = returnedLines.reduce((sum, r) => sum + returnedCost(r.items, r.sale.items), 0);
         const grossProfit = totalRevenue - totalCOGS;
-        const netProfit = grossProfit - totalExpenses - totalReturns;
+        const netProfit = grossProfit - totalExpenses - totalReturns + costReversal;
         const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0;
 
 
@@ -134,7 +122,7 @@ export async function GET(req: Request) {
         const dailyData: Record<string, { revenue: number; cogs: number; expenses: number; returns: number }> = {};
 
         for (const sale of sales) {
-            const dateKey = sale.createdAt.toISOString().split('T')[0];
+            const dateKey = baghdadDate(sale.createdAt);
             if (!dailyData[dateKey]) {
                 dailyData[dateKey] = { revenue: 0, cogs: 0, expenses: 0, returns: 0 };
             }
@@ -152,7 +140,7 @@ export async function GET(req: Request) {
         });
 
         for (const exp of expenses) {
-            const dateKey = exp.date.toISOString().split('T')[0];
+            const dateKey = baghdadDate(exp.date);
             if (!dailyData[dateKey]) {
                 dailyData[dateKey] = { revenue: 0, cogs: 0, expenses: 0, returns: 0 };
             }
@@ -169,13 +157,17 @@ export async function GET(req: Request) {
         });
 
         for (const ret of returns) {
-            const dateKey = ret.createdAt.toISOString().split('T')[0];
+            const dateKey = baghdadDate(ret.createdAt);
             if (!dailyData[dateKey]) {
                 dailyData[dateKey] = { revenue: 0, cogs: 0, expenses: 0, returns: 0 };
             }
             dailyData[dateKey].returns += ret.total;
         }
 
+        for (const ret of returnedLines) {
+            const key = baghdadDate(ret.createdAt);
+            if (dailyData[key]) dailyData[key].cogs -= returnedCost(ret.items, ret.sale.items);
+        }
         const chart = Object.entries(dailyData)
             .sort(([a]: any[], [b]: any[]) => a.localeCompare(b))
             .map(([date, data]: any) => ({

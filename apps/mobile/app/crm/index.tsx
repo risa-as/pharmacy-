@@ -86,7 +86,7 @@ export default function PatientsListScreen() {
                         </TouchableOpacity>
                     )}
                 </View>
-                <AppButton label="إضافة مريض" icon="add" onPress={() => router.push('/crm/add' as Href)} style={{ paddingVertical: 11 }} />
+                <AppButton permission="canEditPatient" label="إضافة مريض" icon="add" onPress={() => router.push('/crm/add' as Href)} style={{ paddingVertical: 11 }} />
             </View>
 
             {loading ? (

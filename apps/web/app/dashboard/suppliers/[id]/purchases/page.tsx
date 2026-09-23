@@ -116,7 +116,7 @@ export default async function SupplierPurchasesPage(
                 </td>
                 <td className="px-6 py-4">
                   <span className="font-mono text-sm font-bold text-foreground">
-                    {p.invoiceNumber || `#${p.id.slice(0, 8).toUpperCase()}`}
+                    {p.invoiceNumber || `#${p.documentNumber}`}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">

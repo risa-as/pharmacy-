@@ -1,9 +1,13 @@
+import { AppState } from 'react-native';
+import { request } from '../services/api';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authService, MobileSessionLimitError, SessionInvalidError, User } from '../services/auth';
 import { registerSessionExpiredHandler } from '../services/api';
 import { AppShell, canSwitchBranch, getShell } from '../utils/roles';
 
 interface AuthContextType {
+    can: (permission: string) => boolean;
+    features: Record<string, boolean>;
     user: User | null;
     role: string | null;
     /** ADMIN / MANAGER — may switch branches. */
@@ -18,6 +22,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({
+    can: () => false,
+    features: {},
     user: null,
     role: null,
     isAdmin: false,
@@ -34,6 +40,12 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [permissions, setPermissions] = useState<Record<string,boolean>>({});
+    const [features, setFeatures] = useState<Record<string,boolean>>({});
+    const loadAccess = useCallback(async () => {
+        try { const access = await request<{permissions:Record<string,boolean>;features:Record<string,boolean>}>('/mobile/access'); setPermissions(access.permissions); setFeatures(access.features); }
+        catch { setPermissions({}); setFeatures({}); }
+    }, []);
 
     const refreshUser = useCallback(async () => {
         try {
@@ -71,6 +83,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
             }
 
+            if (currentUser) await loadAccess(); else { setPermissions({}); setFeatures({}); }
             setUser(currentUser);
         } catch (error) {
             console.error('AuthContext: failed to load user', error);
@@ -78,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [loadAccess]);
 
     useEffect(() => {
         refreshUser();
@@ -90,10 +103,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // user's role (e.g. admin) until AuthContext is remounted.
     useEffect(() => {
         registerSessionExpiredHandler(() => {
-            setUser(null);
+            setUser(null); setPermissions({}); setFeatures({});
         });
     }, []);
 
+    useEffect(() => {
+        if (!user) return;
+        const listener = AppState.addEventListener('change', state => { if (state === 'active') void loadAccess(); });
+        const timer = setInterval(() => { if (AppState.currentState === 'active') void loadAccess(); }, 60000);
+        return () => { listener.remove(); clearInterval(timer); };
+    }, [user?.id, loadAccess]);
     const role = user?.role ?? null;
     const roleUpper = role?.toUpperCase() ?? null;
     const isAdmin = canSwitchBranch(role);
@@ -103,7 +122,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const branchId = user?.branchId ?? null;
 
     return (
-        <AuthContext.Provider value={{ user, role, isAdmin, isPharmacist, shell, isPharmacistShell, branchId, isLoading, refreshUser }}>
+        <AuthContext.Provider value={{ can: permission => permissions[permission] === true, features, user, role, isAdmin, isPharmacist, shell, isPharmacistShell, branchId, isLoading, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );

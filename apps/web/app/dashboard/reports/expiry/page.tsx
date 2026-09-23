@@ -51,10 +51,7 @@ export default async function ExpiryReportPage(
   const batches = await prisma.batch.findMany({
     where: {
       quantity: { gt: 0 },
-      inventory: {
-        ...tenantBranchWhere,
-        ...(branchId ? { branchId } : {}),
-      },
+      inventory: { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] },
     },
     include: {
       inventory: {

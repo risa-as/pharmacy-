@@ -33,7 +33,7 @@ const OPEN_STATUSES = ['UNPAID', 'PARTIAL'] as const;
  * يقبل `prisma` أو عميل معاملة (tx) — فحص حدّ الائتمان يجري داخل معاملة، ويجب
  * أن يقرأ نفس لقطة البيانات التي ستُكتب فيها الفاتورة.
  */
-export type ReceivableDb = Pick<typeof prisma, 'warehouseInvoice' | 'warehouseFieldSale'>;
+export type ReceivableDb = Pick<typeof prisma, 'warehouseInvoice' | 'warehouseFieldSale' | 'warehouseCustomer'>;
 
 /**
  * كل ما هو مستحق لهذا المذخر من الدفترين، بشكل تستهلكه summarizeReceivables.
@@ -52,7 +52,7 @@ export async function loadOpenReceivables(
 ): Promise<ReceivableInvoiceInput[]> {
     const orgFilter = organizationId ? { organizationId } : {};
 
-    const [invoices, fieldSales] = await Promise.all([
+    const [invoices, fieldSales, customers] = await Promise.all([
         db.warehouseInvoice.findMany({
             where: { warehouseId, status: { in: [...OPEN_STATUSES] }, ...orgFilter },
             select: { total: true, paidAmount: true, status: true, dueAt: true },
@@ -61,11 +61,16 @@ export async function loadOpenReceivables(
             where: { warehouseId, status: { in: [...OPEN_STATUSES] }, ...orgFilter },
             select: { total: true, paidAmount: true, status: true },
         }),
+        db.warehouseCustomer.findMany({
+            where: { warehouseId, ...orgFilter, openingBalance: { gt: 0 } },
+            select: { openingBalance: true },
+        }),
     ]);
 
     return [
         ...invoices,
         ...fieldSales.map((s) => ({ ...s, dueAt: null })),
+        ...customers.map((c) => ({ total: c.openingBalance, paidAmount: 0, status: 'UNPAID', dueAt: null })),
     ];
 }
 

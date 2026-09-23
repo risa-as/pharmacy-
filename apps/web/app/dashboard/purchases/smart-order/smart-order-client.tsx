@@ -1,356 +1,882 @@
-'use client';
+"use client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  Sparkles,
+  RefreshCw,
+  Search,
+  ArrowLeft,
+  Download,
+  Package,
+  ChevronDown,
+  Calculator,
+} from "lucide-react";
+import SuggestionDetails from "./suggestion-details";
+import { getSmartPurchasingData } from "@/app/lib/actions/purchase-actions";
+import {
+  baghdadDate,
+  DAY,
+  dateStart,
+  planRow,
+  type PlanningOptions,
+} from "@/app/lib/smart-purchasing";
 
-import { useEffect, useMemo, useState } from 'react';
-import { getLowStockInventory, createSmartPurchase, getSuppliers } from '@/app/lib/actions/purchase-actions';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toast } from 'sonner';
-import { Loader2, Store, AlertTriangle, ListChecks, Wallet, TrendingUp, Sparkles, CheckCircle2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-// المرحلة 4 من ميزة المذاخر: تحويل اقتراحات الطلب الذكي إلى طلب مذخر على المنصة.
-import WarehouseOrderFromSmart from './WarehouseOrderFromSmart';
-
-interface Props {
-    branchId: string;
-    isAdmin: boolean;
-    branches: { id: string; name: string }[];
-}
-
-const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
-
-export default function SmartOrderClient({ branchId: initialBranchId, isAdmin, branches }: Props) {
-    const router = useRouter();
-    const [loading, setLoading] = useState(true);
-    const [items, setItems] = useState<any[]>([]);
-    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-    const [quantities, setQuantities] = useState<Record<string, number>>({});
-    const [suppliers, setSuppliers] = useState<any[]>([]);
-    const [selectedSupplier, setSelectedSupplier] = useState<string>('');
-    const [submitting, setSubmitting] = useState(false);
-    const [currentBranchId, setCurrentBranchId] = useState<string>(initialBranchId);
-    const [warehouseDialogOpen, setWarehouseDialogOpen] = useState(false);
-
-    const isAllBranches = currentBranchId === 'ALL';
-
-    useEffect(() => {
-        loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentBranchId]);
-
-    async function loadData() {
-        setLoading(true);
-        try {
-            const targetBranch = currentBranchId === 'ALL' ? undefined : currentBranchId;
-            const [inventoryData, suppliersData] = await Promise.all([
-                getLowStockInventory(targetBranch),
-                getSuppliers(),
-            ]);
-            setItems(inventoryData);
-            setSuppliers(suppliersData);
-            // Seed editable quantities from the smart suggestion, and reset selection.
-            const q: Record<string, number> = {};
-            for (const it of inventoryData as any[]) q[it.inventoryId] = it.suggestedQty;
-            setQuantities(q);
-            setSelectedItems(new Set());
-        } catch (e) {
-            console.error(e);
-            toast.error('فشل في تحميل البيانات');
-        } finally {
-            setLoading(false);
-        }
+type Data = Awaited<ReturnType<typeof getSmartPurchasingData>>;
+type Row = ReturnType<typeof planRow>;
+type Filter =
+  | "action"
+  | "out"
+  | "urgent"
+  | "insufficient"
+  | "low"
+  | "pending"
+  | "review"
+  | "all";
+const filters: [Filter, string][] = [
+  ["action", "يحتاج إجراء"],
+  ["out", "نافد"],
+  ["urgent", "قبل وصول التوريد"],
+  ["insufficient", "لا يغطي المدة"],
+  ["low", "أقل من الحد الأدنى"],
+  ["pending", "قيد الطلب"],
+  ["review", "يحتاج مراجعة"],
+  ["all", "الكل"],
+];
+const fmt = (n: number) =>
+  n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+const matches = (r: Row, f: Filter) =>
+  f === "all" ||
+  (f === "pending"
+    ? r.incoming.length > 0
+    : f === "review"
+      ? r.noDemand || r.qualityReasons.length > 0
+      : f === "urgent"
+        ? r.urgentUnits > 0
+        : r[f]);
+const field = "rounded-lg border border-border bg-background px-3 py-2 text-sm";
+const button =
+  "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50";
+export default function SmartOrderClient({
+  branchId: initialBranchId,
+  branches,
+  userId,
+  organizationId,
+  canCreate,
+  canWarehouse,
+  canExport,
+}: {
+  branchId: string;
+  branches: { id: string; name: string }[];
+  userId: string;
+  organizationId: string;
+  canCreate: boolean;
+  canWarehouse: boolean;
+  canExport: boolean;
+}) {
+  const router = useRouter();
+  const [branchId, setBranchId] = useState(initialBranchId);
+  const [preset, setPreset] = useState("30");
+  const [from, setFrom] = useState(
+    baghdadDate(new Date(dateStart(baghdadDate()).getTime() - 30 * DAY)),
+  );
+  const [to, setTo] = useState(
+    baghdadDate(new Date(dateStart(baghdadDate()).getTime() - DAY)),
+  );
+  const [options, setOptions] = useState<PlanningOptions>({
+    coverageDays: 15,
+    leadDays: 0,
+    safetyDays: 0,
+    fromArrival: false,
+  });
+  const [data, setData] = useState<Data | null>(null),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState("");
+  const [filter, setFilter] = useState<Filter>("action"),
+    [query, setQuery] = useState(""),
+    [page, setPage] = useState(1);
+  const [draft, setDraft] = useState<Record<string, number>>({}),
+    [draftReady, setDraftReady] = useState(""),
+    [expanded, setExpanded] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const version = useRef(0);
+  const key = `smart-purchasing:v1:${userId}:${organizationId}:${branchId}`;
+  useEffect(() => {
+    setDraftReady("");
+    setDraft({});
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved && typeof saved === "object")
+          setDraft(
+            Object.fromEntries(
+              Object.entries(saved).filter(
+                ([, q]) =>
+                  Number.isSafeInteger(q) &&
+                  Number(q) >= 0 &&
+                  Number(q) <= 1000000,
+              ),
+            ) as Record<string, number>,
+          );
+      }
+    } catch {
+      toast.error("تعذر استعادة مسودة الشراء");
     }
-
-    const getQty = (id: string) => quantities[id] ?? 0;
-    const setQty = (id: string, value: number) =>
-        setQuantities((prev) => ({ ...prev, [id]: Math.max(0, value) }));
-
-    const toggleSelection = (id: string) => {
-        setSelectedItems((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id); else next.add(id);
-            return next;
-        });
+    setDraftReady(key);
+  }, [key]);
+  useEffect(() => {
+    if (draftReady === key)
+      try {
+        localStorage.setItem(key, JSON.stringify(draft));
+      } catch {
+        toast.error("تعذر حفظ المسودة على هذا المتصفح");
+      }
+  }, [draft, key, draftReady]);
+  useEffect(() => {
+    const request = ++version.current;
+    setLoading(true);
+    setError("");
+    setData(null);
+    if (!branchId) {
+      setLoading(false);
+      return;
+    }
+    getSmartPurchasingData(branchId, from, to)
+      .then((d) => {
+        if (request === version.current) setData(d);
+      })
+      .catch((e) => {
+        if (request === version.current)
+          setError(e instanceof Error ? e.message : "تعذر تحميل التحليل");
+      })
+      .finally(() => {
+        if (request === version.current) setLoading(false);
+      });
+    return () => {
+      version.current++;
     };
-
-    // Live grand total of the selected order — recomputes on quantity/selection change.
-    const { selectedCount, grandTotal } = useMemo(() => {
-        let total = 0;
-        for (const it of items) {
-            if (selectedItems.has(it.inventoryId)) total += getQty(it.inventoryId) * (it.cost || 0);
-        }
-        return { selectedCount: selectedItems.size, grandTotal: total };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [items, selectedItems, quantities]);
-
-    const allVisibleSelected = items.length > 0 && selectedItems.size === items.length;
-
-    const handleCreateOrder = async () => {
-        if (isAllBranches) { toast.error('يرجى تحديد فرع معين لإنشاء الطلب'); return; }
-        if (!selectedSupplier) { toast.error('يرجى اختيار المورد'); return; }
-
-        const orderItems = items
-            .filter((item: any) => selectedItems.has(item.inventoryId))
-            .map((item: any) => ({ drugId: item.drugId, quantity: getQty(item.inventoryId), cost: item.cost }))
-            .filter((i) => i.quantity > 0);
-
-        if (orderItems.length === 0) { toast.error('يرجى اختيار عناصر بكميات صحيحة للطلب'); return; }
-
-        setSubmitting(true);
-        try {
-            const result = await createSmartPurchase(currentBranchId, selectedSupplier, orderItems);
-            if (result.success) {
-                toast.success('تم إنشاء طلب الشراء بنجاح');
-                router.push('/dashboard/purchases');
-            } else {
-                toast.error(result.error || 'حدث خطأ أثناء الإنشاء');
-            }
-        } catch {
-            toast.error('حدث خطأ غير متوقع');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    // المرحلة 4: البنود المختارة بصيغة طلب مذخر (باركود + كمية) للمربع الجانبي.
-    const warehouseItems = items
-        .filter((item: any) => selectedItems.has(item.inventoryId))
-        .map((item: any) => ({
-            barcode: item.barcode as string | undefined,
-            tradeName: item.tradeName as string,
-            quantity: getQty(item.inventoryId),
-        }))
-        .filter((i) => i.quantity > 0 && !!i.barcode);
-
-    const colCount = isAllBranches ? 8 : 7;
-
-    return (
-        <div className="space-y-5" dir="rtl">
-            {/* Header */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <Sparkles className="h-6 w-6 text-primary" />
-                        الطلب الذكي
-                    </h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        كميات مقترحة تلقائياً بناءً على متوسط المبيعات اليومية × (مدة التوريد + مخزون الأمان).
-                    </p>
-                </div>
-
-                <div className="flex flex-wrap gap-3 items-end">
-                    {isAdmin && (
-                        <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-muted-foreground">الفرع</label>
-                            <Select onValueChange={setCurrentBranchId} value={currentBranchId}>
-                                <SelectTrigger className="w-[190px] h-10 bg-card">
-                                    <div className="flex items-center gap-2">
-                                        <Store className="w-4 h-4 text-muted-foreground" />
-                                        <SelectValue placeholder="اختر الفرع" />
-                                    </div>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ALL">كل الفروع</SelectItem>
-                                    {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-                    <div className="flex flex-col gap-1">
-                        <label className="text-xs font-medium text-muted-foreground">المورد</label>
-                        <Select onValueChange={setSelectedSupplier} value={selectedSupplier}>
-                            <SelectTrigger className="w-[190px] h-10 bg-card">
-                                <SelectValue placeholder="اختر المورد" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {suppliers.length === 0 ? (
-                                    <div className="px-3 py-2 text-xs text-muted-foreground">لا يوجد موردون</div>
-                                ) : suppliers.map((s) => (
-                                    <SelectItem key={s.id} value={s.id}>{s.name || 'مورد بدون اسم'}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-            </div>
-
-            {/* Summary cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/10 text-warning"><AlertTriangle className="h-5 w-5" /></div>
-                    <div>
-                        <div className="text-lg font-bold leading-none font-mono">{items.length}</div>
-                        <div className="text-xs text-muted-foreground mt-1">مواد بحاجة لإعادة طلب</div>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><ListChecks className="h-5 w-5" /></div>
-                    <div>
-                        <div className="text-lg font-bold leading-none font-mono">{selectedCount}</div>
-                        <div className="text-xs text-muted-foreground mt-1">عناصر محددة</div>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500"><Wallet className="h-5 w-5" /></div>
-                    <div>
-                        <div className="text-lg font-bold leading-none font-mono">{fmt(grandTotal)} <span className="text-xs font-normal text-muted-foreground">د.ع</span></div>
-                        <div className="text-xs text-muted-foreground mt-1">إجمالي الطلب المقدّر</div>
-                    </div>
-                </div>
-            </div>
-
-            {isAllBranches && (
-                <div className="flex items-center gap-2 bg-warning/10 text-warning p-3 rounded-lg text-sm border border-warning/30">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    أنت تشاهد نواقص جميع الفروع. لإنشاء طلب شراء، اختر فرعاً معيناً من القائمة.
-                </div>
-            )}
-
-            {/* Table */}
-            <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
-                <Table>
-                    <TableHeader className="bg-muted">
-                        <TableRow>
-                            <TableHead className="w-[44px] text-right">
-                                <input
-                                    type="checkbox"
-                                    className="rounded border-border text-primary focus:ring-primary/40"
-                                    disabled={isAllBranches || items.length === 0}
-                                    checked={allVisibleSelected}
-                                    onChange={(e) => {
-                                        if (e.target.checked) setSelectedItems(new Set(items.map((i: any) => i.inventoryId)));
-                                        else setSelectedItems(new Set());
-                                    }}
-                                />
-                            </TableHead>
-                            <TableHead className="text-right font-bold text-foreground">الدواء</TableHead>
-                            {isAllBranches && <TableHead className="text-right font-bold text-foreground">الفرع</TableHead>}
-                            <TableHead className="text-right font-bold text-foreground">الرصيد</TableHead>
-                            <TableHead className="text-right font-bold text-foreground">الحد الأدنى</TableHead>
-                            <TableHead className="text-right font-bold text-foreground">مبيعات ٣٠ يوم</TableHead>
-                            <TableHead className="text-right font-bold text-foreground">الكمية المقترحة</TableHead>
-                            <TableHead className="text-right font-bold text-foreground">التكلفة التقديرية</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {loading ? (
-                            <TableRow>
-                                <TableCell colSpan={colCount} className="text-center py-14">
-                                    <div className="flex justify-center items-center gap-2 text-muted-foreground">
-                                        <Loader2 className="h-5 w-5 animate-spin" />
-                                        <span>جاري تحميل البيانات...</span>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ) : items.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={colCount} className="text-center py-14">
-                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                        <CheckCircle2 className="h-10 w-10 text-success/60" />
-                                        <span className="text-base font-medium text-foreground">المخزون في حالة جيدة</span>
-                                        <span className="text-sm">لا توجد مواد وصلت للحد الأدنى حالياً.</span>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            items.map((item: any) => {
-                                const qty = getQty(item.inventoryId);
-                                const selected = selectedItems.has(item.inventoryId);
-                                return (
-                                    <TableRow
-                                        key={item.inventoryId}
-                                        className={`transition-colors ${selected ? 'bg-primary/5' : 'hover:bg-muted/50'}`}
-                                    >
-                                        <TableCell>
-                                            <input
-                                                type="checkbox"
-                                                className="rounded border-border text-primary focus:ring-primary/40 disabled:opacity-50"
-                                                disabled={isAllBranches}
-                                                checked={selected}
-                                                onChange={() => toggleSelection(item.inventoryId)}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="font-bold text-foreground">{item.drugName}</div>
-                                            {item.barcode && <div className="text-xs text-muted-foreground font-mono" dir="ltr">{item.barcode}</div>}
-                                        </TableCell>
-                                        {isAllBranches && <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{item.branchName}</TableCell>}
-                                        <TableCell>
-                                            <span className="inline-flex items-center rounded-md bg-destructive/10 text-destructive font-bold px-2 py-0.5 font-mono">{item.currentStock}</span>
-                                        </TableCell>
-                                        <TableCell className="font-mono text-muted-foreground">{item.minStock}</TableCell>
-                                        <TableCell>
-                                            {item.totalSoldLast30Days > 0 ? (
-                                                <div className="flex items-center gap-1.5">
-                                                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                                                    <div>
-                                                        <div className="font-mono font-medium text-foreground">{item.totalSoldLast30Days}</div>
-                                                        <div className="text-[10px] text-muted-foreground">~{item.averageDailySales}/يوم</div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground">بدون مبيعات</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Input
-                                                type="number"
-                                                min={0}
-                                                disabled={isAllBranches}
-                                                value={qty}
-                                                className="w-24 h-9 font-bold text-center"
-                                                onChange={(e) => setQty(item.inventoryId, parseInt(e.target.value) || 0)}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="font-mono font-bold text-foreground whitespace-nowrap">
-                                            {fmt(qty * (item.cost || 0))} <span className="text-xs font-normal text-muted-foreground">د.ع</span>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })
-                        )}
-                    </TableBody>
-                </Table>
-
-                {/* Sticky action footer */}
-                {!loading && items.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-4 py-3">
-                        <div className="text-sm text-muted-foreground">
-                            المحدد: <span className="font-bold text-foreground">{selectedCount}</span>
-                            <span className="mx-2">·</span>
-                            الإجمالي المقدّر: <span className="font-bold text-foreground font-mono">{fmt(grandTotal)} د.ع</span>
-                        </div>
-                        <Button
-                            onClick={handleCreateOrder}
-                            disabled={submitting || selectedCount === 0 || !selectedSupplier || isAllBranches}
-                            className="h-10 px-6"
-                        >
-                            {submitting ? (
-                                <><Loader2 className="ml-2 h-4 w-4 animate-spin" /> جاري المعالجة...</>
-                            ) : (
-                                `إنشاء طلب شراء (${selectedCount})`
-                            )}
-                        </Button>
-                        {warehouseItems.length > 0 && (
-                            <Button
-                                onClick={() => setWarehouseDialogOpen(true)}
-                                disabled={isAllBranches}
-                                variant="outline"
-                                className="h-10 px-6"
-                            >
-                                إرسال لمذخر ({warehouseItems.length})
-                            </Button>
-                        )}
-                    </div>
-                )}
-            </div>
-            {warehouseDialogOpen && (
-                <WarehouseOrderFromSmart
-                    items={warehouseItems}
-                    onClose={() => setWarehouseDialogOpen(false)}
-                />
-            )}
-        </div>
+  }, [branchId, from, to, revision]);
+  const rows = useMemo(
+    () =>
+      data?.rows
+        .map((r) => planRow(r, options, data.today))
+        .sort(
+          (a, b) =>
+            Number(b.out) - Number(a.out) ||
+            b.urgentUnits - a.urgentUnits ||
+            (a.coverage ?? Infinity) - (b.coverage ?? Infinity),
+        ) || [],
+    [data, options],
+  );
+  const searched = useMemo(
+    () =>
+      rows.filter((r) =>
+        [r.drugName, r.scientificName, r.barcode].some((s) =>
+          s.toLowerCase().includes(query.toLowerCase()),
+        ),
+      ),
+    [rows, query],
+  );
+  const filtered = searched.filter((r) => matches(r, filter));
+  const pages = Math.max(1, Math.ceil(filtered.length / 30));
+  const visible = filtered.slice(
+    (Math.min(page, pages) - 1) * 30,
+    Math.min(page, pages) * 30,
+  );
+  useEffect(() => setPage(1), [filter, query, branchId, from, to]);
+  const selected = rows.filter((r) => draft[r.inventoryId] !== undefined);
+  const blocked = selected.filter(
+    (r) => !r.unitsPerPack || draft[r.inventoryId] <= 0,
+  );
+  const missing = Object.keys(draft).filter(
+    (id) => !rows.some((r) => r.inventoryId === id),
+  );
+  const quantity = (r: Row) => draft[r.inventoryId] ?? r.suggestedQty;
+  const actualQuantity = (r: Row) =>
+    r.unitsPerPack
+      ? Math.ceil(quantity(r) / r.unitsPerPack) * r.unitsPerPack
+      : quantity(r);
+  const total = selected.reduce(
+    (sum, r) => sum + actualQuantity(r) * (r.cost ?? 0),
+    0,
+  );
+  const toggle = (r: Row) =>
+    setDraft((prev) => {
+      const next = { ...prev };
+      if (next[r.inventoryId] !== undefined) delete next[r.inventoryId];
+      else next[r.inventoryId] = r.suggestedQty;
+      return next;
+    });
+  function period(value: string) {
+    setPreset(value);
+    if (value === "custom") return;
+    const end = dateStart(baghdadDate());
+    setFrom(baghdadDate(new Date(end.getTime() - Number(value) * DAY)));
+    setTo(baghdadDate(new Date(end.getTime() - DAY)));
+  }
+  function exportReport() {
+    if (!data || !canExport) return;
+    const records: unknown[][] = [
+      ["الشراء الذكي", branches.find((b) => b.id === branchId)?.name],
+      ["فترة التحليل", data.from, data.to],
+      [
+        "التغطية",
+        options.coverageDays,
+        options.fromArrival ? "من الوصول" : "من اليوم",
+      ],
+      ["التوريد", options.leadDays, "الأمان", options.safetyDays],
+      ["وقت التحليل", data.generatedAt],
+      ["تنبيه", data.notice],
+      [
+        "الدواء",
+        "الباركود",
+        "مبيعات الفترة",
+        "مرتجعات مرتبطة",
+        "أيام الرصد",
+        "المعدل اليومي",
+        "المتاح",
+        "القادم",
+        "اقتراح وحدات المخزون",
+        "اختيارك وحدات المخزون",
+        "باكيتات",
+        "التكلفة التقديرية",
+        "ملاحظات",
+      ],
+    ];
+    for (const r of selected.length ? selected : filtered)
+      records.push([
+        r.drugName,
+        r.barcode,
+        r.sold,
+        r.returned,
+        r.observedDays,
+        r.averageDailySales,
+        r.currentStock,
+        r.pending,
+        r.suggestedQty,
+        quantity(r),
+        r.unitsPerPack
+          ? Math.ceil(quantity(r) / r.unitsPerPack)
+          : "تعبئة غير مؤكدة",
+        r.cost === null ? "سعر غير متوفر" : actualQuantity(r) * r.cost,
+        r.qualityReasons.join("؛ "),
+      ]);
+    const csv =
+      "\uFEFF" +
+      records
+        .map((row) =>
+          row
+            .map((v) => {
+              let s = String(v ?? "");
+              if (/^[=+@\-\t\r]/.test(s)) s = "'" + s;
+              return '"' + s.replace(/"/g, '""') + '"';
+            })
+            .join(","),
+        )
+        .join("\r\n");
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8;" }),
     );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `smart-purchasing-${data.today}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function review() {
+    if (
+      !data ||
+      loading ||
+      blocked.length ||
+      missing.length ||
+      !selected.length ||
+      selected.length > 500 ||
+      !canCreate ||
+      !canWarehouse
+    )
+      return;
+    const handoff = {
+      version: 1,
+      branchId,
+      generatedAt: data.generatedAt,
+      lines: selected.map((r) => ({
+        drugId: r.drugId,
+        tradeName: r.drugName,
+        barcode: r.barcode,
+        scientificName: r.scientificName,
+        currentStock: r.currentStock,
+        quantity: Math.ceil(quantity(r) / r.unitsPerPack!),
+        unitsPerPack: r.unitsPerPack,
+      })),
+    };
+    try {
+      sessionStorage.setItem(
+        `smart-purchasing-handoff:${userId}:${organizationId}`,
+        JSON.stringify(handoff),
+      );
+      router.push("/dashboard/purchases/warehouse-orders/new");
+    } catch {
+      toast.error("تعذر حفظ مسودة الطلب");
+    }
+  }
+  return (
+    <div dir="rtl" className="min-w-0 space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <Sparkles className="text-primary" />
+            الشراء الذكي
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            حدد فترة البيع والتغطية المطلوبة، ثم راجع احتياجك قبل الشراء.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            className={button}
+            onClick={() => setRevision((r) => r + 1)}
+            disabled={loading}
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+            تحديث
+          </button>
+          <button
+            className={button}
+            onClick={exportReport}
+            disabled={!data || loading || !canExport}
+          >
+            <Download size={15} />
+            تصدير التقرير
+          </button>
+        </div>
+      </div>
+      <section className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2 xl:grid-cols-4">
+        <label className="space-y-2 text-xs font-semibold">
+          <span>الفرع</span>
+          <select
+            className={`${field} block w-full`}
+            value={branchId}
+            onChange={(e) => setBranchId(e.target.value)}
+          >
+            {!branchId && <option value="">اختر الفرع</option>}
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-2 text-xs font-semibold">
+          <span>فترة تحليل المبيعات</span>
+          <select
+            className={`${field} block w-full`}
+            value={preset}
+            onChange={(e) => period(e.target.value)}
+          >
+            <option value="7">آخر 7 أيام</option>
+            <option value="15">آخر 15 يوماً</option>
+            <option value="30">آخر 30 يوماً</option>
+            <option value="custom">فترة مخصصة</option>
+          </select>
+        </label>
+        <label className="space-y-2 text-xs font-semibold">
+          <span>أريد أن يكفيني المخزون (يوم)</span>
+          <input
+            className={`${field} block w-full`}
+            type="number"
+            min="1"
+            max="365"
+            value={options.coverageDays}
+            onChange={(e) =>
+              setOptions((o) => ({
+                ...o,
+                coverageDays: Math.max(
+                  1,
+                  Math.min(365, Math.trunc(Number(e.target.value) || 1)),
+                ),
+              }))
+            }
+          />
+        </label>
+        <label className="space-y-2 text-xs font-semibold">
+          <span>تبدأ التغطية</span>
+          <select
+            className={`${field} block w-full`}
+            value={String(options.fromArrival)}
+            onChange={(e) =>
+              setOptions((o) => ({
+                ...o,
+                fromArrival: e.target.value === "true",
+              }))
+            }
+          >
+            <option value="false">من اليوم</option>
+            <option value="true">من وصول الطلب</option>
+          </select>
+        </label>
+        {preset === "custom" && (
+          <>
+            <label className="text-xs">
+              من
+              <input
+                aria-label="بداية فترة التحليل"
+                className={`${field} mt-2 block w-full`}
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </label>
+            <label className="text-xs">
+              إلى
+              <input
+                aria-label="نهاية فترة التحليل"
+                className={`${field} mt-2 block w-full`}
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+        <label className="text-xs">
+          مدة وصول الطلب الجديد (يوم)
+          <input
+            className={`${field} mt-2 block w-full`}
+            type="number"
+            min="0"
+            max="180"
+            aria-describedby="lead-help"
+            value={options.leadDays}
+            onChange={(e) =>
+              setOptions((o) => ({
+                ...o,
+                leadDays: Math.max(
+                  0,
+                  Math.min(180, Math.trunc(Number(e.target.value) || 0)),
+                ),
+              }))
+            }
+          />
+          <span
+            id="lead-help"
+            className="mt-2 block text-xs leading-5 text-muted-foreground"
+          >
+            الوقت من إرسال الطلب حتى وصوله. يساعد على كشف النقص قبل الوصول؛ 0
+            يعني وصولاً اليوم.
+          </span>
+        </label>
+        <label className="text-xs">
+          مخزون أمان إضافي (يوم)
+          <input
+            className={`${field} mt-2 block w-full`}
+            type="number"
+            min="0"
+            max="90"
+            aria-describedby="safety-help"
+            value={options.safetyDays}
+            onChange={(e) =>
+              setOptions((o) => ({
+                ...o,
+                safetyDays: Math.max(
+                  0,
+                  Math.min(90, Math.trunc(Number(e.target.value) || 0)),
+                ),
+              }))
+            }
+          />
+          <span
+            id="safety-help"
+            className="mt-2 block text-xs leading-5 text-muted-foreground"
+          >
+            احتياطي فوق التغطية المطلوبة لمواجهة زيادة البيع أو تأخر التوريد؛ 0
+            يعني دون احتياطي.
+          </span>
+        </label>
+        <p className="self-end text-xs leading-6 text-muted-foreground sm:col-span-2">
+          التحليل:{" "}
+          <b dir="ltr">
+            {from} — {to}
+          </b>{" "}
+          (أيام مكتملة). الكميات بوحدة المخزون، وتحوّل إلى باكيتات عند مراجعة
+          الطلب. أدخل مدة الوصول المتوقعة؛ القيمة 0 تعني وصولًا اليوم.
+        </p>
+      </section>
+      {data && (
+        <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs leading-6 text-muted-foreground">
+          {data.notice} آخر تحديث:{" "}
+          {new Date(data.generatedAt).toLocaleString("ar-IQ-u-nu-latn")}
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {[
+          ["نافد", rows.filter((r) => r.out).length, "out"],
+          [
+            "لا يغطي المدة",
+            rows.filter((r) => r.insufficient).length,
+            "insufficient",
+          ],
+          [
+            "قيد الطلب",
+            rows.filter((r) => r.incoming.length > 0).length,
+            "pending",
+          ],
+          ["قيمة المختارات تقديرياً", `${fmt(total)} د.ع`, null],
+        ].map(([label, value, f]) => (
+          <button
+            key={String(label)}
+            type="button"
+            className="rounded-lg border bg-card p-4 text-right"
+            onClick={() => f && setFilter(f as Filter)}
+            disabled={loading || !f}
+          >
+            <span className="block text-xs text-muted-foreground">{label}</span>
+            <strong className="mt-2 block text-xl tabular-nums">
+              {loading ? "—" : value}
+            </strong>
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[200px] flex-1">
+          <Search
+            size={16}
+            className="absolute right-3 top-3 text-muted-foreground"
+          />
+          <input
+            aria-label="بحث الأدوية"
+            placeholder="اسم الدواء، الاسم العلمي، الباركود"
+            className={`${field} w-full pr-9`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <button
+          className={button}
+          disabled={loading}
+          onClick={() =>
+            setDraft((prev) => ({
+              ...prev,
+              ...Object.fromEntries(
+                filtered
+                  .filter(
+                    (r) =>
+                      r.suggestedQty > 0 &&
+                      r.unitsPerPack &&
+                      !r.qualityReasons.length,
+                  )
+                  .map((r) => [
+                    r.inventoryId,
+                    prev[r.inventoryId] ?? r.suggestedQty,
+                  ]),
+              ),
+            }))
+          }
+        >
+          تحديد المؤهل من النتائج (
+          {
+            filtered.filter(
+              (r) =>
+                r.suggestedQty > 0 &&
+                r.unitsPerPack &&
+                !r.qualityReasons.length,
+            ).length
+          }
+          )
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {filters.map(([f, label]) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            aria-pressed={filter === f}
+            className={`${button} ${filter === f ? "border-primary bg-primary/10 text-primary" : "bg-card text-muted-foreground"}`}
+          >
+            {label}
+            <span className="tabular-nums">
+              {loading ? "—" : searched.filter((r) => matches(r, f)).length}
+            </span>
+          </button>
+        ))}
+      </div>
+      {error ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 p-5 text-destructive"
+        >
+          {error}
+        </div>
+      ) : loading ? (
+        <div role="status" className="rounded-lg border p-12 text-center">
+          جاري تحليل المبيعات والمخزون والطلبات…
+        </div>
+      ) : (
+        <section className="min-w-0 overflow-hidden rounded-lg border bg-card">
+          <div className="hidden grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1.4fr_1fr] gap-3 border-b bg-muted/40 px-4 py-3 text-xs font-semibold xl:grid">
+            <span>الدواء</span>
+            <span>المتاح / التغطية</span>
+            <span>مبيعات الفترة</span>
+            <span>القادم</span>
+            <span>كمية الطلب</span>
+            <span>التكلفة</span>
+          </div>
+          {!visible.length && (
+            <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+              <Package size={34} />
+              <p>لا توجد أصناف تطابق هذا الفلتر</p>
+              <button
+                className={button}
+                onClick={() => {
+                  setFilter("all");
+                  setQuery("");
+                }}
+              >
+                عرض جميع الأصناف
+              </button>
+            </div>
+          )}
+          {visible.map((r) => (
+            <article key={r.inventoryId} className="border-b last:border-0">
+              <div className="grid min-w-0 grid-cols-2 items-start gap-4 p-4 xl:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1.4fr_1fr]">
+                <div className="col-span-2 flex min-w-0 items-start gap-2 xl:col-span-1">
+                  <input
+                    aria-label={`اختيار ${r.drugName}`}
+                    type="checkbox"
+                    className="mt-1"
+                    checked={draft[r.inventoryId] !== undefined}
+                    onChange={() => toggle(r)}
+                  />
+                  <div className="min-w-0">
+                    <b className="break-words text-sm">{r.drugName}</b>
+                    <p
+                      dir="ltr"
+                      className="mt-1 truncate text-right text-xs text-muted-foreground"
+                      title={r.barcode}
+                    >
+                      {r.barcode}
+                    </p>
+                    <span className="text-xs text-muted-foreground">
+                      وحدة المخزون
+                      {r.unitsPerPack
+                        ? ` · الباكيت ${r.unitsPerPack} وحدات`
+                        : " · التعبئة تحتاج تأكيداً"}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground xl:hidden">
+                    المتاح
+                  </span>
+                  <strong className={r.out ? "text-destructive" : ""}>
+                    {fmt(r.currentStock)}
+                  </strong>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {r.coverage === null
+                      ? "التغطية غير قابلة للتقدير"
+                      : `يكفي ${fmt(r.coverage)} يوم`}
+                  </p>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground xl:hidden">
+                    صافي مبيعات الفترة
+                  </span>
+                  <b>{fmt(r.netSales)}</b>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {fmt(r.averageDailySales)} / يوم · {r.observedDays} يوم رصد
+                  </p>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground xl:hidden">
+                    القادم
+                  </span>
+                  <b>{fmt(r.pending)}</b>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {r.incoming.length
+                      ? r.incoming.some((l) => !l.confirmed)
+                        ? "بعضه غير مؤكد الوصول"
+                        : "وارد مؤكد بموعد"
+                      : "لا توجد كميات موثقة"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs">
+                    وحدات المخزون
+                    <input
+                      aria-label={`كمية ${r.drugName}`}
+                      type="number"
+                      min="0"
+                      max="1000000"
+                      className={`${field} mt-1 w-full`}
+                      value={quantity(r)}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          [r.inventoryId]: Math.max(
+                            0,
+                            Math.min(
+                              1000000,
+                              Math.trunc(Number(e.target.value) || 0),
+                            ),
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    المقترح: {fmt(r.suggestedQty)}
+                    {r.unitsPerPack
+                      ? ` · ${fmt(Math.ceil(quantity(r) / r.unitsPerPack))} باكيت`
+                      : ""}
+                  </p>
+                  {r.noDemand && (
+                    <button
+                      className="mt-1 text-xs text-primary"
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          [r.inventoryId]: Math.max(
+                            0,
+                            r.minStock - r.currentStock,
+                          ),
+                        }))
+                      }
+                    >
+                      استكمال الحد الأدنى (
+                      {Math.max(0, r.minStock - r.currentStock)})
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground xl:hidden">
+                    التكلفة التقديرية
+                  </span>
+                  <b className="text-sm">
+                    {r.cost === null
+                      ? "سعر غير متوفر"
+                      : `${fmt(actualQuantity(r) * r.cost)} د.ع`}
+                  </b>
+                  <button
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-controls={`suggestion-${r.inventoryId}`}
+                    aria-expanded={expanded === r.inventoryId}
+                    onClick={() =>
+                      setExpanded(
+                        expanded === r.inventoryId ? null : r.inventoryId,
+                      )
+                    }
+                  >
+                    <Calculator size={14} className="shrink-0" />
+                    سبب الاقتراح
+                    <ChevronDown
+                      size={14}
+                      className={`shrink-0 transition-transform ${expanded === r.inventoryId ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                </div>
+              </div>
+              {expanded === r.inventoryId && (
+                <SuggestionDetails
+                  row={r}
+                  options={options}
+                  quantity={quantity(r)}
+                  actualQuantity={actualQuantity(r)}
+                />
+              )}
+            </article>
+          ))}
+          <div className="flex items-center justify-between p-3 text-xs">
+            <span>
+              {filtered.length} صنف · صفحة {Math.min(page, pages)} من {pages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                className={button}
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                السابق
+              </button>
+              <button
+                className={button}
+                disabled={page >= pages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                التالي
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      <footer className="sticky bottom-3 z-10 space-y-2 rounded-lg border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm">
+            المختار <b>{selected.length}</b> · التقدير <b>{fmt(total)} د.ع</b>
+            <span className="mr-2 text-xs text-muted-foreground">
+              ({selected.filter((r) => r.cost !== null).length} مسعّر) ·{" "}
+              {
+                selected.filter(
+                  (r) => !filtered.some((f) => f.inventoryId === r.inventoryId),
+                ).length
+              }{" "}
+              خارج الفلتر
+            </span>
+          </p>
+          <div className="flex gap-2">
+            <button className={button} onClick={() => setDraft({})}>
+              مسح الاختيار
+            </button>
+            <button
+              className={`${button} bg-primary text-primary-foreground`}
+              onClick={review}
+              disabled={
+                loading ||
+                !canCreate ||
+                !canWarehouse ||
+                !selected.length ||
+                selected.length > 500 ||
+                !!blocked.length ||
+                !!missing.length
+              }
+            >
+              مراجعة الطلب <ArrowLeft size={15} />
+            </button>
+          </div>
+        </div>
+        {selected.length > 500 && (
+          <p className="text-xs text-warning">
+            اختر حتى 500 صنف في المسودة الواحدة.
+          </p>
+        )}
+        {blocked.length > 0 && (
+          <p className="text-xs text-warning">
+            {blocked.length} صنف يحتاج كمية موجبة أو تأكيد التعبئة قبل التحويل.{" "}
+            <Link className="underline" href="/dashboard/inventory/pack-units">
+              تأكيد التعبئة
+            </Link>
+          </p>
+        )}
+        {missing.length > 0 && (
+          <p className="text-xs text-warning">
+            توجد مختارات سابقة غير متاحة في البيانات الحالية؛ راجعها أو امسح
+            الاختيار.
+          </p>
+        )}
+        {!canCreate && (
+          <p className="text-xs text-muted-foreground">
+            حسابك لا يملك صلاحية إنشاء المشتريات.
+          </p>
+        )}
+        {!canWarehouse && (
+          <p className="text-xs text-muted-foreground">
+            يمكنك تصدير الاحتياج؛ طلبات المذاخر تتطلب تفعيل الميزة في الباقة.{" "}
+            <Link href="/dashboard/purchases" className="underline">
+              المشتريات الداخلية
+            </Link>
+          </p>
+        )}
+      </footer>
+    </div>
+  );
 }

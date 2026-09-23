@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function WarehouseOrdersPage(
     props: {
-        searchParams?: Promise<{ status?: string }>;
+        searchParams?: Promise<{ status?: string; page?: string }>;
     }
 ) {
     const searchParams = await props.searchParams;
@@ -50,6 +50,8 @@ export default async function WarehouseOrdersPage(
     try { query = warehouseInboxQuery(searchParams?.status); }
     catch { redirect('/warehouse/orders'); }
 
+    const pageNumber = Math.max(1, Math.min(1000000, Math.floor(Number(searchParams?.page) || 1)));
+    const total = await prisma.warehouseOrder.count({ where: { warehouseId: ctx.warehouseId, status: query.status } });
     const orders = await prisma.warehouseOrder.findMany({
         where: {
             warehouseId: ctx.warehouseId,
@@ -68,8 +70,9 @@ export default async function WarehouseOrdersPage(
             },
             events: { orderBy: { createdAt: "asc" } },
         },
-        orderBy: { createdAt: "desc" },
-        take: 100,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 50,
+        skip: (pageNumber - 1) * 50,
     });
 
     // ميزة البونص: قاعدة البونص القياسية (bonusThreshold/bonusQuantity) لكل
@@ -103,8 +106,17 @@ export default async function WarehouseOrdersPage(
         })),
     }));
 
+    const groupedCounts = await prisma.warehouseOrder.groupBy({by:['status'],where:{warehouseId:ctx.warehouseId,status:{not:'DRAFT'}},_count:{_all:true}});
+    const statusCounts: Record<string, number> = Object.fromEntries(groupedCounts.map(row => [row.status, row._count._all]));
+    statusCounts.ALL = groupedCounts.reduce((sum, row) => sum + row._count._all, 0);
+    statusCounts.REVIEW = (statusCounts.SENT ?? 0) + (statusCounts.UNDER_REVIEW ?? 0);
+
     return (
-        <OrdersClient
+        <OrdersClient operatingMode={(await prisma.warehouse.findUniqueOrThrow({where:{id:ctx.warehouseId},select:{operatingMode:true}})).operatingMode}
+            statusCounts={statusCounts}
+            pageNumber={pageNumber}
+            totalOrders={total}
+            initialStatus={searchParams?.status ?? "ALL"}
             initialOrders={JSON.parse(JSON.stringify(ordersWithBonusRule))}
             canShipOrders={canShipOrders}
             canQuoteOrders={canQuoteOrders}

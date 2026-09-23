@@ -106,7 +106,7 @@ export default function SaleEditModal({ sale, isOpen, onClose }: SaleEditModalPr
                         <p className="text-sm mt-1 opacity-80">
                             رقم الفاتورة:{" "}
                             <span className="font-mono font-bold">
-                                #{sale.invoiceNumber != null ? String(sale.invoiceNumber).padStart(4, "0") : sale.id.slice(0, 8)}
+                                #{sale.invoiceNumber != null ? String(sale.invoiceNumber).padStart(4, "0") : (sale.documentNumber || "—")}
                             </span>
                         </p>
                     </div>

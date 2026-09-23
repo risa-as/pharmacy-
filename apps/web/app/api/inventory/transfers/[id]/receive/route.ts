@@ -1,115 +1,102 @@
-import { Prisma } from '@prisma/client';
-export const dynamic = 'force-dynamic';
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { getTenantContext } from "@/app/lib/tenant-utils";
-import { logAudit } from "@/app/lib/audit";
-
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const params = await props.params;
-    try {
-        const transferId = params.id;
-        const tenantCtx = await getTenantContext();
-        if (tenantCtx instanceof NextResponse) return tenantCtx;
-        const branchId = tenantCtx.user.branchId; // Expecting the Receiver's Branch ID
-
-        if (!branchId) {
-            return NextResponse.json({ error: "Branch not assigned to user" }, { status: 400 });
-        }
-
-        // Fetch the transfer
-        const transfer = await prisma.transfer.findUnique({
-            where: { id: transferId },
-            include: { items: true }
+import { decideNewInventoryPricing } from "@/app/lib/inventory-pricing";
+import { transferAccess } from "@/app/lib/transfer-access";
+export const dynamic = "force-dynamic";
+export async function PUT(
+  _req: NextRequest,
+  props: { params: Promise<{ id: string }> },
+) {
+  const ctx = await transferAccess();
+  if (ctx instanceof NextResponse) return ctx;
+  const { id } = await props.params;
+  try {
+    const result = await prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Transfer" WHERE id=${id} FOR UPDATE`;
+        const transfer = await tx.transfer.findFirst({
+          where: { id, toBranch: ctx.branchModelWhere },
+          include: { items: true },
         });
-
-        if (!transfer) {
-            return NextResponse.json({ error: "Transfer not found" }, { status: 404 });
-        }
-
-        if (transfer.toBranchId !== branchId) {
-            return NextResponse.json({ error: "A transfer can only be received by its destination branch" }, { status: 403 });
-        }
-
-        if (transfer.status === 'COMPLETED') {
-            return NextResponse.json({ error: "Transfer has already been received" }, { status: 400 });
-        }
-
-        // 1. Transaction to Atomically receive goods
-        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            // Update Transfer Status
-            await tx.transfer.update({
-                where: { id: transferId },
-                data: { status: 'COMPLETED' }
-            });
-
-            // 2. Add inventory to the Receiver (toBranchId)
-            for (const item of transfer.items) {
-
-                // Find or Create Global Inventory link for the destination branch
-                let inventory = await tx.inventory.findFirst({
-                    where: { branchId, drugId: item.drugId }
-                });
-
-                if (!inventory) {
-                    inventory = await tx.inventory.create({
-                        data: {
-                            branchId,
-                            drugId: item.drugId,
-                            cost: item.costPrice || 0,
-                            price: item.costPrice || 0 // Default price to cost price initially
-                        }
-                    });
-                }
-
-                // Find or Create specific Batch in destination branch
-                const existingBatch = await tx.batch.findFirst({
-                    where: {
-                        inventoryId: inventory.id,
-                        batchNumber: item.batchNumber
-                    }
-                });
-
-                if (existingBatch) {
-                    // Transfer-in is new stock arriving, not a return of consumed stock —
-                    // bump initialQuantity too so consumed (initial - quantity) stays correct.
-                    await tx.batch.update({
-                        where: { id: existingBatch.id },
-                        data: {
-                            quantity: { increment: item.quantity },
-                            initialQuantity: { increment: item.quantity }
-                        }
-                    });
-                } else {
-                    await tx.batch.create({
-                        data: {
-                            inventoryId: inventory.id,
-                            batchNumber: item.batchNumber,
-                            expiryDate: item.expiryDate,
-                            quantity: item.quantity,
-                            initialQuantity: item.quantity,
-                            costPrice: item.costPrice
-                        }
-                    });
-                }
-            }
+        if (!transfer)
+          throw new Error("التحويل غير موجود في فروع الاستلام المصرح بها");
+        if (transfer.status === "COMPLETED")
+          return { success: true, replayed: true };
+        if (transfer.status !== "IN_TRANSIT")
+          throw new Error("لا يمكن استلام هذه الحالة");
+        const destination = await tx.branch.findUniqueOrThrow({
+          where: { id: transfer.toBranchId },
+          select: { organization: { select: { minProfitMargin: true } } },
         });
-
-        await logAudit({
-            userId: tenantCtx.user.id,
-            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
-            action: 'UPDATE',
-            entity: 'TRANSFER',
-            entityId: transferId,
-            details: JSON.stringify({ event: 'received', fromBranchId: transfer.fromBranchId, toBranchId: branchId }),
-            branchId,
+        for (const item of transfer.items) {
+          const sourceInventory = await tx.inventory.findUnique({
+            where: {
+              drugId_branchId: {
+                drugId: item.drugId,
+                branchId: transfer.fromBranchId,
+              },
+            },
+            select: { price: true },
+          });
+          const pricing = decideNewInventoryPricing({
+            cost: item.costPrice,
+            minProfitMargin: destination.organization.minProfitMargin,
+          });
+          const price =
+            sourceInventory && sourceInventory.price > 0
+              ? sourceInventory.price
+              : pricing.price;
+          const inv = await tx.inventory.upsert({
+            where: {
+              drugId_branchId: {
+                drugId: item.drugId,
+                branchId: transfer.toBranchId,
+              },
+            },
+            create: {
+              drugId: item.drugId,
+              branchId: transfer.toBranchId,
+              cost: item.costPrice,
+              price,
+            },
+            update: {},
+          });
+          // Keep each receipt separate so supplier/purchase provenance is never merged accidentally.
+          await tx.batch.create({
+            data: {
+              inventoryId: inv.id,
+              batchNumber: item.batchNumber,
+              expiryDate: item.expiryDate,
+              quantity: item.quantity,
+              initialQuantity: item.quantity,
+              costPrice: item.costPrice,
+            },
+          });
+        }
+        await tx.transfer.update({
+          where: { id },
+          data: { status: "COMPLETED" },
         });
-
-        return NextResponse.json({ success: true, message: "Transfer received and inventory updated" });
-
-    } catch (error: any) {
-        console.error("Receive transfer error:", error);
-        return NextResponse.json({ error: error.message || "Failed to receive transfer" }, { status: 500 });
-    }
+        await tx.auditLog.create({
+          data: {
+            userId: ctx.user.id,
+            userName: ctx.user.name || ctx.user.id,
+            action: "UPDATE",
+            entity: "TRANSFER",
+            entityId: id,
+            branchId: transfer.toBranchId,
+            details: "received",
+          },
+        });
+        return { success: true };
+      },
+      { maxWait: 20000, timeout: 30000 },
+    );
+    return NextResponse.json(result);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "تعذر الاستلام" },
+      { status: 409 },
+    );
+  }
 }

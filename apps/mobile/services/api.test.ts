@@ -10,7 +10,7 @@ vi.mock('react-native', () => ({ Platform: { OS: 'test' } }));
 vi.mock('expo-router', () => ({ router: { replace: vi.fn() } }));
 vi.mock('./polling', () => ({ pollingService: { unregisterAll: vi.fn() } }));
 
-import { apiService, request, setCachedToken } from './api';
+import { apiService, request, setCachedToken, rotateCachedToken, getSessionGeneration } from './api';
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
     status,
@@ -153,3 +153,30 @@ describe('mobile inventory response cache', () => {
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 });
+
+
+describe('mobile smart planning request', () => {
+ const settings = { from:'2026-09-01', to:'2026-09-20', coverageDays:7, leadDays:2, safetyDays:1, fromArrival:true };
+ beforeEach(() => { vi.restoreAllMocks(); setCachedToken(`planning-${Math.random()}`); });
+ it('sends the full selected period and coverage, and refresh bypasses cache', async () => {
+  const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({rows:[]}));
+  vi.stubGlobal('fetch',fetchMock);
+  await apiService.getSmartPlanning(settings,'branch-a');
+  await apiService.getSmartPlanning(settings,'branch-a');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const url = new URL(String(fetchMock.mock.calls[0][0]));
+  expect(Object.fromEntries(url.searchParams)).toEqual({ format:'planning', branchId:'branch-a', ...Object.fromEntries(Object.entries(settings).map(([k,v]) => [k,String(v)])) });
+  await apiService.getSmartPlanning(settings,'branch-a',true);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+ });
+ it('does not turn an analysis failure into an empty inventory result', async () => {
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(jsonResponse({error:'invalid period'},400)));
+  await expect(apiService.getSmartPlanning(settings)).rejects.toThrow();
+ });
+});
+
+it('keeps in-flight reads valid after same-scope credential renewal',async()=>{setCachedToken('old');const generation=getSessionGeneration();let resolve!:(v:Response)=>void;vi.stubGlobal('fetch',vi.fn(()=>new Promise<Response>(r=>resolve=r)));const pending=request('/inventory?branchId=rotate');await vi.waitFor(()=>expect(resolve).toBeDefined());expect(rotateCachedToken('new','old',generation)).toBe(true);expect(getSessionGeneration()).toBe(generation);resolve(jsonResponse([{id:'allowed'}]));await expect(pending).resolves.toEqual([{id:'allowed'}]);});
+it('does not let a stale refresh replace a different login',()=>{setCachedToken('old');const generation=getSessionGeneration();setCachedToken('other-account');expect(rotateCachedToken('stale-refresh','old',generation)).toBe(false);});
+
+it.each(['error','message'])('preserves server validation text from %s',async(key)=>{setCachedToken('validation-'+key);vi.stubGlobal('fetch',vi.fn().mockResolvedValue(jsonResponse({[key]:'اكتب سبب فرق الجرد'},409)));await expect(request('/inventory/stocktake/test',{method:'PUT',body:'{}'})).rejects.toThrow('اكتب سبب فرق الجرد');});
+it('uses a safe HTTP fallback for non-JSON error pages',async()=>{setCachedToken('html-error');vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('<html>internal diagnostics</html>',{status:409})));await expect(request('/inventory/stocktake/test',{method:'PUT',body:'{}'})).rejects.toThrow('HTTP 409');});

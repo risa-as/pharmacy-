@@ -48,7 +48,7 @@ export default function DemandForecastPage() {
             { header: 'المخزون الحالي', key: 'currentStock', width: 12 },
             { header: 'أيام حتى النفاد', key: 'daysUntilStockout', width: 14 },
             { header: 'طلب مقترح', key: 'suggestedOrder', width: 12 },
-            { header: 'الثقة %', key: 'confidence', width: 8 },
+            { header: 'أساس التقدير', key: 'quality', width: 18 },
             { header: 'الحالة', key: 'urgencyText', width: 10 },
         ], 'تنبؤ_الطلب', 'التنبؤ');
     };
@@ -117,7 +117,7 @@ export default function DemandForecastPage() {
                                     <th className="text-right py-3 px-4 font-bold text-muted-foreground">المخزون</th>
                                     <th className="text-right py-3 px-4 font-bold text-destructive">أيام حتى النفاد</th>
                                     <th className="text-right py-3 px-4 font-bold text-success">طلب مقترح</th>
-                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">الثقة</th>
+                                    <th className="text-right py-3 px-4 font-bold text-muted-foreground">أساس التقدير</th>
                                     <th className="text-right py-3 px-4 font-bold text-muted-foreground">الحالة</th>
                                 </tr>
                             </thead>
@@ -134,7 +134,7 @@ export default function DemandForecastPage() {
                                         <td className="py-3 px-4 text-foreground">{fmt(f.currentStock)}</td>
                                         <td className="py-3 px-4">
                                             <span className={`font-bold ${f.daysUntilStockout <= 7 ? 'text-destructive' : f.daysUntilStockout <= 14 ? 'text-warning' : 'text-success'}`}>
-                                                {f.daysUntilStockout >= 999 ? '∞' : f.daysUntilStockout}
+                                                {f.daysUntilStockout === null ? 'غير مقدّر' : f.daysUntilStockout}
                                             </span>
                                         </td>
                                         <td className="py-3 px-4">
@@ -145,10 +145,7 @@ export default function DemandForecastPage() {
                                             ) : <span className="text-muted-foreground">—</span>}
                                         </td>
                                         <td className="py-3 px-4">
-                                            <div className="w-full bg-muted rounded-full h-2">
-                                                <div className="bg-primary h-2 rounded-full" style={{ width: `${f.confidence}%` }}></div>
-                                            </div>
-                                            <span className="text-xs text-muted-foreground">{f.confidence}%</span>
+                                            <span className="text-xs text-muted-foreground">{f.quality}</span>
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`text-xs px-2 py-0.5 rounded-full border font-bold ${urgencyBadge(f.urgency)}`}>

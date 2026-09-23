@@ -168,7 +168,7 @@ export default async function SalesReportPage(
 
   const lineItems = sales.flatMap((s: any) =>
     s.items.map((it: any) => ({
-      invoice: s.invoiceNumber != null ? `#${s.invoiceNumber}` : s.id.slice(0, 8),
+      invoice: s.invoiceNumber != null ? `#${s.invoiceNumber}` : s.documentNumber,
       drug: it.drug?.tradeName || "—",
       price: it.price,
       quantity: it.quantity,

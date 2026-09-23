@@ -11,6 +11,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect("/login");
+    if (!tenantCtx.userPermissions.canChangeSettings) redirect('/dashboard?denied=1');
 
     const id = params.id;
     // Scope: non-SUPER_ADMIN may only edit their own org

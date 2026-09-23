@@ -157,5 +157,5 @@ export default async function WarehouseCustomersPage() {
         })
         .sort((a, b) => (b.lastOrderDate ? new Date(b.lastOrderDate).getTime() : 0) - (a.lastOrderDate ? new Date(a.lastOrderDate).getTime() : 0));
 
-    return <CustomersClient initialCustomers={rows} isOwner={isOwner} />;
+    return <CustomersClient initialCustomers={rows} isOwner={isOwner} canRecordPayment={belongsAndActive && hasWarehousePermission(actor!, 'canRecordPayment')} />;
 }

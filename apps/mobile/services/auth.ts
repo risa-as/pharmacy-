@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
-import { getBaseUrl, resetSessionExpired, setCachedToken } from './api';
+import { getBaseUrl, resetSessionExpired, setCachedToken, rotateCachedToken, getSessionGeneration } from './api';
 
 export interface User {
     id: string;
@@ -218,6 +218,8 @@ export const authService = {
      * - network/5xx error → resolves silently, keeping the current token (offline).
      */
     async refreshAccessToken(): Promise<void> {
+        const generation = getSessionGeneration();
+        const previousUser = await this.getCurrentUser();
         const token = await secureGet(TOKEN_KEY);
         if (!token) return; // not logged in
 
@@ -235,12 +237,17 @@ export const authService = {
             return; // offline — keep using the stored token
         }
 
+        if (generation !== getSessionGeneration() || await secureGet(TOKEN_KEY) !== token) return;
         if (res.status === 200) {
             const data = await res.json().catch(() => null);
             if (data?.token) {
+                if (generation !== getSessionGeneration()) return;
+                const sameScope = previousUser && data.user && ['id','role','branchId','organizationId','permissions'].every(key => (previousUser as any)[key] === data.user[key]);
+                if (sameScope) {
+                    if (!rotateCachedToken(data.token, token, generation)) return;
+                } else setCachedToken(data.token);
                 await secureSet(TOKEN_KEY, data.token);
                 if (data.user) await secureSet(USER_KEY, JSON.stringify(data.user));
-                setCachedToken(data.token);
             }
             return;
         }

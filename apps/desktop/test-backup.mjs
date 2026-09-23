@@ -14,7 +14,7 @@ async function upload() {
         body: form,
         headers: {
             ...form.getHeaders(),
-            "x-backup-secret": "R$i1999s$a"
+            "x-backup-secret": process.env.BACKUP_SECRET_KEY ?? ""
         }
     });
 

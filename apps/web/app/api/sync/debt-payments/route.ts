@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser } from '@/app/lib/sync-auth';
+import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
 
 async function validateBranchAccess(syncUser: any, branchId: string): Promise<NextResponse | null> {
@@ -108,6 +108,9 @@ export async function POST(request: NextRequest) {
         if (accessError) return accessError;
 
         const syncedIds: string[] = [];
+        // Refused payments are returned for review (desktop moves them to its
+        // sync-failures list) instead of being retried forever or dropped.
+        const conflicts: { id: string; message: string }[] = [];
 
         for (const payment of payments) {
             // Verify the sale belongs to this branch
@@ -122,6 +125,17 @@ export async function POST(request: NextRequest) {
             const existing = await prisma.debtPayment.findUnique({ where: { id: payment.id } });
             if (existing) {
                 syncedIds.push(payment.id);
+                continue;
+            }
+
+            // A non-positive amount would increase the patient's debt.
+            if (typeof payment.amount !== 'number' || !Number.isFinite(payment.amount) || payment.amount <= 0) {
+                conflicts.push({ id: payment.id, message: 'مبلغ التحصيل غير صالح؛ تتطلب العملية مراجعة.' });
+                continue;
+            }
+            const perms = await operatorPermissions(prisma, payment.userId, branchId, syncUser);
+            if (perms === null || (perms !== 'unattributed' && !perms.canPayDebt)) {
+                conflicts.push({ id: payment.id, message: 'صلاحية تحصيل الديون غير متاحة لمنفذ العملية؛ تتطلب العملية مراجعة.' });
                 continue;
             }
 
@@ -159,7 +173,7 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`[Sync] Debt payments received: ${payments.length}, synced: ${syncedIds.length}`);
-        return NextResponse.json({ syncedIds });
+        return NextResponse.json({ syncedIds, conflicts });
     } catch (error: any) {
         console.error("Sync Debt Payments POST Error:", error);
         return NextResponse.json({ error: "Internal Server Error", message: error.message }, { status: 500 });

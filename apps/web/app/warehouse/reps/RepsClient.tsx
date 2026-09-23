@@ -1,4 +1,5 @@
 "use client";
+import { warehouseMutation } from '@/app/lib/warehouse-mutation-client';
 
 // المندوبون (مذاخر B2B): العميل التفاعلي لصفحة «المندوبون» — قائمة مندوبي
 // مذخرك (بضاعة سيارة كل واحد وعمولته المحسوبة للفترة المختارة)، إنشاء/تعديل
@@ -37,7 +38,7 @@ const STATUS_VARIANT: Record<FieldSaleStatus, "success" | "warning" | "danger" |
 };
 
 function money(n: number): string {
-    return Math.round(n).toLocaleString("ar-IQ");
+    return Math.round(n).toLocaleString("ar-IQ-u-nu-latn");
 }
 
 interface RepRow {
@@ -411,7 +412,7 @@ export default function RepsClient({
                                                     <tr key={s.batchId} className="border-t">
                                                         <td className="p-2">{s.tradeName}</td>
                                                         <td className="p-2">{s.batchNumber}</td>
-                                                        <td className="p-2">{new Date(s.expiryDate).toLocaleDateString("ar-IQ")}</td>
+                                                        <td className="p-2">{new Date(s.expiryDate).toLocaleDateString("ar-IQ-u-nu-latn")}</td>
                                                         <td className="tabular-nums p-2">{s.quantity}</td>
                                                     </tr>
                                                 ))}
@@ -451,7 +452,7 @@ export default function RepsClient({
                                                         <td className="p-2">
                                                             <StatusChip variant={STATUS_VARIANT[s.status]} label={STATUS_LABELS[s.status]} />
                                                         </td>
-                                                        <td className="p-2">{new Date(s.soldAt).toLocaleDateString("ar-IQ")}</td>
+                                                        <td className="p-2">{new Date(s.soldAt).toLocaleDateString("ar-IQ-u-nu-latn")}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -482,8 +483,8 @@ export default function RepsClient({
                                                 {detail.collections.map((c) => (
                                                     <tr key={c.id} className="border-t">
                                                         <td className="tabular-nums p-2">{money(c.amount)}</td>
-                                                        <td className="p-2">{c.fieldSaleId ? "نعم" : "تحصيل عام"}</td>
-                                                        <td className="p-2">{new Date(c.collectedAt).toLocaleDateString("ar-IQ")}</td>
+                                                        <td className="p-2">{c.fieldSaleId ? "تحصيل فاتورة" : "تسليم نقدي — خارج العمولة"}</td>
+                                                        <td className="p-2">{new Date(c.collectedAt).toLocaleDateString("ar-IQ-u-nu-latn")}</td>
                                                         <td className="p-2">{c.notes ?? "—"}</td>
                                                     </tr>
                                                 ))}
@@ -693,7 +694,7 @@ function LoadStockModal({ repId, onClose, onDone }: { repId: string; onClose: ()
         }
         setSaving(true);
         try {
-            const res = await fetch(`/api/warehouse-portal/reps/${repId}/load`, {
+            const res = await warehouseMutation(`/api/warehouse-portal/reps/${repId}/load`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ items }),
@@ -815,7 +816,14 @@ function SellModal({
     onClose: () => void;
     onDone: () => void;
 }) {
-    const [customerName, setCustomerName] = useState("");
+    const [organizationId, setOrganizationId] = useState("");
+    const [customers, setCustomers] = useState<{ organizationId: string; name: string; isBlocked: boolean }[]>([]);
+    const customerName = customers.find(c => c.organizationId === organizationId)?.name ?? '';
+    useEffect(() => {
+        let active = true;
+        fetch('/api/warehouse-portal/customers').then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); if (active) setCustomers(d.customers); }).catch(e => toast.error(e.message));
+        return () => { active = false; };
+    }, []);
     const [notes, setNotes] = useState("");
     const [lines, setLines] = useState<SellLine[]>([
         { key: ++sellLineSeq, batchId: "", quantity: "", bonusQuantity: "0", unitPrice: "" },
@@ -841,10 +849,10 @@ function SellModal({
         }
         setSaving(true);
         try {
-            const res = await fetch(`/api/warehouse-portal/reps/${repId}/sales`, {
+            const res = await warehouseMutation(`/api/warehouse-portal/reps/${repId}/sales`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ customerName: customerName.trim(), notes: notes.trim() || undefined, lines: preparedLines }),
+                body: JSON.stringify({ organizationId, customerName: customerName.trim(), notes: notes.trim() || undefined, lines: preparedLines }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || (data?.errors ? data.errors.join("، ") : "فشل تسجيل البيع"));
@@ -864,12 +872,11 @@ function SellModal({
 
                 <div>
                     <label className="mb-1 block text-xs font-medium text-muted-foreground">اسم الصيدلية (العميل)</label>
-                    <input
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        className="w-full rounded-lg border bg-muted px-3 py-2 text-sm"
-                        placeholder="مثال: صيدلية النور"
-                    />
+                    <select value={organizationId} onChange={e => setOrganizationId(e.target.value)} className="w-full rounded-lg border bg-muted px-3 py-2 text-sm">
+                        <option value="">اختر حساب العميل المسجل</option>
+                        {customers.map(c => <option key={c.organizationId} value={c.organizationId} disabled={c.isBlocked}>{c.name}{c.isBlocked ? ' — موقوف' : ''}</option>)}
+                    </select>
+                    <p className="mt-1 text-xs text-muted-foreground">يجب ربط البيع بحساب عميل لتطبيق الحظر وحد الائتمان. أضف العميل من صفحة العملاء أولاً.</p>
                 </div>
 
                 <div className="space-y-3">
@@ -998,7 +1005,7 @@ function CollectModal({
         }
         setSaving(true);
         try {
-            const res = await fetch(`/api/warehouse-portal/reps/${repId}/collections`, {
+            const res = await warehouseMutation(`/api/warehouse-portal/reps/${repId}/collections`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ amount: amountNum, fieldSaleId: fieldSaleId || undefined, notes: notes.trim() || undefined }),
@@ -1026,7 +1033,7 @@ function CollectModal({
                         onChange={(e) => setFieldSaleId(e.target.value)}
                         className="w-full rounded-lg border bg-muted px-2.5 py-2 text-sm"
                     >
-                        <option value="">تحصيل عام (بلا فاتورة محدَّدة)</option>
+                        <option value="">تسليم نقدي للمذخر (لا يسدد فاتورة ولا يحتسب للعمولة)</option>
                         {fieldSales.map((s) => (
                             <option key={s.id} value={s.id}>
                                 {s.invoiceNumber} — {s.customerName} — متبقي {money(Math.max(s.total - s.paidAmount, 0))}

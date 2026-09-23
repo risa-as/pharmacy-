@@ -92,7 +92,7 @@ export default function ShiftsTable({
                                         <td className="whitespace-nowrap px-4 py-3">
                                             <div className="flex items-center gap-3">
                                                 <p className="font-medium text-foreground">{shift.user?.name || 'مستخدم غير معروف'}</p>
-                                                <span className="text-xs text-muted-foreground font-mono">#{shift.id.slice(0, 6)}</span>
+                                                <span className="text-xs text-muted-foreground font-mono">{shift.documentNumber}</span>
                                             </div>
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" dir="ltr">

@@ -1,3 +1,4 @@
+import { buildSaleTenantBranchCondition } from '@/app/lib/report-sales-aggregates';
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/app/lib/prisma";
@@ -122,9 +123,28 @@ export default async function SalesPage(
   }
 
   const baseWhere = branchId
-    ? { ...tenantBranchWhere, branchId }
+    ? { AND: [tenantBranchWhere, { branchId }] }
     : tenantBranchWhere;
   const finalWhere = { ...baseWhere, ...searchWhere, ...dateWhere };
+
+  // Apply the hour filter before pagination and counting.
+  if (fromTimeParam || toTimeParam) {
+    const validTime = (value?: string) => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+    if (!validTime(fromTimeParam) || !validTime(toTimeParam)) return <div>وقت البحث غير صالح.</div>;
+    const start = fromTimeParam || '00:00';
+    const end = toTimeParam || '23:59';
+    const clock = Prisma.sql`to_char((s."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Baghdad', 'HH24:MI')`;
+    const timeCondition = start > end
+      ? Prisma.sql`(${clock} >= ${start} OR ${clock} <= ${end})`
+      : Prisma.sql`(${clock} >= ${start} AND ${clock} <= ${end})`;
+    const dates = fromParam && toParam ? buildDateRange(fromParam, toParam) : null;
+    const matches = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT s.id FROM "Sale" s JOIN "Branch" br ON br.id = s."branchId"
+      WHERE ${buildSaleTenantBranchCondition(tenantBranchWhere, branchId)} AND ${timeCondition}
+      ${dates ? Prisma.sql`AND s."createdAt" >= ${dates.start} AND s."createdAt" <= ${dates.end}` : Prisma.empty}
+    `);
+    Object.assign(finalWhere, { id: { in: matches.map(row => row.id) } });
+  }
 
   // جلب المبيعات
   const [salesRaw, totalCount, statsRaw] = await Promise.all([
@@ -134,7 +154,7 @@ export default async function SalesPage(
       include: {
         items: { include: { drug: true } },
         branch: true,
-        user: true,
+        user: { select: { id: true, name: true } },
         returns: { include: { items: { include: { drug: true } } } },
       },
       take: PAGE_SIZE,

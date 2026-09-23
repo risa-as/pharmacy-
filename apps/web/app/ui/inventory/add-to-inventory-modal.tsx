@@ -71,6 +71,10 @@ export default function AddToInventoryModal({
       toast.error("اكتب عدد الأشرطة في الباكيت الواحد (اعدُدها من العلبة).");
       return;
     }
+    if (!Number.isFinite(computedCost) || computedCost <= 0) {
+      toast.error("لا يمكن الحفظ: أدخل تكلفة شراء صحيحة أكبر من صفر.");
+      return;
+    }
     // سعر الباكيت أقل من 125 دينار = تحذير وتأكيد قبل الحفظ
     if (packetPrice < 125) {
       const ok = await confirm({

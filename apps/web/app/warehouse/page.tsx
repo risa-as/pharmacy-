@@ -15,6 +15,7 @@ import { salesByPeriod, fulfilmentRate, type FulfilmentRateResult } from "@/app/
 import { summarizeReceivables } from "@/app/lib/warehouse-accounts";
 import { summarizeStock, isLowStock, expiryBucket } from "@/app/lib/warehouse-stock";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
+import { loadOpenReceivables } from '@/app/lib/warehouse-receivables';
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,8 @@ interface ExpiringBatch {
 
 async function loadDashboard(warehouseId: string, permissions: ReturnType<typeof getWarehousePermissions>) {
     const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const baghdadNow = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+    const monthStart = new Date(Date.UTC(baghdadNow.getUTCFullYear(), baghdadNow.getUTCMonth(), 1) - 3 * 60 * 60 * 1000);
     const days30Ago = new Date(now.getTime() - 30 * MS_PER_DAY);
 
     let ordersAwaitingQuote = 0;
@@ -105,10 +107,7 @@ async function loadDashboard(warehouseId: string, permissions: ReturnType<typeof
     let receivablesOverdue = 0;
 
     if (permissions.canViewFinance) {
-        const invoices = await prisma.warehouseInvoice.findMany({
-            where: { warehouseId, status: { in: ["UNPAID", "PARTIAL"] } },
-            select: { total: true, paidAmount: true, status: true, dueAt: true },
-        });
+        const invoices = await loadOpenReceivables(prisma, warehouseId);
         const summary = summarizeReceivables(invoices, now);
         receivablesOutstanding = summary.outstanding;
         receivablesOverdue = summary.overdue;
@@ -184,7 +183,7 @@ async function loadDashboard(warehouseId: string, permissions: ReturnType<typeof
 }
 
 function fmt(n: number): string {
-    return Math.round(n).toLocaleString("ar-IQ");
+    return Math.round(n).toLocaleString("ar-IQ-u-nu-latn");
 }
 
 /** سباركلاين مبيعات 30 يوماً — SVG خطي بسيط بلا مكتبة رسوم (القيد §8 من هذه المرحلة). */
@@ -231,6 +230,8 @@ export default async function WarehouseHomePage() {
         ? getWarehousePermissions(actor!)
         : getWarehousePermissions({ warehouseUserType: null, permissions: null });
 
+    const mode = await prisma.warehouse.findUniqueOrThrow({where:{id:ctx.warehouseId},select:{operatingMode:true}});
+    if(mode.operatingMode === 'ORDER_PORTAL') { permissions.canViewStock=false; permissions.canViewPurchases=false; permissions.canViewReps=false; }
     const data = await loadDashboard(ctx.warehouseId, permissions);
 
     // ── تجميع الحاويات حسب التسلسل الهرمي المطلوب: أرقام تحتاج إجراءً أولاً،
@@ -253,21 +254,21 @@ export default async function WarehouseHomePage() {
             {showActionRow && (
                 <section className="space-y-2">
                     <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">يحتاج إجراءً</h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         {permissions.canViewOrders && (
-                            <Link href="/warehouse/orders?status=SENT" className="rounded-lg border bg-card p-5 shadow-sm transition hover:shadow">
+                            <Link href="/warehouse/orders?status=REVIEW" className="rounded-lg border bg-card p-4 shadow-sm transition hover:shadow">
                                 <p className="text-sm text-muted-foreground">طلبات بانتظار المراجعة/التسعير</p>
                                 <p className="tabular-nums mt-2 text-3xl font-bold text-primary">{fmt(data.ordersAwaitingQuote)}</p>
                             </Link>
                         )}
                         {permissions.canViewOrders && (
-                            <Link href="/warehouse/orders?status=APPROVED" className="rounded-lg border bg-card p-5 shadow-sm transition hover:shadow">
+                            <Link href="/warehouse/orders?status=APPROVED" className="rounded-lg border bg-card p-4 shadow-sm transition hover:shadow">
                                 <p className="text-sm text-muted-foreground">طلبات بانتظار الشحن</p>
                                 <p className="tabular-nums mt-2 text-3xl font-bold text-foreground">{fmt(data.ordersAwaitingShipment)}</p>
                             </Link>
                         )}
                         {permissions.canViewStock && (
-                            <Link href="/warehouse/stock" className="rounded-lg border bg-card p-5 shadow-sm transition hover:shadow">
+                            <Link href="/warehouse/stock" className="rounded-lg border bg-card p-4 shadow-sm transition hover:shadow">
                                 <p className="text-sm text-muted-foreground">أصناف تحت حد إعادة الطلب</p>
                                 <p className="tabular-nums mt-2 text-3xl font-bold text-warning">{fmt(data.lowStockCount)}</p>
                             </Link>
@@ -276,8 +277,8 @@ export default async function WarehouseHomePage() {
                             دفعات مهدَّدة هو خبر جيد يستحق أن يُعرَض صراحة، لا أن يختفي كأن
                             التبويب لم يُحمَّل. */}
                         {permissions.canViewStock && (
-                            <div className="rounded-lg border bg-card p-5 shadow-sm">
-                                <p className="text-sm text-muted-foreground">دفعات تنتهي خلال ٩٠ يوماً</p>
+                            <div className="rounded-lg border bg-card p-4 shadow-sm">
+                                <p className="text-sm text-muted-foreground">دفعات تنتهي خلال 90 يوماً</p>
                                 <p className={`tabular-nums mt-2 text-3xl font-bold ${data.expiringSoonCount > 0 ? "text-destructive" : "text-success"}`}>
                                     {fmt(data.expiringSoonCount)}
                                 </p>
@@ -291,22 +292,22 @@ export default async function WarehouseHomePage() {
             {showMetricsRow && (
                 <section className="space-y-2">
                     <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">مؤشرات الأداء</h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         {permissions.canViewReports && data.fulfilment && (
-                            <div className="rounded-lg border bg-card p-5 shadow-sm">
-                                <p className="text-sm text-muted-foreground">نسبة التلبية (٣٠ يوماً)</p>
-                                <p className="tabular-nums mt-2 text-3xl font-bold text-success">{data.fulfilment.ratePercent}%</p>
+                            <div className="rounded-lg border bg-card p-4 shadow-sm">
+                                <p className="text-sm text-muted-foreground">نسبة التلبية (30 يوماً)</p>
+                                <p className="tabular-nums mt-2 text-3xl font-bold text-success">{data.fulfilment.ratePercent.toLocaleString("ar-IQ-u-nu-latn")}٪</p>
                                 <p className="mt-1 text-xs text-muted-foreground">من {fmt(data.fulfilment.totalLines)} بند محسوم</p>
                             </div>
                         )}
                         {permissions.canViewFinance && (
-                            <div className="rounded-lg border bg-card p-5 shadow-sm">
+                            <div className="rounded-lg border bg-card p-4 shadow-sm">
                                 <p className="text-sm text-muted-foreground">مبيعات الشهر الحالي</p>
                                 <p className="tabular-nums mt-2 text-3xl font-bold">{fmt(data.monthRevenue)} د.ع</p>
                             </div>
                         )}
                         {permissions.canViewFinance && (
-                            <div className="rounded-lg border bg-card p-5 shadow-sm">
+                            <div className="rounded-lg border bg-card p-4 shadow-sm">
                                 <p className="text-sm text-muted-foreground">الذمم المدينة القائمة</p>
                                 <p className="tabular-nums mt-2 text-3xl font-bold">{fmt(data.receivablesOutstanding)} د.ع</p>
                                 <p className="tabular-nums mt-1 text-xs text-destructive">
@@ -315,8 +316,8 @@ export default async function WarehouseHomePage() {
                             </div>
                         )}
                         {permissions.canViewFinance && (
-                            <div className="rounded-lg border bg-card p-5 shadow-sm">
-                                <p className="mb-2 text-sm text-muted-foreground">مبيعات آخر ٣٠ يوماً</p>
+                            <div className="rounded-lg border bg-card p-4 shadow-sm">
+                                <p className="mb-2 text-sm text-muted-foreground">مبيعات آخر 30 يوماً</p>
                                 <Sparkline points={data.sparkline} />
                             </div>
                         )}
@@ -386,7 +387,7 @@ export default async function WarehouseHomePage() {
                 {permissions.canViewStock && (
                     <div className="rounded-lg border bg-card shadow-sm">
                         <div className="border-b p-4">
-                            <h3 className="font-bold">دفعات تنتهي خلال ٩٠ يوماً</h3>
+                            <h3 className="font-bold">دفعات تنتهي خلال 90 يوماً</h3>
                         </div>
                         {data.expiringBatches.length === 0 ? (
                             <p className="p-4 text-sm text-muted-foreground">لا توجد دفعات تحت خطر قريب.</p>
@@ -399,7 +400,7 @@ export default async function WarehouseHomePage() {
                                                 {b.tradeName} <span className="text-xs text-muted-foreground">({b.batchNumber})</span>
                                             </span>
                                             <span className={`shrink-0 text-xs ${b.bucket === "EXPIRED" ? "text-destructive" : "text-warning"}`}>
-                                                {b.expiryDate.toLocaleDateString("ar-IQ")}
+                                                {b.expiryDate.toLocaleDateString("ar-IQ-u-nu-latn")}
                                             </span>
                                         </Link>
                                     </li>

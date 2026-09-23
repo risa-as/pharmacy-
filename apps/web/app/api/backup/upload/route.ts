@@ -31,12 +31,18 @@ export async function POST(req: Request) {
             }
             authedBranchId = license.branchId;
         } else {
+            // The legacy secret is shared by every desktop build (compiled into the
+            // binary), so it cannot bind an upload to a branch: with it, branchId
+            // comes from the body. Disabled unless explicitly re-enabled for a
+            // bounded migration window.
+            if (process.env.ALLOW_LEGACY_BACKUP_SECRET !== "true") {
+                return NextResponse.json({ success: false, message: "Device license required for backup upload" }, { status: 401 });
+            }
             const secretKey = req.headers.get("x-backup-secret");
             const configuredSecret = process.env.BACKUP_SECRET_KEY;
             if (!configuredSecret || secretKey !== configuredSecret) {
                 // Log presence + lengths (NOT values) so quote/whitespace mismatches
-                // are diagnosable from the server logs. e.g. a length of 12 means the
-                // value was stored as "R$i1999s$a" *with* the surrounding quotes.
+                // (e.g. a value stored with its surrounding quotes) are diagnosable.
                 console.warn(
                     `[backup/upload] legacy secret mismatch: provided=${!!secretKey} providedLen=${secretKey?.length ?? 0} ` +
                     `configured=${!!configuredSecret} configuredLen=${configuredSecret?.length ?? 0} match=${secretKey === configuredSecret}`,

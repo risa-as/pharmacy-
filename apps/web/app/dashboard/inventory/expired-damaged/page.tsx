@@ -22,7 +22,7 @@ export default async function ExpiredDamagedPage(
     const selectedBranchId = searchParams?.branch;
 
     const inventoryFilter = selectedBranchId
-        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        ? { AND: [tenantBranchWhere, { branchId: selectedBranchId }] }
         : tenantBranchWhere;
 
     const now = new Date();

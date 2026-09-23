@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import ReturnStockReview from '@/app/ui/sales/return-stock-review';
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/app/lib/prisma";
@@ -16,20 +18,31 @@ export default async function ReturnsPage(
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) redirect("/login");
   const { tenantBranchWhere } = tenantCtx;
+  if (!tenantCtx.userPermissions.canViewReturns) redirect('/dashboard');
+  const canReviewStock = ['ADMIN','MANAGER'].includes(tenantCtx.user.role) && tenantCtx.userPermissions.canDoStocktake && tenantCtx.userPermissions.canProcessReturn;
   const branchId =
     typeof searchParams.branch === "string" ? searchParams.branch : undefined;
 
   const returns = await prisma.saleReturn.findMany({
-    where: branchId ? { ...tenantBranchWhere, branchId } : tenantBranchWhere,
+    where: branchId ? { AND: [tenantBranchWhere, { branchId }] } : tenantBranchWhere,
     orderBy: { createdAt: "desc" },
     include: {
-      sale: { include: { user: true, patient: true } },
+      sale: { include: { user: { select: { name: true } }, patient: true } },
       branch: true,
       items: { include: { drug: true } },
     },
     take: 100,
   });
 
+  const reviewPage = Math.max(1, Number(searchParams.reviewPage) || 1);
+  const pendingWhere = { stockStatus: 'QUARANTINED', saleReturn: branchId ? { AND: [tenantBranchWhere, { branchId }] } : tenantBranchWhere };
+  const [pendingRows, pendingCount] = await Promise.all([
+    prisma.saleReturnItem.findMany({ where: pendingWhere, include: { drug: true, saleReturn: { select: { branchId: true, documentNumber: true } } }, orderBy: { id: 'asc' }, take: 50, skip: (reviewPage - 1) * 50 }),
+    prisma.saleReturnItem.count({ where: pendingWhere }),
+  ]);
+  const pending = pendingRows.map(i => ({ ...i, branchId: i.saleReturn.branchId }));
+  const reviewHref = (page: number) => `/dashboard/returns?${new URLSearchParams({ ...(branchId ? { branch: branchId } : {}), reviewPage: String(page) })}`;
+  const reviewBatches = canReviewStock && pending.length ? await prisma.batch.findMany({ where: { expiryDate: { gt: new Date() }, inventory: { AND: [tenantBranchWhere, { drugId: { in: pending.map(i => i.drugId) } }] } }, select: { id: true, batchNumber: true, expiryDate: true, inventory: { select: { drugId: true, branchId: true } } } }) : [];
   const totalReturned = returns.reduce((acc: any, r: any) => acc + r.total, 0);
   const totalReturnedItems = returns.reduce(
     (acc: any, r: any) =>
@@ -109,6 +122,7 @@ export default async function ReturnsPage(
         })}
       </div>
 
+      {pending.length > 0 && <section className="glass-card p-4 space-y-3"><h2 className="font-bold">مرتجعات تنتظر فحص المخزون ({pendingCount})</h2>{pending.map(item => <div key={item.id} className="border-b pb-3"><strong>{item.drug.tradeName}</strong> · {item.quantity} وحدة {canReviewStock ? <ReturnStockReview id={item.id} batches={reviewBatches.filter(b => b.inventory.drugId === item.drugId && b.inventory.branchId === item.branchId).map(b => ({ id: b.id, label: `${b.batchNumber} — ${b.expiryDate.toLocaleDateString('en-GB')}` }))} /> : <p className="text-xs text-warning">اعزل هذه الكمية؛ اعتمادها متاح للمدير.</p>}</div>)}<nav className="flex gap-4 text-sm">{reviewPage > 1 && <Link href={reviewHref(reviewPage - 1)}>السابق</Link>}{reviewPage * 50 < pendingCount && <Link href={reviewHref(reviewPage + 1)}>التالي</Link>}</nav></section>}
       {/* الجدول */}
       <div className="glass-card overflow-hidden">
         <div className="px-6 py-4 border-b border-border flex items-center gap-2">
@@ -169,6 +183,7 @@ export default async function ReturnsPage(
                       className="px-6 py-4 whitespace-nowrap text-right"
                       dir="ltr"
                     >
+                      <div className="font-mono text-primary">{ret.documentNumber}</div>
                       <div className="text-foreground">
                         {new Date(ret.createdAt).toLocaleDateString("ar-IQ", {
                           timeZone: "Asia/Baghdad",
@@ -187,7 +202,7 @@ export default async function ReturnsPage(
                         className="font-mono text-muted-foreground text-xs bg-muted px-2 py-1 rounded"
                         dir="ltr"
                       >
-                        {ret.saleId.substring(0, 8)}…
+                        {ret.sale.documentNumber}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">

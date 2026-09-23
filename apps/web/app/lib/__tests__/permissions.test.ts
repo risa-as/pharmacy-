@@ -51,3 +51,5 @@ describe('getDefaultPermissions — fail-closed fallback', () => {
         expect((permissions as Record<string, unknown>).unknown).toBeUndefined();
     });
 });
+
+it('manager operational defaults preserve explicit revocation and exclude platform administration',()=>{const defaults=getDefaultPermissions('MANAGER');expect(defaults.canCreatePurchase).toBe(true);expect(defaults.canDoStocktake).toBe(true);expect(defaults.canTransferStock).toBe(true);expect(defaults.canManageUsers).toBe(false);expect(getUserPermissions({role:'MANAGER',permissions:JSON.stringify({canTransferStock:false})}).canTransferStock).toBe(false);});

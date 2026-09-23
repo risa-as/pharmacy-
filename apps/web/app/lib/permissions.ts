@@ -43,6 +43,13 @@ export interface UserPermissions {
     canViewSuppliers: boolean;
     canCreatePurchase: boolean;
 
+    canViewWarehouseOrders: boolean;
+    canCreateWarehouseOrder: boolean;
+    canApproveWarehouseOrder: boolean;
+    canReceivePurchase: boolean;
+    canReturnWarehouseOrder: boolean;
+    canReconcileWarehouseOrder: boolean;
+
     // Administration
     canManageUsers: boolean;
     canManageBranches: boolean;
@@ -57,6 +64,13 @@ export interface UserPermissions {
 
 // Default permissions by role
 const ADMIN_DEFAULTS: UserPermissions = {
+    canViewWarehouseOrders: true,
+    canCreateWarehouseOrder: true,
+    canApproveWarehouseOrder: true,
+    canReceivePurchase: true,
+    canReturnWarehouseOrder: true,
+    canReconcileWarehouseOrder: true,
+
     canSell: true, canApplyDiscount: true, canViewSales: true, canDeleteSale: true,
     canProcessReturn: true, canViewReturns: true,
     canViewInventory: true, canAddDrug: true, canEditDrug: true, canDeleteDrug: true,
@@ -70,6 +84,13 @@ const ADMIN_DEFAULTS: UserPermissions = {
 };
 
 const PHARMACIST_DEFAULTS: UserPermissions = {
+    canViewWarehouseOrders: true,
+    canCreateWarehouseOrder: true,
+    canApproveWarehouseOrder: true,
+    canReceivePurchase: true,
+    canReturnWarehouseOrder: true,
+    canReconcileWarehouseOrder: false,
+
     canSell: true, canApplyDiscount: true, canViewSales: true, canDeleteSale: false,
     canProcessReturn: true, canViewReturns: true,
     canViewInventory: true, canAddDrug: true, canEditDrug: true, canDeleteDrug: false,
@@ -83,6 +104,13 @@ const PHARMACIST_DEFAULTS: UserPermissions = {
 };
 
 const CASHIER_DEFAULTS: UserPermissions = {
+    canViewWarehouseOrders: false,
+    canCreateWarehouseOrder: false,
+    canApproveWarehouseOrder: false,
+    canReceivePurchase: false,
+    canReturnWarehouseOrder: false,
+    canReconcileWarehouseOrder: false,
+
     canSell: true, canApplyDiscount: false, canViewSales: true, canDeleteSale: false,
     canProcessReturn: false, canViewReturns: false,
     canViewInventory: true, canAddDrug: false, canEditDrug: false, canDeleteDrug: false,
@@ -103,6 +131,13 @@ const CASHIER_DEFAULTS: UserPermissions = {
 // canPayDebt) must never inherit ANY role's permissions just because it fell
 // through the switch. See app/lib/__tests__/permissions.test.ts.
 const ALL_FALSE_DEFAULTS: UserPermissions = {
+    canViewWarehouseOrders: false,
+    canCreateWarehouseOrder: false,
+    canApproveWarehouseOrder: false,
+    canReceivePurchase: false,
+    canReturnWarehouseOrder: false,
+    canReconcileWarehouseOrder: false,
+
     canSell: false, canApplyDiscount: false, canViewSales: false, canDeleteSale: false,
     canProcessReturn: false, canViewReturns: false,
     canViewInventory: false, canAddDrug: false, canEditDrug: false, canDeleteDrug: false,
@@ -118,6 +153,7 @@ const ALL_FALSE_DEFAULTS: UserPermissions = {
 export function getDefaultPermissions(role: string): UserPermissions {
     switch (role) {
         case 'ADMIN': return { ...ADMIN_DEFAULTS };
+        case 'MANAGER': return { ...ADMIN_DEFAULTS, canManageUsers: false, canManageBranches: false, canChangeSettings: false, canBackup: false };
         // SUPER_ADMIN is documented elsewhere (auth.config.ts's /dashboard
         // authorized() branch: "Admin and Super Admin have full access") as
         // having full access — mirrored here explicitly instead of letting
@@ -140,7 +176,7 @@ export function getDefaultPermissions(role: string): UserPermissions {
 
 export function getUserPermissions(user: { role: string; permissions?: string | null }): UserPermissions {
     const defaults = getDefaultPermissions(user.role);
-    if (!user.permissions) return defaults;
+    if (!['ADMIN', 'MANAGER', 'SUPER_ADMIN', 'PHARMACIST', 'CASHIER'].includes(user.role) || !user.permissions) return defaults;
 
     try {
         const overrides = JSON.parse(user.permissions);
@@ -152,7 +188,18 @@ export function getUserPermissions(user: { role: string; permissions?: string | 
         for (const key of Object.keys(defaults) as Array<keyof UserPermissions>) {
             if (typeof overrides[key] === 'boolean') safeOverrides[key] = overrides[key];
         }
-        return { ...defaults, ...safeOverrides };
+        const result = { ...defaults, ...safeOverrides };
+        // Legacy accounts retain prior restrictions until these flags are explicitly saved.
+        const legacy = result.canViewSuppliers && result.canCreatePurchase;
+        for (const key of ['canCreateWarehouseOrder', 'canApproveWarehouseOrder', 'canReceivePurchase', 'canReturnWarehouseOrder', 'canReconcileWarehouseOrder'] as const) {
+            if (typeof overrides[key] !== 'boolean') result[key] = legacy && (key !== 'canReconcileWarehouseOrder' || defaults[key]);
+        }
+        if (typeof overrides.canViewWarehouseOrders !== 'boolean') result.canViewWarehouseOrders = result.canViewSuppliers;
+        result.canViewWarehouseOrders &&= result.canViewSuppliers;
+        result.canReceivePurchase &&= result.canViewSuppliers;
+        for (const key of ['canCreateWarehouseOrder', 'canApproveWarehouseOrder', 'canReturnWarehouseOrder', 'canReconcileWarehouseOrder'] as const) result[key] &&= result.canViewWarehouseOrders;
+        result.canReconcileWarehouseOrder &&= ['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role);
+        return result;
     } catch {
         return defaults;
     }
@@ -188,6 +235,12 @@ export const PERMISSION_LABELS: Record<keyof UserPermissions, { label: string; c
     canEditPatient: { label: 'تعديل بيانات مريض', category: 'العملاء' },
     canViewSuppliers: { label: 'عرض الموردين', category: 'التوريد' },
     canCreatePurchase: { label: 'إنشاء طلب شراء', category: 'التوريد' },
+    canViewWarehouseOrders: { label: 'عرض طلبات المذاخر', category: 'التوريد' },
+    canCreateWarehouseOrder: { label: 'إنشاء طلب من مذخر', category: 'التوريد' },
+    canApproveWarehouseOrder: { label: 'اعتماد ورفض وإلغاء طلب المذخر', category: 'التوريد' },
+    canReceivePurchase: { label: 'استلام المشتريات', category: 'التوريد' },
+    canReturnWarehouseOrder: { label: 'إرجاع مشتريات المذخر', category: 'التوريد' },
+    canReconcileWarehouseOrder: { label: 'مطابقة الاستلام والسداد', category: 'التوريد' },
     canManageUsers: { label: 'إدارة المستخدمين', category: 'الإدارة' },
     canManageBranches: { label: 'إدارة الفروع', category: 'الإدارة' },
     canViewAuditLog: { label: 'سجل النشاطات', category: 'الإدارة' },

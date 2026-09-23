@@ -1,4 +1,6 @@
 "use client";
+import { HandCoins } from "@/app/ui/debts/debt-icon";
+
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -65,6 +67,7 @@ interface NavLink {
   subLinks?: {
     name: string;
     href: string;
+    icon?: any;
     activeFor?: string[];
     excludeFor?: string[];
     plan?: "pro" | "enterprise";
@@ -166,7 +169,7 @@ const sections: NavSection[] = [
             ],
           },
           // { name: "نقطة البيع (مؤقت)", href: "/dashboard/pos-temp" },
-          { name: "دفتر الديون", href: "/dashboard/debts" },
+          { name: "دفتر الديون", href: "/dashboard/debts", icon: HandCoins },
           {
             name: "حركة المنتجات",
             href: "/dashboard/inventory/product-movement",
@@ -641,6 +644,7 @@ export default function SideNav({
                                 },
                               )}
                             >
+                              {subLink.icon && <subLink.icon className="w-4 h-4 shrink-0" aria-hidden="true" />}
                               <span className="truncate flex-1">
                                 {subLink.name}
                               </span>

@@ -1,3 +1,4 @@
+import { returnedCost } from '@/app/lib/profit-math';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
@@ -38,11 +39,12 @@ export async function GET(req: Request) {
 
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewProfitReport) return NextResponse.json({ error: 'ليس لديك صلاحية لهذا الإجراء.' }, { status: 403 });
         const { tenantWhere } = tenantCtx;
 
         // Fetch all branches
         const branches = await prisma.branch.findMany({
-            where: tenantWhere,
+            where: tenantCtx.branchModelWhere,
             select: { id: true, name: true }
         });
 
@@ -55,8 +57,8 @@ export async function GET(req: Request) {
                     _sum: { total: true },
                     where: { ...branchFilter, createdAt: dateFilter }
                 }),
-                prisma.saleItem.aggregate({
-                    _sum: { cost: true },
+                prisma.saleItem.findMany({
+                    select: { cost: true, quantity: true },
                     where: { sale: { ...branchFilter, createdAt: dateFilter } }
                 }),
                 prisma.expense.aggregate({
@@ -92,10 +94,14 @@ export async function GET(req: Request) {
             ]);
 
             const revenue = salesAgg._sum.total || 0;
-            const cogs = cogsAgg._sum.cost || 0;
+            const cogs = cogsAgg.reduce((sum, item) => sum + item.cost * item.quantity, 0);
             const expenses = expAgg._sum.amount || 0;
             const returns = returnsAgg._sum.total || 0;
-            const netProfit = revenue - cogs - expenses - returns;
+            const returnLines = await prisma.saleReturn.findMany({ where: { ...branchFilter, createdAt: dateFilter }, select: {
+                items: { select: { drugId: true, quantity: true } }, sale: { select: { items: { select: { drugId: true, quantity: true, cost: true } } } },
+            } });
+            const reversed = returnLines.reduce((sum, r) => sum + returnedCost(r.items, r.sale.items), 0);
+            const netProfit = revenue - cogs - expenses - returns + reversed;
             const margin = revenue > 0 ? (netProfit / revenue * 100) : 0;
 
             // Growth vs previous equal-length period

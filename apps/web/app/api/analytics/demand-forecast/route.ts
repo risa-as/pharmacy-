@@ -1,108 +1,87 @@
-export const dynamic = 'force-dynamic';
-
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/app/lib/prisma';
-import { getTenantContext } from '@/app/lib/tenant-utils';
-
-// GET: Generate demand forecasts for a branch
-export async function GET(req: NextRequest) {
-    try {
-        const tenantCtx = await getTenantContext();
-        if (tenantCtx instanceof NextResponse) return tenantCtx;
-
-        const { searchParams } = new URL(req.url);
-        const branchId = searchParams.get('branchId') || tenantCtx.user.branchId;
-        const days = Number(searchParams.get('days') || 30);
-
-        if (!branchId) return NextResponse.json({ error: "branchId required" }, { status: 400 });
-
-        // Get historical sales for the last 90 days grouped by drug
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-        const salesData = await prisma.saleItem.groupBy({
-            by: ['drugId'],
-            _sum: { quantity: true },
-            where: {
-                sale: {
-                    branchId,
-                    createdAt: { gte: ninetyDaysAgo }
-                }
-            },
-            orderBy: { _sum: { quantity: 'desc' } },
-            take: 50
-        });
-
-        if (salesData.length === 0) {
-            return NextResponse.json({
-                forecasts: [],
-                message: 'لا توجد بيانات مبيعات كافية للتنبؤ'
-            });
-        }
-
-        // Get drug details
-        const drugIds = salesData.map((s: any) => s.drugId);
-        const drugs = await prisma.globalDrug.findMany({
-            where: { id: { in: drugIds } },
-            select: { id: true, tradeName: true, barcode: true }
-        });
-
-        // Get current stock
-        const inventories = await prisma.inventory.findMany({
-            where: { branchId, drugId: { in: drugIds } },
-            include: { batches: true }
-        });
-
-        const inventoryMap = new Map<string, any>(inventories.map((i: any) => [i.drugId, i]));
-        const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
-
-        // Moving Average Forecast algorithm
-        const forecasts = salesData.map((sale: any) => {
-            const drug = drugMap.get(sale.drugId);
-            const inv = inventoryMap.get(sale.drugId);
-            const totalSold = sale._sum.quantity || 0;
-            const dailyAvg = totalSold / 90;
-            const predictedDemand = Math.ceil(dailyAvg * days);
-            const currentStock = inv?.batches?.reduce((acc: number, batch: any) => acc + batch.quantity, 0) || 0;
-            const minStock = inv?.minStock || 10;
-            const daysUntilStockout = dailyAvg > 0 ? Math.floor(currentStock / dailyAvg) : 999;
-            const suggestedOrder = Math.max(0, predictedDemand - currentStock + minStock);
-
-            // Confidence based on data consistency
-            const confidence = Math.min(0.95, 0.5 + (totalSold > 100 ? 0.3 : totalSold > 30 ? 0.2 : 0.1));
-
-            return {
-                drugId: sale.drugId,
-                drugName: drug?.tradeName || 'غير معروف',
-                barcode: drug?.barcode,
-                totalSold90Days: totalSold,
-                dailyAverage: Math.round(dailyAvg * 100) / 100,
-                predictedDemand,
-                currentStock,
-                daysUntilStockout,
-                suggestedOrder,
-                confidence: Math.round(confidence * 100),
-                urgency: daysUntilStockout <= 7 ? 'critical' : daysUntilStockout <= 14 ? 'warning' : 'normal'
-            };
-        });
-
-        // Sort by urgency
-        forecasts.sort((a: any, b: any) => {
-            const urgencyOrder = { critical: 0, warning: 1, normal: 2 };
-            return (urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 2) - (urgencyOrder[b.urgency as keyof typeof urgencyOrder] || 2);
-        });
-
-        return NextResponse.json({
-            forecasts,
-            metadata: {
-                branchId,
-                forecastDays: days,
-                dataWindow: 90,
-                algorithm: 'moving_average',
-                generatedAt: new Date().toISOString()
-            }
-        });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
-    }
+export const dynamic = "force-dynamic";
+import { NextResponse } from "next/server";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { getPlanningData } from "@/app/lib/smart-purchasing-data";
+import {
+  baghdadDate,
+  dateStart,
+  DAY,
+  planRow,
+  validatePlanningOptions,
+} from "@/app/lib/smart-purchasing";
+export async function GET(req: Request) {
+  const ctx = await getTenantContext();
+  if (ctx instanceof NextResponse) return ctx;
+  if (!ctx.userPermissions.canViewReports)
+    return NextResponse.json(
+      { error: "ليس لديك صلاحية عرض التقارير" },
+      { status: 403 },
+    );
+  try {
+    const p = new URL(req.url).searchParams,
+      days = Number(p.get("days") ?? 30);
+    const options = {
+      coverageDays: days,
+      leadDays: 0,
+      safetyDays: 0,
+      fromArrival: false,
+    };
+    validatePlanningOptions(options);
+    const end = dateStart(baghdadDate());
+    const data = await getPlanningData(
+      ctx,
+      p.get("branchId") || ctx.user.branchId,
+      baghdadDate(new Date(end.getTime() - 90 * DAY)),
+      baghdadDate(new Date(end.getTime() - DAY)),
+    );
+    const forecasts = data.rows
+      .map((row) => {
+        const r = planRow(row, options, data.today);
+        return {
+          drugId: r.drugId,
+          branchId: r.branchId,
+          drugName: r.drugName,
+          barcode: r.barcode,
+          totalSold90Days: r.netSales,
+          dailyAverage: Number(r.averageDailySales.toFixed(2)),
+          predictedDemand: Math.ceil(r.averageDailySales * days),
+          currentStock: r.currentStock,
+          daysUntilStockout:
+            r.coverage === null ? null : Math.floor(r.coverage),
+          suggestedOrder: r.suggestedQty,
+          confidence: null,
+          quality: r.noDemand
+            ? "حركة غير كافية"
+            : r.qualityReasons.length
+              ? "تحتاج مراجعة"
+              : "متوسط تاريخي",
+          urgency: r.out ? "critical" : r.insufficient ? "warning" : "normal",
+        };
+      })
+      .sort((a, b) => {
+        const rank: Record<string, number> = {
+          critical: 0,
+          warning: 1,
+          normal: 2,
+        };
+        return rank[a.urgency] - rank[b.urgency];
+      });
+    return NextResponse.json({
+      forecasts,
+      metadata: {
+        branchId: p.get("branchId") || ctx.user.branchId,
+        forecastDays: days,
+        dataWindow: 90,
+        algorithm: "inventory_coverage_v1",
+        generatedAt: data.generatedAt,
+      },
+      notice: data.notice,
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "تعذر حساب التوقع؛ تحقق من نطاق الفرع والمدة" },
+      { status: 400 },
+    );
+  }
 }

@@ -1,0 +1,16 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+import {NextRequest} from 'next/server';
+const h=vi.hoisted(()=>({mode:'ORDER_PORTAL',tx:{} as any,find:vi.fn(),transaction:vi.fn()}));
+vi.mock('@/app/lib/prisma',()=>({prisma:{warehouseOrder:{findFirst:h.find},$transaction:h.transaction}}));
+vi.mock('@/app/lib/warehouse-context',()=>({getWarehouseContext:async()=>({warehouseId:'w',user:{id:'u',name:'Staff'}})}));
+vi.mock('@/app/lib/warehouse-permission-guard',()=>({requireWarehousePermission:async()=>({ok:true})}));
+vi.mock('@/app/lib/warehouse-order-lock',()=>({lockWarehouseOrder:vi.fn()}));
+vi.mock('@/app/lib/notifications/notificationTriggers',()=>({sendAndPersistNotification:vi.fn()}));
+import {PATCH} from '../../api/warehouse-portal/orders/[id]/shipping/route';
+const lot={drugId:'d',batchNumber:'B1',expiryDate:'2099-01-01',quantity:7};
+const params={params:Promise.resolve({id:'o'})};
+const req=(lots:unknown)=>new NextRequest('http://local/x',{method:'PATCH',body:JSON.stringify({status:'SHIPPED',lots})});
+beforeEach(()=>{vi.clearAllMocks();h.mode='ORDER_PORTAL';h.find.mockResolvedValue({id:'o',status:'APPROVED',branchId:'b'});h.tx={$queryRaw:vi.fn(),warehouse:{findUniqueOrThrow:async()=>({operatingMode:h.mode})},warehouseOrder:{findUniqueOrThrow:vi.fn().mockResolvedValue({id:'o',items:[{drugId:'d',quantity:5,quotedQuantity:null,status:'AVAILABLE',bonusQuantity:2,unitPrice:10,drug:{barcode:'123',tradeName:'Drug'}}]}),update:vi.fn(),updateMany:vi.fn().mockResolvedValue({count:1})},warehouseOrderEvent:{create:vi.fn()},warehouseCatalogItem:{findMany:vi.fn().mockResolvedValue([])}};h.transaction.mockImplementation((fn:any)=>fn(h.tx))});
+it('portal saves real shipment metadata without querying or deducting warehouse stock',async()=>{expect((await PATCH(req([lot]),params)).status).toBe(200);expect(h.tx.warehouseCatalogItem.findMany).not.toHaveBeenCalled();expect(h.tx.warehouseOrder.update).toHaveBeenCalledWith({where:{id:'o'},data:{shipmentMode:'ORDER_PORTAL',externalShipment:[lot]}})});
+it('portal cannot ship without complete batch information',async()=>{expect((await PATCH(req([]),params)).status).toBe(409);expect(h.tx.warehouseOrder.updateMany).not.toHaveBeenCalled()});
+it('full mode does not silently skip items missing inventory',async()=>{h.mode='FULL';expect((await PATCH(req(undefined),params)).status).toBe(409);expect(h.tx.warehouseOrder.updateMany).not.toHaveBeenCalled()});

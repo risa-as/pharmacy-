@@ -1,3 +1,4 @@
+import type { PlanningResult, PlanningSettings } from '../utils/smart-planning';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
@@ -59,6 +60,11 @@ function _cacheTTL(endpoint: string): number {
 // Weekly / monthly reports aggregate large date ranges on the server and can
 // exceed the default 8 s limit. Override per path prefix as needed.
 const _TIMEOUT_MS: Array<[string, number]> = [
+    ['/smart-order', 30_000],
+    ['/warehouses/orders', 40_000],
+    ['/inventory/stocktake', 40_000],
+    ['/inventory/transfers', 40_000],
+    ['/purchases', 40_000],
     ['/reports', 25_000],  // 25 s — aggregation queries can be slow
 ];
 function _requestTimeout(endpoint: string): number {
@@ -130,6 +136,16 @@ function _invalidateInventoryCaches() {
 // of firing a duplicate network request.
 const _inflight = new Map<string, Promise<unknown>>();
 
+export class SessionChangedError extends Error {
+    constructor(message = 'Session changed while the request was in flight') { super(message); this.name = 'SessionChangedError'; }
+}
+export const getSessionGeneration = () => _sessionGeneration;
+/** Only auth/refresh may rotate credentials for the same verified user and scope. */
+export function rotateCachedToken(token:string, previousToken:string, generation:number):boolean {
+    if (generation !== _sessionGeneration || (cachedToken !== undefined && cachedToken !== previousToken)) return false;
+    cachedToken = token;
+    return true;
+}
 export function setCachedToken(token: string | null) {
     if (cachedToken !== token) {
         _sessionGeneration++;
@@ -272,10 +288,11 @@ async function fetchOnce<T>(
         // A response authenticated with an old account must not log out or
         // return data into a newer session after the token has changed.
         if (sessionGeneration !== _sessionGeneration) {
-            throw new Error('Session changed while the request was in flight');
+            throw new SessionChangedError('Session changed while the request was in flight');
         }
 
         if (response.status === 401) {
+            if (token !== cachedToken) throw new SessionChangedError('Credentials refreshed during request');
             if (noAutoLogout) {
                 // Background/polling call — throw silently without wiping the session
                 throw new Error('انتهت صلاحية الجلسة');
@@ -287,18 +304,18 @@ async function fetchOnce<T>(
 
         if (!response.ok) {
             const errorText = await response.text();
+            let serverMessage: string | undefined;
             try {
                 const errorJson = JSON.parse(errorText);
-                throw new Error(errorJson.message || `HTTP ${response.status}: ${response.statusText}`);
-            } catch (e) {
-                if (e instanceof Error && e.message.includes('انتهت صلاحية')) throw e;
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
+                const message = errorJson.message || errorJson.error;
+                if (typeof message === 'string' && message.trim()) serverMessage = message;
+            } catch { /* Non-JSON error pages must not be shown as raw HTML. */ }
+            throw new Error(serverMessage || `HTTP ${response.status}: ${response.statusText}`);
         }
 
         const result = await response.json() as T;
         if (sessionGeneration !== _sessionGeneration) {
-            throw new Error('Session changed while the request was in flight');
+            throw new SessionChangedError('Session changed while the request was in flight');
         }
         return result;
     } catch (error) {
@@ -349,7 +366,7 @@ async function request<T>(
         // so simultaneous callers also share request preparation.
         const [token, baseUrl] = await Promise.all([getStoredToken(sessionGeneration), getBaseUrl()]);
         if (sessionGeneration !== _sessionGeneration) {
-            throw new Error('Session changed while the request was being prepared');
+            throw new SessionChangedError('Session changed while the request was being prepared');
         }
         let lastError: unknown;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -470,7 +487,7 @@ export const apiService = {
             const query = branchId ? `?branchId=${branchId}` : '';
             return await request<any[]>(`/inventory${query}`, {}, false, { forceRefresh });
         } catch (error) {
-            console.error('API Error getInventory:', error);
+            if (!(error instanceof SessionChangedError)) console.error('API Error getInventory:', error);
             // For development, allow mock inventory
             // return [
             //     { id: '1', drugName: 'باراسيتامول 500mg', quantity: 150, price: 2.50, reorderLevel: 20 },
@@ -706,6 +723,12 @@ export const apiService = {
         }
     },
 
+    async getSmartPlanning(settings: PlanningSettings, branchId?: string, forceRefresh = false) {
+        const params = new URLSearchParams({ format: 'planning', ...Object.fromEntries(Object.entries(settings).map(([k, v]) => [k, String(v)])) });
+        if (branchId) params.set('branchId', branchId);
+        return request<PlanningResult>(`/smart-order?${params}`, {}, false, { forceRefresh });
+    },
+
     // Get Smart Orders
     async getSmartOrders(branchId?: string) {
         try {
@@ -739,7 +762,7 @@ export const apiService = {
     },
 
     // Create Purchase
-    async createPurchase(data: { branchId: string; supplierId: string; items: any[] }) {
+    async createPurchase(data: { branchId: string; supplierId: string; items: any[]; idempotencyKey: string }) {
         try {
             return await request('/purchases/create', {
                 method: 'POST',

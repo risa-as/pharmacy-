@@ -43,7 +43,7 @@ export default async function AnalyticsPage(
 
     const selectedBranchId = searchParams?.branch;
     const branchWhere = selectedBranchId
-        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        ? { AND: [tenantBranchWhere, { branchId: selectedBranchId }] }
         : tenantBranchWhere;
 
     let resolvedOrgId = organizationId;

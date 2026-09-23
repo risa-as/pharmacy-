@@ -1,0 +1,11 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+const h=vi.hoisted(()=>({event:vi.fn(),user:vi.fn(),order:vi.fn()}));
+vi.mock('../prisma',()=>({prisma:{warehouseOrderEvent:{findFirst:h.event},user:{findUnique:h.user},warehouseOrder:{findFirst:h.order}}}));
+import {canAutomaticallyApproveWarehouseOrder as allowed} from '../warehouse-auto-approval-permission';
+const actor={role:'PHARMACIST',isActive:true,permissions:null,branchId:'b',branch:{organizationId:'org'}};
+beforeEach(()=>{vi.clearAllMocks();h.event.mockResolvedValue({payload:{requestedByUserId:'u',canAutoApproveQuote:true}});h.user.mockResolvedValue(actor);h.order.mockResolvedValue({id:'o'})});
+it('requires recorded approval authority at creation',async()=>{h.event.mockResolvedValue({payload:{requestedByUserId:'u',canAutoApproveQuote:false}});expect(await allowed('o')).toBe(false);expect(h.user).not.toHaveBeenCalled()});
+it('requires manual approval for legacy requests',async()=>{h.event.mockResolvedValue({payload:{itemCount:1}});expect(await allowed('o')).toBe(false)});
+it.each([{isActive:false},{permissions:JSON.stringify({canApproveWarehouseOrder:false})}])('rechecks current authority %j',async patch=>{h.user.mockResolvedValue({...actor,...patch});expect(await allowed('o')).toBe(false)});
+it('rejects a requester no longer in the order scope',async()=>{h.order.mockResolvedValue(null);expect(await allowed('o')).toBe(false)});
+it('allows an active authorized requester still in scope',async()=>{expect(await allowed('o')).toBe(true);expect(h.order).toHaveBeenCalledWith({where:{AND:[{id:'o'},{branchId:'b'}]},select:{id:true}})});

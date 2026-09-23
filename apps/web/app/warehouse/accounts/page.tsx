@@ -9,6 +9,7 @@ import { hasWarehousePermission } from "@/app/lib/warehouse-permissions";
 import { agingBucket, summarizeReceivables } from "@/app/lib/warehouse-accounts";
 import PageHeader from "@/app/warehouse/_components/PageHeader";
 import AccountsClient from "./AccountsClient";
+import { loadOpenReceivables } from '@/app/lib/warehouse-receivables';
 
 export const dynamic = "force-dynamic";
 
@@ -56,12 +57,9 @@ export default async function WarehouseAccountsPage() {
                 _count: { select: { payments: true } },
             },
             orderBy: { issuedAt: "desc" },
-            take: 300,
+            take: 50,
         }),
-        prisma.warehouseInvoice.findMany({
-            where: { warehouseId: ctx.warehouseId, status: { in: ["UNPAID", "PARTIAL"] } },
-            select: { total: true, paidAmount: true, status: true, dueAt: true },
-        }),
+        loadOpenReceivables(prisma, ctx.warehouseId),
     ]);
 
     const now = new Date();

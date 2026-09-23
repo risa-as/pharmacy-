@@ -1,4 +1,8 @@
 'use server';
+import { resolvePurchaseIdentity } from '@/app/lib/purchase-drug-identity';
+import { pharmacyDrugScope } from '@/app/lib/drug-scope';
+import { getPlanningData } from '@/app/lib/smart-purchasing-data';
+import { planRow } from '@/app/lib/smart-purchasing';
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '@/app/lib/prisma';
@@ -9,103 +13,34 @@ import { logAudit } from '@/app/lib/audit';
 import { receivePurchaseStock } from '@/app/lib/purchase-receipt';
 import { computeShippedBatchPrefill, type ShippedBatchPrefill } from '@/app/lib/shipped-batch-prefill';
 
-// Smart-reorder tuning (matches /api/smart-order).
-const VELOCITY_WINDOW_DAYS = 30; // sales look-back window
-const LEAD_TIME_DAYS = 14;       // typical supplier lead time in Iraq
-const SAFETY_STOCK_DAYS = 7;     // safety buffer
+export async function getSmartPurchasingData(branchId?: string, from?: string, to?: string) {
+    const ctx = await getTenantContext();
+    if (ctx instanceof NextResponse) throw new Error('تعذر التحقق من الجلسة');
+    return getPlanningData(ctx, branchId, from, to);
+}
 
 export async function getLowStockInventory(branchId?: string) {
-    const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return [];
-    const { tenantBranchWhere } = tenantCtx;
+    const data = await getSmartPurchasingData(branchId);
+    return data.rows.map(row => planRow(row, { coverageDays: 15, leadDays: 0, safetyDays: 0, fromArrival: false }, data.today)).filter(row => row.action);
+}
 
-    // 1. Fetch inventory based on branchId (if provided) or tenantBranchWhere
-    const finalWhere = { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] };
-
-    const inventories = await prisma.inventory.findMany({
-        where: finalWhere,
-        include: {
-            batches: true,
-            branch: true,
-        }
+/** Revalidate the handoff on the server; browser storage is never authoritative. */
+export async function prepareSmartOrderDraft(branchId: string, input: { drugId: string; quantity: number; unitsPerPack: number }[]) {
+    const ctx = await getTenantContext();
+    if (ctx instanceof NextResponse || !ctx.userPermissions.canCreatePurchase) throw new Error('ليس لديك صلاحية إنشاء الطلب');
+    if (!Array.isArray(input) || !input.length || input.length > 500 || input.some(l=>!l || typeof l.drugId !== 'string' || !Number.isSafeInteger(l.quantity) || l.quantity < 1 || l.quantity > 1000000 || !Number.isSafeInteger(l.unitsPerPack) || l.unitsPerPack < 1) || new Set(input.map(l=>l.drugId)).size !== input.length) throw new Error('مسودة غير صالحة');
+    if (!await prisma.branch.findFirst({where:{AND:[ctx.branchModelWhere,{id:branchId}]},select:{id:true}})) throw new Error('الفرع خارج النطاق');
+    const inventory = await prisma.inventory.findMany({where:{branchId,drugId:{in:input.map(l=>l.drugId)},drug:{isActive:true,...pharmacyDrugScope(ctx.organizationId)}},include:{drug:true,batches:{where:{quantity:{gt:0},expiryDate:{gte:new Date()}},select:{quantity:true}}}});
+    if(inventory.length!==input.length)throw new Error('تغيرت الأصناف المتاحة؛ حدّث تحليل الشراء');
+    const candidates = await prisma.globalDrug.findMany({where:{...pharmacyDrugScope(ctx.organizationId),barcode:{in:inventory.map(i=>i.drug.barcode)}},select:{id:true,barcode:true,tradeName:true,scientificName:true,organizationId:true}});
+    return input.map(line=>{
+        const inv=inventory.find(i=>i.drugId===line.drugId)!;
+        if(!inv.drug.unitsPerPackConfirmedAt || inv.drug.unitsPerPack!==line.unitsPerPack) throw new Error('تغيرت التعبئة أو لم تؤكد؛ حدّث تحليل الشراء قبل المراجعة');
+        const identity=resolvePurchaseIdentity(inv.drug,candidates);
+        return {drugId:inv.drugId,globalDrugId:identity.globalDrugId,tradeName:inv.drug.tradeName,scientificName:inv.drug.scientificName,barcode:inv.drug.barcode,currentStock:inv.batches.reduce((s,b)=>s+b.quantity,0),inInventory:true,
+            orderability:identity.reason,orderabilityReason:identity.reason==='AMBIGUOUS_BARCODE'?'مطابقة الباركود تحتاج مراجعة':identity.reason==='NO_BARCODE'?'الباركود غير متوفر':null,
+            quantity:line.quantity,unitsPerPack:line.unitsPerPack,comparison:null,selectedSupplierId:null,manuallyChosen:false,chosenPriceAtSelection:null,manualWarehouseId:null,manualWarehouseName:null};
     });
-
-    // 2. Fetch all Global Drugs to map names
-    const drugIds = inventories.map((i: any) => i.drugId);
-    const drugs = await prisma.globalDrug.findMany({
-        where: { id: { in: drugIds } }
-    });
-    const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
-
-    // 3. Filter for Low Stock
-    const lowStockItems = inventories.map((inv: any) => {
-        const currentStock = inv.batches.reduce((sum: number, b: any) => sum + b.quantity, 0);
-        const drug = drugMap.get(inv.drugId);
-
-        return {
-            inventoryId: inv.id,
-            drugId: inv.drugId,
-            drugName: drug?.tradeName || 'Unknown',
-            barcode: drug?.barcode,
-            currentStock,
-            minStock: inv.minStock,
-            maxStock: inv.maxStock,
-            cost: inv.cost,
-            branchId: inv.branchId,
-            branchName: inv.branch.name
-        };
-    }).filter((item: any) => item.currentStock < item.minStock);
-
-    // 4. Exclude items already in PENDING purchases
-    const pendingFinalWhere = { AND: [tenantBranchWhere, { status: 'PENDING' }, ...(branchId ? [{ branchId }] : [])] };
-    const pendingPurchases = await prisma.purchase.findMany({
-        where: pendingFinalWhere,
-        include: { items: true }
-    });
-
-    const pendingDrugIds = new Set<string>();
-    pendingPurchases.forEach((p: any) => {
-        p.items.forEach((i: any) => pendingDrugIds.add(i.drugId));
-    });
-
-    const filtered = lowStockItems.filter((item: any) => !pendingDrugIds.has(item.drugId));
-    if (filtered.length === 0) return [];
-
-    // 5. Compute sales velocity per (drug, branch) so the suggested quantity is
-    //    demand-driven (avg daily sales × lead+safety) instead of a flat top-up.
-    //    Items with no recent sales fall back to "fill to max stock".
-    const neededDrugIds = filtered.map((i: any) => i.drugId);
-    const velocityStart = new Date();
-    velocityStart.setDate(velocityStart.getDate() - VELOCITY_WINDOW_DAYS);
-
-    const recentSaleItems = await prisma.saleItem.findMany({
-        where: {
-            drugId: { in: neededDrugIds },
-            sale: { AND: [tenantBranchWhere, { createdAt: { gte: velocityStart } }, ...(branchId ? [{ branchId }] : [])] },
-        },
-        select: { drugId: true, quantity: true, sale: { select: { branchId: true } } },
-    });
-
-    const soldByKey = new Map<string, number>();
-    for (const it of recentSaleItems) {
-        const key = `${it.drugId}:${(it as any).sale?.branchId ?? ''}`;
-        soldByKey.set(key, (soldByKey.get(key) || 0) + it.quantity);
-    }
-
-    return filtered
-        .map((item: any) => {
-            const totalSold = soldByKey.get(`${item.drugId}:${item.branchId}`) || 0;
-            const averageDailySales = totalSold / VELOCITY_WINDOW_DAYS;
-            const velocityQty = Math.ceil(averageDailySales * (LEAD_TIME_DAYS + SAFETY_STOCK_DAYS));
-            const fallbackQty = Math.max(0, item.maxStock - item.currentStock);
-            return {
-                ...item,
-                suggestedQty: Math.max(1, averageDailySales > 0 ? velocityQty : fallbackQty),
-                averageDailySales: Math.round(averageDailySales * 100) / 100,
-                totalSoldLast30Days: totalSold,
-            };
-        })
-        .sort((a: any, b: any) => a.currentStock - b.currentStock);
 }
 
 export async function createSmartPurchase(branchId: string, supplierId: string, items: any[]) {
@@ -171,7 +106,7 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
 
 export async function getSuppliers() {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return [];
+    if (tenantCtx instanceof NextResponse || !tenantCtx.userPermissions.canViewSuppliers) return [];
     if (!tenantCtx.organizationId && tenantCtx.user.role !== 'SUPER_ADMIN') return [];
     const tenantWhere = tenantCtx.user.role === 'SUPER_ADMIN' ? {} : { organizationId: tenantCtx.organizationId };
 
@@ -183,7 +118,7 @@ export async function getSuppliers() {
 
 export async function getPurchases(branchId?: string) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return []; // Fallback empty array instead of exposing errors in TS
+    if (tenantCtx instanceof NextResponse || !tenantCtx.userPermissions.canViewSuppliers) return [];
     const { tenantBranchWhere } = tenantCtx;
 
     let finalWhere = { ...tenantBranchWhere };
@@ -191,7 +126,7 @@ export async function getPurchases(branchId?: string) {
         finalWhere = { AND: [tenantBranchWhere, { branchId }] };
     }
 
-    return await prisma.purchase.findMany({
+    const purchases = await prisma.purchase.findMany({
         where: finalWhere,
         include: {
             supplier: true,
@@ -200,11 +135,16 @@ export async function getPurchases(branchId?: string) {
         },
         orderBy: { createdAt: 'desc' }
     });
+    const legacy = purchases.filter(p=>p.supplier.warehouseId&&!p.warehouseOrderId);
+    const links = legacy.length ? await prisma.warehouseOrderEvent.findMany({where:{type:'APPROVED',order:tenantBranchWhere,OR:legacy.map(p=>({payload:{path:['purchaseId'],equals:p.id}}))},select:{orderId:true,payload:true}}) : [];
+    const linked = new Map(links.map(e=>[(e.payload as any)?.purchaseId,e.orderId]));
+    return purchases.map(p=>({...p,warehouseOrderId:p.warehouseOrderId||linked.get(p.id)||null}));
+
 }
 
 export async function getPurchaseDetails(id: string) {
     const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) return null;
+    if (tenantCtx instanceof NextResponse || !tenantCtx.userPermissions.canViewSuppliers) return null;
 
     const purchase = await prisma.purchase.findFirst({
         where: { id, ...tenantCtx.tenantBranchWhere },
@@ -246,9 +186,12 @@ export async function getPurchaseDetails(id: string) {
             where: { type: 'APPROVED', payload: { path: ['purchaseId'], equals: id } },
             select: { orderId: true },
         });
-        if (linkedOrder) {
+        const shippedOrderId = purchase.warehouseOrderId || linkedOrder?.orderId;
+        if (shippedOrderId) {
+            const shipment = await prisma.warehouseOrder.findUnique({where:{id:shippedOrderId},select:{shipmentMode:true,externalShipment:true}});
+            if(shipment?.shipmentMode === 'ORDER_PORTAL' && Array.isArray(shipment.externalShipment)) prefillByDrug = computeShippedBatchPrefill(shipment.externalShipment as any);
             const moves = await prisma.warehouseStockMove.findMany({
-                where: { orderId: linkedOrder.orderId, type: 'SHIPMENT', batchId: { not: null } },
+                where: { orderId: shippedOrderId, type: 'SHIPMENT', batchId: { not: null } },
                 select: {
                     catalogItemId: true,
                     quantity: true,
@@ -364,7 +307,7 @@ export async function cancelPurchase(purchaseId: string) {
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) throw new Error('غير مصرح');
-    if (!tenantCtx.userPermissions.canCreatePurchase) throw new Error('ليس لديك صلاحية استلام المشتريات.');
+    if (!tenantCtx.userPermissions.canReceivePurchase) throw new Error('ليس لديك صلاحية استلام المشتريات.');
     if (typeof isPaid !== 'boolean') throw new Error('حالة الدفع غير صالحة.');
     const result = await receivePurchaseStock(prisma, purchaseId, tenantCtx.tenantBranchWhere, items, isPaid, tenantCtx.user);
     revalidatePath('/dashboard/purchases');

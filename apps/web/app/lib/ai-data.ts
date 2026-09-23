@@ -98,7 +98,7 @@ export async function getSuspiciousActivity(from: Date, to: Date, ctx: AIDataCon
             where: { ...where, OR: [{ hasPriceOverride: true }, { discount: { gt: maxDiscount } }] },
             select: {
                 id: true,
-                invoiceNumber: true,
+                invoiceNumber: true, documentNumber: true,
                 total: true,
                 discount: true,
                 hasPriceOverride: true,
@@ -134,7 +134,7 @@ export async function getSuspiciousActivity(from: Date, to: Date, ctx: AIDataCon
             const flags: string[] = [];
             if (s.hasPriceOverride) flags.push('تعديل سعر');
             if (s.discount > maxDiscount) flags.push(`خصم ${s.discount}% > الحد ${maxDiscount}%`);
-            const invNo = s.invoiceNumber != null ? `#${String(s.invoiceNumber).padStart(4, '0')}` : `#${s.id.slice(0, 8)}`;
+            const invNo = s.invoiceNumber != null ? `#${String(s.invoiceNumber).padStart(4, '0')}` : `#${s.documentNumber}`;
             lines.push(`- فاتورة ${invNo} | ${userName} | إجمالي: ${fmt(s.total)} | ${flags.join(' + ')} | ${fmtDate(s.createdAt)}`);
             for (const item of s.items) {
                 const orig = item.originalPrice!;
@@ -395,7 +395,7 @@ export async function getPendingOrders(ctx: AIDataContext): Promise<string> {
             total: true,
             paidAmount: true,
             status: true,
-            invoiceNumber: true,
+            invoiceNumber: true, documentNumber: true,
             createdAt: true,
             supplier: { select: { name: true } },
             items: {
@@ -587,7 +587,7 @@ export async function getPurchasesSummary(from: Date, to: Date, ctx: AIDataConte
             total: true,
             paidAmount: true,
             status: true,
-            invoiceNumber: true,
+            invoiceNumber: true, documentNumber: true,
             createdAt: true,
             supplier: { select: { name: true } },
         },

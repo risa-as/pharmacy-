@@ -43,10 +43,7 @@ export default async function Page(
 
   const users = await prisma.user
     .findMany({
-      where: {
-        ...tenantBranchWhere,
-        ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
-      },
+      where: { AND: [tenantBranchWhere, ...(selectedBranchId ? [{ branchId: selectedBranchId }] : [])] },
       orderBy: { createdAt: "desc" },
       include: { branch: true },
     })

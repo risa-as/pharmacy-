@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 // المخزون فعلياً بأسلوب FEFO — انظر deductStockForShipment أدناه للقاعدة
 // ذاتية الضبط الكاملة (مذخر بلا دفعات مُدخَلة لصنف يستمر بلا تحقق كما كان).
 import { NextRequest, NextResponse } from 'next/server';
+import { validatePortalShipment } from '@/app/lib/warehouse-operating-mode';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/app/lib/prisma';
 import { lockWarehouseOrder } from '@/app/lib/warehouse-order-lock';
@@ -98,14 +99,15 @@ async function deductStockForShipment(
     );
 
     const shortfalls: Array<{ barcode: string; tradeName: string; missing: number }> = [];
-    const plannedMoves: Array<{ catalogItemId: string; batchId: string; quantity: number }> = [];
+    const plannedMoves: Array<{ catalogItemId: string; batchId: string; quantity: number; unitCost: number }> = [];
 
     for (const d of deductions) {
         const catalogItem = catalogByBarcode.get(d.barcode);
         const batchCount = catalogItem?.batches.length ?? 0;
 
         if (decideStockTracking(batchCount) === 'UNTRACKED_SKIP') {
-            continue; // لا صنف كتالوج مطابق، أو صنف بلا أي دفعة — غير متتبَّع، يُشحَن بلا تحقق.
+            shortfalls.push({barcode:d.barcode,tradeName:tradeNameByBarcode.get(d.barcode) ?? d.barcode,missing:d.quantity});
+            continue;
         }
 
         const allocation = allocateFEFO(catalogItem!.batches, d.quantity);
@@ -119,7 +121,7 @@ async function deductStockForShipment(
         }
 
         for (const a of allocation.allocations) {
-            plannedMoves.push({ catalogItemId: catalogItem!.id, batchId: a.batchId, quantity: a.quantity });
+            plannedMoves.push({ catalogItemId: catalogItem!.id, batchId: a.batchId, quantity: a.quantity, unitCost: catalogItem!.batches.find(b => b.id === a.batchId)!.costPrice });
         }
     }
 
@@ -155,6 +157,7 @@ async function deductStockForShipment(
                 batchId: move.batchId,
                 type: 'SHIPMENT',
                 quantity: move.quantity,
+                unitCost: move.unitCost,
                 actorName,
                 orderId,
             },
@@ -208,6 +211,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         const isShippingTransition = order.status === 'APPROVED' && status === 'SHIPPED';
 
         const updated = await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "Warehouse" WHERE id = ${ctx.warehouseId} FOR UPDATE`;
+            const warehouse = await tx.warehouse.findUniqueOrThrow({where:{id:ctx.warehouseId},select:{operatingMode:true}});
             await lockWarehouseOrder(tx, order.id, order.status);
             if (isShippingTransition) {
                 const orderWithItems = await tx.warehouseOrder.findUniqueOrThrow({
@@ -215,6 +220,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                     select: {
                         items: {
                             select: {
+                                drugId: true,
                                 quantity: true,
                                 unitPrice: true,
                                 quotedPrice: true,
@@ -227,6 +233,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                     },
                 });
 
+                if (warehouse.operatingMode === 'ORDER_PORTAL') {
+                    let lots;
+                    try { lots = validatePortalShipment(body.lots, orderWithItems.items.filter(i=>i.status!=='OUT_OF_STOCK').map(i=>({drugId:i.drugId,quantity:(i.status==='PARTIAL' ? i.quotedQuantity ?? 0 : i.quantity)+i.bonusQuantity}))); }
+                    catch(e) { throw new StockShortfallError(e instanceof Error?e.message:'بيانات الشحنة غير صالحة',[]); }
+                    await tx.warehouseOrder.update({where:{id:order.id},data:{shipmentMode:'ORDER_PORTAL',externalShipment:lots}});
+                } else {
+                    await tx.warehouseOrder.update({where:{id:order.id},data:{shipmentMode:'FULL'}});
                 await deductStockForShipment(
                     tx,
                     ctx.warehouseId,
@@ -234,6 +247,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                     orderWithItems.items,
                     ctx.user.name ?? ctx.user.email ?? null
                 );
+                }
             }
 
             // حارس تزامن: التحديث مشروط بأن تبقى حالة الطلب كما قرأناها خارج

@@ -8,7 +8,7 @@
 //
 // z-50 موحَّد لكل النوافذ (أعلى من درج التنقّل الجوّال في WarehouseSideNav
 // الذي يبقى z-40 — لا تغييره، فهو ليس نافذة منبثقة).
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export default function Modal({
@@ -26,16 +26,28 @@ export default function Modal({
 }) {
     // آمن للتصيير على الخادم: document غير موجود أثناء SSR، لذا لا نستدعي
     // createPortal إلا بعد التركيب على المتصفّح (mounted === true).
+    const dialog = useRef<HTMLDivElement>(null);
+    const closeRef = useRef(onClose); closeRef.current = onClose;
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
         setMounted(true);
     }, []);
 
     useEffect(() => {
-        if (!open) return;
-
+        if (!open || !mounted) return;
+        const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const focusable = () => Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []).filter(el => el.getClientRects().length > 0);
+        (focusable()[0] ?? dialog.current)?.focus();
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
+            const dialogs = document.querySelectorAll('[aria-modal="true"]');
+            if (dialogs[dialogs.length - 1] !== dialog.current) return;
+            if (e.key === "Escape") { e.preventDefault(); closeRef.current(); }
+            if (e.key === 'Tab') {
+                const nodes = focusable(), first = nodes[0], last = nodes[nodes.length - 1];
+                if (!first) { e.preventDefault(); dialog.current?.focus(); }
+                else if (e.shiftKey && (document.activeElement === first || !dialog.current?.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && (document.activeElement === last || !dialog.current?.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+            }
         };
         window.addEventListener("keydown", onKeyDown);
 
@@ -48,8 +60,9 @@ export default function Modal({
         return () => {
             window.removeEventListener("keydown", onKeyDown);
             document.body.style.overflow = previousOverflow;
+            if (previousFocus?.isConnected) previousFocus.focus();
         };
-    }, [open, onClose]);
+    }, [open, mounted]);
 
     if (!open || !mounted) return null;
 
@@ -57,6 +70,8 @@ export default function Modal({
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
             dir="rtl"
+            ref={dialog}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={title}

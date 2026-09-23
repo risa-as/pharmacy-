@@ -140,7 +140,7 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
 
     return (
         <div className="p-6 space-y-6" dir="rtl">
-            <h1 className="text-2xl font-bold">استلام مواد الطلب #{purchase.id.slice(0, 8)}</h1>
+            <h1 className="text-2xl font-bold">استلام مواد الطلب #{purchase.documentNumber}</h1>
 
             <div className="bg-card rounded-lg shadow overflow-hidden">
                 <Table>

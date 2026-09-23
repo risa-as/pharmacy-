@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter, Href } from 'expo-router';
+import { useLocalSearchParams, useRouter, Href, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../../services/api';
@@ -36,7 +36,7 @@ export default function PurchaseDetailsScreen() {
         }
     }, [id]);
 
-    useEffect(() => { if (id) fetchDetails(); }, [fetchDetails, id]);
+    useFocusEffect(useCallback(() => { if(id) void fetchDetails(); }, [fetchDetails,id]));
 
     const handleWhatsApp = () => {
         if (!purchase) return;
@@ -100,7 +100,7 @@ export default function PurchaseDetailsScreen() {
     const status = purchaseStatus(purchase.status);
     const isPending = purchase.status === 'PENDING';
     const isCancelled = purchase.status === 'CANCELLED';
-    const refId = purchase.id.slice(0, 8).toUpperCase();
+    const refId = purchase.documentNumber || "—";
     const estimatedTotal = purchase.items.reduce((s: number, i: any) => s + i.quantity * (i.cost ?? 0), 0);
 
     return (
@@ -172,10 +172,11 @@ export default function PurchaseDetailsScreen() {
                     </View>
                 </Surface>
 
-                {isPending && (
+                {purchase.warehouseOrderId&&<AppButton label="متابعة العرض والشحن والاستلام" variant="outline" onPress={()=>router.push({pathname:'/warehouse-orders' as any,params:{orderId:purchase.warehouseOrderId}})}/>}
+                {isPending && !purchase.warehouseOrderId && (
                     <View style={{ gap: 10 }}>
-                        <AppButton label="استلام المواد" icon="cube-outline" onPress={() => router.push(`/purchases/${id}/receive` as Href)} />
-                        <AppButton label="إلغاء الطلب" icon="close-circle-outline" variant="dangerOutline" loading={cancelling} onPress={handleCancel} />
+                        <AppButton permission="canReceivePurchase" label="استلام المواد" icon="cube-outline" onPress={() => router.push(`/purchases/${id}/receive` as Href)} />
+                        <AppButton permission="canCreatePurchase" label="إلغاء الطلب" icon="close-circle-outline" variant="dangerOutline" loading={cancelling} onPress={handleCancel} />
                     </View>
                 )}
             </ScrollView>

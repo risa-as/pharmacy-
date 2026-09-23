@@ -88,7 +88,7 @@ export default async function TransfersTable({
                             return (
                                 <tr key={transfer.id} className="hover:bg-muted/40 transition-colors">
                                     <td className="whitespace-nowrap px-6 py-4 font-mono text-muted-foreground text-xs" dir="ltr">
-                                        #{transfer.id.slice(0, 8).toUpperCase()}
+                                        {transfer.documentNumber}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 font-bold">
                                         {isIncoming ? (

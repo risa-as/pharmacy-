@@ -1,3 +1,4 @@
+import { getUserPermissions } from '@/app/lib/permissions';
 export const dynamic = 'force-dynamic';
 
 import { Prisma } from '@prisma/client';
@@ -33,6 +34,12 @@ export async function POST(req: Request) {
     try {
         const syncUser = await validateSyncUser(req);
         if (syncUser instanceof NextResponse) return syncUser;
+        if (syncUser.role !== 'DEVICE') {
+            const actor = await prisma.user.findUnique({where:{id:syncUser.id},select:{isActive:true,role:true,permissions:true,branchId:true,branch:{select:{organizationId:true}}}});
+            if (!actor?.isActive || !getUserPermissions(actor).canAddDrug) return NextResponse.json({message:'ليس لديك صلاحية إضافة المخزون'},{status:403});
+            syncUser.role=actor.role;syncUser.branchId=actor.branchId??undefined;syncUser.organizationId=actor.branch?.organizationId;
+            if (!syncUser.branchId && actor.role!=='SUPER_ADMIN') return NextResponse.json({message:'لا يوجد فرع مصرح'}, {status:403});
+        }
 
         const body = await req.json();
         const idempotencyKey = readIdempotencyKey(req, body);
@@ -71,6 +78,9 @@ export async function POST(req: Request) {
             );
         }
 
+        const rawCost = costPrice;
+        const validatedCost = typeof rawCost === "number" || typeof rawCost === "string" ? Number(rawCost) : NaN;
+        if (!Number.isFinite(validatedCost) || validatedCost <= 0 || validatedCost > 1000000000) return NextResponse.json({success:false,message:'تكلفة الشراء يجب أن تكون أكبر من صفر. البونص يُستلم من طلب الشراء المعتمد.'}, {status:400});
         const parsedQuantity = Number.parseInt(String(quantity ?? 0), 10) || 0;
         if (parsedQuantity <= 0) {
             return NextResponse.json(
@@ -115,8 +125,8 @@ export async function POST(req: Request) {
                         data: {
                             drugId,
                             branchId,
-                            price: Number(costPrice) || 0,
-                            cost: Number(costPrice) || 0,
+                            price: validatedCost,
+                            cost: validatedCost,
                             minStock: 0,
                             maxStock: 1000,
                         }
@@ -144,7 +154,7 @@ export async function POST(req: Request) {
                         ? new Date(expiryDate)
                         : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
                     batchNumber: effectiveBatchNumber,
-                    costPrice: Number(costPrice) || 0,
+                    costPrice: validatedCost,
                     supplierId: supplierId ?? null,
                 }
             });
@@ -180,7 +190,7 @@ export async function POST(req: Request) {
             action: "ADD_BATCH",
             entity: "INVENTORY",
             entityId: result.inventory.id,
-            details: JSON.stringify({ quantity: parsedQuantity, drugId: drugId ?? null, source: "desktop-sync" }),
+            details: JSON.stringify({ quantity: parsedQuantity, costPrice: validatedCost, batchNumber: batchNumber ?? null, drugId: drugId ?? null, source: "desktop-sync" }),
             branchId: result.inventory.branchId,
         });
 

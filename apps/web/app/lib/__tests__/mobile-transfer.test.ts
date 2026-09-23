@@ -1,0 +1,14 @@
+import {beforeEach,it,expect,vi} from 'vitest';
+import {NextRequest,NextResponse} from 'next/server';
+const h=vi.hoisted(()=>({access:vi.fn(),db:{branch:{findFirst:vi.fn()},$transaction:vi.fn()}}));
+vi.mock('@/app/lib/transfer-access',()=>({transferAccess:h.access}));vi.mock('@/app/lib/prisma',()=>({prisma:h.db}));
+import {POST} from '../../api/inventory/transfers/route';
+import {PUT} from '../../api/inventory/transfers/[id]/receive/route';
+const ctx={user:{id:'u'},branchModelWhere:{id:'own'}};
+const request=(body:any)=>new NextRequest('http://local/x',{method:'POST',body:JSON.stringify(body)});
+beforeEach(()=>{vi.clearAllMocks();h.access.mockResolvedValue(ctx);});
+it('requires transfer permission before any mutation',async()=>{h.access.mockResolvedValue(NextResponse.json({error:'no'},{status:403}));expect((await POST(request({}))).status).toBe(403);expect(h.db.$transaction).not.toHaveBeenCalled();});
+it('rejects missing destination before branch lookup',async()=>{expect((await POST(request({fromBranchId:'own'}))).status).toBe(409);expect(h.db.branch.findFirst).not.toHaveBeenCalled();});
+it('requires destination to belong to source organization',async()=>{h.db.branch.findFirst.mockResolvedValueOnce({id:'own',organizationId:'org'}).mockResolvedValueOnce(null);expect((await POST(request({fromBranchId:'own',toBranchId:'foreign',items:[{batchId:'b',quantity:1}]}))).status).toBe(409);expect(h.db.branch.findFirst.mock.calls[1][0].where).toEqual({id:'foreign',organizationId:'org'});expect(h.db.$transaction).not.toHaveBeenCalled();});
+it('receiving is scoped to destination and replay does not add stock',async()=>{const tx:any={$queryRaw:vi.fn(),transfer:{findFirst:vi.fn().mockResolvedValue({status:'COMPLETED'})},batch:{create:vi.fn()}};h.db.$transaction.mockImplementation((fn:any)=>fn(tx));const result=await PUT(request({}),{params:Promise.resolve({id:'t'})});expect(result.status).toBe(200);expect(tx.transfer.findFirst.mock.calls[0][0].where).toEqual({id:'t',toBranch:{id:'own'}});expect(tx.batch.create).not.toHaveBeenCalled();});
+it('foreign destination cannot receive',async()=>{const tx:any={$queryRaw:vi.fn(),transfer:{findFirst:vi.fn().mockResolvedValue(null)},batch:{create:vi.fn()}};h.db.$transaction.mockImplementation((fn:any)=>fn(tx));expect((await PUT(request({}),{params:Promise.resolve({id:'t'})})).status).toBe(409);expect(tx.batch.create).not.toHaveBeenCalled();});

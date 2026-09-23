@@ -9,6 +9,8 @@ import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { agingBucket } from '@/app/lib/warehouse-accounts';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
+import { warehousePage } from '@/app/lib/warehouse-pagination';
+import type { Prisma } from '@prisma/client';
 
 const VALID_STATUSES = ['UNPAID', 'PARTIAL', 'PAID', 'CANCELLED'];
 
@@ -24,24 +26,28 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const status = searchParams.get('status') || undefined;
         const organizationId = searchParams.get('organizationId') || undefined;
+        const search = searchParams.get('search')?.trim();
+        const pagination = warehousePage(searchParams);
 
         if (status && !VALID_STATUSES.includes(status)) {
             return NextResponse.json({ error: 'status غير صالح' }, { status: 400 });
         }
 
-        const invoices = await prisma.warehouseInvoice.findMany({
-            where: {
+        const where: Prisma.WarehouseInvoiceWhereInput = {
                 warehouseId: ctx.warehouseId,
                 ...(status ? { status: status as any } : {}),
                 ...(organizationId ? { organizationId } : {}),
-            },
+                ...(search ? { OR: [{ organization: { name: { contains: search, mode: 'insensitive' } } }, { invoiceNumber: { contains: search, mode: 'insensitive' } }] } : {}),
+        };
+        const [invoices, total] = await prisma.$transaction([prisma.warehouseInvoice.findMany({
+            where,
             include: {
                 organization: { select: { name: true } },
                 _count: { select: { payments: true } },
             },
-            orderBy: { issuedAt: 'desc' },
-            take: 300,
-        });
+            orderBy: [{ issuedAt: 'desc' }, { id: 'desc' }],
+            take: pagination.take, skip: pagination.skip,
+        }), prisma.warehouseInvoice.count({ where })]);
 
         const now = new Date();
         const rows = invoices.map((inv) => ({
@@ -61,7 +67,7 @@ export async function GET(req: NextRequest) {
             notes: inv.notes,
         }));
 
-        return NextResponse.json({ invoices: rows });
+        return NextResponse.json({ invoices: rows, total, page: pagination.page, pageSize: pagination.pageSize });
     } catch (e: any) {
         console.error('warehouse-portal invoices GET error:', e);
         return NextResponse.json({ error: 'فشل في جلب الفواتير' }, { status: 500 });

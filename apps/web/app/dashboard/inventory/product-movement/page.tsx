@@ -57,15 +57,15 @@ export default async function ProductMovementPage(
 
     // فلتر الفرع للنماذج التي تملك علاقة branch مباشرة (Sale/Purchase/SaleReturn/Stocktake)
     const branchFilter: any = selectedBranchId
-        ? { ...tenantBranchWhere, branchId: selectedBranchId }
+        ? { AND: [tenantBranchWhere, { branchId: selectedBranchId }] }
         : tenantBranchWhere;
 
     // فلتر الفرع لنموذج التحويل (يستخدم fromBranch/toBranch بدل branch)
     const transferScope = (idField: 'fromBranchId' | 'toBranchId', relField: 'fromBranch' | 'toBranch'): any => {
-        if (selectedBranchId) return { [idField]: selectedBranchId };
-        if ((tenantBranchWhere as any).branchId) return { [idField]: (tenantBranchWhere as any).branchId };
-        if ((tenantBranchWhere as any).branch) return { [relField]: (tenantBranchWhere as any).branch };
-        return {};
+        const scope = (tenantBranchWhere as any).branchId
+            ? { [idField]: (tenantBranchWhere as any).branchId }
+            : (tenantBranchWhere as any).branch ? { [relField]: (tenantBranchWhere as any).branch } : {};
+        return selectedBranchId ? { AND: [scope, { [idField]: selectedBranchId }] } : scope;
     };
 
     let movements: Movement[] = [];
@@ -176,15 +176,15 @@ export default async function ProductMovementPage(
             ]);
 
             for (const si of saleItems) {
-                movements.push({ date: si.sale.createdAt, type: "بيع", quantity: -si.quantity, reference: `فاتورة #${si.saleId.slice(0, 8)}`, branch: si.sale.branch.name });
+                movements.push({ date: si.sale.createdAt, type: "بيع", quantity: -si.quantity, reference: `فاتورة #${si.sale.documentNumber}`, branch: si.sale.branch.name });
                 totalOut += si.quantity;
             }
             for (const pi of purchaseItems) {
-                movements.push({ date: pi.purchase.createdAt, type: "شراء", quantity: pi.quantity, reference: `مشتريات #${pi.purchaseId.slice(0, 8)}`, branch: pi.purchase.branch.name });
+                movements.push({ date: pi.purchase.createdAt, type: "شراء", quantity: pi.quantity, reference: `مشتريات #${pi.purchase.documentNumber}`, branch: pi.purchase.branch.name });
                 totalIn += pi.quantity;
             }
             for (const ri of returnItems) {
-                const ref = ri.saleReturn.returnNumber ? `مرتجع #${ri.saleReturn.returnNumber}` : `مرتجع #${ri.saleReturnId.slice(0, 8)}`;
+                const ref = `مرتجع ${ri.saleReturn.documentNumber}`;
                 movements.push({ date: ri.saleReturn.createdAt, type: "مرتجع", quantity: ri.quantity, reference: ref, branch: ri.saleReturn.branch.name });
                 totalIn += ri.quantity;
             }
