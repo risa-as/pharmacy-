@@ -32,7 +32,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
             if (params.user) return token;
             return refreshSessionToken(token, (id) => prisma.user.findUnique({
                 where: { id },
-                select: { role: true, isActive: true, branchId: true, permissions: true, warehouseId: true, sessionVersion: true, branch: { select: { organizationId: true } } },
+                select: { role: true, isActive: true, branchId: true, permissions: true, warehouseId: true, sessionVersion: true, branch: { select: { organizationId: true, organization: { select: { subscriptionEndsAt: true, isSuspended: true } } } } },
             }));
         },
         // An unverifiable session (database unavailable) exposes no user: every

@@ -664,12 +664,13 @@ export const apiService = {
         }
     },
 
-    // Toggle quick-sale flag for a drug
-    async toggleQuickSale(drugId: string, isQuickSale: boolean) {
+    // Toggle the quick-sale flag of a drug in one branch (the flag is per branch
+    // inventory; without branchId the server uses the user's own branch).
+    async toggleQuickSale(drugId: string, isQuickSale: boolean, branchId?: string) {
         try {
             return await request<any>('/inventory/quick-sale', {
                 method: 'PATCH',
-                body: JSON.stringify({ drugId, isQuickSale }),
+                body: JSON.stringify({ drugId, isQuickSale, ...(branchId ? { branchId } : {}) }),
             });
         } catch (error) {
             console.error('API Error toggleQuickSale:', error);

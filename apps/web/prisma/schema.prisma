@@ -241,6 +241,9 @@ model Inventory {
   updatedAt DateTime   @updatedAt
   maxStock  Int        @default(1000)
   minStock  Int        @default(1)
+  /// Quick-sale shortcut for this branch's stock (N09). GlobalDrug.isQuickSale
+  /// is shared by every organisation and is no longer read or written.
+  isQuickSale Boolean  @default(false)
   batches   Batch[]
   branch    Branch     @relation(fields: [branchId], references: [id])
 

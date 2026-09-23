@@ -18,7 +18,7 @@ export async function GET(req: Request) {
         const rows = summary.ids.length ? await prisma.inventory.findMany({
             where: { AND: [tenant.tenantBranchWhere, branchId ? { branchId } : {}, { id: { in: summary.ids } }] },
             include: {
-                drug: { select: { barcode: true, tradeName: true, scientificName: true, isQuickSale: true } },
+                drug: { select: { barcode: true, tradeName: true, scientificName: true } },
                 batches: { select: { quantity: true, expiryDate: true } },
             },
         }) : [];
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
             expiryDate: item.batches.filter(b => b.quantity > 0)
                 .reduce<Date | null>((earliest, b) => !earliest || b.expiryDate < earliest ? b.expiryDate : earliest, null),
             price: item.price, reorderLevel: item.minStock, branchId: item.branchId,
-            isQuickSale: item.drug.isQuickSale ?? false,
+            isQuickSale: item.isQuickSale,
         }]));
         return NextResponse.json({
             items: summary.ids.flatMap(id => mapped.has(id) ? [mapped.get(id)] : []),

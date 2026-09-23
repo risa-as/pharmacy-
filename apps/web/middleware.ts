@@ -52,7 +52,9 @@ export default auth((req) => {
     }
 
     // ── US4: Grace period write-blocking ─────────────────────────────────────
-    // subscriptionState is stored in the JWT by auth.ts (populated on sign-in).
+    // subscriptionState is stored in the JWT at sign-in and refreshed from the
+    // organisation on every Node-side session read (session-refresh.ts, N10); the
+    // edge copy here sees the refreshed value once the session cookie is rewritten.
     // Only API routes need to be blocked here; UI forms are gated by the overlay.
     const subscriptionState = (req.auth?.user as any)?.subscriptionState as string | undefined;
     if (subscriptionState === "grace" && isBlockedInGracePeriod(nextUrl.pathname, method ?? "GET")) {

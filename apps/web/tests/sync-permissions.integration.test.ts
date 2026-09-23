@@ -67,6 +67,24 @@ describe('sync/sales: operator permissions at sync time', () => {
         expect(body.conflicts).toHaveLength(2);
         expect(await db.sale.count({ where: { id: { in: [discounted.id, repriced.id] } } })).toBe(0);
     });
+
+    it('checks the price against the stored inventory price, not the originalPrice the device reports', async () => {
+        // Stored price is 100. The device omits originalPrice, or reports a false one.
+        const hidden = sale(f.cashier.id, { total: 150, items: [{ drugId: f.drug.id, quantity: 1, price: 150 }] });
+        const spoofed = sale(f.cashier.id, { total: 150, items: [{ drugId: f.drug.id, quantity: 1, price: 150, originalPrice: 150 }] });
+        const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [hidden, spoofed] }))).json();
+        expect(body.syncedIds).toEqual([]);
+        expect(body.conflicts.map((c: any) => c.id).sort()).toEqual([hidden.id, spoofed.id].sort());
+        expect(await db.sale.count({ where: { id: { in: [hidden.id, spoofed.id] } } })).toBe(0);
+    });
+
+    it('accepts the stored price from a cashier, and a changed price from someone allowed to edit prices', async () => {
+        const atStored = sale(f.cashier.id);
+        const byAdmin = sale(f.admin.id, { total: 150, items: [{ drugId: f.drug.id, quantity: 1, price: 150 }] });
+        const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [atStored, byAdmin] }))).json();
+        expect(body.conflicts).toEqual([]);
+        expect(body.syncedIds.sort()).toEqual([atStored.id, byAdmin.id].sort());
+    });
 });
 
 describe('operator impersonation: a restricted session cannot borrow a permitted id', () => {

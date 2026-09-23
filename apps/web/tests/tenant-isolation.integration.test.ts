@@ -14,7 +14,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/app/lib/saas-guards', () => ({ checkFeatureAccess: async () => ({ allowed: true }) }));
 
-import { GET as quickSale } from '../app/api/inventory/quick-sale/route';
+import { GET as quickSale, PATCH as toggleQuickSale } from '../app/api/inventory/quick-sale/route';
 import { GET as search } from '../app/api/inventory/search/route';
 import { GET as alerts } from '../app/api/alerts/route';
 import { GET as marginList, POST as marginCheck } from '../app/api/inventory/margin-check/route';
@@ -47,9 +47,10 @@ beforeAll(async () => {
     const foreignUser = await mk('CASHIER', b1.id, { pushEnabled: true, expoPushToken: 'ExponentPushToken[FOREIGN]' });
     await mk('CASHIER', a1.id, { pushEnabled: true, expoPushToken: 'ExponentPushToken[OWN]' });
     // Shared global drug (organizationId null) stocked in both tenants.
-    const drug = await db.globalDrug.create({ data: { barcode: 'ISO-' + key, tradeName: 'IsoDrug ' + key, scientificName: 'Iso', alternatives: [], isQuickSale: true } });
-    const invA = await db.inventory.create({ data: { branchId: a1.id, drugId: drug.id, price: 100, cost: 70, minStock: 50 } });
-    const invB = await db.inventory.create({ data: { branchId: b1.id, drugId: drug.id, price: 777, cost: 500, minStock: 50 } });
+    // The quick-sale flag is per branch inventory (N09); both tenants flagged it.
+    const drug = await db.globalDrug.create({ data: { barcode: 'ISO-' + key, tradeName: 'IsoDrug ' + key, scientificName: 'Iso', alternatives: [] } });
+    const invA = await db.inventory.create({ data: { branchId: a1.id, drugId: drug.id, price: 100, cost: 70, minStock: 50, isQuickSale: true } });
+    const invB = await db.inventory.create({ data: { branchId: b1.id, drugId: drug.id, price: 777, cost: 500, minStock: 50, isQuickSale: true } });
     const soon = new Date(Date.now() + 10 * 86400000);
     await db.batch.create({ data: { inventoryId: invA.id, batchNumber: 'OWN', quantity: 3, initialQuantity: 3, costPrice: 70, expiryDate: soon } });
     await db.batch.create({ data: { inventoryId: invB.id, batchNumber: 'FOREIGN-' + key, quantity: 9, initialQuantity: 9, costPrice: 500, expiryDate: soon } });
@@ -62,10 +63,32 @@ beforeAll(async () => {
     // Marketplace: a foreign listing with 5 units and a foreign order.
     const listing = await db.marketplaceListing.create({ data: { sellerId: b1.id, drugId: drug.id, quantity: 5, unitPrice: 10 } });
     await db.marketplaceOrder.create({ data: { listingId: listing.id, buyerId: b1.id, quantity: 1, totalPrice: 10, notes: 'FOREIGN-' + key } });
-    f = { a1, b1, pharmacist, adminA, drug, listing, foreignMarker: 'FOREIGN-' + key };
+    f = { a1, b1, pharmacist, adminA, drug, invA, invB, listing, foreignMarker: 'FOREIGN-' + key };
 });
 afterAll(() => db.$disconnect());
 beforeEach(() => as(f.pharmacist));
+
+describe('N09: the quick-sale flag belongs to each branch inventory', () => {
+    const patch = (body: unknown) => new NextRequest('http://localhost/api/inventory/quick-sale', { method: 'PATCH', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+    it('turning it off in one organisation leaves the other organisation flag and list untouched', async () => {
+        as(f.adminA);
+        const res = await toggleQuickSale(patch({ drugId: f.drug.id, isQuickSale: false }));
+        expect(res.status).toBe(200);
+        expect((await db.inventory.findUnique({ where: { id: f.invA.id } }))!.isQuickSale).toBe(false);
+        expect((await db.inventory.findUnique({ where: { id: f.invB.id } }))!.isQuickSale).toBe(true);
+        const rows = await (await quickSale(get('/api/inventory/quick-sale'))).json();
+        expect(rows.find((r: any) => r.id === f.drug.id)).toBeUndefined();
+        await toggleQuickSale(patch({ inventoryId: f.invA.id, isQuickSale: true }));
+        expect((await db.inventory.findUnique({ where: { id: f.invA.id } }))!.isQuickSale).toBe(true);
+    });
+
+    it('refuses another organisation inventory, by id or by branch', async () => {
+        as(f.adminA);
+        expect((await toggleQuickSale(patch({ inventoryId: f.invB.id, isQuickSale: false }))).status).toBe(403);
+        expect((await toggleQuickSale(patch({ drugId: f.drug.id, branchId: f.b1.id, isQuickSale: false }))).status).toBe(403);
+        expect((await db.inventory.findUnique({ where: { id: f.invB.id } }))!.isQuickSale).toBe(true);
+    });
+});
 
 describe('N11: client branchId no longer replaces a branch user\'s scope', () => {
     it('quick-sale: foreign branch stock and every tenant\'s sales stay hidden', async () => {

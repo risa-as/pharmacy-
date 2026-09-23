@@ -143,8 +143,21 @@ export async function POST(req: NextRequest) {
                     if (perms !== 'unattributed') {
                         if (!perms.canSell) throw new SyncSaleConflictError('صلاحية البيع غير متاحة لمنفذ البيع؛ تتطلب العملية مراجعة.');
                         if (sale.discount > 0 && !perms.canApplyDiscount) throw new SyncSaleConflictError('صلاحية الخصم غير متاحة لمنفذ البيع؛ تتطلب العملية مراجعة.');
-                        const priceChanged = sale.items.some(i => i.originalPrice != null && Math.abs(i.price - i.originalPrice) > .01
-                            && !perms.canEditPrice && !(i.price < i.originalPrice && perms.canApplyDiscount));
+                        // The reference price is the branch's stored inventory price, as on
+                        // the web, not the originalPrice the desktop reports (a client claim,
+                        // and absent unless the cashier overrode the price). A sale rung at a
+                        // price that has since changed is refused for review, not dropped.
+                        // Only an item whose inventory has not reached the cloud yet falls
+                        // back to the reported originalPrice.
+                        const stored = new Map((await tx.inventory.findMany({
+                            where: { branchId, drugId: { in: sale.items.map(i => i.drugId) } },
+                            select: { drugId: true, price: true },
+                        })).map(inv => [inv.drugId, inv.price]));
+                        const priceChanged = sale.items.some(i => {
+                            const reference = stored.get(i.drugId) ?? i.originalPrice;
+                            return reference != null && Math.abs(i.price - reference) > .01
+                                && !perms.canEditPrice && !(i.price < reference && perms.canApplyDiscount);
+                        });
                         if (priceChanged) throw new SyncSaleConflictError('تغيير السعر يحتاج صلاحية؛ تتطلب العملية مراجعة.');
                     }
                     const isCredit = sale.paymentMethod === "CREDIT";

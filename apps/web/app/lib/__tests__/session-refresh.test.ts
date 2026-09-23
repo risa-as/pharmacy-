@@ -36,6 +36,24 @@ describe('refreshSessionToken (N01, N14)', () => {
     });
 });
 
+describe('refreshSessionToken: subscription state (N10)', () => {
+    const inOrg = (organization: object) => row({ role: 'ADMIN', branchId: 'b1', branch: { organizationId: 'orgA', organization } });
+    const day = 86400000;
+    it('follows a suspension, a lapse into grace, and a renewal without a new sign-in', async () => {
+        const signedIn = staleAdmin({ role: 'ADMIN', subscriptionState: 'active' });
+        expect(await refreshSessionToken({ ...signedIn }, async () => inOrg({ isSuspended: true, subscriptionEndsAt: null }))).toMatchObject({ subscriptionState: 'suspended' });
+        expect(await refreshSessionToken({ ...signedIn }, async () => inOrg({ isSuspended: false, subscriptionEndsAt: new Date(Date.now() - 2 * day) }))).toMatchObject({ subscriptionState: 'grace' });
+        const graced = staleAdmin({ role: 'ADMIN', subscriptionState: 'grace' });
+        expect(await refreshSessionToken(graced, async () => inOrg({ isSuspended: false, subscriptionEndsAt: new Date(Date.now() + 60 * day) }))).toMatchObject({ subscriptionState: 'active' });
+    });
+
+    it('treats an account without a branch as active and keeps the value when the organisation was not loaded', async () => {
+        expect(await refreshSessionToken(staleAdmin({ subscriptionState: 'grace' }), async () => row())).toMatchObject({ subscriptionState: 'active' });
+        const kept = await refreshSessionToken(staleAdmin({ subscriptionState: 'grace' }), async () => row({ branchId: 'b1', branch: { organizationId: 'orgA' } }));
+        expect(kept).toMatchObject({ subscriptionState: 'grace' });
+    });
+});
+
 describe('withSessionRevocation middleware', () => {
     it('bumps sessionVersion on password change and on disabling, including upsert', () => {
         expect(withSessionRevocation({ model: 'User', action: 'update', args: { where: { id: 'u' }, data: { password: 'h' } } }).args.data)

@@ -1,4 +1,5 @@
 import type { JWT } from 'next-auth/jwt';
+import { getSubscriptionState } from './subscription-state';
 
 type UserLookup = (id: string) => Promise<{
     role: string;
@@ -7,7 +8,10 @@ type UserLookup = (id: string) => Promise<{
     permissions: string | null;
     warehouseId: string | null;
     sessionVersion: number;
-    branch: { organizationId: string } | null;
+    branch: {
+        organizationId: string;
+        organization?: { subscriptionEndsAt: Date | null; isSuspended: boolean } | null;
+    } | null;
 } | null>;
 
 /** Session marker set when the user could not be re-read (database unavailable). */
@@ -51,5 +55,12 @@ export async function refreshSessionToken(token: JWT, findUser: UserLookup): Pro
     token.organizationId = user.branch?.organizationId ?? null;
     token.permissions = user.permissions ?? null;
     token.warehouseId = user.warehouseId ?? null;
+    // Subscription state follows the organisation now, not the sign-in moment
+    // (N10), so a suspension or renewal reaches the session without a new login.
+    // No branch (warehouse or super admin) has nothing to gate on; a lookup that
+    // did not load the organisation leaves the previous value untouched.
+    const org = user.branch?.organization;
+    if (org) token.subscriptionState = getSubscriptionState(org).state;
+    else if (!user.branch) token.subscriptionState = 'active';
     return token;
 }

@@ -69,7 +69,7 @@ export async function GET(req: Request) {
         const drugs = drugIds.length > 0
             ? await prisma.globalDrug.findMany({
                 where: { id: { in: drugIds } },
-                select: { id: true, barcode: true, tradeName: true, scientificName: true, isQuickSale: true },
+                select: { id: true, barcode: true, tradeName: true, scientificName: true },
             })
             : [];
         const drugMap = new Map<string, any>(drugs.map((d: any) => [d.id, d]));
@@ -98,7 +98,7 @@ export async function GET(req: Request) {
                 publicPrice: drug ? (drug as any).publicPrice || item.price : item.price,
                 reorderLevel: item.minStock,
                 branchId: item.branchId,
-                isQuickSale: drug ? (drug.isQuickSale ?? false) : false,
+                isQuickSale: item.isQuickSale ?? false,
             };
         });
 

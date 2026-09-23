@@ -82,6 +82,8 @@ interface InventoryItem {
     expiryDate?: string;
     isQuickSale?: boolean;
     scientificName?: string;
+    /** Branch of this inventory row; the quick-sale flag is per branch. */
+    branchId?: string;
 }
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -292,13 +294,13 @@ export default function InventoryScreen() {
         return () => { active = false; task?.cancel(); };
     }, []));
 
-    const handleQuickSaleToggle = async (drugId: string) => {
+    const handleQuickSaleToggle = async (drugId: string, itemBranchId?: string) => {
         if (togglingQuickSale === drugId) return;
         setTogglingQuickSale(drugId);
         const newValue = !quickSaleState[drugId];
         setQuickSaleState(prev => ({ ...prev, [drugId]: newValue }));
         try {
-            const res = await apiService.toggleQuickSale(drugId, newValue);
+            const res = await apiService.toggleQuickSale(drugId, newValue, itemBranchId);
             if (!res?.success) setQuickSaleState(prev => ({ ...prev, [drugId]: !newValue }));
         } catch {
             setQuickSaleState(prev => ({ ...prev, [drugId]: !newValue }));
@@ -674,7 +676,7 @@ export default function InventoryScreen() {
                         <>
                             <View style={{ width: 1, height: 30, backgroundColor: C.border, marginHorizontal: 12 }} />
                             <TouchableOpacity
-                                onPress={() => handleQuickSaleToggle(item.drugId!)}
+                                onPress={() => handleQuickSaleToggle(item.drugId!, item.branchId)}
                                 disabled={isToggling}
                                 activeOpacity={0.75}
                                 accessibilityRole="switch"

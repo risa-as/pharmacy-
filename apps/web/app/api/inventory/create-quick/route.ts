@@ -152,7 +152,6 @@ export async function POST(req: Request) {
                         tradeName,
                         scientificName: scientificName || tradeName,
                         origin: origin || "unknown",
-                        isQuickSale: isQuickSale === true,
                         organizationId,
                         // مؤكّدة من لحظة الإنشاء، فلا تظهر إشارة التحقق لاحقاً.
                         unitsPerPack: validUnitsPerPack,
@@ -194,6 +193,9 @@ export async function POST(req: Request) {
                         cost: parsedCost,
                         minStock: parsedMin,
                         maxStock: parsedMax,
+                        // Per branch inventory (N09); set only when the row is created,
+                        // as the drug-level flag was.
+                        isQuickSale: isQuickSale === true,
                     }
                 });
             }

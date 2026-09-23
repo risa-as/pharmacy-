@@ -7,11 +7,12 @@ import { UpdateInventory, DeleteInventory } from "./buttons";
 
 interface InventoryItem {
   id: string;
+  /** Per-branch quick-sale flag (N09). */
+  isQuickSale: boolean;
   drug: {
     id: string;
     tradeName: string;
     barcode: string;
-    isQuickSale: boolean;
     // ميزة وحدة التسعير: محمّلان أصلاً ضمن include: { drug: true }،
     // فتمريرهما للنافذة بلا كلفة ويوفّر ذهاباً وإياباً إلى قاعدة بعيدة.
     unitsPerPack?: number | null;
@@ -78,24 +79,24 @@ export default function InventoryTable({
     lastCostAt: string | null;
   } | null>(null);
   const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(items.map((i) => [i.drug.id, i.drug.isQuickSale])),
+    () => Object.fromEntries(items.map((i) => [i.id, i.isQuickSale])),
   );
   const [toggling, setToggling] = useState<string | null>(null);
 
-  const handleQuickSaleToggle = async (drugId: string) => {
-    setToggling(drugId);
-    const newValue = !quickSaleState[drugId];
-    setQuickSaleState((prev) => ({ ...prev, [drugId]: newValue }));
+  const handleQuickSaleToggle = async (inventoryId: string) => {
+    setToggling(inventoryId);
+    const newValue = !quickSaleState[inventoryId];
+    setQuickSaleState((prev) => ({ ...prev, [inventoryId]: newValue }));
     try {
       const res = await fetch("/api/inventory/quick-sale", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ drugId, isQuickSale: newValue }),
+        body: JSON.stringify({ inventoryId, isQuickSale: newValue }),
       });
       if (!res.ok)
-        setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+        setQuickSaleState((prev) => ({ ...prev, [inventoryId]: !newValue }));
     } catch {
-      setQuickSaleState((prev) => ({ ...prev, [drugId]: !newValue }));
+      setQuickSaleState((prev) => ({ ...prev, [inventoryId]: !newValue }));
     } finally {
       setToggling(null);
     }
@@ -204,18 +205,18 @@ export default function InventoryTable({
                   <td className="whitespace-nowrap px-3 py-3 text-center">
                     <button
                       dir="ltr"
-                      onClick={() => handleQuickSaleToggle(item.drug.id)}
-                      disabled={toggling === item.drug.id}
+                      onClick={() => handleQuickSaleToggle(item.id)}
+                      disabled={toggling === item.id}
                       title="تفعيل/إلغاء البيع السريع"
                       className={`w-9 h-5 rounded-full transition-colors relative inline-flex items-center ${
-                        quickSaleState[item.drug.id]
+                        quickSaleState[item.id]
                           ? "bg-amber-400"
                           : "bg-muted-foreground/30"
-                      } ${toggling === item.drug.id ? "opacity-50" : ""}`}
+                      } ${toggling === item.id ? "opacity-50" : ""}`}
                     >
                       <span
                         className={`absolute w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                          quickSaleState[item.drug.id]
+                          quickSaleState[item.id]
                             ? "translate-x-4"
                             : "translate-x-0.5"
                         }`}

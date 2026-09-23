@@ -54,7 +54,7 @@ export async function GET(req: Request) {
                     costPrice: inv.cost || 0,
                     minStock: inv.minStock || 0,
                     maxStock: inv.maxStock || 100,
-                    isQuickSale: inv.drug.isQuickSale ?? false,
+                    isQuickSale: inv.isQuickSale ?? false,
                     // ميزة وحدة التسعير: يُرسلان ليعرف سطح المكتب — وهو يعمل
                     // أوفلاين — أُعُدّت أشرطة الدواء أم لا، فيعرض الإشارة الصحيحة
                     // بدل افتراض حالة لا يعرفها. null صريح لا حذف للحقل.
