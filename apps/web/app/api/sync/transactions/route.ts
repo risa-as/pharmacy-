@@ -48,9 +48,10 @@ export async function POST(req: NextRequest) {
         const userRole = syncUser.role;
         const userBranchId = syncUser.branchId;
         const userOrgId = syncUser.organizationId;
+        const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
+        if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+        const orgId = branch.organizationId;
         if (userRole !== 'SUPER_ADMIN') {
-            const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
-            if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
             if (userRole === 'ADMIN') {
                 if (branch.organizationId !== userOrgId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
             } else {
@@ -70,108 +71,96 @@ export async function POST(req: NextRequest) {
         }
 
         const processedIds: string[] = [];
+        // Records that are invalid or name another organisation's data: refused
+        // for review, never written and never silently dropped.
+        const conflicts: { id: string; message: string }[] = [];
 
-        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            // Resolve a desktop-local safe id to the cloud's canonical CASH_DRAWER
-            // safe for this branch. Prevents duplicate "الصندوق الرئيسي" safes when
-            // the desktop's local safe id differs from the one already in cloud.
-            const safeIdMap = new Map<string, string>();
-            async function resolveSafeId(incomingSafeId: string): Promise<string> {
-                const cached = safeIdMap.get(incomingSafeId);
-                if (cached) return cached;
+        // Resolve a desktop-local safe id to this branch's canonical CASH_DRAWER
+        // safe. Prevents duplicate "الصندوق الرئيسي" safes when the desktop's local
+        // safe id differs from the cloud's, and never uses a safe of another branch.
+        const resolveSafeId = async (tx: Prisma.TransactionClient, incomingSafeId: string): Promise<string> => {
+            // 1. The exact safe already exists in this branch → use it as-is.
+            const exact = await tx.safe.findUnique({ where: { id: incomingSafeId }, select: { id: true, branchId: true } });
+            if (exact && exact.branchId === branchId) return exact.id;
 
-                // 1. The exact safe already exists in cloud → use it as-is.
-                const exact = await tx.safe.findUnique({ where: { id: incomingSafeId }, select: { id: true } });
-                if (exact) {
-                    safeIdMap.set(incomingSafeId, exact.id);
-                    return exact.id;
-                }
+            // 2. A CASH_DRAWER safe already exists for this branch → reuse it.
+            const existing = await tx.safe.findFirst({
+                where: { branchId, type: 'CASH_DRAWER' },
+                orderBy: { createdAt: 'asc' },
+                select: { id: true },
+            });
+            if (existing) return existing.id;
 
-                // 2. A CASH_DRAWER safe already exists for this branch → reuse it
-                //    instead of creating a duplicate under the incoming id.
-                const existing = await tx.safe.findFirst({
-                    where: { branchId, type: 'CASH_DRAWER' },
-                    orderBy: { createdAt: 'asc' },
-                    select: { id: true },
-                });
-                if (existing) {
-                    safeIdMap.set(incomingSafeId, existing.id);
-                    return existing.id;
-                }
+            // 3. No safe exists yet → create the canonical one (keep the incoming id
+            //    unless another branch already uses it).
+            const created = await tx.safe.create({
+                data: { ...(exact ? {} : { id: incomingSafeId }), name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId },
+                select: { id: true },
+            });
+            return created.id;
+        };
 
-                // 3. No safe exists yet → create the canonical one (keep the incoming id).
-                try {
-                    const created = await tx.safe.create({
-                        data: { id: incomingSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId },
-                        select: { id: true },
-                    });
-                    safeIdMap.set(incomingSafeId, created.id);
-                    return created.id;
-                } catch {
-                    // Created concurrently — re-fetch the branch's safe.
-                    const fallback = await tx.safe.findFirst({
-                        where: { branchId, type: 'CASH_DRAWER' },
-                        orderBy: { createdAt: 'asc' },
-                        select: { id: true },
-                    });
-                    const resolved = fallback?.id ?? incomingSafeId;
-                    safeIdMap.set(incomingSafeId, resolved);
-                    return resolved;
-                }
+        // One transaction per record, so a refused or failing record neither rolls
+        // back nor blocks the others.
+        for (const txn of transactions) {
+            if ((txn.type !== 'IN' && txn.type !== 'OUT') || !Number.isFinite(txn.amount) || txn.amount < 0) {
+                conflicts.push({ id: txn.id, message: 'حركة صندوق غير صالحة (النوع أو المبلغ).' });
+                continue;
             }
+            try {
+                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'done' | 'foreign'> => {
+                    const existing = await tx.transaction.findUnique({ where: { id: txn.id }, select: { safe: { select: { branchId: true } } } });
+                    if (existing) return existing.safe.branchId === branchId ? 'done' : 'foreign';
 
-            for (const txn of transactions) {
-                const existing = await tx.transaction.findUnique({ where: { id: txn.id } });
-
-                if (existing) {
-                    continue; // Log already exists, skip
-                }
-
-                // Map the desktop's safe id onto the branch's canonical safe.
-                const resolvedSafeId = await resolveSafeId(txn.safeId);
-
-                // Create Transaction
-                await tx.transaction.create({
-                    data: {
-                        id: txn.id,
-                        safeId: resolvedSafeId,
-                        type: txn.type,
-                        amount: txn.amount,
-                        referenceType: txn.referenceType,
-                        referenceId: txn.referenceId,
-                        description: txn.description,
-                        userId: txn.userId,
-                        createdAt: new Date(txn.createdAt),
-                        updatedAt: new Date(txn.updatedAt)
+                    if (txn.userId) {
+                        const user = await tx.user.findUnique({ where: { id: txn.userId }, select: { branch: { select: { organizationId: true } } } });
+                        if (user && user.branch?.organizationId !== orgId) return 'foreign';
                     }
-                });
-                processedIds.push(txn.id);
 
-                // Update Safe Balance in Cloud DB
-                const safe = await tx.safe.findUnique({ where: { id: resolvedSafeId } });
-                if (safe) {
-                    const newBalance = txn.type === "IN" ? safe.balance + txn.amount : safe.balance - txn.amount;
+                    // Map the desktop's safe id onto the branch's canonical safe.
+                    const resolvedSafeId = await resolveSafeId(tx, txn.safeId);
+
+                    await tx.transaction.create({
+                        data: {
+                            id: txn.id,
+                            safeId: resolvedSafeId,
+                            type: txn.type,
+                            amount: txn.amount,
+                            referenceType: txn.referenceType,
+                            referenceId: txn.referenceId,
+                            description: txn.description,
+                            userId: txn.userId,
+                            createdAt: new Date(txn.createdAt),
+                            updatedAt: new Date(txn.updatedAt)
+                        }
+                    });
+
+                    // Update Safe Balance in Cloud DB
                     await tx.safe.update({
                         where: { id: resolvedSafeId },
-                        data: { balance: newBalance }
+                        data: { balance: txn.type === 'IN' ? { increment: txn.amount } : { decrement: txn.amount } }
                     });
-                }
+                    return 'done';
+                });
+                if (outcome === 'foreign') conflicts.push({ id: txn.id, message: 'الحركة تشير إلى حركة أو مستخدم من فرع أو مؤسسة أخرى.' });
+                else processedIds.push(txn.id);
+            } catch (txnErr: any) {
+                console.error(`[Transaction Sync] Failed to sync transaction ${txn.id}:`, txnErr.message);
             }
+        }
 
-            // Log the action
-            await tx.syncActionLog.upsert({
-                where: { idempotencyKey },
-                update: { status: "PROCESSED" },
-                create: {
-                    idempotencyKey,
-                    actionType: "SYNC_TRANSACTIONS",
-                    branchId,
-                    status: "PROCESSED"
-                }
-            });
+        await prisma.syncActionLog.upsert({
+            where: { idempotencyKey },
+            update: { status: "PROCESSED" },
+            create: {
+                idempotencyKey,
+                actionType: "SYNC_TRANSACTIONS",
+                branchId,
+                status: "PROCESSED"
+            }
         });
 
-        return NextResponse.json({ success: true, syncedIds: processedIds, ack: { status: 'processed', idempotencyKey } });
+        return NextResponse.json({ success: true, syncedIds: processedIds, conflicts, ack: { status: 'processed', idempotencyKey } });
 
     } catch (error: any) {
         console.error("Transaction sync error:", error);

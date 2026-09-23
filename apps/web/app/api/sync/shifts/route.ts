@@ -56,9 +56,10 @@ export async function POST(req: NextRequest) {
         const userRole = syncUser.role;
         const userBranchId = syncUser.branchId;
         const userOrgId = syncUser.organizationId;
+        const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
+        if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+        const orgId = branch.organizationId;
         if (userRole !== 'SUPER_ADMIN') {
-            const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } });
-            if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
             if (userRole === 'ADMIN') {
                 if (branch.organizationId !== userOrgId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
             } else {
@@ -78,15 +79,23 @@ export async function POST(req: NextRequest) {
         }
 
         const processedIds: string[] = [];
+        // Records that name another branch/organisation's shift, user or branch.
+        // They are refused for review (never written, never silently dropped).
+        const conflicts: { id: string; message: string }[] = [];
 
         // Process each shift in its own transaction so a single bad record
         // (e.g. an unresolvable user) can't roll back the entire batch and
         // block every shift from ever syncing.
         for (const shift of shifts) {
             try {
-                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'created' | 'closed' | 'updated' | 'skip'> => {
+                if (shift.branchId !== branchId) {
+                    conflicts.push({ id: shift.id, message: 'الوردية تخص فرعاً غير فرع المزامنة.' });
+                    continue;
+                }
+                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'created' | 'closed' | 'updated' | 'skip' | 'foreign'> => {
                     const existing = await tx.shift.findUnique({ where: { id: shift.id } });
 
+                    if (existing && existing.branchId !== branchId) return 'foreign';
                     if (existing) {
                         // Audit the open→closed transition only (not every re-sync of
                         // an open shift) so the log isn't flooded with duplicates.
@@ -118,11 +127,15 @@ export async function POST(req: NextRequest) {
                     // the cloud when the same email was created on both sides with
                     // different IDs. Fall back to matching by the user's email so the
                     // FK on Shift.userId is satisfied instead of failing the sync.
+                    // Only users of this branch's organisation; a user found elsewhere
+                    // is a foreign record, a user found nowhere is not synced yet.
                     let resolvedUserId = shift.userId;
-                    const userById = await tx.user.findUnique({ where: { id: resolvedUserId }, select: { id: true } });
+                    const userById = await tx.user.findUnique({ where: { id: resolvedUserId }, select: { id: true, branch: { select: { organizationId: true } } } });
+                    if (userById && userById.branch?.organizationId !== orgId) return 'foreign';
                     if (!userById) {
                         if (shift.userEmail) {
-                            const userByEmail = await tx.user.findUnique({ where: { email: shift.userEmail }, select: { id: true } });
+                            const userByEmail = await tx.user.findUnique({ where: { email: shift.userEmail }, select: { id: true, branch: { select: { organizationId: true } } } });
+                            if (userByEmail && userByEmail.branch?.organizationId !== orgId) return 'foreign';
                             if (userByEmail) {
                                 resolvedUserId = userByEmail.id;
                             } else {
@@ -137,10 +150,12 @@ export async function POST(req: NextRequest) {
 
                     // Resolve the safe to the branch's canonical CASH_DRAWER safe so a
                     // diverging desktop-local safe id can't create a duplicate "الصندوق الرئيسي".
+                    // A safe id from another branch is never used: fall back to this
+                    // branch's canonical safe as for an unknown desktop-local id.
                     let resolvedSafeId = shift.safeId ?? null;
                     if (resolvedSafeId) {
-                        const exact = await tx.safe.findUnique({ where: { id: resolvedSafeId }, select: { id: true } });
-                        if (!exact) {
+                        const exact = await tx.safe.findUnique({ where: { id: resolvedSafeId }, select: { id: true, branchId: true } });
+                        if (!exact || exact.branchId !== shift.branchId) {
                             // Reuse the existing branch safe if there is one; otherwise create it.
                             const existingSafe = await tx.safe.findFirst({
                                 where: { branchId: shift.branchId, type: 'CASH_DRAWER' },
@@ -151,7 +166,7 @@ export async function POST(req: NextRequest) {
                                 resolvedSafeId = existingSafe.id;
                             } else {
                                 const created = await tx.safe.create({
-                                    data: { id: resolvedSafeId, name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId },
+                                    data: { ...(exact ? {} : { id: resolvedSafeId }), name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId: shift.branchId },
                                     select: { id: true },
                                 });
                                 resolvedSafeId = created.id;
@@ -178,6 +193,10 @@ export async function POST(req: NextRequest) {
                     });
                     return 'created';
                 });
+                if (outcome === 'foreign') {
+                    conflicts.push({ id: shift.id, message: 'الوردية تشير إلى وردية أو مستخدم من فرع أو مؤسسة أخرى.' });
+                    continue;
+                }
                 // Only acknowledge shifts we actually wrote, so guarded-skip shifts
                 // (branch/user not yet in cloud) are retried on the next sync.
                 if (outcome !== 'skip') processedIds.push(shift.id);
@@ -212,7 +231,7 @@ export async function POST(req: NextRequest) {
             }
         });
 
-        return NextResponse.json({ success: true, syncedIds: processedIds, ack: { status: 'processed', idempotencyKey } });
+        return NextResponse.json({ success: true, syncedIds: processedIds, conflicts, ack: { status: 'processed', idempotencyKey } });
 
     } catch (error: any) {
         console.error("Shift sync error:", error);

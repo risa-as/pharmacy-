@@ -71,12 +71,31 @@ export async function POST(req: NextRequest) {
         // ────────────────────────────────────────────────────────────────────────
 
         const processedIds: string[] = [];
+        // Invalid records, or records naming another organisation's patient or
+        // points: refused for review, never written and never silently dropped.
+        const conflicts: { id: string; message: string }[] = [];
         // Track which accounts were updated so we can return their new balances
         const updatedAccountIds = new Set<string>();
+        const orgId = branch.organizationId;
 
         for (const txData of transactions) {
+            if ((txData.type !== 'EARN' && txData.type !== 'REDEEM') || !Number.isFinite(txData.points) || txData.points < 0) {
+                conflicts.push({ id: txData.id, message: 'حركة نقاط غير صالحة (النوع أو العدد).' });
+                continue;
+            }
             try {
-                await prisma.$transaction(async (prismaTx: any) => {
+                const outcome = await prisma.$transaction(async (prismaTx: any): Promise<'done' | 'foreign' | 'skip'> => {
+                    // 0. The patient must belong to this organisation. Patients with no
+                    //    branch are legacy shared records the desktop receives for every
+                    //    branch; they stay accepted (tracked open). A patient not in the
+                    //    cloud yet is retried on the next sync.
+                    const patient = await prismaTx.patient.findUnique({
+                        where: { id: txData.patientId },
+                        select: { branchId: true, branch: { select: { organizationId: true } } },
+                    });
+                    if (!patient) return 'skip';
+                    if (patient.branchId && patient.branch?.organizationId !== orgId) return 'foreign';
+
                     // 1. Ensure Loyalty Account exists for Patient
                     let account = await prismaTx.loyaltyAccount.findUnique({
                         where: { patientId: txData.patientId }
@@ -107,8 +126,9 @@ export async function POST(req: NextRequest) {
                     });
 
                     if (existingTx) {
+                        if (existingTx.accountId !== account!.id) return 'foreign';
                         updatedAccountIds.add(account!.id);
-                        return;
+                        return 'done';
                     }
 
                     // 3. Create Transaction
@@ -160,8 +180,10 @@ export async function POST(req: NextRequest) {
                     }
 
                     updatedAccountIds.add(account!.id);
+                    return 'done';
                 });
-                processedIds.push(txData.id);
+                if (outcome === 'foreign') conflicts.push({ id: txData.id, message: 'حركة النقاط تخص مريضاً من مؤسسة أخرى.' });
+                else if (outcome === 'done') processedIds.push(txData.id);
             } catch (err) {
                 console.error(`Failed to sync loyalty tx ${txData.id}:`, err);
             }
@@ -185,6 +207,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             success: true,
             syncedIds: processedIds,
+            conflicts,
             accountBalances,
         });
 
