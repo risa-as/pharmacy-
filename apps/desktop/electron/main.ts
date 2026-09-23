@@ -3668,6 +3668,12 @@ ipcMain.handle("retry-sync-failure", async (_event, failureData) => {
                 note: parsedPayload.note,
             },
         });
+    } else if (entityType === "SHIFT" || entityType === "TRANSACTION" || entityType === "LOYALTY") {
+      // Refused by the server's scope/validity checks; retried only after an
+      // explicit review. The server re-checks everything on the next sync.
+      const model = entityType === "SHIFT" ? prisma.shift : entityType === "TRANSACTION" ? prisma.transaction : prisma.loyaltyTransaction;
+      // @ts-ignore
+      await model.update({ where: { id: parsedPayload.id }, data: { synced: false } });
     } else if (entityType === "SALE_RETURN") {
       // A return conflict is retried only after an explicit review. The
       // server will re-check the available quantity atomically.

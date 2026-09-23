@@ -19,6 +19,9 @@ const TYPE_LABELS: Record<string, string> = {
     'SALE':             'عملية بيع',
     'SALE_RETURN':      'مرتجع بيع',
     'DEBT_PAYMENT':     'سداد دين',
+    'SHIFT':            'وردية',
+    'TRANSACTION':      'حركة صندوق',
+    'LOYALTY':          'نقاط ولاء',
 };
 
 function simplifyError(raw: string): string {

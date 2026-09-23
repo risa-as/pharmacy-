@@ -132,7 +132,7 @@ export default function SyncFailuresTab() {
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-100 text-red-700 uppercase tracking-widest border border-red-200">
-                                            {({SALE:'فاتورة بيع',SALE_RETURN:'مرتجع بيع',DEBT_PAYMENT:'تحصيل دين','ADD-INVENTORY':'إضافة مخزون','ADD-BATCH':'إضافة دفعة','UPDATE-INVENTORY':'تحديث مخزون'} as Record<string,string>)[failure.entityType] || failure.entityType}
+                                            {({SALE:'فاتورة بيع',SALE_RETURN:'مرتجع بيع',DEBT_PAYMENT:'تحصيل دين',SHIFT:'وردية',TRANSACTION:'حركة صندوق',LOYALTY:'نقاط ولاء','ADD-INVENTORY':'إضافة مخزون','ADD-BATCH':'إضافة دفعة','UPDATE-INVENTORY':'تحديث مخزون'} as Record<string,string>)[failure.entityType] || failure.entityType}
                                         </span>
                                         <span className="text-xs text-gray-400 font-medium">
                                             {new Date(failure.createdAt).toLocaleString('ar-IQ-u-nu-latn')}

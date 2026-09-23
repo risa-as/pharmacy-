@@ -1,4 +1,5 @@
 import {recordSyncSuccess} from "./sync-success";
+import {recordSyncConflicts as recordConflicts} from "./sync-conflicts";
 import {validateSnapshotBarcodes} from "./product-snapshot-validation";
 import { prisma } from './db';
 import { BrowserWindow, app } from 'electron';
@@ -947,8 +948,9 @@ export async function syncShifts() {
             })
         });
 
-        const result = await response.json() as { syncedIds?: string[] };
+        const result = await response.json() as { syncedIds?: string[]; conflicts?: { id: string; message: string }[] };
         const syncedIds = result.syncedIds;
+        await recordConflicts(prisma, 'SHIFT', unsyncedShifts, result.conflicts, (tx, id) => tx.shift.update({ where: { id }, data: { synced: true } }));
 
         if (syncedIds && syncedIds.length > 0) {
             await prisma.shift.updateMany({
@@ -1007,8 +1009,9 @@ export async function syncTransactions() {
             })
         });
 
-        const result = await response.json() as { syncedIds?: string[] };
+        const result = await response.json() as { syncedIds?: string[]; conflicts?: { id: string; message: string }[] };
         const syncedIds = result.syncedIds;
+        await recordConflicts(prisma, 'TRANSACTION', unsyncedTxns, result.conflicts, (tx, id) => tx.transaction.update({ where: { id }, data: { synced: true } }));
 
         if (syncedIds && syncedIds.length > 0) {
             // @ts-ignore
@@ -1118,6 +1121,7 @@ export async function syncLoyalty() {
 
         const result = await response.json();
         const syncedIds = result.syncedIds as string[];
+        await recordConflicts(prisma, 'LOYALTY', unsyncedTx.map(({ account, ...tx }: any) => tx), result.conflicts, (tx, id) => tx.loyaltyTransaction.update({ where: { id }, data: { synced: true } }));
         const accountBalances = result.accountBalances as {
             patientId: string;
             totalPoints: number;
