@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { requireActionTenant } from '../action-tenant';
 
 
 // Schema للتحقق
@@ -18,6 +19,7 @@ const PrescriptionSchema = z.object({
 
 // إنشاء وصفة جديدة
 export async function createPrescription(prevState: any, formData: FormData) {
+    const ctx = await requireActionTenant('canEditPatient');
     const validatedFields = PrescriptionSchema.safeParse({
         patientId: formData.get("patientId"),
         doctorName: formData.get("doctorName"),
@@ -33,6 +35,7 @@ export async function createPrescription(prevState: any, formData: FormData) {
     }
 
     const { patientId, doctorName, clinicName, notes } = validatedFields.data;
+    if (!await prisma.patient.findFirst({ where: { AND: [ctx.tenantBranchWhere, { id: patientId }] } })) return { message: 'المريض خارج النطاق' };
 
     // جلب عناصر الوصفة من FormData
     const itemsData = formData.get("itemsData");
@@ -76,9 +79,12 @@ export async function createPrescription(prevState: any, formData: FormData) {
 // صرف الوصفة (كاملة أو جزئية)
 export async function dispensePrescription(prescriptionId: string, itemIds: string[]) {
     try {
+        const ctx = await requireActionTenant('canEditPatient');
+        if (!await prisma.prescription.findFirst({ where: { id: prescriptionId, patient: ctx.tenantBranchWhere } })) return { message: 'الوصفة خارج النطاق' };
+        if (!itemIds.length || await prisma.prescriptionItem.count({ where: { id: { in: itemIds }, prescriptionId } }) !== new Set(itemIds).size) return { message: 'أصناف الصرف لا تطابق الوصفة' };
         // تحديث العناصر المصروفة
         await prisma.prescriptionItem.updateMany({
-            where: { id: { in: itemIds } },
+            where: { id: { in: itemIds }, prescriptionId },
             data: { isDispensed: true },
         });
 
@@ -115,6 +121,8 @@ export async function dispensePrescription(prescriptionId: string, itemIds: stri
 // إلغاء الوصفة
 export async function cancelPrescription(id: string) {
     try {
+        const ctx = await requireActionTenant('canEditPatient');
+        if (!await prisma.prescription.findFirst({ where: { id, patient: ctx.tenantBranchWhere } })) return { message: 'الوصفة خارج النطاق' };
         await prisma.prescription.update({
             where: { id },
             data: { status: "CANCELLED" },
@@ -128,7 +136,7 @@ export async function cancelPrescription(id: string) {
 
 // جلب جميع الوصفات
 export async function getPrescriptions() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
     const { tenantBranchWhere } = tenantCtx;
 
@@ -144,8 +152,9 @@ export async function getPrescriptions() {
 
 // جلب وصفة بالـ ID
 export async function getPrescriptionById(id: string) {
-    return await prisma.prescription.findUnique({
-        where: { id },
+    const ctx = await requireActionTenant('canViewPatients', 'read');
+    return await prisma.prescription.findFirst({
+        where: { id, patient: ctx.tenantBranchWhere },
         include: {
             patient: true,
             items: true,
@@ -155,7 +164,7 @@ export async function getPrescriptionById(id: string) {
 
 // جلب الوصفات المعلقة
 export async function getPendingPrescriptions() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
     const { tenantBranchWhere } = tenantCtx;
 
@@ -174,6 +183,8 @@ export async function getPendingPrescriptions() {
 
 // تحديث وصفة
 export async function updatePrescription(id: string, prevState: any, formData: FormData) {
+    const ctx = await requireActionTenant('canEditPatient');
+    if (!await prisma.prescription.findFirst({ where: { id, patient: ctx.tenantBranchWhere } })) return { message: 'الوصفة خارج النطاق' };
     const validatedFields = PrescriptionSchema.safeParse({
         patientId: formData.get("patientId"),
         doctorName: formData.get("doctorName"),
@@ -190,6 +201,7 @@ export async function updatePrescription(id: string, prevState: any, formData: F
 
     const { patientId, doctorName, clinicName, notes } = validatedFields.data;
 
+    if (!await prisma.patient.findFirst({ where: { AND: [ctx.tenantBranchWhere, { id: patientId }] } })) return { message: 'المريض خارج النطاق' };
     try {
         await prisma.prescription.update({
             where: { id },
@@ -211,6 +223,8 @@ export async function updatePrescription(id: string, prevState: any, formData: F
 // حذف وصفة
 export async function deletePrescription(id: string) {
     try {
+        const ctx = await requireActionTenant('canEditPatient');
+        if (!await prisma.prescription.findFirst({ where: { id, patient: ctx.tenantBranchWhere } })) return { message: 'الوصفة خارج النطاق' };
         // حذف عناصر الوصفة أولاً
         await prisma.prescriptionItem.deleteMany({
             where: { prescriptionId: id },

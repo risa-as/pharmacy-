@@ -26,7 +26,7 @@ const UpdateUser = UserSchema.omit({ password: true }).extend({
 });
 
 export async function createUser(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canManageUsers) return { message: "ليس لديك صلاحية لإدارة المستخدمين." };
 
@@ -101,7 +101,7 @@ export async function updateUser(
     prevState: any,
     formData: FormData,
 ) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canManageUsers) return { message: "ليس لديك صلاحية لتعديل المستخدمين." };
     const passwordValue = formData.get("password");
@@ -172,7 +172,7 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canManageUsers) {
         return { message: "ليس لديك صلاحية لحذف المستخدمين." };
@@ -210,7 +210,7 @@ export async function deleteUser(id: string) {
 }
 
 export async function getUsers() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
     const { tenantBranchWhere } = tenantCtx;
 
@@ -222,7 +222,7 @@ export async function getUsers() {
 }
 
 export async function getUserById(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return null;
 
     const user = await prisma.user.findUnique({

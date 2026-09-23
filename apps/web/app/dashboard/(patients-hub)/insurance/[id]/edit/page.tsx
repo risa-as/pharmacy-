@@ -7,6 +7,7 @@ import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { ArrowRight, Building2 } from "lucide-react";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { changeableByTenant } from "@/app/lib/tenant-owned";
 import { NextResponse } from "next/server";
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
@@ -18,7 +19,8 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
         where: { id: params.id },
     });
 
-    if (!company) {
+    // N20: only the owning organisation (or SUPER_ADMIN for legacy rows) edits it.
+    if (!company || !changeableByTenant(tenantCtx, company)) {
         notFound();
     }
 

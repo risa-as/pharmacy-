@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
 
 export async function getWebProducts(searchTerm: string = "") {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
 
     // In getTenantContext, user is guaranteed to be there if it's not a NextResponse.
@@ -60,7 +60,7 @@ export async function getWebProducts(searchTerm: string = "") {
 
 
 export async function getWebPatients(searchTerm: string = "") {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
     const { tenantBranchWhere } = tenantCtx;
 
@@ -102,7 +102,7 @@ export async function processWebSale(data: {
     pointsRedeemed: number,
     paymentMethod: string
 }) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: "غير مصرح" };
 
     const { tenantBranchWhere, user, organizationId } = tenantCtx;

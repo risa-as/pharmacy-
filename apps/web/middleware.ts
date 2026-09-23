@@ -1,15 +1,14 @@
 import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 import { isSuperAdminRoute, isPharmacyOnlyRoute } from "@/app/lib/super-admin-guard";
-import { isBlockedInGracePeriod } from "@/app/lib/grace-period-guard";
 import { isWarehouseRole } from "@/app/lib/warehouse-role";
 import { NextResponse } from "next/server";
+import { REQUEST_METHOD_HEADER, REQUEST_PATH_HEADER } from '@/app/lib/subscription-request-policy';
 
 const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
     const { nextUrl } = req;
-    const method = req.method;
     const role = (req.auth?.user as any)?.role as string | undefined;
 
     // ── US1: SUPER_ADMIN isolation ────────────────────────────────────────────
@@ -51,22 +50,12 @@ export default auth((req) => {
         return Response.redirect(new URL("/dashboard", nextUrl));
     }
 
-    // ── US4: Grace period write-blocking ─────────────────────────────────────
-    // subscriptionState is stored in the JWT at sign-in and refreshed from the
-    // organisation on every Node-side session read (session-refresh.ts, N10); the
-    // edge copy here sees the refreshed value once the session cookie is rewritten.
-    // Only API routes need to be blocked here; UI forms are gated by the overlay.
-    const subscriptionState = (req.auth?.user as any)?.subscriptionState as string | undefined;
-    if (subscriptionState === "grace" && isBlockedInGracePeriod(nextUrl.pathname, method ?? "GET")) {
-        return NextResponse.json(
-            {
-                gracePeriodActive: true,
-                message:
-                    "الإجراءات الإدارية محدودة خلال فترة السماح. يرجى تجديد الاشتراك.",
-            },
-            { status: 403 }
-        );
-    }
+    // Current subscription is checked in Node (cookie and mobile Bearer), not
+    // from an edge claim that can outlive a renewal. Overwrite spoofed headers.
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set(REQUEST_METHOD_HEADER, req.method);
+    requestHeaders.set(REQUEST_PATH_HEADER, nextUrl.pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
 });
 
 export const config = {
@@ -76,5 +65,5 @@ export const config = {
     // api/auth/login and api/auth/change-password are custom endpoints (not NextAuth
     // actions) — excluding them prevents NextAuth middleware from intercepting and
     // returning a non-JSON response instead of the route handler's response.
-    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/sync|api/mobile|api/public|api/auth/login|api/auth/change-password|api/auth/refresh).*)"],
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/sync|api/mobile/session|api/public|api/auth/login|api/auth/change-password|api/auth/refresh).*)"],
 };

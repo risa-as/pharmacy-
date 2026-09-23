@@ -27,7 +27,7 @@ const PurchaseSchema = z.object({
 });
 
 export async function createPurchase(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
 
     const rawItems = formData.get("itemsData");
@@ -136,7 +136,7 @@ export async function createPurchase(prevState: any, formData: FormData) {
 }
 
 export async function deletePurchase(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
 
     try {

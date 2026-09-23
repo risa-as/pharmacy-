@@ -12,6 +12,7 @@ import { prisma } from '@/app/lib/prisma';
 import { getSubscriptionState } from '@/app/lib/subscription-state';
 import { getUserPermissions, UserPermissions } from '@/app/lib/permissions';
 import { syncTokenMessage } from '@/app/lib/sync-token';
+import { SESSION_REFRESH_UNAVAILABLE } from '@/app/lib/session-refresh';
 import { jwtVerify } from 'jose';
 import crypto from 'crypto';
 
@@ -202,21 +203,27 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
     // ── 2. Device license key (Electron — fallback if no syncToken) ──────────
     const licenseKey = h.get('x-device-license-key');
     if (licenseKey && branchId) {
-        const license = await prisma.deviceLicense.findFirst({
-            where: { licenseKey, branchId, isActive: true },
-            select: { id: true, branchId: true, branch: { select: { organizationId: true } } },
-        });
-        if (!license) {
-            return NextResponse.json({ error: 'Invalid or inactive device license' }, { status: 401 });
+        try {
+            const license = await prisma.deviceLicense.findFirst({
+                where: { licenseKey, branchId, isActive: true },
+                select: { id: true, branchId: true, branch: { select: { organizationId: true } } },
+            });
+            if (!license) {
+                return NextResponse.json({ error: 'Invalid or inactive device license' }, { status: 401 });
+            }
+            const suspended = await assertOrgActive(license.branch.organizationId);
+            if (suspended) return suspended;
+            return {
+                id: license.id,
+                role: 'DEVICE',
+                branchId: license.branchId,
+                organizationId: license.branch.organizationId,
+            };
+        } catch (e) {
+            // N14-L: an outage is retryable (503), not a thrown 500.
+            if (isDatabaseUnavailable(e)) return verificationUnavailable();
+            throw e;
         }
-        const suspended = await assertOrgActive(license.branch.organizationId);
-        if (suspended) return suspended;
-        return {
-            id: license.id,
-            role: 'DEVICE',
-            branchId: license.branchId,
-            organizationId: license.branch.organizationId,
-        };
     }
 
     // ── 3. Bearer JWT (mobile app) ───────────────────────────────────────────
@@ -240,11 +247,20 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
     }
 
     // ── 4. NextAuth session (web dashboard) ──────────────────────────────────
-    const session = await auth();
-    if (!session?.user?.id) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    try {
+        const session = await auth();
+        // The cookie could not be re-verified (database unavailable): retryable,
+        // not "unauthorized", so the caller keeps its session (N01/N14-L).
+        if ((session as any)?.error === SESSION_REFRESH_UNAVAILABLE) return verificationUnavailable();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        return await currentSyncUser(session.user.id);
+    } catch (e) {
+        // N14-L: an outage is retryable (503), not a thrown 500.
+        if (isDatabaseUnavailable(e)) return verificationUnavailable();
+        throw e;
     }
-    return currentSyncUser(session.user.id);
 
 }
 

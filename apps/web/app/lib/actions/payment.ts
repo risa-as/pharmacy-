@@ -2,6 +2,7 @@
 
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireActionTenant } from '../action-tenant';
 
 export type PaymentMethod = "CASH" | "CARD" | "MOBILE_WALLET" | "BANK_TRANSFER" | "ZAIN_CASH";
 
@@ -13,6 +14,8 @@ export async function createPayment(
     referenceNumber?: string
 ) {
     try {
+        const ctx = await requireActionTenant('canPayDebt');
+        if (!Number.isFinite(amount) || amount <= 0 || !await prisma.sale.findFirst({ where: { AND: [ctx.tenantBranchWhere, { id: saleId }] } })) throw new Error('دفعة غير صالحة أو خارج النطاق');
         const payment = await prisma.payment.create({
             data: {
                 saleId,
@@ -35,6 +38,8 @@ export async function createPayment(
 // استرجاع دفعة
 export async function refundPayment(paymentId: string) {
     try {
+        const ctx = await requireActionTenant('canProcessReturn');
+        if (!await prisma.payment.findFirst({ where: { id: paymentId, sale: ctx.tenantBranchWhere } })) throw new Error('الدفعة خارج النطاق');
         await prisma.payment.update({
             where: { id: paymentId },
             data: { status: "REFUNDED" },
@@ -50,35 +55,37 @@ export async function refundPayment(paymentId: string) {
 
 // جلب تفاصيل دفعة
 export async function getPaymentBySaleId(saleId: string) {
-    return await prisma.payment.findUnique({
-        where: { saleId },
+    const ctx = await requireActionTenant('canViewSales', 'read');
+    return await prisma.payment.findFirst({
+        where: { saleId, sale: ctx.tenantBranchWhere },
     });
 }
 
 // جلب إحصائيات الدفع
 export async function getPaymentStats() {
+    const ctx = await requireActionTenant('canViewReports', 'read');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const [totalCash, totalCard, totalMobile, totalTransfer, totalZainCash] = await Promise.all([
         prisma.payment.aggregate({
-            where: { method: "CASH", status: "COMPLETED", createdAt: { gte: today } },
+            where: { sale: ctx.tenantBranchWhere, method: "CASH", status: "COMPLETED", createdAt: { gte: today } },
             _sum: { amount: true },
         }),
         prisma.payment.aggregate({
-            where: { method: "CARD", status: "COMPLETED", createdAt: { gte: today } },
+            where: { sale: ctx.tenantBranchWhere, method: "CARD", status: "COMPLETED", createdAt: { gte: today } },
             _sum: { amount: true },
         }),
         prisma.payment.aggregate({
-            where: { method: "MOBILE_WALLET", status: "COMPLETED", createdAt: { gte: today } },
+            where: { sale: ctx.tenantBranchWhere, method: "MOBILE_WALLET", status: "COMPLETED", createdAt: { gte: today } },
             _sum: { amount: true },
         }),
         prisma.payment.aggregate({
-            where: { method: "BANK_TRANSFER", status: "COMPLETED", createdAt: { gte: today } },
+            where: { sale: ctx.tenantBranchWhere, method: "BANK_TRANSFER", status: "COMPLETED", createdAt: { gte: today } },
             _sum: { amount: true },
         }),
         prisma.payment.aggregate({
-            where: { method: "ZAIN_CASH", status: "COMPLETED", createdAt: { gte: today } },
+            where: { sale: ctx.tenantBranchWhere, method: "ZAIN_CASH", status: "COMPLETED", createdAt: { gte: today } },
             _sum: { amount: true },
         }),
     ]);

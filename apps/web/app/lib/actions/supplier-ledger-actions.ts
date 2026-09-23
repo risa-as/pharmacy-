@@ -13,7 +13,7 @@ import { logAudit } from '@/app/lib/audit';
  * جلب قائمة الموردين مع الأرصدة
  */
 export async function getSuppliersWithBalances() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
 
     const suppliers = await prisma.supplier.findMany({
@@ -40,7 +40,7 @@ export async function getSuppliersWithBalances() {
  * ملخص مورد واحد
  */
 export async function getSupplierSummary(supplierId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return null;
 
     const supplier = await prisma.supplier.findUnique({
@@ -82,7 +82,7 @@ export async function getSupplierSummary(supplierId: string) {
  * كشف حساب كامل (حركات مرتبة بالتاريخ)
  */
 export async function getSupplierLedger(supplierId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
 
     const supplier = await prisma.supplier.findUnique({
@@ -178,7 +178,7 @@ export async function recordSupplierPayment(data: {
     notes?: string;
     date?: string;
 }) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
 
     try {
@@ -244,7 +244,7 @@ export async function setSupplierOpeningBalance(data: {
     amount: number;
     notes?: string;
 }) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
 
     const { supplierId, branchId, amount, notes } = data;
@@ -300,7 +300,7 @@ export async function setSupplierOpeningBalance(data: {
  * إعادة حساب رصيد المورد (في حالة عدم التطابق)
  */
 export async function recalculateSupplierBalance(supplierId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return 0;
 
     const supplier = await prisma.supplier.findUnique({

@@ -1,4 +1,5 @@
-"use server";
+// Internal service only. Never expose organisation-wide licence mutations as
+// independently callable Server Actions; callers must enforce authorization.
 
 import { prisma } from "@/app/lib/prisma";
 

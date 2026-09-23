@@ -6,6 +6,7 @@ import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
 import { ArrowRight, Shield } from "lucide-react";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { readableByTenant } from "@/app/lib/tenant-owned";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
@@ -21,7 +22,7 @@ export default async function Page() {
     });
     const companies = await prisma.insuranceCompany.findMany({
         select: { id: true, name: true },
-        where: { isActive: true },
+        where: { AND: [readableByTenant(tenantCtx), { isActive: true }] },
         orderBy: { name: "asc" },
     });
 

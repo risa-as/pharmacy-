@@ -45,6 +45,7 @@ import {
 } from "./backup";
 import { initBackupScheduler, uploadBackup } from "./cloudBackup";
 import store from "./store";
+import { saveOperatorProof } from "./operator-proofs";
 import { getApiCandidates, setApiBaseUrl } from "./api-config";
 import crypto from "crypto";
 
@@ -1540,6 +1541,9 @@ app.whenReady().then(async () => {
                 // The token is signed with this version; sent as x-session-version.
                 store.set("syncSessionVersion", Number(cloudUser.sessionVersion) || 0);
               }
+              // N16: proof that this employee signed in online here; attached to
+              // the sales and payments they perform (kept per employee).
+              saveOperatorProof(cloudUser.id, data.operatorProof);
               void processPendingSyncActions();
               // Trigger product sync in background — do not await so login
               // returns immediately instead of blocking on a potentially slow sync.
@@ -3054,6 +3058,8 @@ ipcMain.handle(
                 type: "IN",
                 amount: total,
                 referenceType: "SALE",
+                // Lets the cloud post this cash only once the sale itself is accepted (N02-R2).
+                referenceId: sale.id,
                 description: `مبيعات نقدية فاتورة #${sale.id.slice(0, 8)}`,
               },
             });

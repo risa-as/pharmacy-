@@ -7,6 +7,8 @@ import { getUserPermissions, UserPermissions } from '@/app/lib/permissions';
 import { isWarehouseRole } from '@/app/lib/warehouse-context';
 import { prisma } from '@/app/lib/prisma';
 import { SESSION_REFRESH_UNAVAILABLE, SessionUnavailableError } from '@/app/lib/session-refresh';
+import { getSubscriptionState } from './subscription-state';
+import { subscriptionWriteDenied, REQUEST_METHOD_HEADER, REQUEST_PATH_HEADER, SUBSCRIPTION_READ_ONLY } from './subscription-request-policy';
 
 export interface TenantContext {
     user: {
@@ -44,13 +46,15 @@ function getJwtSecret(): Uint8Array {
  * Supports both NextAuth cookie sessions (web) and Bearer JWT tokens (mobile).
  */
 export const getTenantContext = cache(
-    async (): Promise<TenantContext | NextResponse> => {
+    async (access: 'auto' | 'read' | 'write' = 'auto'): Promise<TenantContext | NextResponse> => {
         // Try NextAuth session first (web browser / dashboard)
         const session = await auth();
         // Database unavailable while verifying the cookie: refuse without falling
         // back to stale claims. Thrown (not a 401) so pages reach their error
         // boundary instead of redirect("/login"), which middleware would bounce back.
         if ((session as any)?.error === SESSION_REFRESH_UNAVAILABLE) throw new SessionUnavailableError();
+        if ((session as any)?.error === SUBSCRIPTION_READ_ONLY)
+            return NextResponse.json({ code: SUBSCRIPTION_READ_ONLY, error: 'الاشتراك في وضع القراءة فقط.' }, { status: 403 });
 
         let role: string;
         // Mobile Bearer tokens carry the sessionVersion they were issued with (none = 0).
@@ -91,7 +95,7 @@ export const getTenantContext = cache(
         if (typeof userId !== 'string' || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         const currentUser = await prisma.user.findUnique({
             where: { id: userId },
-            select: { role: true, isActive: true, branchId: true, permissions: true, sessionVersion: true, branch: { select: { organizationId: true } } },
+            select: { role: true, isActive: true, branchId: true, permissions: true, sessionVersion: true, branch: { select: { organizationId: true, organization: { select: { subscriptionEndsAt: true, isSuspended: true } } } } },
         });
         if (!currentUser?.isActive) return NextResponse.json({ error: 'Account disabled or unavailable' }, { status: 403 });
         // Cookie sessions are version-checked in auth.ts; Bearer tokens here.
@@ -101,6 +105,15 @@ export const getTenantContext = cache(
         branchId = currentUser.branchId ?? undefined;
         organizationId = currentUser.branch?.organizationId;
         permissionsOverride = currentUser.permissions;
+        const requestHeaders = await headers();
+        const org = currentUser.branch?.organization;
+        if (role !== 'SUPER_ADMIN' && org && subscriptionWriteDenied(
+            getSubscriptionState(org).state,
+            access === 'read' ? 'GET' : access === 'write' ? 'POST' : requestHeaders.get(REQUEST_METHOD_HEADER) ?? 'GET',
+            requestHeaders.get(REQUEST_PATH_HEADER) ?? '',
+        )) {
+            return NextResponse.json({ code: SUBSCRIPTION_READ_ONLY, error: 'الاشتراك في وضع القراءة فقط؛ جدّد الاشتراك لاستئناف العمليات.' }, { status: 403 });
+        }
 
         // Stage 1 (المذاخر/B2B): a WAREHOUSE account belongs to no Organization
         // and no Branch — it must never resolve a pharmacy tenant context.

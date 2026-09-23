@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
+import { checkOperator } from '@/app/lib/operator-proof';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
 
 async function validateBranchAccess(syncUser: any, branchId: string): Promise<NextResponse | null> {
@@ -87,8 +88,10 @@ export async function POST(request: NextRequest) {
         if (syncUser instanceof NextResponse) return syncUser;
 
         const body = await request.json();
-        const { branchId, payments } = body as {
+        const { branchId, payments, operatorProofs } = body as {
             branchId: string;
+            // N16: userId → server-issued operator proof for the collectors in this batch.
+            operatorProofs?: Record<string, string>;
             payments: Array<{
                 id: string;
                 saleId: string;
@@ -139,12 +142,19 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
+            const operatorVerified = await checkOperator(prisma, payment.userId, operatorProofs, branchId);
+            if (operatorVerified === null) {
+                conflicts.push({ id: payment.id, message: 'تعذّر التحقق من هوية منفّذ التحصيل (لا يوجد إثبات دخول صالح له على هذا الجهاز)؛ تتطلب العملية مراجعة.' });
+                continue;
+            }
+
             await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                 await tx.debtPayment.create({
                     data: {
                         id: payment.id,
                         saleId: payment.saleId,
                         userId: payment.userId || null,
+                        operatorVerified,
                         amount: payment.amount,
                         method: (payment.method || "CASH") as any,
                         note: payment.note || null,

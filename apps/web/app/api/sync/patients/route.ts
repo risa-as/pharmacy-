@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser } from '@/app/lib/sync-auth';
+import { validateSyncUser, isBranchInSyncScope } from '@/app/lib/sync-auth';
 
 
 export async function GET(request: Request) {
@@ -11,38 +11,14 @@ export async function GET(request: Request) {
         if (syncUser instanceof NextResponse) return syncUser;
 
         const { searchParams } = new URL(request.url);
-        const branchId = searchParams.get("branchId");
-
-        // Validate branchId ownership: ensure the caller can only access their own branch/org
-        if (branchId) {
-            const userRole = syncUser.role;
-            const userBranchId = syncUser.branchId;
-            const userOrgId = syncUser.organizationId;
-
-            if (userRole !== 'SUPER_ADMIN') {
-                const branch = await prisma.branch.findUnique({
-                    where: { id: branchId },
-                    select: { organizationId: true }
-                });
-                if (!branch) {
-                    return NextResponse.json({ error: "Branch not found" }, { status: 404 });
-                }
-                if (userRole === 'ADMIN') {
-                    if (branch.organizationId !== userOrgId) {
-                        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-                    }
-                } else {
-                    if (branchId !== userBranchId) {
-                        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-                    }
-                }
-            }
+        const branchId = searchParams.get("branchId") || syncUser.branchId;
+        // No branch is never an instruction to list every tenant. Legacy
+        // unassigned patients require administrative reconciliation, not sharing.
+        if (!branchId || !(await isBranchInSyncScope(syncUser, branchId))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const where: any = {};
-        if (branchId) {
-            where.OR = [{ branchId }, { branchId: null }];
-        }
+        const where = { branchId };
 
         const patients = await prisma.patient.findMany({
             where,

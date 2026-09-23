@@ -46,6 +46,15 @@ afterAll(() => db.$disconnect());
 beforeEach(() => { state.session = { user: { id: f.admin.id } }; });
 
 describe('sync/sales: operator permissions at sync time', () => {
+    it('does not trust originalPrice when branch inventory is missing', async () => {
+        const drug = await db.globalDrug.create({ data: { barcode: randomUUID(), tradeName: 'No branch inventory', scientificName: 'Test', alternatives: [] } });
+        const s = sale(f.cashier.id, { items: [{ drugId: drug.id, quantity: 1, price: 100, originalPrice: 100 }] });
+        const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [s] }))).json();
+        expect(body.syncedIds).toEqual([]);
+        expect(body.conflicts).toHaveLength(1);
+        expect(body.conflicts[0].message).toContain('سعر الصنف غير متاح');
+        expect(await db.sale.count({ where: { id: s.id } })).toBe(0);
+    });
     it('accepts a sale rung by a cashier who may sell', async () => {
         const s = sale(f.cashier.id);
         const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [s] }))).json();
@@ -113,6 +122,59 @@ describe('operator impersonation: a restricted session cannot borrow a permitted
         const s = sale(other.id);
         const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [s] }))).json();
         expect(body.syncedIds).toEqual([s.id]);
+    });
+});
+
+describe('N16: operator proofs', () => {
+    const syncSecret = () => { process.env.SYNC_TOKEN_SECRET ||= 'isolated-operator-proof'; };
+    it('records a proven cashier as verified and a merely named one as unverified (compatible default)', async () => {
+        syncSecret();
+        const { issueOperatorProof } = await import('../app/lib/operator-proof');
+        const proven = sale(f.cashier.id);
+        const claimed = sale(f.cashier.id);
+        const forged = sale(f.cashier.id);
+        const proofs = { [f.cashier.id]: issueOperatorProof(f.cashier.id, f.branch.id, 0) };
+        await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [proven], operatorProofs: proofs }));
+        await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [claimed] }));
+        await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [forged], operatorProofs: { [f.cashier.id]: `${Date.now()}.forged` } }));
+        const rows = await db.sale.findMany({ where: { id: { in: [proven.id, claimed.id, forged.id] } }, select: { id: true, operatorVerified: true } });
+        expect(Object.fromEntries(rows.map(r => [r.id, r.operatorVerified]))).toEqual({ [proven.id]: true, [claimed.id]: false, [forged.id]: false });
+    });
+
+    it('a colleague proof cannot vouch for another cashier, and a password change revokes a proof', async () => {
+        syncSecret();
+        const { issueOperatorProof } = await import('../app/lib/operator-proof');
+        const other = await db.user.create({ data: { email: `p-${randomUUID()}@test.invalid`, password: 'unused', role: 'CASHIER', branchId: f.branch.id } });
+        const borrowed = sale(other.id);
+        await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [borrowed], operatorProofs: { [other.id]: issueOperatorProof(f.cashier.id, f.branch.id, 0) } }));
+        const oldProof = issueOperatorProof(other.id, f.branch.id, 0);
+        await db.user.update({ where: { id: other.id }, data: { sessionVersion: 1 } });
+        const revoked = sale(other.id);
+        await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [revoked], operatorProofs: { [other.id]: oldProof } }));
+        const rows = await db.sale.findMany({ where: { id: { in: [borrowed.id, revoked.id] } }, select: { operatorVerified: true } });
+        expect(rows.map(r => r.operatorVerified)).toEqual([false, false]);
+    });
+
+    it('with enforcement on, unproven sales and payments become review conflicts and write nothing', async () => {
+        syncSecret();
+        const { issueOperatorProof } = await import('../app/lib/operator-proof');
+        process.env.REQUIRE_OPERATOR_PROOF = 'true';
+        try {
+            const unproven = sale(f.cashier.id);
+            const proven = sale(f.cashier.id);
+            const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [unproven], operatorProofs: {} }))).json();
+            expect(body.conflicts.map((c: any) => c.id)).toEqual([unproven.id]);
+            const ok = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [proven], operatorProofs: { [f.cashier.id]: issueOperatorProof(f.cashier.id, f.branch.id, 0) } }))).json();
+            expect(ok.syncedIds).toEqual([proven.id]);
+            const pay = { id: randomUUID(), saleId: f.creditSale.id, userId: f.admin.id, amount: 1, method: 'CASH', createdAt: new Date().toISOString() };
+            const before = (await db.patient.findUnique({ where: { id: f.patient.id } }))!.balance;
+            const refused = await (await syncDebts(post('/api/sync/debt-payments', { branchId: f.branch.id, payments: [pay] }))).json();
+            expect(refused.conflicts.map((c: any) => c.id)).toEqual([pay.id]);
+            expect((await db.patient.findUnique({ where: { id: f.patient.id } }))!.balance).toBe(before);
+            expect(await db.sale.count({ where: { id: unproven.id } })).toBe(0);
+        } finally {
+            delete process.env.REQUIRE_OPERATOR_PROOF;
+        }
     });
 });
 

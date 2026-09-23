@@ -17,6 +17,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
+import { getTenantContext } from "@/app/lib/tenant-utils";
+import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 
 // ── Env helpers ────────────────────────────────────────────────────────────
@@ -51,6 +53,11 @@ export type VerifyResult =
 export async function sweepExpiredPendingTransactions(
     organizationId: string
 ): Promise<void> {
+    // Exported from a "use server" module, so it is remotely callable: only
+    // the caller's own organisation (or SUPER_ADMIN) may be swept (N20).
+    const ctx = await getTenantContext('read');
+    if (ctx instanceof NextResponse) return;
+    if (ctx.user.role !== 'SUPER_ADMIN' && ctx.organizationId !== organizationId) return;
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
     try {

@@ -3,6 +3,7 @@
 import { prisma } from '@/app/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { logAudit } from '@/app/lib/audit'
+import { requireActionTenant } from '../action-tenant';
 
 export type ShiftStatus = {
     isWorking: boolean;
@@ -12,6 +13,8 @@ export type ShiftStatus = {
 }
 
 export async function getShiftStatus(userId: string): Promise<ShiftStatus> {
+    const ctx = await requireActionTenant('canViewSales', 'read');
+    if (ctx.user.id !== userId) throw new Error('الوردية تخص موظفاً آخر');
     const activeShift = await prisma.shift.findFirst({
         where: {
             userId,
@@ -32,6 +35,8 @@ export async function getShiftStatus(userId: string): Promise<ShiftStatus> {
 
 export async function clockIn(userId: string, branchId: string) {
     try {
+        const ctx = await requireActionTenant('canSell');
+        if (ctx.user.id !== userId || ctx.user.branchId !== branchId) throw new Error('الوردية خارج النطاق');
         // Check if already open
         const existing = await prisma.shift.findFirst({
             where: { userId, status: 'OPEN' }
@@ -69,8 +74,10 @@ export async function clockIn(userId: string, branchId: string) {
 
 export async function clockOut(userId: string) {
     try {
+        const ctx = await requireActionTenant('canSell');
+        if (ctx.user.id !== userId) throw new Error('الوردية تخص موظفاً آخر');
         const activeShift = await prisma.shift.findFirst({
-            where: { userId, status: 'OPEN' }
+            where: { userId, status: 'OPEN', ...ctx.tenantBranchWhere }
         });
 
         if (!activeShift) {

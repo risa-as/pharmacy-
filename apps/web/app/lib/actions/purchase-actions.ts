@@ -14,7 +14,7 @@ import { receivePurchaseStock } from '@/app/lib/purchase-receipt';
 import { computeShippedBatchPrefill, type ShippedBatchPrefill } from '@/app/lib/shipped-batch-prefill';
 
 export async function getSmartPurchasingData(branchId?: string, from?: string, to?: string) {
-    const ctx = await getTenantContext();
+    const ctx = await getTenantContext('read');
     if (ctx instanceof NextResponse) throw new Error('تعذر التحقق من الجلسة');
     return getPlanningData(ctx, branchId, from, to);
 }
@@ -26,7 +26,7 @@ export async function getLowStockInventory(branchId?: string) {
 
 /** Revalidate the handoff on the server; browser storage is never authoritative. */
 export async function prepareSmartOrderDraft(branchId: string, input: { drugId: string; quantity: number; unitsPerPack: number }[]) {
-    const ctx = await getTenantContext();
+    const ctx = await getTenantContext('write');
     if (ctx instanceof NextResponse || !ctx.userPermissions.canCreatePurchase) throw new Error('ليس لديك صلاحية إنشاء الطلب');
     if (!Array.isArray(input) || !input.length || input.length > 500 || input.some(l=>!l || typeof l.drugId !== 'string' || !Number.isSafeInteger(l.quantity) || l.quantity < 1 || l.quantity > 1000000 || !Number.isSafeInteger(l.unitsPerPack) || l.unitsPerPack < 1) || new Set(input.map(l=>l.drugId)).size !== input.length) throw new Error('مسودة غير صالحة');
     if (!await prisma.branch.findFirst({where:{AND:[ctx.branchModelWhere,{id:branchId}]},select:{id:true}})) throw new Error('الفرع خارج النطاق');
@@ -45,7 +45,7 @@ export async function prepareSmartOrderDraft(branchId: string, input: { drugId: 
 
 export async function createSmartPurchase(branchId: string, supplierId: string, items: any[]) {
     try {
-        const tenantCtx = await getTenantContext();
+        const tenantCtx = await getTenantContext('write');
         if (tenantCtx instanceof NextResponse) return { success: false, error: 'Unauthorized Session' };
         if (!tenantCtx.userPermissions.canCreatePurchase) {
             return { success: false, error: 'ليس لديك صلاحية لإنشاء طلبات الشراء.' };
@@ -105,7 +105,7 @@ export async function createSmartPurchase(branchId: string, supplierId: string, 
 }
 
 export async function getSuppliers() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse || !tenantCtx.userPermissions.canViewSuppliers) return [];
     if (!tenantCtx.organizationId && tenantCtx.user.role !== 'SUPER_ADMIN') return [];
     const tenantWhere = tenantCtx.user.role === 'SUPER_ADMIN' ? {} : { organizationId: tenantCtx.organizationId };
@@ -117,7 +117,7 @@ export async function getSuppliers() {
 }
 
 export async function getPurchases(branchId?: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse || !tenantCtx.userPermissions.canViewSuppliers) return [];
     const { tenantBranchWhere } = tenantCtx;
 
@@ -143,7 +143,7 @@ export async function getPurchases(branchId?: string) {
 }
 
 export async function getPurchaseDetails(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse || !tenantCtx.userPermissions.canViewSuppliers) return null;
 
     const purchase = await prisma.purchase.findFirst({
@@ -232,7 +232,7 @@ export async function getPurchaseDetails(id: string) {
 }
 
 export async function deletePurchase(purchaseId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
     if (!tenantCtx.userPermissions.canCreatePurchase) return { success: false, error: 'ليس لديك صلاحية إدارة المشتريات.' };
 
@@ -270,7 +270,7 @@ export async function deletePurchase(purchaseId: string) {
 }
 
 export async function cancelPurchase(purchaseId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
     if (!tenantCtx.userPermissions.canCreatePurchase) return { success: false, error: 'ليس لديك صلاحية إدارة المشتريات.' };
 
@@ -305,7 +305,7 @@ export async function cancelPurchase(purchaseId: string) {
 }
 
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) throw new Error('غير مصرح');
     if (!tenantCtx.userPermissions.canReceivePurchase) throw new Error('ليس لديك صلاحية استلام المشتريات.');
     if (typeof isPaid !== 'boolean') throw new Error('حالة الدفع غير صالحة.');

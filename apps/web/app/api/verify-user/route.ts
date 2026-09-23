@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { generateSyncToken } from '@/app/lib/sync-token';
+import { issueOperatorProof } from '@/app/lib/operator-proof';
 import { enforceRateLimit } from '@/app/lib/rate-limit';
 import { getSubscriptionState } from '@/app/lib/subscription-state';
 
@@ -65,6 +66,9 @@ export async function POST(req: Request) {
             success: true,
             user: { ...userWithoutPassword, organizationId: orgId },
             syncToken,
+            // N16: proves later that this employee performed the operations the
+            // desktop attributes to them. Not a sync credential.
+            ...(user.branchId ? { operatorProof: issueOperatorProof(user.id, user.branchId, user.sessionVersion) } : {}),
         });
 
     } catch (error) {

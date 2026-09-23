@@ -20,6 +20,9 @@ const SyncTransactionSchema = z.object({
     updatedAt: z.string().or(z.date()),
 });
 
+/** How long a sale/return cash movement waits for its document before review. */
+const REFERENCE_WAIT_MS = 24 * 60 * 60 * 1000;
+
 const SyncPayloadSchema = z.object({
     branchId: z.string(),
     transactions: z.array(SyncTransactionSchema)
@@ -108,13 +111,27 @@ export async function POST(req: NextRequest) {
                 continue;
             }
             try {
-                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'done' | 'foreign'> => {
+                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'done' | 'foreign' | 'pending' | 'unmatched'> => {
                     const existing = await tx.transaction.findUnique({ where: { id: txn.id }, select: { safe: { select: { branchId: true } } } });
                     if (existing) return existing.safe.branchId === branchId ? 'done' : 'foreign';
 
                     if (txn.userId) {
                         const user = await tx.user.findUnique({ where: { id: txn.userId }, select: { branch: { select: { organizationId: true } } } });
                         if (user && user.branch?.organizationId !== orgId) return 'foreign';
+                    }
+
+                    // N02-R2: cash tied to a sale or return moves the safe only once that
+                    // document is in the cloud for this branch. A sale refused at sync (a
+                    // review conflict) must not still add its cash. The document may simply
+                    // not have synced yet, so a recent movement waits; one whose document
+                    // never arrives becomes a review conflict instead of blocking the batch.
+                    // Older desktop builds send no referenceId for sales: unchanged for them.
+                    if (txn.referenceId && (txn.referenceType === 'SALE' || txn.referenceType === 'SALE_RETURN')) {
+                        const doc = txn.referenceType === 'SALE'
+                            ? await tx.sale.findUnique({ where: { id: txn.referenceId }, select: { branchId: true } })
+                            : await tx.saleReturn.findUnique({ where: { id: txn.referenceId }, select: { branchId: true } });
+                        if (doc && doc.branchId !== branchId) return 'foreign';
+                        if (!doc) return Date.now() - new Date(txn.createdAt).getTime() < REFERENCE_WAIT_MS ? 'pending' : 'unmatched';
                     }
 
                     // Map the desktop's safe id onto the branch's canonical safe.
@@ -143,7 +160,8 @@ export async function POST(req: NextRequest) {
                     return 'done';
                 });
                 if (outcome === 'foreign') conflicts.push({ id: txn.id, message: 'الحركة تشير إلى حركة أو مستخدم من فرع أو مؤسسة أخرى.' });
-                else processedIds.push(txn.id);
+                else if (outcome === 'unmatched') conflicts.push({ id: txn.id, message: 'حركة الصندوق لفاتورة أو مرتجع لم يصل إلى السحابة (قد يكون رُفض للمراجعة)؛ تتطلب مراجعة.' });
+                else if (outcome === 'done') processedIds.push(txn.id);
             } catch (txnErr: any) {
                 console.error(`[Transaction Sync] Failed to sync transaction ${txn.id}:`, txnErr.message);
             }

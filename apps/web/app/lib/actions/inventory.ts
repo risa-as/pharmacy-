@@ -22,7 +22,7 @@ const InventorySchema = z.object({
 const CreateInventory = InventorySchema.omit({ id: true });
 
 export async function createInventory(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canAddDrug) return { message: "ليس لديك صلاحية لإضافة أدوية للمخزون." };
 
@@ -87,7 +87,7 @@ export async function updateInventory(
     prevState: any,
     formData: FormData,
 ) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لتعديل المخزون." };
 
@@ -134,7 +134,7 @@ export async function updateInventory(
 }
 
 export async function deleteInventory(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canDeleteDrug) return { message: "ليس لديك صلاحية لحذف الأدوية من المخزون." };
 
@@ -171,7 +171,7 @@ function generateBatchNumber(): string {
 
 // إضافة دفعة جديدة
 export async function addBatch(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canAddDrug) return { message: "ليس لديك صلاحية لإضافة دفعات للمخزون." };
 
@@ -250,7 +250,7 @@ export async function addBatch(prevState: any, formData: FormData) {
 
 // تحديث كمية دفعة
 export async function updateBatchQuantity(batchId: string, newQuantity: number) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
 
     try {
@@ -287,7 +287,7 @@ export async function updateBatchQuantity(batchId: string, newQuantity: number) 
 
 // حذف دفعة
 export async function deleteBatch(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لحذف الدفعات." };
 

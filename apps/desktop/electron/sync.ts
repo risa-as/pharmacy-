@@ -1,5 +1,6 @@
 import {recordSyncSuccess} from "./sync-success";
 import {recordSyncConflicts as recordConflicts} from "./sync-conflicts";
+import {operatorProofsFor} from "./operator-proofs";
 import {validateSnapshotBarcodes} from "./product-snapshot-validation";
 import { prisma } from './db';
 import { BrowserWindow, app } from 'electron';
@@ -348,7 +349,9 @@ export async function syncSales() {
             },
             body: JSON.stringify({
                 branchId: branchId,
-                sales: salesPayload
+                sales: salesPayload,
+                // N16: lets the cloud verify the cashier each sale names.
+                operatorProofs: operatorProofsFor(salesPayload.map((s: any) => s.userId)),
             })
         });
 
@@ -469,7 +472,9 @@ export async function syncDebtPayments() {
                 },
                 body: JSON.stringify({
                     branchId,
-                    payments: payload
+                    payments: payload,
+                    // N16: lets the cloud verify the collector each payment names.
+                    operatorProofs: operatorProofsFor(payload.map((p: any) => p.userId)),
                 })
             });
 
@@ -983,8 +988,11 @@ export async function syncTransactions() {
         }
 
         // @ts-ignore
+        // Oldest first: a sale's cash waiting for its sale (N02-R2) turns into a
+        // review item after a day instead of holding newer movements back.
         const unsyncedTxns = await prisma.transaction.findMany({
             where: { synced: false },
+            orderBy: { createdAt: 'asc' },
             take: 20
         });
 

@@ -3,6 +3,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
+import { requireActionTenant } from '../action-tenant';
 
 // Zain Cash Configuration
 const ZAINCASH_MERCHANT_ID = process.env.ZAINCASH_MERCHANT_ID || "";
@@ -34,6 +35,7 @@ function generateZainCashToken(payload: object): string {
 // Helper function to verify JWT token from Zain Cash
 function verifyZainCashToken(token: string): object | null {
     try {
+        if (!ZAINCASH_SECRET) return null;
         const parts = token.split(".");
         if (parts.length !== 3) return null;
 
@@ -59,6 +61,8 @@ export async function createZainCashTransaction(
     serviceType: string = "pharmacy_payment"
 ): Promise<ZainCashTransactionResult | { error: string }> {
     try {
+        const ctx = await requireActionTenant('canPayDebt');
+        if (!await prisma.sale.findFirst({ where: { AND: [ctx.tenantBranchWhere, { id: saleId }] } })) throw new Error('الفاتورة خارج النطاق');
         const transactionData = {
             amount: amount,
             serviceType,
@@ -103,6 +107,8 @@ export async function createZainCashTransaction(
 // التحقق من دفعة Zain Cash
 export async function verifyZainCashPayment(token: string) {
     try {
+        // Also called by the signed provider callback without a user session.
+        // Settling an already-paid transaction remains allowed during suspension.
         const payload = verifyZainCashToken(token) as any;
 
         if (!payload) {
@@ -174,6 +180,8 @@ export async function verifyZainCashPayment(token: string) {
 // استعلام عن حالة معاملة
 export async function checkZainCashTransactionStatus(transactionId: string) {
     try {
+        const ctx = await requireActionTenant('canViewSales', 'read');
+        if (!await prisma.payment.findFirst({ where: { referenceNumber: transactionId, sale: ctx.tenantBranchWhere } })) throw new Error('الدفعة خارج النطاق');
         const payload = {
             id: transactionId,
             msisdn: ZAINCASH_MERCHANT_ID,

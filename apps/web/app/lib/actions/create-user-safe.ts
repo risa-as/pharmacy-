@@ -22,7 +22,7 @@ const UserSchema = z.object({
 const CreateUser = UserSchema.omit({ id: true });
 
 export async function createUser(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
 
     const validatedFields = CreateUser.safeParse({
         name: formData.get("name"),

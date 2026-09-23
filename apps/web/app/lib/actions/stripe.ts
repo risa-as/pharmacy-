@@ -3,6 +3,7 @@
 import Stripe from "stripe";
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireActionTenant } from '../action-tenant';
 
 
 let _stripe: Stripe | null = null;
@@ -27,6 +28,8 @@ export async function createStripePaymentIntent(
     currency: string = "usd"
 ): Promise<CreatePaymentIntentResult | { error: string }> {
     try {
+        const ctx = await requireActionTenant('canPayDebt');
+        if (!await prisma.sale.findFirst({ where: { AND: [ctx.tenantBranchWhere, { id: saleId }] } })) throw new Error('الفاتورة خارج النطاق');
         // Convert amount to cents (Stripe uses smallest currency unit)
         const amountInCents = Math.round(amount * 100);
 
@@ -57,7 +60,10 @@ export async function confirmStripePayment(
     saleId: string
 ) {
     try {
+        const ctx = await requireActionTenant('canPayDebt');
+        if (!await prisma.sale.findFirst({ where: { AND: [ctx.tenantBranchWhere, { id: saleId }] } })) throw new Error('الفاتورة خارج النطاق');
         const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+        if (paymentIntent.metadata.saleId !== saleId) throw new Error('الدفع لا يخص هذه الفاتورة');
 
         if (paymentIntent.status === "succeeded") {
             // تسجيل الدفع في قاعدة البيانات
@@ -87,6 +93,8 @@ export async function confirmStripePayment(
 // استرجاع دفعة
 export async function refundStripePayment(paymentIntentId: string) {
     try {
+        const ctx = await requireActionTenant('canProcessReturn');
+        if (!await prisma.payment.findFirst({ where: { referenceNumber: paymentIntentId, sale: ctx.tenantBranchWhere } })) throw new Error('الدفعة خارج النطاق');
         const refund = await getStripe().refunds.create({
             payment_intent: paymentIntentId,
         });
@@ -109,6 +117,8 @@ export async function refundStripePayment(paymentIntentId: string) {
 // جلب تفاصيل دفعة
 export async function getStripePaymentDetails(paymentIntentId: string) {
     try {
+        const ctx = await requireActionTenant('canViewSales', 'read');
+        if (!await prisma.payment.findFirst({ where: { referenceNumber: paymentIntentId, sale: ctx.tenantBranchWhere } })) throw new Error('الدفعة خارج النطاق');
         const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
         return { paymentIntent };
     } catch (error: any) {

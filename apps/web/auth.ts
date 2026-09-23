@@ -6,6 +6,8 @@ import { authConfig } from "./auth.config";
 import { prisma } from "@/app/lib/prisma";
 import { getSubscriptionState } from "@/app/lib/subscription-state";
 import { refreshSessionToken, SESSION_REFRESH_UNAVAILABLE } from "@/app/lib/session-refresh";
+import { headers } from 'next/headers';
+import { subscriptionWriteDenied, REQUEST_METHOD_HEADER, REQUEST_PATH_HEADER, SUBSCRIPTION_READ_ONLY } from '@/app/lib/subscription-request-policy';
 
 async function getUser(email: string) {
     try {
@@ -43,6 +45,15 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
             if ((params as any).token?.refreshFailed) {
                 return { ...session, user: undefined, error: SESSION_REFRESH_UNAVAILABLE } as any;
             }
+            const requestHeaders = await headers();
+            const pathname = requestHeaders.get(REQUEST_PATH_HEADER) ?? '';
+            // Direct auth() API handlers must obey the same read-only policy.
+            // Server Actions are guarded by getTenantContext; platform-admin and
+            // billing recovery actions retain their own explicit authorization.
+            if (session.user?.role !== 'SUPER_ADMIN' && pathname.startsWith('/api/') && subscriptionWriteDenied(
+                String((params as any).token?.subscriptionState ?? 'active'),
+                requestHeaders.get(REQUEST_METHOD_HEADER) ?? 'GET', pathname,
+            )) return { ...session, user: undefined, error: SUBSCRIPTION_READ_ONLY } as any;
             return session;
         },
     },

@@ -74,7 +74,26 @@ describe('sessionVersion revocation', () => {
         state.bearer = null;
         state.session = { user: undefined, error: SESSION_REFRESH_UNAVAILABLE };
         await expect(getTenantContext()).rejects.toBeInstanceOf(SessionUnavailableError);
+        // Retryable (rule 13, N14-L): an outage is not "unauthorized".
         const sync = await validateSyncUser(new Request('http://localhost/api/sync/x'));
-        expect((sync as any).status).toBe(401);
+        expect((sync as any).status).toBe(503);
     });
+});
+
+describe('N14-L: device session registration and sync outages', () => {
+    it('mobile/session refuses a revoked token or a disabled account, and accepts the current one', async () => {
+        const { POST: mobileSession } = await import('../app/api/mobile/session/route');
+        const call = async (token: string) => (await mobileSession(new Request('http://localhost/api/mobile/session', {
+            method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ userId: user.id, deviceToken: randomUUID() }),
+        }))).status;
+        const current = (await prisma.user.findUnique({ where: { id: user.id } }))!.sessionVersion;
+        expect(await call(await bearer({ sessionVersion: current - 1 }))).toBe(401);
+        expect(await call(await bearer({ sessionVersion: current }))).not.toBe(401);
+        await prisma.user.update({ where: { id: user.id }, data: { isActive: false } });
+        const afterDisable = (await prisma.user.findUnique({ where: { id: user.id } }))!.sessionVersion;
+        expect(await call(await bearer({ sessionVersion: afterDisable }))).toBe(401);
+        await prisma.user.update({ where: { id: user.id }, data: { isActive: true } });
+    });
+
 });

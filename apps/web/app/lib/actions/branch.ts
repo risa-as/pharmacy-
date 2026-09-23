@@ -19,7 +19,7 @@ const CreateBranch = BranchSchema.omit({ id: true });
 const UpdateBranch = BranchSchema;
 
 export async function createBranch(prevState: any, formData: FormData) {
-  const tenantCtx = await getTenantContext();
+  const tenantCtx = await getTenantContext('write');
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
   if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لإدارة الفروع." };
 
@@ -36,6 +36,12 @@ export async function createBranch(prevState: any, formData: FormData) {
   }
 
   const { name, organizationId } = validatedFields.data;
+
+  // N20: the organisation comes from the form, so it must be the caller's own
+  // (only SUPER_ADMIN creates branches for any organisation).
+  if (tenantCtx.user.role !== 'SUPER_ADMIN' && organizationId !== tenantCtx.user.organizationId) {
+    return { message: "غير مصرح: لا يمكنك إنشاء فرع في منظمة أخرى." };
+  }
 
   // Iron Wall: enforce per-plan branch limit
   const limitCheck = await checkPlanLimit(organizationId, "branches");
@@ -71,7 +77,7 @@ export async function updateBranch(
   prevState: any,
   formData: FormData
 ) {
-  const tenantCtx = await getTenantContext();
+  const tenantCtx = await getTenantContext('write');
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
   if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لتعديل الفروع." };
 
@@ -99,6 +105,10 @@ export async function updateBranch(
     if (!targetBranch || targetBranch.organizationId !== tenantCtx.user.organizationId) {
       return { message: "غير مصرح: لا يمكنك تعديل فرع من منظمة أخرى." };
     }
+    // N20: nor move one of its own branches into another organisation.
+    if (organizationId !== tenantCtx.user.organizationId) {
+      return { message: "غير مصرح: لا يمكنك نقل الفرع إلى منظمة أخرى." };
+    }
   }
 
   try {
@@ -120,7 +130,7 @@ export async function updateBranch(
 }
 
 export async function deleteBranch(id: string) {
-  const tenantCtx = await getTenantContext();
+  const tenantCtx = await getTenantContext('write');
   if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
   if (!tenantCtx.userPermissions.canManageBranches) return { message: "ليس لديك صلاحية لحذف الفروع." };
 
@@ -143,11 +153,4 @@ export async function deleteBranch(id: string) {
   } catch (error) {
     return { message: "خطأ في قاعدة البيانات: فشل في حذف الفرع." };
   }
-}
-
-export async function getBranchById(id: string) {
-  return await prisma.branch.findUnique({
-    where: { id },
-    include: { organization: true },
-  });
 }

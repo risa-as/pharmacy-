@@ -22,7 +22,7 @@ function saleScope(tenantCtx: TenantContext, branchId?: string) {
 
 // جلب جميع المدينين
 export async function getAllDebtors(branchId?: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
     const { user, organizationId } = tenantCtx;
 
@@ -74,7 +74,7 @@ export async function getAllDebtors(branchId?: string) {
 
 // إحصائيات الديون
 export async function getDebtStats(branchId?: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) {
         return { totalDebt: 0, debtorCount: 0, todayPaymentsAmount: 0, todayPaymentsCount: 0 };
     }
@@ -121,7 +121,7 @@ export async function getDebtStats(branchId?: string) {
 
 // جلب ديون مريض معين مع كشف حساب
 export async function getPatientDebts(patientId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return null;
     const { tenantBranchWhere } = tenantCtx;
 
@@ -179,7 +179,7 @@ export async function getPatientDebts(patientId: string) {
 
 // سجل التسديدات الأخيرة
 export async function getRecentDebtPayments(branchId?: string, limit = 30) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
     const { tenantBranchWhere } = tenantCtx;
 
@@ -228,7 +228,7 @@ export async function makeDebtPayment(
     safeId?: string
 ) {
     try {
-        const tenantCtx = await getTenantContext();
+        const tenantCtx = await getTenantContext('write');
         if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
 
         const { organizationId } = tenantCtx;
@@ -373,7 +373,7 @@ export async function makePatientDebtPayment(
     safeId?: string
 ) {
     try {
-        const tenantCtx = await getTenantContext();
+        const tenantCtx = await getTenantContext('write');
         if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
         const { organizationId } = tenantCtx;
 

@@ -5,6 +5,7 @@ import { Building2, Plus } from "lucide-react";
 import Link from "next/link";
 import { UpdateInsurance, DeleteInsurance } from "@/app/ui/insurance/buttons";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { readableByTenant } from "@/app/lib/tenant-owned";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
@@ -12,10 +13,12 @@ export default async function InsurancePage() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) redirect("/login");
 
+    // N20: own and legacy (unowned) companies only; policy counts cover this tenant's patients.
     const companies = await prisma.insuranceCompany.findMany({
+        where: readableByTenant(tenantCtx),
         orderBy: { name: "asc" },
         include: {
-            _count: { select: { policies: true } },
+            _count: { select: { policies: { where: { patient: tenantCtx.tenantBranchWhere } } } },
         },
     });
 

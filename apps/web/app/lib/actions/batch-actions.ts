@@ -17,7 +17,7 @@ import { logAudit } from "@/app/lib/audit";
  *  - Writes an audit-log entry. The action cannot be undone.
  */
 export async function writeOffExpiredBatch(batchId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canDoStocktake) {
         return { success: false, message: "ليس لديك صلاحية لشطب الدفعات." };

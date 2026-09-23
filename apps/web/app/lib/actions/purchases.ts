@@ -10,7 +10,7 @@ import { logAudit } from '@/app/lib/audit';
 // ─── جلب الأدوية المتاحة للشراء ───────────────────────────────────────────
 
 export async function getDrugsForPurchase() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
 
     // جلب معرّفات فروع المؤسسة
@@ -39,7 +39,7 @@ export async function getDrugsForPurchase() {
 // ─── توليد رقم فاتورة تلقائي ──────────────────────────────────────────────
 
 export async function generateInvoiceNumber(): Promise<string> {
-    const ctx = await getTenantContext();
+    const ctx = await getTenantContext('write');
     if (ctx instanceof NextResponse) throw new Error('غير مصرح');
     return nextDocumentReference(prisma, 'PIN');
 }
@@ -47,7 +47,7 @@ export async function generateInvoiceNumber(): Promise<string> {
 // ─── قائمة فواتير مورد معين ───────────────────────────────────────────────
 
 export async function getPurchasesBySupplier(supplierId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
 
     const orgBranchIds = await prisma.branch
@@ -71,7 +71,7 @@ export async function getPurchasesBySupplier(supplierId: string) {
 // ─── تفاصيل فاتورة واحدة ─────────────────────────────────────────────────
 
 export async function getPurchaseById(purchaseId: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return null;
 
     const purchase = await prisma.purchase.findUnique({
@@ -105,7 +105,7 @@ export async function createPurchase(data: {
         batchNumber?: string;
     }>;
 }) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
     if (!tenantCtx.userPermissions.canCreatePurchase) {
         return { success: false, error: 'ليس لديك صلاحية لإنشاء فواتير الشراء.' };

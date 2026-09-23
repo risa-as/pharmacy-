@@ -21,7 +21,7 @@ const CreateSupplier = SupplierSchema.omit({ id: true });
 const UpdateSupplier = SupplierSchema;
 
 export async function createSupplier(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canCreatePurchase || !tenantCtx.organizationId) return { message: 'ليس لديك صلاحية إدارة الموردين ضمن مؤسسة.' };
 
@@ -71,7 +71,7 @@ export async function createSupplier(prevState: any, formData: FormData) {
 }
 
 export async function deleteSupplier(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canCreatePurchase || !tenantCtx.organizationId) return { message: 'ليس لديك صلاحية إدارة الموردين ضمن مؤسسة.' };
 
@@ -118,7 +118,7 @@ export async function deleteSupplier(id: string) {
 
 export async function getSupplierById(id: string) {
     try {
-        const ctx = await getTenantContext();
+        const ctx = await getTenantContext('read');
         if (ctx instanceof NextResponse || !ctx.userPermissions.canViewSuppliers || (!ctx.organizationId && ctx.user.role !== 'SUPER_ADMIN')) return null;
         const supplier = await prisma.supplier.findFirst({
             where: { id, ...(ctx.user.role === 'SUPER_ADMIN' ? {} : { organizationId: ctx.organizationId }) },
@@ -130,7 +130,7 @@ export async function getSupplierById(id: string) {
 }
 
 export async function updateSupplier(id: string, prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canCreatePurchase || !tenantCtx.organizationId) return { message: 'ليس لديك صلاحية إدارة الموردين ضمن مؤسسة.' };
 

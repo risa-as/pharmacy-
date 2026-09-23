@@ -5,7 +5,7 @@ import { prisma } from "@/app/lib/prisma";
 import { checkMobileSessionLimit } from "@/app/lib/saas-guards";
 import { jwtVerify } from "jose";
 
-async function verifyBearerToken(req: Request): Promise<{ userId: string } | null> {
+async function verifyBearerToken(req: Request): Promise<{ userId: string; sessionVersion: number } | null> {
     const authHeader = req.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) return null;
     const token = authHeader.slice(7);
@@ -13,7 +13,8 @@ async function verifyBearerToken(req: Request): Promise<{ userId: string } | nul
     try {
         const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
         const { payload } = await jwtVerify(token, secret);
-        return { userId: payload.userId as string };
+        // Tokens issued before sessionVersion existed carry none: version 0.
+        return { userId: payload.userId as string, sessionVersion: Number(payload.sessionVersion) || 0 };
     } catch {
         return null;
     }
@@ -61,6 +62,11 @@ export async function POST(req: Request) {
 
         if (!user) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+        // N14-L: a disabled account or a revoked token (password changed,
+        // account disabled) cannot register or refresh a device session.
+        if (!user.isActive || user.sessionVersion !== verified.sessionVersion) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         // SUPER_ADMIN is platform staff — not subject to tenant session limits

@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
 
 export async function getExpenses(branchId?: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
 
     const { user, organizationId } = tenantCtx;
@@ -29,7 +29,7 @@ export async function getExpenses(branchId?: string) {
 }
 
 export async function createExpense(data: { amount: number, category: string, description?: string, date?: Date }) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
     if (!tenantCtx.userPermissions.canCreateExpense) return { success: false, error: 'ليس لديك صلاحية لإنشاء مصروفات.' };
 
@@ -73,7 +73,7 @@ export async function updateExpense(
     id: string,
     data: { amount: number; category: string; description?: string; date?: Date },
 ) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
     if (!tenantCtx.userPermissions.canCreateExpense) return { success: false, error: 'ليس لديك صلاحية لتعديل المصروفات.' };
 
@@ -131,7 +131,7 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     // Deleting used to run with no auth, permission or scope check at all: any
     // caller who knew an id could delete another organisation's expense.
     if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };

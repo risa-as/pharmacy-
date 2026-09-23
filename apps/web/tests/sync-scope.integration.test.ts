@@ -122,6 +122,29 @@ describe('sync/transactions stays inside the organisation', () => {
     });
 });
 
+describe('sync/transactions: sale cash follows the sale (N02-R2)', () => {
+    it('posts cash for a synced sale, waits for a recent missing one, and sends an old orphan to review', async () => {
+        const sale = await db.sale.create({ data: { branchId: f.A.branch.id, total: 30 } });
+        const foreignSale = await db.sale.create({ data: { branchId: f.B.branch.id, total: 30 } });
+        const before = (await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance;
+        const matched = txn({ amount: 30, referenceId: sale.id });
+        const waiting = txn({ amount: 40, referenceId: randomUUID() });
+        const orphan = txn({ amount: 50, referenceId: randomUUID(), createdAt: new Date(Date.now() - 2 * 86400000).toISOString() });
+        const foreign = txn({ amount: 60, referenceId: foreignSale.id });
+        const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [matched, waiting, orphan, foreign] }))).json();
+        expect(body.syncedIds).toEqual([matched.id]);
+        expect(body.conflicts.map((c: any) => c.id).sort()).toEqual([orphan.id, foreign.id].sort());
+        expect((await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance).toBe(before + 30);
+        expect(await db.transaction.count({ where: { id: { in: [waiting.id, orphan.id, foreign.id] } } })).toBe(0);
+    });
+
+    it('keeps accepting movements from older desktop builds that send no sale reference', async () => {
+        const legacy = txn({ amount: 1 });
+        const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [legacy] }))).json();
+        expect(body.syncedIds).toEqual([legacy.id]);
+    });
+});
+
 describe('sync/loyalty stays inside the organisation', () => {
     it('accepts points for this organisation\'s patient', async () => {
         const p = points();

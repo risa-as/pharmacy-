@@ -17,7 +17,7 @@ const CreateOrganization = OrganizationSchema.omit({ id: true });
 const UpdateOrganization = OrganizationSchema;
 
 export async function createOrganization(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (tenantCtx.user.role !== 'SUPER_ADMIN') return { message: "هذا الإجراء متاح للمشرف العام فقط." };
 
@@ -55,7 +55,7 @@ export async function updateOrganization(
     prevState: any,
     formData: FormData,
 ) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canChangeSettings) return { message: "ليس لديك صلاحية تعديل إعدادات المؤسسة." };
     if (tenantCtx.user.role !== 'SUPER_ADMIN' && tenantCtx.user.organizationId !== id) {
@@ -90,7 +90,7 @@ export async function updateOrganization(
 }
 
 export async function deleteOrganization(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (tenantCtx.user.role !== 'SUPER_ADMIN') return { message: "هذا الإجراء متاح للمشرف العام فقط." };
 

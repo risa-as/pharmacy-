@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
+import { checkOperator } from '@/app/lib/operator-proof';
 import { z } from "zod";
 import { logAudit } from '@/app/lib/audit';
 
@@ -39,7 +40,9 @@ const SyncSaleSchema = z.object({
 
 const SyncPayloadSchema = z.object({
     branchId: z.string(),
-    sales: z.array(SyncSaleSchema)
+    sales: z.array(SyncSaleSchema),
+    // N16: userId → server-issued operator proof for the cashiers in this batch.
+    operatorProofs: z.record(z.string(), z.string()).optional(),
 });
 
 class SyncSaleConflictError extends Error {}
@@ -56,7 +59,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Invalid Payload", details: result.error }, { status: 400 });
         }
 
-        const { branchId, sales } = result.data;
+        const { branchId, sales, operatorProofs } = result.data;
 
         // Validate branchId belongs to the authenticated user
         const userRole = syncUser.role;
@@ -147,19 +150,23 @@ export async function POST(req: NextRequest) {
                         // the web, not the originalPrice the desktop reports (a client claim,
                         // and absent unless the cashier overrode the price). A sale rung at a
                         // price that has since changed is refused for review, not dropped.
-                        // Only an item whose inventory has not reached the cloud yet falls
-                        // back to the reported originalPrice.
+                        // Missing inventory prices require reconciliation; never use
+                        // a client-supplied price as the authority.
                         const stored = new Map((await tx.inventory.findMany({
                             where: { branchId, drugId: { in: sale.items.map(i => i.drugId) } },
                             select: { drugId: true, price: true },
                         })).map(inv => [inv.drugId, inv.price]));
                         const priceChanged = sale.items.some(i => {
-                            const reference = stored.get(i.drugId) ?? i.originalPrice;
-                            return reference != null && Math.abs(i.price - reference) > .01
+                            const reference = stored.get(i.drugId);
+                            if (reference == null) throw new SyncSaleConflictError('سعر الصنف غير متاح في مخزون الفرع؛ تتطلب العملية مراجعة.');
+                            return Math.abs(i.price - reference) > .01
                                 && !perms.canEditPrice && !(i.price < reference && perms.canApplyDiscount);
                         });
                         if (priceChanged) throw new SyncSaleConflictError('تغيير السعر يحتاج صلاحية؛ تتطلب العملية مراجعة.');
                     }
+                    // N16: is the cashier named on the sale proven, or only claimed?
+                    const operatorVerified = await checkOperator(tx, sale.userId, operatorProofs, branchId);
+                    if (operatorVerified === null) throw new SyncSaleConflictError('تعذّر التحقق من هوية منفّذ البيع (لا يوجد إثبات دخول صالح له على هذا الجهاز)؛ تتطلب العملية مراجعة.');
                     const isCredit = sale.paymentMethod === "CREDIT";
 
                     const saleItemsData = [];
@@ -264,6 +271,7 @@ export async function POST(req: NextRequest) {
                             hasPriceOverride: sale.hasPriceOverride === true,
                             createdAt: new Date(sale.createdAt),
                             userId: sale.userId,
+                            operatorVerified,
                             patientId: resolvedPatientId,
                             ...(invoiceNumber !== undefined ? { invoiceNumber } : {}),
                             items: {

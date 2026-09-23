@@ -85,16 +85,15 @@ export async function POST(req: NextRequest) {
             }
             try {
                 const outcome = await prisma.$transaction(async (prismaTx: any): Promise<'done' | 'foreign' | 'skip'> => {
-                    // 0. The patient must belong to this organisation. Patients with no
-                    //    branch are legacy shared records the desktop receives for every
-                    //    branch; they stay accepted (tracked open). A patient not in the
-                    //    cloud yet is retried on the next sync.
+                    // 0. Unknown legacy ownership is not shared ownership. Refuse
+                    // unassigned patients without modifying their points or assigning
+                    // them by guesswork. Missing cloud patients remain retryable.
                     const patient = await prismaTx.patient.findUnique({
                         where: { id: txData.patientId },
                         select: { branchId: true, branch: { select: { organizationId: true } } },
                     });
                     if (!patient) return 'skip';
-                    if (patient.branchId && patient.branch?.organizationId !== orgId) return 'foreign';
+                    if (!patient.branchId || patient.branch?.organizationId !== orgId) return 'foreign';
 
                     // 1. Ensure Loyalty Account exists for Patient
                     let account = await prismaTx.loyaltyAccount.findUnique({

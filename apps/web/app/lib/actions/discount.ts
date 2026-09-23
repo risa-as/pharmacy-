@@ -1,12 +1,12 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { changeableByTenant, ownerForNewRow } from "@/app/lib/tenant-owned";
 
 
 // Schema for discount validation
@@ -25,8 +25,9 @@ const DiscountSchema = z.object({
 
 // Create a new discount
 export async function createDiscount(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canApplyDiscount) return { message: "ليس لديك صلاحية لإدارة العروض." };
 
     const validatedFields = DiscountSchema.safeParse({
         name: formData.get("name"),
@@ -68,6 +69,8 @@ export async function createDiscount(prevState: any, formData: FormData) {
                 isActive: data.isActive,
                 applyToAll: data.applyToAll,
                 drugIds: drugIds.length > 0 ? drugIds : [],
+                // N20: owned by the creating organisation, never shared implicitly.
+                organizationId: ownerForNewRow(tenantCtx),
             },
         });
     } catch (error) {
@@ -81,8 +84,12 @@ export async function createDiscount(prevState: any, formData: FormData) {
 
 // Update discount
 export async function updateDiscount(id: string, prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canApplyDiscount) return { message: "ليس لديك صلاحية لإدارة العروض." };
+    // N20: only the owning organisation (or SUPER_ADMIN for legacy rows) may change it.
+    const owned = await prisma.discount.findUnique({ where: { id }, select: { organizationId: true } });
+    if (!changeableByTenant(tenantCtx, owned)) return { message: "غير مصرح: العرض ليس تابعاً لمؤسستك." };
 
     const validatedFields = DiscountSchema.safeParse({
         name: formData.get("name"),
@@ -135,8 +142,11 @@ export async function updateDiscount(id: string, prevState: any, formData: FormD
 
 // Delete discount
 export async function deleteDiscount(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canApplyDiscount) return { message: "ليس لديك صلاحية لإدارة العروض." };
+    const owned = await prisma.discount.findUnique({ where: { id }, select: { organizationId: true } });
+    if (!changeableByTenant(tenantCtx, owned)) return { message: "غير مصرح: العرض ليس تابعاً لمؤسستك." };
 
     try {
         await prisma.discount.delete({
@@ -147,73 +157,4 @@ export async function deleteDiscount(id: string) {
     }
 
     revalidatePath("/dashboard/discounts");
-}
-
-// Get all discounts
-export async function getDiscounts() {
-    return await prisma.discount.findMany({
-        orderBy: { createdAt: "desc" },
-    });
-}
-
-// Get active discounts
-export async function getActiveDiscounts() {
-    const now = new Date();
-    return await prisma.discount.findMany({
-        where: {
-            isActive: true,
-            startDate: { lte: now },
-            endDate: { gte: now },
-        },
-    });
-}
-
-// Get discount by ID
-export async function getDiscountById(id: string) {
-    return await prisma.discount.findUnique({
-        where: { id },
-    });
-}
-
-// Apply discount to a sale
-export async function applyDiscount(code: string, subtotal: number, drugIds: string[]) {
-    const now = new Date();
-
-    const discount = await prisma.discount.findFirst({
-        where: {
-            code,
-            isActive: true,
-            startDate: { lte: now },
-            endDate: { gte: now },
-            minPurchase: { lte: subtotal },
-        },
-    });
-
-    if (!discount) {
-        return { error: "كود الخصم غير صالح أو منتهي" };
-    }
-
-    // Check if discount applies to the selected drugs
-    if (!discount.applyToAll && discount.drugIds.length > 0) {
-        const applicable = drugIds.some((id: any) => discount.drugIds.includes(id));
-        if (!applicable) {
-            return { error: "الخصم لا ينطبق على هذه المنتجات" };
-        }
-    }
-
-    let discountAmount = 0;
-    if (discount.type === "PERCENTAGE") {
-        discountAmount = (subtotal * discount.value) / 100;
-        if (discount.maxDiscount && discountAmount > discount.maxDiscount) {
-            discountAmount = discount.maxDiscount;
-        }
-    } else {
-        discountAmount = discount.value;
-    }
-
-    return {
-        discount,
-        discountAmount,
-        finalTotal: subtotal - discountAmount,
-    };
 }

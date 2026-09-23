@@ -10,7 +10,7 @@ import { logAudit } from "@/app/lib/audit";
 // --- Company Settings ---
 
 export async function getCompanySettings() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return null;
     const organizationId = tenantCtx.organizationId;
     if (!organizationId) return null;
@@ -20,6 +20,7 @@ export async function getCompanySettings() {
             where: { organizationId }
         });
         if (!settings) {
+            if (await getTenantContext('write') instanceof NextResponse) return null;
             return await prisma.companySettings.create({
                 data: {
                     name: "Pharmacy System",
@@ -36,7 +37,7 @@ export async function getCompanySettings() {
 }
 
 export async function updateCompanySettings(formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canChangeSettings) return { success: false, message: "ليس لديك صلاحية لتغيير الإعدادات." };
 
@@ -104,7 +105,7 @@ export async function updateCompanySettings(formData: FormData) {
 // --- Backup ---
 
 export async function createBackup() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
 
     try {

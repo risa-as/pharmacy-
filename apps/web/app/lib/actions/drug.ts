@@ -41,7 +41,7 @@ export async function createDrug(prevState: any, formData: FormData) {
         };
     }
 
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) {
         return { message: "غير مصرح لك بإضافة دواء." };
     }
@@ -82,7 +82,7 @@ export async function createDrug(prevState: any, formData: FormData) {
 }
 
 export async function deleteDrug(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) {
         return { message: "غير مصرح لك بحذف الأدوية." };
     }
@@ -157,7 +157,7 @@ export async function updateDrug(
         };
     }
 
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) {
         return { message: "غير مصرح لك بتحديث دواء." };
     }
@@ -240,16 +240,12 @@ export async function updateDrug(
     redirect("/dashboard/drugs");
 }
 
-export async function getDrugById(id: string) {
-    return await prisma.globalDrug.findUnique({
-        where: { id },
-    });
-}
+
 
 // ── Admin-specific variants that redirect to /dashboard/admin/drugs ──────────
 
 export async function createGlobalDrug(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (tenantCtx.user.role !== 'SUPER_ADMIN') return { message: "هذا الإجراء للمشرف العام فقط." };
 
@@ -300,7 +296,7 @@ export async function createGlobalDrug(prevState: any, formData: FormData) {
 }
 
 export async function updateGlobalDrug(id: string, prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (tenantCtx.user.role !== 'SUPER_ADMIN') return { message: "هذا الإجراء للمشرف العام فقط." };
 

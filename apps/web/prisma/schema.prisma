@@ -305,6 +305,9 @@ model SyncActionLog {
 }
 
 model Sale {
+  /// N16: true when the desktop proved userId with a server-issued operator
+  /// proof; false = attribution claimed but not proven; null = not a desktop sync.
+  operatorVerified Boolean?
   documentNumber String @unique @default(dbgenerated("next_document_reference('INV'::text)"))
   id               String        @id @default(uuid())
   invoiceNumber    Int?
@@ -578,9 +581,14 @@ model InsuranceCompany {
   contactPhone String?
   contactEmail String?
   isActive     Boolean           @default(true)
+  /// Owning organisation (N20). Null = legacy/platform row: readable by every
+  /// organisation, changeable only by SUPER_ADMIN.
+  organizationId String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   policies     InsurancePolicy[]
+
+  @@index([organizationId])
 }
 
 model InsurancePolicy {
@@ -622,8 +630,13 @@ model Discount {
   isActive    Boolean      @default(true)
   applyToAll  Boolean      @default(false)
   drugIds     String[]
+  /// Owning organisation (N20). Null = legacy/platform row: readable by every
+  /// organisation, changeable only by SUPER_ADMIN.
+  organizationId String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 // ==================== Enums ====================
@@ -743,6 +756,9 @@ model DebtPayment {
   id        String        @id @default(uuid())
   saleId    String
   userId    String? // Cashier who recorded the payment (for audit attribution)
+  /// N16: true when the desktop proved userId with a server-issued operator
+  /// proof; false = attribution claimed but not proven; null = not a desktop sync.
+  operatorVerified Boolean?
   amount    Float
   method    PaymentMethod @default(CASH)
   note      String?

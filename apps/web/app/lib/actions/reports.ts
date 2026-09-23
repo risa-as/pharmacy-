@@ -13,7 +13,7 @@ export async function fetchReportData(
 ) {
     console.log("Fetching report data:", { type, startDate, endDate });
     try {
-        const tenantCtx = await getTenantContext();
+        const tenantCtx = await getTenantContext('read');
         if (tenantCtx instanceof NextResponse) return [];
         const { tenantBranchWhere } = tenantCtx;
 

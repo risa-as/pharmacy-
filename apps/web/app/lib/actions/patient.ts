@@ -23,7 +23,7 @@ const PatientSchema = z.object({
 
 // إنشاء مريض جديد
 export async function createPatient(prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لإضافة مرضى." };
 
@@ -92,7 +92,7 @@ export async function createPatient(prevState: any, formData: FormData) {
 
 // تحديث مريض
 export async function updatePatient(id: string, prevState: any, formData: FormData) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لتعديل بيانات المرضى." };
 
@@ -162,7 +162,7 @@ export async function updatePatient(id: string, prevState: any, formData: FormDa
 
 // حذف مريض
 export async function deletePatient(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canEditPatient) return { message: "ليس لديك صلاحية لحذف المرضى." };
 
@@ -219,7 +219,7 @@ export async function deletePatient(id: string) {
 
 // جلب جميع المرضى
 export async function getPatients() {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return [];
     const { tenantBranchWhere } = tenantCtx;
 
@@ -237,7 +237,7 @@ export async function getPatients() {
 
 // جلب مريض بالـ ID
 export async function getPatientById(id: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return null;
 
     return await prisma.patient.findFirst({
@@ -256,7 +256,7 @@ export async function getPatientById(id: string) {
 
 // البحث عن مريض بالهاتف
 export async function searchPatientByPhone(phone: string) {
-    const tenantCtx = await getTenantContext();
+    const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return null;
 
     return await prisma.patient.findFirst({
