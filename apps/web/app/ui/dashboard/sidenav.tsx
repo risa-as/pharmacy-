@@ -110,6 +110,7 @@ const controlTowerSections: NavSection[] = [
     links: [
       { name: "معلومات الدفع", href: "/dashboard/admin/payment-info", icon: Landmark },
       { name: "إعدادات التنزيل", href: "/dashboard/admin/downloads", icon: Download },
+      { name: "تسوية الملكية", href: "/dashboard/admin/ownership", icon: Landmark },
       { name: "قاعدة الأدوية العالمية", href: "/dashboard/admin/drugs", icon: Pill },
       { name: "الإعدادات", href: "/dashboard/settings", icon: SettingsIcon },
     ],

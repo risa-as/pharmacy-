@@ -21,8 +21,16 @@ describe('operator proof (N16)', () => {
 
     it('measures the offline window on the server clock and refuses future-dated proofs', () => {
         const issued = Date.now() - OPERATOR_PROOF_TTL_MS - 1000;
-        expect(verifyOperatorProof(issueOperatorProof('u1', 'b1', 3, issued), op, 'b1')).toBe('expired');
-        expect(verifyOperatorProof(issueOperatorProof('u1', 'b1', 3, Date.now() + 3600000), op, 'b1')).toBe('invalid');
+        expect(verifyOperatorProof(issueOperatorProof('u1', 'b1', 3, null, issued), op, 'b1')).toBe('expired');
+        expect(verifyOperatorProof(issueOperatorProof('u1', 'b1', 3, null, Date.now() + 3600000), op, 'b1')).toBe('invalid');
+    });
+
+    it('verifies only on the device license it was issued to', () => {
+        const bound = issueOperatorProof('u1', 'b1', 3, 'device-A');
+        expect(verifyOperatorProof(bound, op, 'b1', 'device-A')).toBe('verified');
+        expect(verifyOperatorProof(bound, op, 'b1', 'device-B')).toBe('invalid');
+        expect(verifyOperatorProof(bound, op, 'b1', null)).toBe('invalid');
+        expect(verifyOperatorProof(issueOperatorProof('u1', 'b1', 3), op, 'b1', 'device-A')).toBe('invalid');
     });
 
     it('is domain-separated from the sync token: neither verifies as the other', () => {

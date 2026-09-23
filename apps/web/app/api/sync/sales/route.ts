@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
-import { checkOperator } from '@/app/lib/operator-proof';
+import { checkOperator, requestDeviceId } from '@/app/lib/operator-proof';
 import { z } from "zod";
 import { logAudit } from '@/app/lib/audit';
 
@@ -60,6 +60,8 @@ export async function POST(req: NextRequest) {
         }
 
         const { branchId, sales, operatorProofs } = result.data;
+        // N16: operator proofs only verify on the licensed device they were issued to.
+        const deviceId = await requestDeviceId(prisma, req, branchId);
 
         // Validate branchId belongs to the authenticated user
         const userRole = syncUser.role;
@@ -165,7 +167,7 @@ export async function POST(req: NextRequest) {
                         if (priceChanged) throw new SyncSaleConflictError('تغيير السعر يحتاج صلاحية؛ تتطلب العملية مراجعة.');
                     }
                     // N16: is the cashier named on the sale proven, or only claimed?
-                    const operatorVerified = await checkOperator(tx, sale.userId, operatorProofs, branchId);
+                    const operatorVerified = await checkOperator(tx, sale.userId, operatorProofs, branchId, deviceId);
                     if (operatorVerified === null) throw new SyncSaleConflictError('تعذّر التحقق من هوية منفّذ البيع (لا يوجد إثبات دخول صالح له على هذا الجهاز)؛ تتطلب العملية مراجعة.');
                     const isCredit = sale.paymentMethod === "CREDIT";
 

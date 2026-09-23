@@ -10,7 +10,10 @@ import crypto from 'crypto';
  * as a proof). It only answers "can this operation's operator claim be trusted?"
  *
  * Validity:
- *  - signature over userId + branchId + sessionVersion + issuedAt;
+ *  - signature over userId + branchId + sessionVersion + issuedAt + the device
+ *    license it was issued to (a proof copied to another device does not
+ *    verify there; a device without a license gets an unbound proof, which
+ *    enforcement refuses);
  *  - sessionVersion must still be the user's current one (password change or
  *    deactivation revokes outstanding proofs);
  *  - an offline-delegation window measured on the SERVER clock from issuedAt
@@ -25,14 +28,25 @@ function secret(): string {
     return value;
 }
 
-function sign(userId: string, branchId: string, sessionVersion: number, issuedAt: number): string {
+function sign(userId: string, branchId: string, sessionVersion: number, issuedAt: number, deviceId: string | null): string {
     return crypto.createHmac('sha256', secret())
-        .update(`${PURPOSE}:${userId}:${branchId}:${sessionVersion}:${issuedAt}`)
+        .update(`${PURPOSE}:${userId}:${branchId}:${sessionVersion}:${issuedAt}:${deviceId ?? '-'}`)
         .digest('hex');
 }
 
-export function issueOperatorProof(userId: string, branchId: string, sessionVersion: number, issuedAt = Date.now()): string {
-    return `${issuedAt}.${sign(userId, branchId, sessionVersion, issuedAt)}`;
+export function issueOperatorProof(userId: string, branchId: string, sessionVersion: number, deviceId: string | null = null, issuedAt = Date.now()): string {
+    return `${issuedAt}.${sign(userId, branchId, sessionVersion, issuedAt, deviceId)}`;
+}
+
+/** The active device license a request presents for this branch (id), or null. */
+export async function requestDeviceId(
+    db: { deviceLicense: { findFirst(args: any): Promise<{ id: string } | null> } },
+    request: Request, branchId: string,
+): Promise<string | null> {
+    const licenseKey = request.headers.get('x-device-license-key');
+    if (!licenseKey || !branchId) return null;
+    const license = await db.deviceLicense.findFirst({ where: { licenseKey, branchId, isActive: true }, select: { id: true } });
+    return license?.id ?? null;
 }
 
 export type OperatorProofResult = 'verified' | 'missing' | 'invalid' | 'expired';
@@ -41,13 +55,14 @@ export function verifyOperatorProof(
     proof: string | null | undefined,
     operator: { id: string; branchId: string | null; sessionVersion: number },
     branchId: string,
+    deviceId: string | null = null,
     now = Date.now(),
 ): OperatorProofResult {
     if (!proof) return 'missing';
     const [issuedRaw, mac] = proof.split('.');
     const issuedAt = Number(issuedRaw);
     if (!Number.isSafeInteger(issuedAt) || !mac || operator.branchId !== branchId) return 'invalid';
-    const expected = Buffer.from(sign(operator.id, branchId, operator.sessionVersion, issuedAt));
+    const expected = Buffer.from(sign(operator.id, branchId, operator.sessionVersion, issuedAt, deviceId));
     const given = Buffer.from(mac);
     if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return 'invalid';
     if (issuedAt > now + 5 * 60 * 1000) return 'invalid';
@@ -71,12 +86,15 @@ export async function checkOperator(
     operatorId: string | null | undefined,
     proofs: Record<string, string> | undefined,
     branchId: string,
+    deviceId: string | null = null,
 ): Promise<boolean | null> {
     let verified = false;
     if (operatorId) {
         const operator = await db.user.findUnique({ where: { id: operatorId }, select: { id: true, branchId: true, sessionVersion: true } });
-        verified = !!operator && verifyOperatorProof(proofs?.[operatorId], operator, branchId) === 'verified';
+        verified = !!operator && verifyOperatorProof(proofs?.[operatorId], operator, branchId, deviceId) === 'verified';
     }
+    // Under enforcement a proof must also be bound to a licensed device.
+    if (verified && operatorProofRequired() && !deviceId) verified = false;
     if (!verified && operatorProofRequired()) return null;
     return verified;
 }

@@ -16,6 +16,9 @@ import { createInsuranceCompany, updateInsuranceCompany, deleteInsuranceCompany,
 import { createDiscount, updateDiscount, deleteDiscount } from '../app/lib/actions/discount';
 import { createBranch, updateBranch } from '../app/lib/actions/branch';
 import { sweepExpiredPendingTransactions } from '../app/lib/actions/billing';
+import { settleOwnership } from '../app/lib/actions/ownership';
+import { readableByTenant } from '../app/lib/tenant-owned';
+import { getTenantContext } from '../app/lib/tenant-utils';
 
 const db = new PrismaClient({ datasources: { db: { url: process.env.TEST_DATABASE_URL } } });
 state.db = db;
@@ -37,11 +40,13 @@ beforeAll(async () => {
     const A = await mk('A'), B = await mk('B');
     const companyB = await db.insuranceCompany.create({ data: { name: 'B insurer', organizationId: B.org.id } });
     const legacyCompany = await db.insuranceCompany.create({ data: { name: 'legacy insurer ' + randomUUID() } });
+    const sharedCompany = await db.insuranceCompany.create({ data: { name: 'platform insurer ' + randomUUID(), isPlatformShared: true } });
     const policyB = await db.insurancePolicy.create({ data: { patientId: B.patient.id, companyId: companyB.id, policyNumber: 'B-1', expiryDate: new Date('2030-01-01') } });
     const discountB = await db.discount.create({ data: { name: 'B offer', type: 'PERCENTAGE', value: 50, startDate: new Date('2026-01-01'), endDate: new Date('2030-01-01'), organizationId: B.org.id } });
     const legacyDiscount = await db.discount.create({ data: { name: 'legacy offer', type: 'FIXED', value: 1, startDate: new Date('2026-01-01'), endDate: new Date('2030-01-01') } });
     const pendingB = await db.paymentTransaction.create({ data: { organizationId: B.org.id, status: 'PENDING', initiatedAt: new Date(Date.now() - 3600000), amount: 1 } });
-    f = { A, B, companyB, legacyCompany, policyB, discountB, legacyDiscount, pendingB };
+    const superAdmin = await db.user.create({ data: { email: `sa-${randomUUID()}@test.invalid`, password: 'unused', role: 'SUPER_ADMIN' } });
+    f = { A, B, companyB, legacyCompany, sharedCompany, policyB, discountB, legacyDiscount, pendingB, superAdmin };
 });
 afterAll(() => db.$disconnect());
 beforeEach(() => { state.session = { user: { id: f.A.admin.id } }; state.headers = new Headers(); });
@@ -64,9 +69,11 @@ describe('N20: insurance', () => {
 
     it('creates policies only for own patients with a readable company, and deletes only own policies', async () => {
         const policy = (patientId: string, companyId: string) => form({ patientId, companyId, policyNumber: randomUUID(), expiryDate: '2030-01-01', coverageRate: '50' });
-        expect(await createInsurancePolicy(null, policy(f.B.patient.id, f.legacyCompany.id))).toMatchObject({ message: expect.stringContaining('خارج نطاق') });
+        expect(await createInsurancePolicy(null, policy(f.B.patient.id, f.sharedCompany.id))).toMatchObject({ message: expect.stringContaining('خارج نطاق') });
         expect(await createInsurancePolicy(null, policy(f.A.patient.id, f.companyB.id))).toMatchObject({ message: expect.stringContaining('خارج نطاق') });
-        expect(await createInsurancePolicy(null, policy(f.A.patient.id, f.legacyCompany.id))).toEqual({ success: true });
+        // Unknown ownership is not shared: a legacy company is not usable until settled.
+        expect(await createInsurancePolicy(null, policy(f.A.patient.id, f.legacyCompany.id))).toMatchObject({ message: expect.stringContaining('خارج نطاق') });
+        expect(await createInsurancePolicy(null, policy(f.A.patient.id, f.sharedCompany.id))).toEqual({ success: true });
         expect(await deleteInsurancePolicy(f.policyB.id, f.B.patient.id)).toMatchObject({ message: expect.stringContaining('ضمن نطاق') });
         expect(await db.insurancePolicy.count({ where: { id: f.policyB.id } })).toBe(1);
     });
@@ -103,5 +110,32 @@ describe('N20: branches and billing', () => {
     it('does not sweep another organisation pending payments', async () => {
         await sweepExpiredPendingTransactions(f.B.org.id);
         expect((await db.paymentTransaction.findUnique({ where: { id: f.pendingB.id } }))?.status).toBe('PENDING');
+    });
+});
+
+describe('N20: unknown ownership is hidden until SUPER_ADMIN settles it', () => {
+    const visible = async () => {
+        const ctx: any = await getTenantContext();
+        return (await db.insuranceCompany.findMany({ where: readableByTenant(ctx), select: { id: true } })).map(c => c.id);
+    };
+    const settle = (kind: string, id: string, target: string) => settleOwnership(form({ kind, id, target }));
+
+    it('an organisation sees its own and platform records, never legacy or foreign ones', async () => {
+        const ids = await visible();
+        expect(ids).toContain(f.sharedCompany.id);
+        expect(ids).not.toContain(f.legacyCompany.id);
+        expect(ids).not.toContain(f.companyB.id);
+    });
+
+    it('only SUPER_ADMIN settles; assigning a legacy company returns it to its organisation for editing', async () => {
+        await expect(settle('insurance', f.legacyCompany.id, f.A.org.id)).rejects.toThrow('Unauthorized');
+        state.session = { user: { id: f.superAdmin.id, role: 'SUPER_ADMIN' } };
+        await settle('insurance', f.legacyCompany.id, f.A.org.id);
+        await settle('discount', f.legacyDiscount.id, 'shared');
+        await expect(settle('insurance', f.companyB.id, f.A.org.id)).rejects.toThrow(); // owned rows are never reassigned here
+        state.session = { user: { id: f.A.admin.id } };
+        expect(await visible()).toContain(f.legacyCompany.id);
+        expect(await db.discount.findUnique({ where: { id: f.legacyDiscount.id } })).toMatchObject({ organizationId: null, isPlatformShared: true });
+        expect((await db.insuranceCompany.findUnique({ where: { id: f.companyB.id } }))?.organizationId).toBe(f.B.org.id);
     });
 });

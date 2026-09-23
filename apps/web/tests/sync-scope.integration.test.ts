@@ -123,25 +123,68 @@ describe('sync/transactions stays inside the organisation', () => {
 });
 
 describe('sync/transactions: sale cash follows the sale (N02-R2)', () => {
-    it('posts cash for a synced sale, waits for a recent missing one, and sends an old orphan to review', async () => {
-        const sale = await db.sale.create({ data: { branchId: f.A.branch.id, total: 30 } });
-        const foreignSale = await db.sale.create({ data: { branchId: f.B.branch.id, total: 30 } });
-        const before = (await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance;
-        const matched = txn({ amount: 30, referenceId: sale.id });
-        const waiting = txn({ amount: 40, referenceId: randomUUID() });
-        const orphan = txn({ amount: 50, referenceId: randomUUID(), createdAt: new Date(Date.now() - 2 * 86400000).toISOString() });
-        const foreign = txn({ amount: 60, referenceId: foreignSale.id });
-        const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [matched, waiting, orphan, foreign] }))).json();
-        expect(body.syncedIds).toEqual([matched.id]);
-        expect(body.conflicts.map((c: any) => c.id).sort()).toEqual([orphan.id, foreign.id].sort());
-        expect((await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance).toBe(before + 30);
-        expect(await db.transaction.count({ where: { id: { in: [waiting.id, orphan.id, foreign.id] } } })).toBe(0);
+    const sync = async (transactions: unknown[]) => (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions }))).json();
+    const balance = async () => (await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance;
+    const cashSale = async (total: number, branchId = f.A.branch.id) => {
+        const s = await db.sale.create({ data: { branchId, total } });
+        await db.payment.create({ data: { saleId: s.id, amount: total, method: 'CASH' } });
+        return s;
+    };
+
+    it('posts a synced sale cash once; a second movement for it (another id) has no second effect', async () => {
+        const sale = await cashSale(30);
+        const before = await balance();
+        const first = txn({ amount: 30, referenceId: sale.id });
+        const second = txn({ amount: 30, referenceId: sale.id });
+        expect((await sync([first])).syncedIds).toEqual([first.id]);
+        expect((await sync([second])).syncedIds).toEqual([second.id]);
+        expect(await balance()).toBe(before + 30);
+        expect(await db.transaction.count({ where: { referenceId: sale.id } })).toBe(1);
     });
 
-    it('keeps accepting movements from older desktop builds that send no sale reference', async () => {
+    it('refuses a movement whose amount or direction does not match its document, or a foreign document', async () => {
+        const sale = await cashSale(30);
+        const foreignSale = await cashSale(30, f.B.branch.id);
+        const before = await balance();
+        const cases = [txn({ amount: 300, referenceId: sale.id }), txn({ type: 'OUT', amount: 30, referenceId: sale.id }), txn({ amount: 30, referenceId: foreignSale.id })];
+        const body = await sync(cases);
+        expect(body.syncedIds).toEqual([]);
+        expect(body.conflicts.map((c: any) => c.id).sort()).toEqual(cases.map(c => c.id).sort());
+        expect(await balance()).toBe(before);
+    });
+
+    it('does not refund twice when the return sync already posted the refund', async () => {
+        const sale = await cashSale(40);
+        const ret = await db.saleReturn.create({ data: { saleId: sale.id, branchId: f.A.branch.id, total: 15 } as any });
+        await db.transaction.create({ data: { safeId: f.A.safe.id, type: 'OUT', amount: 15, referenceType: 'SALE_RETURN', referenceId: ret.id } });
+        const before = await balance();
+        const desktopCopy = txn({ type: 'OUT', amount: 15, referenceType: 'SALE_RETURN', referenceId: ret.id });
+        expect((await sync([desktopCopy])).syncedIds).toEqual([desktopCopy.id]);
+        expect(await balance()).toBe(before);
+    });
+
+    it('waits for a missing document by the server clock, not the device clock, then sends it to review', async () => {
+        const before = await balance();
+        const waiting = txn({ amount: 40, referenceId: randomUUID(), createdAt: new Date(Date.now() - 5 * 86400000).toISOString() });
+        const first = await sync([waiting]);
+        expect(first.syncedIds).toEqual([]);
+        expect(first.conflicts).toEqual([]); // an old device date does not skip the wait
+        await db.syncMovementWait.update({ where: { transactionId: waiting.id }, data: { firstSeenAt: new Date(Date.now() - 2 * 86400000) } });
+        const later = await sync([waiting]);
+        expect(later.conflicts.map((c: any) => c.id)).toEqual([waiting.id]);
+        expect(await balance()).toBe(before);
+    });
+
+    it('refuses unknown movement kinds, and (once enforced) sale movements without a document', async () => {
+        const unknown = txn({ referenceType: 'MANUAL_GIFT' });
+        expect((await sync([unknown])).conflicts.map((c: any) => c.id)).toEqual([unknown.id]);
         const legacy = txn({ amount: 1 });
-        const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [legacy] }))).json();
-        expect(body.syncedIds).toEqual([legacy.id]);
+        expect((await sync([legacy])).syncedIds).toEqual([legacy.id]); // older desktops still sync until enforcement
+        process.env.REQUIRE_MOVEMENT_REFERENCE = 'true';
+        try {
+            const unreferenced = txn({ amount: 1 });
+            expect((await sync([unreferenced])).conflicts.map((c: any) => c.id)).toEqual([unreferenced.id]);
+        } finally { delete process.env.REQUIRE_MOVEMENT_REFERENCE; }
     });
 });
 

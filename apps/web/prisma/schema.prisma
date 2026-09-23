@@ -581,9 +581,12 @@ model InsuranceCompany {
   contactPhone String?
   contactEmail String?
   isActive     Boolean           @default(true)
-  /// Owning organisation (N20). Null = legacy/platform row: readable by every
-  /// organisation, changeable only by SUPER_ADMIN.
+  /// Owning organisation (N20). Null = no organisation owns it: either a
+  /// platform record (isPlatformShared) or a legacy row of unknown ownership,
+  /// hidden from organisations until SUPER_ADMIN settles it.
   organizationId String?
+  /// N20: SUPER_ADMIN-approved platform record readable by every organisation.
+  isPlatformShared Boolean @default(false)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   policies     InsurancePolicy[]
@@ -630,9 +633,12 @@ model Discount {
   isActive    Boolean      @default(true)
   applyToAll  Boolean      @default(false)
   drugIds     String[]
-  /// Owning organisation (N20). Null = legacy/platform row: readable by every
-  /// organisation, changeable only by SUPER_ADMIN.
+  /// Owning organisation (N20). Null = no organisation owns it: either a
+  /// platform record (isPlatformShared) or a legacy row of unknown ownership,
+  /// hidden from organisations until SUPER_ADMIN settles it.
   organizationId String?
+  /// N20: SUPER_ADMIN-approved platform record readable by every organisation.
+  isPlatformShared Boolean @default(false)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -1990,4 +1996,15 @@ model WarehouseSettlement {
   @@unique([warehouseId, kind, reference])
   @@index([warehouseId, createdAt])
   @@index([warehouseId, sourceId])
+}
+
+/// N02-R2: first time the server saw a synced cash movement whose sale/return
+/// had not reached the cloud yet. The review deadline counts from here, never
+/// from the device clock. Rows are removed once the document arrives.
+model SyncMovementWait {
+  transactionId String   @id
+  branchId      String
+  firstSeenAt   DateTime @default(now())
+
+  @@index([branchId])
 }

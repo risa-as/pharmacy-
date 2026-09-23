@@ -155,6 +155,26 @@ describe('N16: operator proofs', () => {
         expect(rows.map(r => r.operatorVerified)).toEqual([false, false]);
     });
 
+    it('a proof bound to one licensed device does not verify from another, and enforcement needs a bound proof', async () => {
+        syncSecret();
+        const { issueOperatorProof } = await import('../app/lib/operator-proof');
+        const devA = await db.deviceLicense.create({ data: { licenseKey: 'A-' + randomUUID(), branchId: f.branch.id } });
+        const devB = await db.deviceLicense.create({ data: { licenseKey: 'B-' + randomUUID(), branchId: f.branch.id } });
+        const proofs = { [f.cashier.id]: issueOperatorProof(f.cashier.id, f.branch.id, 0, devA.id) };
+        const from = (key: string) => (path: string, body: unknown) => new NextRequest(`http://localhost${path}`, { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json', 'x-device-license-key': key } });
+        const onA = sale(f.cashier.id), onB = sale(f.cashier.id);
+        await syncSales(from(devA.licenseKey)('/api/sync/sales', { branchId: f.branch.id, sales: [onA], operatorProofs: proofs }));
+        await syncSales(from(devB.licenseKey)('/api/sync/sales', { branchId: f.branch.id, sales: [onB], operatorProofs: proofs }));
+        const rows = await db.sale.findMany({ where: { id: { in: [onA.id, onB.id] } }, select: { id: true, operatorVerified: true } });
+        expect(Object.fromEntries(rows.map(r => [r.id, r.operatorVerified]))).toEqual({ [onA.id]: true, [onB.id]: false });
+        process.env.REQUIRE_OPERATOR_PROOF = 'true';
+        try {
+            const unbound = sale(f.cashier.id);
+            const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [unbound], operatorProofs: { [f.cashier.id]: issueOperatorProof(f.cashier.id, f.branch.id, 0) } }))).json();
+            expect(body.conflicts.map((c: any) => c.id)).toEqual([unbound.id]);
+        } finally { delete process.env.REQUIRE_OPERATOR_PROOF; }
+    });
+
     it('with enforcement on, unproven sales and payments become review conflicts and write nothing', async () => {
         syncSecret();
         const { issueOperatorProof } = await import('../app/lib/operator-proof');
@@ -164,7 +184,10 @@ describe('N16: operator proofs', () => {
             const proven = sale(f.cashier.id);
             const body = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [unproven], operatorProofs: {} }))).json();
             expect(body.conflicts.map((c: any) => c.id)).toEqual([unproven.id]);
-            const ok = await (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [proven], operatorProofs: { [f.cashier.id]: issueOperatorProof(f.cashier.id, f.branch.id, 0) } }))).json();
+            const dev = await db.deviceLicense.create({ data: { licenseKey: 'E-' + randomUUID(), branchId: f.branch.id } });
+            const onDevice = new NextRequest('http://localhost/api/sync/sales', { method: 'POST', headers: { 'content-type': 'application/json', 'x-device-license-key': dev.licenseKey },
+                body: JSON.stringify({ branchId: f.branch.id, sales: [proven], operatorProofs: { [f.cashier.id]: issueOperatorProof(f.cashier.id, f.branch.id, 0, dev.id) } }) });
+            const ok = await (await syncSales(onDevice)).json();
             expect(ok.syncedIds).toEqual([proven.id]);
             const pay = { id: randomUUID(), saleId: f.creditSale.id, userId: f.admin.id, amount: 1, method: 'CASH', createdAt: new Date().toISOString() };
             const before = (await db.patient.findUnique({ where: { id: f.patient.id } }))!.balance;

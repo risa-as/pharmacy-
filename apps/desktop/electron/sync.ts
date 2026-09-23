@@ -105,10 +105,10 @@ function getDeviceAuthHeaders(): Record<string, string> {
         // Tokens issued before versioning have none stored and verify as version 0.
         const syncSessionVersion = Number(store.get('syncSessionVersion')) || 0;
         if (syncSessionVersion > 0) deviceHeaders['x-session-version'] = String(syncSessionVersion);
-    } else if (licenseKey) {
-        // Fallback to device license key
-        deviceHeaders['x-device-license-key'] = licenseKey;
     }
+    // Always identify the licensed device: it authenticates when there is no sync
+    // token, and binds employee operator proofs to this machine (N16).
+    if (licenseKey) deviceHeaders['x-device-license-key'] = licenseKey;
     return deviceHeaders;
 }
 

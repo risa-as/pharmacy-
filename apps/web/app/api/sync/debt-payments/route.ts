@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
-import { checkOperator } from '@/app/lib/operator-proof';
+import { checkOperator, requestDeviceId } from '@/app/lib/operator-proof';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
 
 async function validateBranchAccess(syncUser: any, branchId: string): Promise<NextResponse | null> {
@@ -110,6 +110,8 @@ export async function POST(request: NextRequest) {
         const accessError = await validateBranchAccess(syncUser, branchId);
         if (accessError) return accessError;
 
+        // N16: operator proofs only verify on the licensed device they were issued to.
+        const deviceId = await requestDeviceId(prisma, request, branchId);
         const syncedIds: string[] = [];
         // Refused payments are returned for review (desktop moves them to its
         // sync-failures list) instead of being retried forever or dropped.
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            const operatorVerified = await checkOperator(prisma, payment.userId, operatorProofs, branchId);
+            const operatorVerified = await checkOperator(prisma, payment.userId, operatorProofs, branchId, deviceId);
             if (operatorVerified === null) {
                 conflicts.push({ id: payment.id, message: 'تعذّر التحقق من هوية منفّذ التحصيل (لا يوجد إثبات دخول صالح له على هذا الجهاز)؛ تتطلب العملية مراجعة.' });
                 continue;

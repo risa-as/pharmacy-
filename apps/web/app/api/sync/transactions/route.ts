@@ -20,8 +20,24 @@ const SyncTransactionSchema = z.object({
     updatedAt: z.string().or(z.date()),
 });
 
-/** How long a sale/return cash movement waits for its document before review. */
+/** How long a sale/return cash movement waits for its document before review,
+ * counted from the server's first sight of it (never the device clock). */
 const REFERENCE_WAIT_MS = 24 * 60 * 60 * 1000;
+
+/** Cash movement kinds the desktop creates; anything else is refused for review. */
+const DOCUMENT_TYPES = { SALE: 'IN', SALE_RETURN: 'OUT' } as const;
+const KNOWN_REFERENCE_TYPES = new Set(['SALE', 'SALE_RETURN', 'SHIFT_CASH_DROP']);
+
+/** Once every desktop sends document references, a sale/return movement without one is refused. */
+const movementReferenceRequired = () => process.env.REQUIRE_MOVEMENT_REFERENCE === 'true';
+
+type Outcome = 'done' | 'duplicate' | 'foreign' | 'pending' | 'unmatched' | 'mismatch' | 'unreferenced';
+const CONFLICT_MESSAGES: Partial<Record<Outcome, string>> = {
+    foreign: 'الحركة تشير إلى حركة أو مستخدم أو مستند من فرع أو مؤسسة أخرى.',
+    unmatched: 'حركة الصندوق لفاتورة أو مرتجع لم يصل إلى السحابة خلال يوم (قد يكون رُفض للمراجعة)؛ تتطلب مراجعة.',
+    mismatch: 'مبلغ حركة الصندوق أو اتجاهها لا يطابق الفاتورة أو المرتجع؛ تتطلب مراجعة.',
+    unreferenced: 'حركة بيع أو مرتجع بلا رقم مستند؛ تتطلب مراجعة.',
+};
 
 const SyncPayloadSchema = z.object({
     branchId: z.string(),
@@ -106,12 +122,12 @@ export async function POST(req: NextRequest) {
         // One transaction per record, so a refused or failing record neither rolls
         // back nor blocks the others.
         for (const txn of transactions) {
-            if ((txn.type !== 'IN' && txn.type !== 'OUT') || !Number.isFinite(txn.amount) || txn.amount < 0) {
+            if ((txn.type !== 'IN' && txn.type !== 'OUT') || !Number.isFinite(txn.amount) || txn.amount < 0 || !KNOWN_REFERENCE_TYPES.has(txn.referenceType)) {
                 conflicts.push({ id: txn.id, message: 'حركة صندوق غير صالحة (النوع أو المبلغ).' });
                 continue;
             }
             try {
-                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'done' | 'foreign' | 'pending' | 'unmatched'> => {
+                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<Outcome> => {
                     const existing = await tx.transaction.findUnique({ where: { id: txn.id }, select: { safe: { select: { branchId: true } } } });
                     if (existing) return existing.safe.branchId === branchId ? 'done' : 'foreign';
 
@@ -120,18 +136,45 @@ export async function POST(req: NextRequest) {
                         if (user && user.branch?.organizationId !== orgId) return 'foreign';
                     }
 
-                    // N02-R2: cash tied to a sale or return moves the safe only once that
-                    // document is in the cloud for this branch. A sale refused at sync (a
-                    // review conflict) must not still add its cash. The document may simply
-                    // not have synced yet, so a recent movement waits; one whose document
-                    // never arrives becomes a review conflict instead of blocking the batch.
-                    // Older desktop builds send no referenceId for sales: unchanged for them.
-                    if (txn.referenceId && (txn.referenceType === 'SALE' || txn.referenceType === 'SALE_RETURN')) {
-                        const doc = txn.referenceType === 'SALE'
-                            ? await tx.sale.findUnique({ where: { id: txn.referenceId }, select: { branchId: true } })
-                            : await tx.saleReturn.findUnique({ where: { id: txn.referenceId }, select: { branchId: true } });
-                        if (doc && doc.branchId !== branchId) return 'foreign';
-                        if (!doc) return Date.now() - new Date(txn.createdAt).getTime() < REFERENCE_WAIT_MS ? 'pending' : 'unmatched';
+                    // N02-R2: cash for a sale or a return moves the safe only against that
+                    // document, in this branch, once, with its amount and direction:
+                    //  - the document row is locked, so two movements for it serialise;
+                    //  - a document not in the cloud yet waits (first sight recorded by the
+                    //    server), and becomes a review item after a day;
+                    //  - a second movement for the same document (another id, or the one
+                    //    sync/returns already posted) is acknowledged without a second effect.
+                    const expectedDirection = DOCUMENT_TYPES[txn.referenceType as keyof typeof DOCUMENT_TYPES];
+                    if (expectedDirection) {
+                        if (!txn.referenceId) {
+                            // Older desktop builds send no sale reference (tracked open until
+                            // REQUIRE_MOVEMENT_REFERENCE is switched on after the update).
+                            if (movementReferenceRequired()) return 'unreferenced';
+                        } else {
+                            const doc = txn.referenceType === 'SALE'
+                                ? (await tx.$queryRaw<{ branchId: string; total: number; method: string | null }[]>`
+                                    SELECT s."branchId", s.total, p.method::text AS method FROM "Sale" s
+                                    LEFT JOIN "Payment" p ON p."saleId" = s.id WHERE s.id = ${txn.referenceId} FOR UPDATE OF s`)[0]
+                                : (await tx.$queryRaw<{ branchId: string; total: number; method: string | null }[]>`
+                                    SELECT r."branchId", r.total, NULL::text AS method FROM "SaleReturn" r
+                                    WHERE r.id = ${txn.referenceId} FOR UPDATE`)[0];
+                            if (!doc) {
+                                const wait = await tx.syncMovementWait.upsert({
+                                    where: { transactionId: txn.id },
+                                    create: { transactionId: txn.id, branchId },
+                                    update: {},
+                                });
+                                return Date.now() - wait.firstSeenAt.getTime() < REFERENCE_WAIT_MS ? 'pending' : 'unmatched';
+                            }
+                            await tx.syncMovementWait.deleteMany({ where: { transactionId: txn.id } });
+                            if (doc.branchId !== branchId) return 'foreign';
+                            if (txn.type !== expectedDirection || Math.abs(txn.amount - doc.total) > 0.01
+                                || (txn.referenceType === 'SALE' && doc.method !== null && doc.method !== 'CASH')) return 'mismatch';
+                            const already = await tx.transaction.findFirst({
+                                where: { referenceType: txn.referenceType, referenceId: txn.referenceId },
+                                select: { id: true },
+                            });
+                            if (already) return 'duplicate';
+                        }
                     }
 
                     // Map the desktop's safe id onto the branch's canonical safe.
@@ -159,9 +202,9 @@ export async function POST(req: NextRequest) {
                     });
                     return 'done';
                 });
-                if (outcome === 'foreign') conflicts.push({ id: txn.id, message: 'الحركة تشير إلى حركة أو مستخدم من فرع أو مؤسسة أخرى.' });
-                else if (outcome === 'unmatched') conflicts.push({ id: txn.id, message: 'حركة الصندوق لفاتورة أو مرتجع لم يصل إلى السحابة (قد يكون رُفض للمراجعة)؛ تتطلب مراجعة.' });
-                else if (outcome === 'done') processedIds.push(txn.id);
+                const conflictMessage = CONFLICT_MESSAGES[outcome];
+                if (conflictMessage) conflicts.push({ id: txn.id, message: conflictMessage });
+                else if (outcome === 'done' || outcome === 'duplicate') processedIds.push(txn.id);
             } catch (txnErr: any) {
                 console.error(`[Transaction Sync] Failed to sync transaction ${txn.id}:`, txnErr.message);
             }

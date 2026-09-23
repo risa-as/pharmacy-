@@ -1411,9 +1411,11 @@ app.whenReady().then(async () => {
 
         for (const base of getApiCandidates()) {
           try {
+            const licenseKey = store.get("licenseKey") as string | undefined;
             const res = await fetch(`${base}/verify-user`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              // The license binds the returned operator proof to this device (N16).
+              headers: { "Content-Type": "application/json", ...(licenseKey ? { "x-device-license-key": licenseKey } : {}) },
               body: JSON.stringify({ email, password }),
               signal: AbortSignal.timeout(6000),
             });

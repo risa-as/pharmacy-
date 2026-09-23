@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { generateSyncToken } from '@/app/lib/sync-token';
-import { issueOperatorProof } from '@/app/lib/operator-proof';
+import { issueOperatorProof, requestDeviceId } from '@/app/lib/operator-proof';
 import { enforceRateLimit } from '@/app/lib/rate-limit';
 import { getSubscriptionState } from '@/app/lib/subscription-state';
 
@@ -68,7 +68,8 @@ export async function POST(req: Request) {
             syncToken,
             // N16: proves later that this employee performed the operations the
             // desktop attributes to them. Not a sync credential.
-            ...(user.branchId ? { operatorProof: issueOperatorProof(user.id, user.branchId, user.sessionVersion) } : {}),
+            // Bound to this device's license when it presents one (N16).
+            ...(user.branchId ? { operatorProof: issueOperatorProof(user.id, user.branchId, user.sessionVersion, await requestDeviceId(prisma, req, user.branchId)) } : {}),
         });
 
     } catch (error) {
