@@ -31,9 +31,10 @@ describe('backup upload auth (N05)', () => {
         expect(mocks.backup).not.toHaveBeenCalled();
     });
 
-    it('accepts the shared secret only when explicitly re-enabled', async () => {
+    it('rejects the shared secret even when the old re-enable flag is set (the value is public)', async () => {
         vi.stubEnv('ALLOW_LEGACY_BACKUP_SECRET', 'true');
-        expect((await upload({ 'x-backup-secret': 'shared' })).status).toBe(200);
+        expect((await upload({ 'x-backup-secret': 'shared' })).status).toBe(401);
+        expect(mocks.backup).not.toHaveBeenCalled();
     });
 
     it('binds a license upload to the license branch, ignoring the body branch', async () => {

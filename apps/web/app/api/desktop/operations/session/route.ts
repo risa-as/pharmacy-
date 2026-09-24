@@ -46,19 +46,21 @@ export async function POST(req: Request) {
     .setIssuedAt()
     .setExpirationTime("5m")
     .sign(new TextEncoder().encode(secret));
-  const warehouse = (
-    await checkFeatureAccess(user.branch.organizationId, "warehouseManagement")
-  ).allowed;
+  const [warehouse, transfers, branchCount] = await Promise.all([
+    checkFeatureAccess(user.branch.organizationId, "warehouseManagement"),
+    checkFeatureAccess(user.branch.organizationId, "interBranchTransfers"),
+    prisma.branch.count({where:{organizationId:user.branch.organizationId}}),
+  ]);
   return NextResponse.json(
     {
       token,
       userId: user.id,
       permissions: getUserPermissions(user),
-      features: { warehouseManagement: warehouse, interBranchTransfers: (await checkFeatureAccess(user.branch.organizationId, "interBranchTransfers")).allowed },
+      features: { warehouseManagement: warehouse.allowed, interBranchTransfers: transfers.allowed },
       role: user.role,
       branchId: user.branchId,
       branchName: user.branch.name,
-      branchCount: await prisma.branch.count({where:{organizationId:user.branch.organizationId}}),
+      branchCount,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

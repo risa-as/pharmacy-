@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser } from '@/app/lib/sync-auth';
+import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
 import { z } from "zod";
 
@@ -92,11 +92,21 @@ export async function POST(req: NextRequest) {
                     conflicts.push({ id: shift.id, message: 'الوردية تخص فرعاً غير فرع المزامنة.' });
                     continue;
                 }
-                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'created' | 'closed' | 'updated' | 'skip' | 'foreign'> => {
+                const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<'created' | 'closed' | 'updated' | 'skip' | 'foreign' | 'owner' | 'forbidden'> => {
                     const existing = await tx.shift.findUnique({ where: { id: shift.id } });
 
                     if (existing && existing.branchId !== branchId) return 'foreign';
                     if (existing) {
+                        // Only the shift's own employee may change it. The desktop may
+                        // know that employee by a local id; the email snapshot then
+                        // identifies them, as it did when the shift was created.
+                        const sameOwner = shift.userId === existing.userId || (!!shift.userEmail
+                            && !!await tx.user.findFirst({ where: { id: existing.userId, email: shift.userEmail }, select: { id: true } }));
+                        if (!sameOwner) return 'owner';
+                        // N02-R: same permission as clockOut on the web, for that
+                        // employee and the signed-in session, as of now.
+                        const perms = await operatorPermissions(tx, existing.userId, branchId, syncUser);
+                        if (perms === null || (perms !== 'unattributed' && !perms.canSell)) return 'forbidden';
                         // Audit the open→closed transition only (not every re-sync of
                         // an open shift) so the log isn't flooded with duplicates.
                         const becameClosed = existing.status !== 'CLOSED' && shift.status === 'CLOSED';
@@ -148,6 +158,11 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
+                    // N02-R: same permission as clockIn on the web. Checked after the
+                    // user resolves, so an employee not synced yet stays retryable.
+                    const perms = await operatorPermissions(tx, resolvedUserId, branchId, syncUser);
+                    if (perms === null || (perms !== 'unattributed' && !perms.canSell)) return 'forbidden';
+
                     // Resolve the safe to the branch's canonical CASH_DRAWER safe so a
                     // diverging desktop-local safe id can't create a duplicate "الصندوق الرئيسي".
                     // A safe id from another branch is never used: fall back to this
@@ -195,6 +210,14 @@ export async function POST(req: NextRequest) {
                 });
                 if (outcome === 'foreign') {
                     conflicts.push({ id: shift.id, message: 'الوردية تشير إلى وردية أو مستخدم من فرع أو مؤسسة أخرى.' });
+                    continue;
+                }
+                if (outcome === 'owner') {
+                    conflicts.push({ id: shift.id, message: 'تعديل وردية موظف آخر؛ تتطلب العملية مراجعة.' });
+                    continue;
+                }
+                if (outcome === 'forbidden') {
+                    conflicts.push({ id: shift.id, message: 'صلاحية البيع غير متاحة لموظف الوردية أو للجلسة؛ تتطلب العملية مراجعة.' });
                     continue;
                 }
                 // Only acknowledge shifts we actually wrote, so guarded-skip shifts

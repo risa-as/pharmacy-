@@ -3,6 +3,13 @@ const bcrypt = require("bcrypt");
 
 const prisma = new PrismaClient();
 
+/** Password for seeded accounts, from SEED_USER_PASSWORD; never written here (public repository). */
+function seedPassword() {
+    const value = process.env.SEED_USER_PASSWORD;
+    if (!value || value.length < 12) throw new Error('Set SEED_USER_PASSWORD (at least 12 characters) before seeding.');
+    return value;
+}
+
 async function main() {
     console.log("🌱 بدء إنشاء البيانات التجريبية...\n");
 
@@ -35,7 +42,7 @@ async function main() {
 
     // 3. إنشاء المستخدمين
     console.log("\n👥 إنشاء المستخدمين...");
-    const hashedPassword = await bcrypt.hash("123456", 10);
+    const hashedPassword = await bcrypt.hash(seedPassword(), 10);
     const users = await Promise.all([
         prisma.user.create({
             data: {
@@ -390,7 +397,7 @@ async function main() {
     console.log(`   • المصروفات: ${expensesData.length}`);
     console.log("\n🔐 بيانات تسجيل الدخول:");
     console.log("   البريد: admin@faramace.com");
-    console.log("   كلمة المرور: 123456");
+    console.log("   كلمة المرور: SEED_USER_PASSWORD");
 }
 
 main()

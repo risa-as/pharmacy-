@@ -4,10 +4,17 @@ import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+/** Password for seeded accounts, from SEED_USER_PASSWORD; never written here (public repository). */
+function seedPassword(): string {
+    const value = process.env.SEED_USER_PASSWORD;
+    if (!value || value.length < 12) throw new Error('Set SEED_USER_PASSWORD (at least 12 characters) before seeding.');
+    return value;
+}
+
 async function main() {
     console.log('🌱 بدء ملء قاعدة البيانات بالبيانات الافتراضية...\n');
 
-    const password = await bcrypt.hash('123456', 10);
+    const password = await bcrypt.hash(seedPassword(), 10);
 
     // ==================== 1. Organization ====================
     const org = await prisma.organization.create({
@@ -72,7 +79,7 @@ async function main() {
             branchId: branch1.id,
         },
     });
-    console.log('✅ تم إنشاء 4 مستخدمين (كلمة السر: 123456)');
+    console.log('✅ تم إنشاء 4 مستخدمين (كلمة السر: SEED_USER_PASSWORD)');
     console.log('   📧 raad@faramace.com (ADMIN)');
     console.log('   📧 ahmed@faramace.com (PHARMACIST)');
     console.log('   📧 sara@faramace.com (PHARMACIST)');
@@ -348,10 +355,10 @@ async function main() {
     console.log('\n🎉 تمت عملية الملء بنجاح! قاعدة البيانات جاهزة للاستخدام.\n');
     console.log('📋 ملخص الحسابات:');
     console.log('   ─────────────────────────────────────');
-    console.log('   raad@faramace.com     | كلمة السر: 123456 | ADMIN');
-    console.log('   ahmed@faramace.com    | كلمة السر: 123456 | PHARMACIST');
-    console.log('   sara@faramace.com     | كلمة السر: 123456 | PHARMACIST');
-    console.log('   cashier@faramace.com  | كلمة السر: 123456 | CASHIER');
+    console.log('   raad@faramace.com     | كلمة السر: SEED_USER_PASSWORD | ADMIN');
+    console.log('   ahmed@faramace.com    | كلمة السر: SEED_USER_PASSWORD | PHARMACIST');
+    console.log('   sara@faramace.com     | كلمة السر: SEED_USER_PASSWORD | PHARMACIST');
+    console.log('   cashier@faramace.com  | كلمة السر: SEED_USER_PASSWORD | CASHIER');
     console.log('   ─────────────────────────────────────\n');
 }
 

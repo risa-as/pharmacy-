@@ -220,3 +220,56 @@ describe('sync/debt-payments: canPayDebt and amount validation', () => {
         expect((await db.patient.findUnique({ where: { id: f.patient.id } }))!.balance).toBe(450);
     });
 });
+
+
+describe('invoice numbering on synchronization', () => {
+ const send = async (s: any) => (await syncSales(post('/api/sync/sales', {branchId:f.branch.id,sales:[s]}))).json();
+ it('returns the original number after a lost response without consuming another', async () => {
+  const s = sale(f.cashier.id);
+  const first = await send(s);
+  const second = await send(s);
+  expect(first.syncedIds).toEqual([s.id]);
+  expect(second.invoiceNumbers[s.id]).toBe(first.invoiceNumbers[s.id]);
+  const next = sale(f.cashier.id);
+  expect((await send(next)).invoiceNumbers[next.id]).toBe(first.invoiceNumbers[s.id]+1);
+ });
+ it('serializes concurrent retries and returns the same number to both', async () => {
+  const s = sale(f.cashier.id);
+  const [a,b] = await Promise.all([send(s),send(s)]);
+  expect(a.syncedIds).toEqual([s.id]); expect(b.syncedIds).toEqual([s.id]);
+  expect(a.invoiceNumbers[s.id]).toBeGreaterThan(0);
+  expect(b.invoiceNumbers[s.id]).toBe(a.invoiceNumbers[s.id]);
+  expect(await db.sale.count({where:{id:s.id}})).toBe(1);
+ });
+ it('does not expose or consume a rolled-back number for a rejected sale', async () => {
+  const before = sale(f.cashier.id); const first = await send(before);
+  const denied = sale(f.noSell.id); const rejected = await send(denied);
+  expect(rejected.invoiceNumbers[denied.id]).toBeUndefined();
+  const after = sale(f.cashier.id);
+  expect((await send(after)).invoiceNumbers[after.id]).toBe(first.invoiceNumbers[before.id]+1);
+ });
+});
+
+describe('sync/sales: a device never chooses the invoice number', () => {
+    const send = async (s: object) => (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [s] }))).json();
+    it('keeps an issued, unused number from an older desktop; replaces an invented or reused one', async () => {
+        const org = f.branch.organizationId;
+        const issued = (await send(sale(f.cashier.id))).invoiceNumbers;
+        const used = Number(Object.values(issued)[0]);
+        // The counter has issued everything below nextNumber; reserve one unused number.
+        const [c] = await db.$queryRaw<{ nextNumber: number }[]>`UPDATE "InvoiceCounter" SET "nextNumber" = "nextNumber" + 1 WHERE "organizationId" = ${org} RETURNING "nextNumber"`;
+        const reserved = Number(c.nextNumber) - 1;
+
+        const legacy = sale(f.cashier.id, { invoiceNumber: String(reserved) });
+        expect((await send(legacy)).invoiceNumbers[legacy.id]).toBe(reserved);
+
+        const future = sale(f.cashier.id, { invoiceNumber: String(reserved + 1000) });
+        const reused = sale(f.cashier.id, { invoiceNumber: String(used) });
+        const a = (await send(future)).invoiceNumbers[future.id];
+        const b = (await send(reused)).invoiceNumbers[reused.id];
+        expect([a, b]).not.toContain(reserved + 1000);
+        expect(b).not.toBe(used);
+        const all = await db.sale.findMany({ where: { branchId: f.branch.id, invoiceNumber: { not: null } }, select: { invoiceNumber: true } });
+        expect(new Set(all.map(s => s.invoiceNumber)).size).toBe(all.length);
+    });
+});

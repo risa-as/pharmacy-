@@ -8,10 +8,10 @@ const utapi = new UTApi();
 
 export async function POST(req: Request) {
     try {
-        // 1. Authentication — prefer per-device license binding; the branchId is
-        //    then derived from the validated license, never trusted from the body.
-        //    The legacy shared secret is still accepted during the rollout so
-        //    desktop builds that predate this change keep working until updated.
+        // 1. Authentication — per-device license only; the branchId is derived
+        //    from the validated license, never trusted from the body. The former
+        //    shared secret (x-backup-secret) was compiled into desktop installers,
+        //    so it is public: it is no longer accepted under any setting.
         const licenseKey = req.headers.get("x-device-license-key");
         const headerBranchId = req.headers.get("x-branch-id");
 
@@ -31,32 +31,12 @@ export async function POST(req: Request) {
             }
             authedBranchId = license.branchId;
         } else {
-            // The legacy secret is shared by every desktop build (compiled into the
-            // binary), so it cannot bind an upload to a branch: with it, branchId
-            // comes from the body. Disabled unless explicitly re-enabled for a
-            // bounded migration window.
-            if (process.env.ALLOW_LEGACY_BACKUP_SECRET !== "true") {
-                return NextResponse.json({ success: false, message: "Device license required for backup upload" }, { status: 401 });
-            }
-            const secretKey = req.headers.get("x-backup-secret");
-            const configuredSecret = process.env.BACKUP_SECRET_KEY;
-            if (!configuredSecret || secretKey !== configuredSecret) {
-                // Log presence + lengths (NOT values) so quote/whitespace mismatches
-                // (e.g. a value stored with its surrounding quotes) are diagnosable.
-                console.warn(
-                    `[backup/upload] legacy secret mismatch: provided=${!!secretKey} providedLen=${secretKey?.length ?? 0} ` +
-                    `configured=${!!configuredSecret} configuredLen=${configuredSecret?.length ?? 0} match=${secretKey === configuredSecret}`,
-                );
-                return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-            }
-            console.warn("[backup/upload] Legacy shared-secret auth used — migrate this device to license-key auth.");
+            return NextResponse.json({ success: false, message: "Device license required for backup upload" }, { status: 401 });
         }
 
         const formData = await req.formData();
         const file = formData.get("file") as File;
-        // License-bound uploads use the validated branch; legacy uploads fall back
-        // to the body value for backward compatibility.
-        const branchId = authedBranchId ?? ((formData.get("branchId") as string) || "default");
+        const branchId = authedBranchId;
 
         if (!file) {
             return NextResponse.json({ success: false, message: "No file provided" }, { status: 400 });

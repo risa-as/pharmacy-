@@ -39,7 +39,10 @@ beforeAll(async () => {
     const foreignShift = await db.shift.create({ data: { userId: B.admin.id, branchId: B.branch.id, safeId: B.safe.id, startTime: new Date(), status: 'OPEN', expectedCash: 50 } });
     const foreignAccount = await db.loyaltyAccount.create({ data: { patientId: B.patient.id, totalPoints: 900, lifetimePoints: 900 } });
     const foreignLoyaltyTx = await db.loyaltyTransaction.create({ data: { accountId: foreignAccount.id, type: 'EARN', points: 900 } });
-    f = { A, B, foreignShift, foreignAccount, foreignLoyaltyTx };
+    // Points move only against a sale of the same branch and patient (N02-R).
+    // Paid 1000 at the default 0.01 points per dinar: up to 10 points may be earned.
+    const patientSale = await db.sale.create({ data: { branchId: A.branch.id, patientId: A.patient.id, total: 1000 } });
+    f = { A, B, foreignShift, foreignAccount, foreignLoyaltyTx, patientSale };
 });
 afterAll(() => db.$disconnect());
 // The desktop session is organisation A's admin.
@@ -53,7 +56,7 @@ const txn = (over: object = {}) => ({
     id: randomUUID(), safeId: f.A.safe.id, type: 'IN', amount: 25, referenceType: 'SALE',
     userId: f.A.admin.id, createdAt: now(), updatedAt: now(), ...over,
 });
-const points = (over: object = {}) => ({ id: randomUUID(), patientId: f.A.patient.id, type: 'EARN', points: 10, createdAt: now(), ...over });
+const points = (over: object = {}) => ({ id: randomUUID(), patientId: f.A.patient.id, type: 'EARN', points: 10, saleId: f.patientSale.id, createdAt: now(), ...over });
 
 describe('sync/shifts stays inside the organisation', () => {
     it('accepts a genuine desktop shift', async () => {

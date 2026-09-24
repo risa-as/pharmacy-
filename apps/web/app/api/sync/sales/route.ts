@@ -111,20 +111,32 @@ export async function POST(req: NextRequest) {
         // Process each sale in a separate transaction to avoid timeouts
         for (const sale of sales) {
             try {
-                await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+                const committedNumber = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+                    // Serialize retries of the same document before checking existence.
+                    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${sale.id}::text, 0))`;
                     const existing = await tx.sale.findUnique({ where: { id: sale.id } });
                     if (existing) {
                         if (existing.branchId !== branchId) throw new SyncSaleConflictError('معرف الفاتورة خارج الفرع.');
-                        return; // Already synced
+                        return existing.invoiceNumber; // Recover the number after a lost response
                     }
 
-                    // Reuse the number the desktop allocated at sale time (online sales).
-                    // Only allocate a fresh one here for sales created while offline.
+                    // Current desktops send no number; the server allocates it here.
+                    // Older desktops reserved one at sale time and printed it, so it
+                    // is kept only if this organisation's counter really issued it and
+                    // no other sale holds it. Anything else (invented, future, reused)
+                    // gets a fresh number: a device never chooses a sale's number.
                     let invoiceNumber: number | undefined;
                     const providedNumber = sale.invoiceNumber != null ? Number(sale.invoiceNumber) : NaN;
-                    if (Number.isInteger(providedNumber) && providedNumber > 0) {
-                        invoiceNumber = providedNumber;
-                    } else if (resolvedOrgId) {
+                    if (resolvedOrgId && Number.isSafeInteger(providedNumber) && providedNumber > 0) {
+                        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${resolvedOrgId + ':invoice:' + providedNumber}::text, 0))`;
+                        const counter = await tx.invoiceCounter.findUnique({ where: { organizationId: resolvedOrgId }, select: { nextNumber: true } });
+                        const issued = !!counter && providedNumber < counter.nextNumber;
+                        const taken = issued && !!await tx.sale.findFirst({
+                            where: { invoiceNumber: providedNumber, branch: { organizationId: resolvedOrgId } }, select: { id: true },
+                        });
+                        if (issued && !taken) invoiceNumber = providedNumber;
+                    }
+                    if (invoiceNumber === undefined && resolvedOrgId) {
                         const [counter] = await tx.$queryRaw<[{ nextNumber: bigint }]>`
                             INSERT INTO "InvoiceCounter" ("organizationId", "nextNumber")
                             VALUES (${resolvedOrgId}::text, 2)
@@ -133,9 +145,6 @@ export async function POST(req: NextRequest) {
                             RETURNING "nextNumber"
                         `;
                         invoiceNumber = Number(counter.nextNumber) - 1;
-                    }
-                    if (invoiceNumber !== undefined) {
-                        invoiceNumbers[sale.id] = invoiceNumber;
                     }
 
                     const subtotal = sale.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
@@ -299,10 +308,12 @@ export async function POST(req: NextRequest) {
                             data: { balance: { increment: sale.total } }
                         });
                     }
+                    return invoiceNumber;
                 }, {
                     maxWait: 5000, // default: 2000
                     timeout: 20000 // default: 5000
                 });
+                if (committedNumber != null) invoiceNumbers[sale.id] = committedNumber;
                 processedIds.push(sale.id);
                 const cashier = sale.userId ? cashierMap.get(sale.userId) : undefined;
                 await logAudit({

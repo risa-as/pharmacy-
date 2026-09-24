@@ -16,6 +16,13 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+/** Password for seeded accounts, from SEED_USER_PASSWORD; never written here (public repository). */
+function seedPassword(): string {
+    const value = process.env.SEED_USER_PASSWORD;
+    if (!value || value.length < 12) throw new Error('Set SEED_USER_PASSWORD (at least 12 characters) before seeding.');
+    return value;
+}
+
 // باركودات ثابتة لضمان تكرارية البذر (idempotent)
 const BARCODES = {
   panadol: "WM-DEMO-0001",
@@ -28,7 +35,7 @@ const BARCODES = {
 async function main() {
   console.log("🌱 بذر بيانات المذاخر التجريبية...\n");
 
-  const password = await bcrypt.hash("R$i1999s$a", 10);
+  const password = await bcrypt.hash(seedPassword(), 10);
 
   // 1) المذخر التجريبي
   const warehouse = await prisma.warehouse.upsert({

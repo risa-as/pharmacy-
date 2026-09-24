@@ -3,10 +3,17 @@ import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
+/** Password for seeded accounts, from SEED_USER_PASSWORD; never written here (public repository). */
+function seedPassword(): string {
+    const value = process.env.SEED_USER_PASSWORD;
+    if (!value || value.length < 12) throw new Error('Set SEED_USER_PASSWORD (at least 12 characters) before seeding.');
+    return value;
+}
+
 async function main() {
   console.log("🌱 إنشاء بيانات المستخدمين...\n");
 
-  const password = await bcrypt.hash("R$i1999s$a", 10);
+  const password = await bcrypt.hash(seedPassword(), 10);
 
   // ==================== Super Admin (لا يحتاج org أو branch) ====================
   const superAdmin = await prisma.user.upsert({
@@ -85,7 +92,7 @@ async function main() {
 
   // console.log('\n✅ تم إنشاء المستخدمين بنجاح!');
   // console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  // console.log('  كلمة المرور لجميع الحسابات: 123456');
+  // console.log('  كلمة المرور لجميع الحسابات: SEED_USER_PASSWORD');
   // console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   // console.log('  superadmin@faramace.com  →  SUPER_ADMIN');
   // console.log('  admin@faramace.com       →  ADMIN');

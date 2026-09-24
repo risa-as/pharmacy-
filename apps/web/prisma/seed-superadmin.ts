@@ -10,6 +10,13 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+/** Password for seeded accounts, from SEED_USER_PASSWORD; never written here (public repository). */
+function seedPassword(): string {
+    const value = process.env.SEED_USER_PASSWORD;
+    if (!value || value.length < 12) throw new Error('Set SEED_USER_PASSWORD (at least 12 characters) before seeding.');
+    return value;
+}
+
 async function seedPlans() {
     const plans = [
         {
@@ -95,14 +102,14 @@ async function seedSuperAdmin() {
 
     if (existing) {
         // Update password and ensure role is SUPER_ADMIN
-        const hashed = await bcrypt.hash('R$i1999s$a', 10);
+        const hashed = await bcrypt.hash(seedPassword(), 10);
         await prisma.user.update({
             where: { email },
             data: { password: hashed, role: 'SUPER_ADMIN', name: 'Super Admin' },
         });
         console.log(`  ↻ SuperAdmin updated: ${email}`);
     } else {
-        const hashed = await bcrypt.hash('R$i1999s$a', 10);
+        const hashed = await bcrypt.hash(seedPassword(), 10);
         await prisma.user.create({
             data: {
                 email,

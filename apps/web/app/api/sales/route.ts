@@ -45,6 +45,10 @@ async function searchSalesForReturn(mode: 'invoice' | 'drug', rawQuery: string, 
         // users (formatInvoiceNumber), and a numbered sale's uuid can start with
         // another invoice's digits (e.g. #13743 has id "138880f1-…").
         if (normalized.length >= 4) or.push({ invoiceNumber: null, id: { startsWith: normalized.toLowerCase() } });
+        // A desktop receipt printed before sync carries "م-" + the id's first 8
+        // characters; the prefix marks it as an id, so it matches numbered sales too.
+        const localRef = /^م-([0-9a-f]{8})$/i.exec(normalized);
+        if (localRef) or.push({ id: { startsWith: localRef[1].toLowerCase() } });
         if (or.length === 0) return NextResponse.json([]);
 
         const sales = await prisma.sale.findMany({

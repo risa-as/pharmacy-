@@ -3,10 +3,17 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+/** Password for seeded accounts, from SEED_USER_PASSWORD; never written here (public repository). */
+function seedPassword(): string {
+    const value = process.env.SEED_USER_PASSWORD;
+    if (!value || value.length < 12) throw new Error('Set SEED_USER_PASSWORD (at least 12 characters) before seeding.');
+    return value;
+}
+
 async function main() {
   console.log('Seeding dummy data...');
 
-  const passwordHash = await bcrypt.hash('123456', 10);
+  const passwordHash = await bcrypt.hash(seedPassword(), 10);
 
   // 1. Get plans
   const freePlan = await prisma.subscriptionPlan.findFirst({ where: { name: 'FREE' } });
@@ -103,7 +110,7 @@ async function main() {
   console.log(`Created Org 2: ${org2.name} with 1 branch, 2 users, and 1 license.`);
 
   console.log('\n--- Test Accounts Summary ---');
-  console.log('All passwords are: 123456');
+  console.log('All passwords are SEED_USER_PASSWORD.');
   console.log('1. Super Admin: super@faramace.com');
   console.log('2. Org 1 Admin: admin@shifa.com (Plan: PRO, 2 Branches)');
   console.log('3. Org 1 Pharmacist: ph1@shifa.com');
