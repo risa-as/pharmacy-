@@ -7,7 +7,7 @@ import { prisma } from "@/app/lib/prisma";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 export const dynamic = "force-dynamic";
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   props: { params: Promise<{ id: string }> },
 ) {
   const ctx = await getTenantContext();
@@ -26,9 +26,31 @@ export async function GET(
       user: { select: { name: true, email: true } },
     },
   });
-  return stocktake
-    ? NextResponse.json({ stocktake })
-    : NextResponse.json({ error: "الجرد غير موجود" }, { status: 404 });
+  if (!stocktake)
+    return NextResponse.json({ error: "الجرد غير موجود" }, { status: 404 });
+  // ?type=sheet: the whole count sheet in one response (every batch of the
+  // branch that holds stock, plus the ones already counted), as the web page
+  // builds it server-side. The desktop used to page through
+  // /inventory/operation-batches 40 batches at a time.
+  if (new URL(req.url).searchParams.get("type") === "sheet") {
+    const counted = stocktake.items.map((item) => item.batchId);
+    const sheet = await prisma.batch.findMany({
+      where: {
+        inventory: { branchId: stocktake.branchId },
+        OR: [{ quantity: { gt: 0 } }, { id: { in: counted } }],
+      },
+      select: {
+        id: true,
+        quantity: true,
+        costPrice: true,
+        expiryDate: true,
+        inventory: { select: { drug: { select: { tradeName: true, barcode: true } } } },
+      },
+      orderBy: [{ inventory: { drug: { tradeName: "asc" } } }, { expiryDate: "asc" }],
+    });
+    return NextResponse.json({ stocktake, sheet });
+  }
+  return NextResponse.json({ stocktake });
 }
 async function change(
   req: NextRequest,

@@ -15,7 +15,7 @@ interface InventoryItem {
     minStock: number;
     maxStock: number;
     branch: { name: string };
-    drug: { tradeName: string };
+    drug: { tradeName: string; unitsPerPack?: number | null };
 }
 
 interface Branch {
@@ -26,6 +26,7 @@ interface Branch {
 interface Drug {
     id: string;
     tradeName: string;
+    unitsPerPack?: number | null;
 }
 
 export default function EditForm({
@@ -41,6 +42,7 @@ export default function EditForm({
     const updateInventoryWithId = updateInventory.bind(null, inventory.id);
     const [state, dispatch] = useActionState(updateInventoryWithId, initialState);
     const [mounted, setMounted] = useState(false);
+    const [unitsPerPack, setUnitsPerPack] = useState(String(inventory.drug.unitsPerPack ?? ""));
 
     useEffect(() => {
         setMounted(true);
@@ -81,6 +83,10 @@ export default function EditForm({
                     id="drugId"
                     name="drugId"
                     defaultValue={inventory.drugId}
+                    onChange={(event) => {
+                        const selected = drugs.find(drug => drug.id === event.target.value);
+                        setUnitsPerPack(String(selected?.unitsPerPack ?? ""));
+                    }}
                     className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     required
                 >
@@ -90,6 +96,30 @@ export default function EditForm({
                         </option>
                     ))}
                 </select>
+            </div>
+
+            <div>
+                <label htmlFor="unitsPerPack" className="mb-2 block text-sm font-bold text-foreground">
+                    تأكيد عدد الأشرطة في الباكيت الواحد
+                </label>
+                <input
+                    id="unitsPerPack"
+                    name="unitsPerPack"
+                    type="number"
+                    min="1"
+                    max="2147483647"
+                    step="1"
+                    value={unitsPerPack}
+                    onChange={(event) => setUnitsPerPack(event.target.value)}
+                    placeholder="مثال: 3"
+                    className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                    عدد الأشرطة داخل علبة واحدة، وليس كمية المخزون. حفظ التغييرات يؤكد العدد لهذا الدواء. اتركه فارغًا للإبقاء على القيمة السابقة.
+                </p>
+                {state.errors?.unitsPerPack && (
+                    <p className="mt-1 text-sm text-destructive">{state.errors.unitsPerPack}</p>
+                )}
             </div>
 
             {/* السعر والتكلفة */}

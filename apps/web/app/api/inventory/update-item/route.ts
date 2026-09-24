@@ -9,6 +9,7 @@ import { logAudit, resolveUserName } from "@/app/lib/audit";
 type AckStatus = "processed" | "duplicate" | "noop";
 
 class ForbiddenError extends Error {}
+class ValidationError extends Error {}
 
 function readIdempotencyKey(req: Request, body: any): string {
     const fromHeader = String(req.headers.get("x-idempotency-key") || "").trim();
@@ -24,6 +25,25 @@ function makeAck(status: AckStatus, idempotencyKey: string) {
     };
 }
 
+function parseOptionalPackUnits(value: unknown): number | undefined {
+    if (value === undefined || value === null) {
+        return undefined;
+    }
+    if (typeof value !== "string" && typeof value !== "number") {
+        throw new ValidationError("عدد الأشرطة في الباكيت يجب أن يكون رقماً صحيحاً أكبر من صفر.");
+    }
+    if (typeof value === "string" && value.trim() === "") {
+        return undefined;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 2147483647) {
+        throw new ValidationError("عدد الأشرطة في الباكيت يجب أن يكون رقماً صحيحاً أكبر من صفر.");
+    }
+
+    return parsed;
+}
+
 export async function POST(req: Request) {
     try {
         const syncUser = await validateSyncUser(req);
@@ -33,6 +53,7 @@ export async function POST(req: Request) {
         const idempotencyKey = readIdempotencyKey(req, body);
 
         const { inventoryId, drugId, branchId, price, costPrice, minStock, maxStock } = body;
+        const unitsPerPack = parseOptionalPackUnits(body.unitsPerPack);
 
         if (!hasSyncPermission(syncUser, 'canEditDrug')) {
             return NextResponse.json(
@@ -107,9 +128,25 @@ export async function POST(req: Request) {
                     data: updateData
                 });
             }
+            let packUpdate: { unitsPerPack?: number | null; unitsPerPackConfirmedAt?: Date | null } = {};
+            if (unitsPerPack !== undefined) {
+                const drug = await tx.globalDrug.update({
+                    where: { id: inventory.drugId },
+                    data: { unitsPerPack, unitsPerPackConfirmedAt: new Date() },
+                    select: { unitsPerPack: true, unitsPerPackConfirmedAt: true },
+                });
+                packUpdate = {
+                    unitsPerPack: drug.unitsPerPack,
+                    unitsPerPackConfirmedAt: drug.unitsPerPackConfirmedAt,
+                };
+            }
             // GlobalDrug price update removed because web schema does not have price on GlobalDrug
 
-            return { inventory, ackStatus: "processed" as AckStatus, changed: updateData };
+            return {
+                inventory,
+                ackStatus: "processed" as AckStatus,
+                changed: { ...updateData, ...packUpdate },
+            };
         });
 
         // Audit the price/stock-level edit, attributed to the acting user.
@@ -127,10 +164,26 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             success: true,
-            data: result.inventory,
+            data: {
+                ...result.inventory,
+                ...("unitsPerPack" in result.changed
+                    ? {
+                        unitsPerPack: result.changed.unitsPerPack,
+                        unitsPerPackConfirmedAt: result.changed.unitsPerPackConfirmedAt instanceof Date
+                            ? result.changed.unitsPerPackConfirmedAt.toISOString()
+                            : result.changed.unitsPerPackConfirmedAt ?? null,
+                    }
+                    : {}),
+            },
             ack: makeAck(result.ackStatus, idempotencyKey),
         });
     } catch (error: any) {
+        if (error instanceof ValidationError) {
+            return NextResponse.json(
+                { success: false, message: error.message, ack: makeAck("noop", "") },
+                { status: 400 }
+            );
+        }
         if (error instanceof ForbiddenError) {
             return NextResponse.json(
                 { success: false, message: "Forbidden", ack: makeAck("noop", "") },

@@ -28,9 +28,6 @@ const REFERENCE_WAIT_MS = 24 * 60 * 60 * 1000;
 const DOCUMENT_TYPES = { SALE: 'IN', SALE_RETURN: 'OUT' } as const;
 const KNOWN_REFERENCE_TYPES = new Set(['SALE', 'SALE_RETURN', 'SHIFT_CASH_DROP']);
 
-/** Once every desktop sends document references, a sale/return movement without one is refused. */
-const movementReferenceRequired = () => process.env.REQUIRE_MOVEMENT_REFERENCE === 'true';
-
 type Outcome = 'done' | 'duplicate' | 'foreign' | 'pending' | 'unmatched' | 'mismatch' | 'unreferenced';
 const CONFLICT_MESSAGES: Partial<Record<Outcome, string>> = {
     foreign: 'الحركة تشير إلى حركة أو مستخدم أو مستند من فرع أو مؤسسة أخرى.',
@@ -146,17 +143,19 @@ export async function POST(req: NextRequest) {
                     const expectedDirection = DOCUMENT_TYPES[txn.referenceType as keyof typeof DOCUMENT_TYPES];
                     if (expectedDirection) {
                         if (!txn.referenceId) {
-                            // Older desktop builds send no sale reference (tracked open until
-                            // REQUIRE_MOVEMENT_REFERENCE is switched on after the update).
-                            if (movementReferenceRequired()) return 'unreferenced';
+                            // Preserve legacy operations for review, never post unverified
+                            // cash. Upgrade desktop clients before deploying this policy.
+                            return 'unreferenced';
                         } else {
                             const doc = txn.referenceType === 'SALE'
                                 ? (await tx.$queryRaw<{ branchId: string; total: number; method: string | null }[]>`
                                     SELECT s."branchId", s.total, p.method::text AS method FROM "Sale" s
                                     LEFT JOIN "Payment" p ON p."saleId" = s.id WHERE s.id = ${txn.referenceId} FOR UPDATE OF s`)[0]
                                 : (await tx.$queryRaw<{ branchId: string; total: number; method: string | null }[]>`
-                                    SELECT r."branchId", r.total, NULL::text AS method FROM "SaleReturn" r
-                                    WHERE r.id = ${txn.referenceId} FOR UPDATE`)[0];
+                                    SELECT r."branchId", r.total, p.method::text AS method FROM "SaleReturn" r
+                                    JOIN "Sale" s ON s.id = r."saleId"
+                                    LEFT JOIN "Payment" p ON p."saleId" = s.id
+                                    WHERE r.id = ${txn.referenceId} FOR UPDATE OF r`)[0];
                             if (!doc) {
                                 const wait = await tx.syncMovementWait.upsert({
                                     where: { transactionId: txn.id },
@@ -168,12 +167,17 @@ export async function POST(req: NextRequest) {
                             await tx.syncMovementWait.deleteMany({ where: { transactionId: txn.id } });
                             if (doc.branchId !== branchId) return 'foreign';
                             if (txn.type !== expectedDirection || Math.abs(txn.amount - doc.total) > 0.01
-                                || (txn.referenceType === 'SALE' && doc.method !== null && doc.method !== 'CASH')) return 'mismatch';
+                                || doc.method !== 'CASH') return 'mismatch';
                             const already = await tx.transaction.findFirst({
                                 where: { referenceType: txn.referenceType, referenceId: txn.referenceId },
-                                select: { id: true },
+                                select: { id: true, type: true, amount: true, safe: { select: { branchId: true } } },
                             });
-                            if (already) return 'duplicate';
+                            if (already) return already.safe.branchId === branchId && already.type === expectedDirection
+                                && Math.abs(already.amount - doc.total) <= 0.01 ? 'duplicate' : 'mismatch';
+                            // Refund posting belongs to the return endpoint. A desktop
+                            // movement can acknowledge that settlement, never invent one
+                            // from a return total (e.g. a debt reduction or card refund).
+                            if (txn.referenceType === 'SALE_RETURN') return 'mismatch';
                         }
                     }
 

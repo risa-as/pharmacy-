@@ -1673,11 +1673,34 @@ model DeviceLicense {
   updatedAt                DateTime  @updatedAt
 
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  signingKey DeviceSigningKey?
 
   @@index([licenseKey])
   @@index([hardwareId])
   @@index([branchId])
   @@index([branchId, isActive])
+}
+
+model DeviceSigningKey {
+  id String @id @default(uuid())
+  licenseId String @unique
+  license DeviceLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  publicKey String
+  fingerprint String
+  status String @default("PENDING")
+  createdAt DateTime @default(now())
+  approvedAt DateTime?
+  approvedBy String?
+  nonces DeviceSigningNonce[]
+}
+
+model DeviceSigningNonce {
+  keyId String
+  nonce String
+  expiresAt DateTime
+  key DeviceSigningKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+  @@id([keyId, nonce])
+  @@index([expiresAt])
 }
 
 // =======================

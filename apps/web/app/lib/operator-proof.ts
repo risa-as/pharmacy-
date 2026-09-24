@@ -11,8 +11,9 @@ import crypto from 'crypto';
  *
  * Validity:
  *  - signature over userId + branchId + sessionVersion + issuedAt + the device
- *    license it was issued to (a proof copied to another device does not
- *    verify there; a device without a license gets an unbound proof, which
+ *    license it was issued to (a proof presented with a different license does
+ *    not verify; copying both credentials is outside this guarantee. A
+ *    device without a license gets an unbound proof, which
  *    enforcement refuses);
  *  - sessionVersion must still be the user's current one (password change or
  *    deactivation revokes outstanding proofs);
@@ -93,8 +94,9 @@ export async function checkOperator(
         const operator = await db.user.findUnique({ where: { id: operatorId }, select: { id: true, branchId: true, sessionVersion: true } });
         verified = !!operator && verifyOperatorProof(proofs?.[operatorId], operator, branchId, deviceId) === 'verified';
     }
-    // Under enforcement a proof must also be bound to a licensed device.
-    if (verified && operatorProofRequired() && !deviceId) verified = false;
+    // A signature without a licensed-device binding must never be labelled
+    // verified, even while compatibility accepts unverified operations.
+    if (!deviceId) verified = false;
     if (!verified && operatorProofRequired()) return null;
     return verified;
 }

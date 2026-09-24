@@ -7,12 +7,15 @@ import { generateSyncToken } from '@/app/lib/sync-token';
 import { issueOperatorProof, requestDeviceId } from '@/app/lib/operator-proof';
 import { enforceRateLimit } from '@/app/lib/rate-limit';
 import { getSubscriptionState } from '@/app/lib/subscription-state';
+import { deviceSigningEnabled } from '@/app/lib/device-signature';
+import { enforceDeviceSignature } from '@/app/lib/device-auth';
 
 export async function POST(req: Request) {
     try {
         const limited = await enforceRateLimit(req, 'verify-user', 10, 60_000);
         if (limited) return limited;
 
+        const signatureRequest = req.clone();
         const { email, password } = await req.json();
 
         const user = await prisma.user.findFirst({
@@ -59,13 +62,25 @@ export async function POST(req: Request) {
         }
         // Signed with the current sessionVersion; the desktop echoes it back as
         // x-session-version (user.sessionVersion is also in the response body).
-        const syncToken = generateSyncToken(user.id, user.branchId || '', orgId, user.role, user.sessionVersion);
+        const deviceId = user.branchId ? await requestDeviceId(prisma, req, user.branchId) : null;
+        const signingKey = deviceSigningEnabled() && deviceId ? await prisma.deviceSigningKey.findUnique({where:{licenseId:deviceId}}) : null;
+        // Signature validation reads a clone before the body is consumed (see below).
+        if (signingKey?.status === 'ACTIVE') {
+            const denied = await enforceDeviceSignature(signatureRequest);
+            if (denied) return denied;
+        }
+        if (signingKey?.status === 'REVOKED') return NextResponse.json({error:'اعتماد الجهاز ملغى.'},{status:403});
+        const syncToken = generateSyncToken(user.id, user.branchId || '', orgId, user.role, user.sessionVersion,
+            signingKey?.status === 'ACTIVE' ? {keyId:signingKey.id,fingerprint:signingKey.fingerprint} : undefined);
 
         const { password: _, branch: __, ...userWithoutPassword } = user as any;
         return NextResponse.json({
             success: true,
             user: { ...userWithoutPassword, organizationId: orgId },
             syncToken,
+            // A bootstrap login may propose a key, but strict sync still rejects
+            // its token until an administrator approves the key and it logs in again.
+            deviceEnrollmentRequired: deviceSigningEnabled() && process.env.REQUIRE_TPM_SYNC === 'true' && signingKey?.status !== 'ACTIVE',
             // N16: proves later that this employee performed the operations the
             // desktop attributes to them. Not a sync credential.
             // Bound to this device's license when it presents one (N16).

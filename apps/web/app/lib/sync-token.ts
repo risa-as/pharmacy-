@@ -20,8 +20,8 @@ export function syncTokenMessage(userId: string, branchId: string, orgId: string
     return sessionVersion > 0 ? `${base}:v${sessionVersion}` : base;
 }
 
-export function generateSyncToken(userId: string, branchId: string, orgId: string, role: string, sessionVersion = 0): string {
-    return crypto.createHmac('sha256', getSyncSecret())
-        .update(syncTokenMessage(userId, branchId, orgId, role, sessionVersion))
-        .digest('hex');
+export function generateSyncToken(userId: string, branchId: string, orgId: string, role: string, sessionVersion = 0, device?: {keyId: string; fingerprint: string}): string {
+    const prefix = device ? `d1.${device.keyId}.${device.fingerprint}.` : '';
+    return prefix + crypto.createHmac('sha256', getSyncSecret())
+        .update(prefix + syncTokenMessage(userId, branchId, orgId, role, sessionVersion)).digest('hex');
 }

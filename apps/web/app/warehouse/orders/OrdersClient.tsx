@@ -213,20 +213,32 @@ export default function OrdersClient({
         setReviewOrder({ ...order, status: "UNDER_REVIEW" });
     };
 
+    // The order whose shipping/delivery update is in flight: its button shows a
+    // spinner and ignores repeat clicks until the server answers.
+    const [shippingBusyId, setShippingBusyId] = useState<string | null>(null);
     const updateShipping = async (order: Order, status: "SHIPPED" | "DELIVERED", lots?: ShipmentLot[]) => {
-        const res = await fetch(`/api/warehouse-portal/orders/${order.id}/shipping`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status, lots }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            toast.error(data.error ?? "تعذر تحديث حالة الشحن");
+        if (shippingBusyId) return false;
+        setShippingBusyId(order.id);
+        try {
+            const res = await fetch(`/api/warehouse-portal/orders/${order.id}/shipping`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status, lots }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                toast.error(data.error ?? "تعذر تحديث حالة الشحن");
+                return false;
+            }
+            setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status } : o)));
+            toast.success(status === "SHIPPED" ? "تم تسجيل شحن الطلب" : "تم تسجيل تسليم الطلب");
+            return true;
+        } catch {
+            toast.error("تعذر الاتصال بالخادم؛ تحقق من حالة الطلب قبل إعادة المحاولة");
             return false;
+        } finally {
+            setShippingBusyId(null);
         }
-        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status } : o)));
-        toast.success(status === "SHIPPED" ? "تم تسجيل شحن الطلب" : "تم تسجيل تسليم الطلب");
-        return true;
     };
 
     // ── طلب هاتفي: يدخله المذخر نيابةً عن صيدلية طلبت بالهاتف/واتساب ──────
@@ -464,17 +476,21 @@ export default function OrdersClient({
                                 {o.status === "APPROVED" && (
                                     <button
                                         onClick={() => operatingMode === "ORDER_PORTAL" ? setShippingOrder(o) : updateShipping(o, "SHIPPED")}
-                                        className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                                        disabled={shippingBusyId !== null}
+                                        aria-busy={shippingBusyId === o.id}
+                                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                        تم الشحن
+                                        {shippingBusyId === o.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />جارٍ تسجيل الشحن…</> : "تم الشحن"}
                                     </button>
                                 )}
                                 {o.status === "SHIPPED" && (
                                     <button
                                         onClick={() => updateShipping(o, "DELIVERED")}
-                                        className="inline-flex h-9 items-center justify-center rounded-lg bg-success px-3 text-xs font-medium text-success-foreground hover:bg-success/90"
+                                        disabled={shippingBusyId !== null}
+                                        aria-busy={shippingBusyId === o.id}
+                                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-success px-3 text-xs font-medium text-success-foreground hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                        تم التسليم
+                                        {shippingBusyId === o.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />جارٍ تسجيل التسليم…</> : "تم التسليم"}
                                     </button>
                                 )}
                                 {/* فاتورة الشحن: الورقة الواحدة التي تسافر مع البضاعة

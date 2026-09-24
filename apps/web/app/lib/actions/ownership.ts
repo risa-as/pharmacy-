@@ -28,11 +28,23 @@ export async function settleOwnership(formData: FormData): Promise<void> {
         data = { organizationId: org.id, isPlatformShared: false };
     }
 
-    const where = { id, organizationId: null };
-    const { count } = kind === "insurance"
-        ? await prisma.insuranceCompany.updateMany({ where, data })
-        : await prisma.discount.updateMany({ where, data });
-    if (count === 0) throw new Error("السجل غير موجود أو له مالك بالفعل");
+    await prisma.$transaction(async tx => {
+        const where = { id, organizationId: null, isPlatformShared: false };
+        const { count } = kind === "insurance"
+            ? await tx.insuranceCompany.updateMany({ where, data })
+            : await tx.discount.updateMany({ where, data });
+        if (count === 0) throw new Error("السجل غير موجود أو سُوّيت ملكيته بالفعل");
+        // Ownership and its audit evidence commit together. An audit failure
+        // must not leave an undocumented reassignment behind.
+        await tx.auditLog.create({ data: {
+            userId: session!.user!.id!,
+            userName: session!.user!.name ?? session!.user!.email ?? 'SUPER_ADMIN',
+            action: 'SETTLE_OWNERSHIP',
+            entity: kind === 'insurance' ? 'INSURANCE_COMPANY' : 'DISCOUNT',
+            entityId: id,
+            details: JSON.stringify({ before: { organizationId: null, isPlatformShared: false }, after: data }),
+        } });
+    });
 
     revalidatePath("/dashboard/admin/ownership");
 }

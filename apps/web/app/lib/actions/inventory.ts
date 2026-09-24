@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { logAudit } from "@/app/lib/audit";
+import { pharmacyDrugScope } from "@/app/lib/drug-scope";
 
 
 const InventorySchema = z.object({
@@ -91,7 +92,12 @@ export async function updateInventory(
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لتعديل المخزون." };
 
-    const validatedFields = InventorySchema.safeParse({
+    const validatedFields = InventorySchema.extend({
+        unitsPerPack: z.preprocess(
+            value => value === null || (typeof value === "string" && value.trim() === "") ? undefined : value,
+            z.coerce.number().int("عدد الأشرطة يجب أن يكون عددًا صحيحًا.").min(1, "عدد الأشرطة يجب أن يكون أكبر من صفر.").max(2147483647).optional(),
+        ),
+    }).safeParse({
         id: id,
         branchId: formData.get("branchId"),
         drugId: formData.get("drugId"),
@@ -99,6 +105,7 @@ export async function updateInventory(
         cost: formData.get("cost"),
         minStock: formData.get("minStock") || 0,
         maxStock: formData.get("maxStock") || 1000,
+        unitsPerPack: formData.get("unitsPerPack"),
     });
 
     if (!validatedFields.success) {
@@ -108,12 +115,30 @@ export async function updateInventory(
         };
     }
 
-    const { branchId, drugId, price, cost, minStock, maxStock } = validatedFields.data;
+    const { branchId, drugId, price, cost, minStock, maxStock, unitsPerPack } = validatedFields.data;
 
     try {
-        await prisma.inventory.update({
-            where: { id },
-            data: { branchId, drugId, price, cost, minStock, maxStock },
+        await prisma.$transaction(async tx => {
+            const existing = await tx.inventory.findFirst({
+                where: { AND: [tenantCtx.tenantBranchWhere, { id }] }, select: { id: true, drugId: true },
+            });
+            const branch = await tx.branch.findFirst({
+                where: { AND: [tenantCtx.branchModelWhere, { id: branchId }] }, select: { id: true },
+            });
+            const drug = existing?.drugId === drugId ? { id: drugId } : await tx.globalDrug.findFirst({
+                where: { AND: [pharmacyDrugScope(tenantCtx.organizationId), { id: drugId }] }, select: { id: true },
+            });
+            if (!existing || !branch || !drug) throw new Error("المخزون أو الفرع أو الدواء خارج نطاقك.");
+            await tx.inventory.update({
+                where: { id },
+                data: { branchId, drugId, price, cost, minStock, maxStock },
+            });
+            if (unitsPerPack !== undefined) {
+                await tx.globalDrug.update({
+                    where: { id: drugId },
+                    data: { unitsPerPack, unitsPerPackConfirmedAt: new Date() },
+                });
+            }
         });
         await logAudit({
             userId: tenantCtx.user.id,
@@ -121,7 +146,7 @@ export async function updateInventory(
             action: 'UPDATE',
             entity: 'INVENTORY',
             entityId: id,
-            details: JSON.stringify({ price, cost, minStock, maxStock }),
+            details: JSON.stringify({ price, cost, minStock, maxStock, unitsPerPack }),
             branchId,
         });
     } catch (error) {
@@ -130,6 +155,7 @@ export async function updateInventory(
     }
 
     revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/inventory/pack-units");
     redirect("/dashboard/inventory");
 }
 

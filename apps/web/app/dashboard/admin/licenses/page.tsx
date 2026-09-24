@@ -1,4 +1,5 @@
 'use client';
+import DeviceSigningPanel from "./DeviceSigningPanel";
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -313,6 +314,7 @@ export default function AdminLicensesPage() {
 
     return (
         <div className="glass-card space-y-6 p-6" dir="rtl">
+            <DeviceSigningPanel />
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">

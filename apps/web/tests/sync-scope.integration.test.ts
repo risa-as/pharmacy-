@@ -86,17 +86,22 @@ describe('sync/shifts stays inside the organisation', () => {
 });
 
 describe('sync/transactions stays inside the organisation', () => {
-    it('accepts genuine desktop movements (sale in, return out) and moves this branch\'s safe', async () => {
+    const fundedTxn = async (extra: object = {}) => {
+        const s = await db.sale.create({ data: { branchId: f.A.branch.id, total: 25 } });
+        await db.payment.create({ data: { saleId: s.id, method: 'CASH', amount: 25 } });
+        return txn({ referenceId: s.id, ...extra });
+    };
+    it('accepts a documented cash sale and moves this branch\'s safe', async () => {
         const before = (await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance;
-        const cases = [txn(), txn({ type: 'OUT', amount: 5, referenceType: 'SALE_RETURN' })];
+        const cases = [await fundedTxn()];
         const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: cases }))).json();
         expect(body.syncedIds.sort()).toEqual(cases.map(c => c.id).sort());
-        expect((await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance).toBe(before + 20);
+        expect((await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance).toBe(before + 25);
     });
 
     it('never moves another branch\'s safe, even when its id is named', async () => {
         const beforeB = (await db.safe.findUnique({ where: { id: f.B.safe.id } }))!.balance;
-        const t = txn({ safeId: f.B.safe.id, type: 'OUT', amount: 400 });
+        const t = await fundedTxn({ safeId: f.B.safe.id });
         const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [t] }))).json();
         expect(body.syncedIds).toEqual([t.id]);
         expect((await db.safe.findUnique({ where: { id: f.B.safe.id } }))!.balance).toBe(beforeB);
@@ -105,7 +110,7 @@ describe('sync/transactions stays inside the organisation', () => {
 
     it('refuses invalid or foreign-attributed movements and keeps the rest of the batch', async () => {
         const bad = [txn({ type: 'STEAL' }), txn({ amount: -50 }), txn({ userId: f.B.admin.id })];
-        const good = txn();
+        const good = await fundedTxn();
         const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [...bad, good] }))).json();
         expect(body.syncedIds).toEqual([good.id]);
         expect(body.conflicts.map((c: any) => c.id).sort()).toEqual(bad.map(c => c.id).sort());
@@ -113,7 +118,7 @@ describe('sync/transactions stays inside the organisation', () => {
     });
 
     it('acknowledges an already-synced movement once, without moving the safe again', async () => {
-        const t = txn();
+        const t = await fundedTxn();
         await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [t] }));
         const mid = (await db.safe.findUnique({ where: { id: f.A.safe.id } }))!.balance;
         const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [t] }))).json();
@@ -142,6 +147,16 @@ describe('sync/transactions: sale cash follows the sale (N02-R2)', () => {
         expect(await db.transaction.count({ where: { referenceId: sale.id } })).toBe(1);
     });
 
+    it('serializes simultaneous movements for one cash invoice', async () => {
+        const sale = await cashSale(30);
+        const before = await balance();
+        const movements = [txn({ amount: 30, referenceId: sale.id }), txn({ amount: 30, referenceId: sale.id })];
+        const results = await Promise.all(movements.map(m => sync([m])));
+        expect(results.flatMap(r => r.syncedIds).sort()).toEqual(movements.map(m => m.id).sort());
+        expect(await balance()).toBe(before + 30);
+        expect(await db.transaction.count({ where: { referenceId: sale.id } })).toBe(1);
+    });
+
     it('refuses a movement whose amount or direction does not match its document, or a foreign document', async () => {
         const sale = await cashSale(30);
         const foreignSale = await cashSale(30, f.B.branch.id);
@@ -163,6 +178,32 @@ describe('sync/transactions: sale cash follows the sale (N02-R2)', () => {
         expect(await balance()).toBe(before);
     });
 
+    it('refuses cash for a credit return and for a sale without a payment method', async () => {
+        const credit = await db.sale.create({ data: { branchId: f.A.branch.id, total: 30, patientId: f.A.patient.id } });
+        await db.payment.create({ data: { saleId: credit.id, method: 'CREDIT', amount: 30 } });
+        const ret = await db.saleReturn.create({ data: { saleId: credit.id, branchId: f.A.branch.id, total: 10 } });
+        const unknown = await db.sale.create({ data: { branchId: f.A.branch.id, total: 20 } });
+        const cases = [txn({ type: 'OUT', amount: 10, referenceType: 'SALE_RETURN', referenceId: ret.id }), txn({ amount: 20, referenceId: unknown.id })];
+        const before = await balance();
+        const debtBefore = (await db.patient.findUnique({ where: { id: f.A.patient.id } }))!.balance;
+        const result = await sync(cases);
+        expect(result.syncedIds).toEqual([]);
+        expect(result.conflicts.map((c: any) => c.id).sort()).toEqual(cases.map(c => c.id).sort());
+        expect(await balance()).toBe(before);
+        expect((await db.patient.findUnique({ where: { id: f.A.patient.id } }))!.balance).toBe(debtBefore);
+        expect(await db.transaction.count({ where: { id: { in: cases.map(c => c.id) } } })).toBe(0);
+    });
+
+    it('does not create a refund settlement merely from a cash return total', async () => {
+        const sale = await cashSale(40);
+        const ret = await db.saleReturn.create({ data: { saleId: sale.id, branchId: f.A.branch.id, total: 15 } });
+        const movement = txn({ type: 'OUT', amount: 15, referenceType: 'SALE_RETURN', referenceId: ret.id });
+        const before = await balance();
+        expect((await sync([movement])).conflicts.map((c: any) => c.id)).toEqual([movement.id]);
+        expect(await balance()).toBe(before);
+        expect(await db.transaction.count({ where: { referenceId: ret.id } })).toBe(0);
+    });
+
     it('waits for a missing document by the server clock, not the device clock, then sends it to review', async () => {
         const before = await balance();
         const waiting = txn({ amount: 40, referenceId: randomUUID(), createdAt: new Date(Date.now() - 5 * 86400000).toISOString() });
@@ -175,12 +216,12 @@ describe('sync/transactions: sale cash follows the sale (N02-R2)', () => {
         expect(await balance()).toBe(before);
     });
 
-    it('refuses unknown movement kinds, and (once enforced) sale movements without a document', async () => {
+    it('refuses unknown movement kinds and unreferenced document cash even with legacy enforcement disabled', async () => {
         const unknown = txn({ referenceType: 'MANUAL_GIFT' });
         expect((await sync([unknown])).conflicts.map((c: any) => c.id)).toEqual([unknown.id]);
         const legacy = txn({ amount: 1 });
-        expect((await sync([legacy])).syncedIds).toEqual([legacy.id]); // older desktops still sync until enforcement
-        process.env.REQUIRE_MOVEMENT_REFERENCE = 'true';
+        expect((await sync([legacy])).conflicts.map((c: any) => c.id)).toEqual([legacy.id]);
+        process.env.REQUIRE_MOVEMENT_REFERENCE = 'false';
         try {
             const unreferenced = txn({ amount: 1 });
             expect((await sync([unreferenced])).conflicts.map((c: any) => c.id)).toEqual([unreferenced.id]);

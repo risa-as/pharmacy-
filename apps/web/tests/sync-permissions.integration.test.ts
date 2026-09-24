@@ -138,7 +138,7 @@ describe('N16: operator proofs', () => {
         await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [claimed] }));
         await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [forged], operatorProofs: { [f.cashier.id]: `${Date.now()}.forged` } }));
         const rows = await db.sale.findMany({ where: { id: { in: [proven.id, claimed.id, forged.id] } }, select: { id: true, operatorVerified: true } });
-        expect(Object.fromEntries(rows.map(r => [r.id, r.operatorVerified]))).toEqual({ [proven.id]: true, [claimed.id]: false, [forged.id]: false });
+        expect(Object.fromEntries(rows.map(r => [r.id, r.operatorVerified]))).toEqual({ [proven.id]: false, [claimed.id]: false, [forged.id]: false });
     });
 
     it('a colleague proof cannot vouch for another cashier, and a password change revokes a proof', async () => {

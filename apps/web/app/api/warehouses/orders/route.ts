@@ -15,6 +15,7 @@ import { checkCreditLimit } from '@/app/lib/warehouse-accounts';
 import { notifyWarehouseUsers } from '@/app/lib/notifications/notificationTriggers';
 import { createHash } from 'node:crypto';
 import { ORDER_TRANSITIONS, type OrderStatus } from '@/app/lib/warehouse-order-state';
+import { listPharmacyReturns } from '@/app/lib/warehouse-return-list';
 
 export async function GET(req: NextRequest) {
     const ctx = await getTenantContext();
@@ -22,6 +23,15 @@ export async function GET(req: NextRequest) {
     if (!ctx.userPermissions.canViewWarehouseOrders) return NextResponse.json({ error: 'غير مصرح بعرض المشتريات.' }, { status: 403 });
     const scope = warehouseOrderScope({ role: ctx.user.role, organizationId: ctx.organizationId, branchId: ctx.user.branchId });
     if (!scope) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (req.nextUrl.searchParams.get('view') === 'returns') {
+        try {
+            return NextResponse.json(await listPharmacyReturns({ role: ctx.user.role, organizationId: ctx.organizationId, branchId: ctx.user.branchId }, req.nextUrl.searchParams));
+        } catch (error) {
+            if (error instanceof Error && error.message === 'INVALID_STATUS') return NextResponse.json({ error: 'حالة المرتجع غير صالحة.' }, { status: 400 });
+            console.error('Return list failed', error);
+            return NextResponse.json({ error: 'تعذر تحميل المرتجعات.' }, { status: 500 });
+        }
+    }
     const branchId = req.nextUrl.searchParams.get("branchId");
     const status = req.nextUrl.searchParams.get('status');
     if (status && !Object.hasOwn(ORDER_TRANSITIONS, status)) return NextResponse.json({ error: 'حالة غير صالحة.' }, { status: 400 });

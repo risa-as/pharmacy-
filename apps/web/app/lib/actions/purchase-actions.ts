@@ -138,7 +138,14 @@ export async function getPurchases(branchId?: string) {
     const legacy = purchases.filter(p=>p.supplier.warehouseId&&!p.warehouseOrderId);
     const links = legacy.length ? await prisma.warehouseOrderEvent.findMany({where:{type:'APPROVED',order:tenantBranchWhere,OR:legacy.map(p=>({payload:{path:['purchaseId'],equals:p.id}}))},select:{orderId:true,payload:true}}) : [];
     const linked = new Map(links.map(e=>[(e.payload as any)?.purchaseId,e.orderId]));
-    return purchases.map(p=>({...p,warehouseOrderId:p.warehouseOrderId||linked.get(p.id)||null}));
+    const withOrder = purchases.map(p=>({...p,warehouseOrderId:p.warehouseOrderId||linked.get(p.id)||null}));
+    // The linked warehouse order's own status (APPROVED → not shipped yet,
+    // SHIPPED/DELIVERED → on its way / arrived), so a pending purchase can say
+    // whether the goods have left the warehouse. Scoped like the detail route.
+    const orderIds = withOrder.map(p=>p.warehouseOrderId).filter((id): id is string => !!id);
+    const orders = orderIds.length ? await prisma.warehouseOrder.findMany({where:{AND:[tenantBranchWhere,{id:{in:orderIds}}]},select:{id:true,status:true,orderNumber:true}}) : [];
+    const orderById = new Map(orders.map(o=>[o.id,o]));
+    return withOrder.map(p=>({...p,warehouseOrderStatus:p.warehouseOrderId?orderById.get(p.warehouseOrderId)?.status??null:null,warehouseOrderNumber:p.warehouseOrderId?orderById.get(p.warehouseOrderId)?.orderNumber??null:null}));
 
 }
 

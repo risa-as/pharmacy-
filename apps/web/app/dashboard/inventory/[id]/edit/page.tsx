@@ -28,7 +28,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
 
     const drug = await prisma.globalDrug.findUnique({
         where: { id: inventory.drugId },
-        select: { id: true, tradeName: true },
+        select: { id: true, tradeName: true, unitsPerPack: true },
     });
 
     const inventoryWithDrug = {
@@ -44,7 +44,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     const drugs = await prisma.globalDrug.findMany({
         // النطاق: عالمي + أدوية هذه المؤسسة — انظر app/lib/drug-scope.ts.
         where: pharmacyDrugScope(tenantCtx.organizationId),
-        select: { id: true, tradeName: true },
+        select: { id: true, tradeName: true, unitsPerPack: true },
         orderBy: { tradeName: "asc" },
     });
 
@@ -66,7 +66,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
             </div>
 
             <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-                <EditForm inventory={inventoryWithDrug} branches={branches} drugs={drugs} />
+                <EditForm inventory={inventoryWithDrug} branches={branches} drugs={drug && !drugs.some(item => item.id === drug.id) ? [drug, ...drugs] : drugs} />
             </div>
         </div>
     );

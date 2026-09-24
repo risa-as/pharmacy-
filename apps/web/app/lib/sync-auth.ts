@@ -15,6 +15,7 @@ import { syncTokenMessage } from '@/app/lib/sync-token';
 import { SESSION_REFRESH_UNAVAILABLE } from '@/app/lib/session-refresh';
 import { jwtVerify } from 'jose';
 import crypto from 'crypto';
+import { enforceDeviceSignature } from './device-auth';
 
 // Lazily encoded once per process — same secret/scheme getTenantContext uses to
 // verify the mobile app's Bearer JWT.
@@ -117,10 +118,12 @@ function getSyncSecret(): string {
 }
 
 function verifySyncToken(token: string, userId: string, branchId: string, orgId: string, role: string, sessionVersion: number): boolean {
+    const parts = token.split('.');
+    const prefix = token.startsWith('d1.') && parts.length === 4 ? parts.slice(0,3).join('.') + '.' : '';
     const expected = crypto.createHmac('sha256', getSyncSecret())
-        .update(syncTokenMessage(userId, branchId, orgId, role, sessionVersion))
+        .update(prefix + syncTokenMessage(userId, branchId, orgId, role, sessionVersion))
         .digest('hex');
-    const tokenBuf = Buffer.from(token);
+    const tokenBuf = Buffer.from(prefix ? parts[3] : token);
     const expectedBuf = Buffer.from(expected);
     // timingSafeEqual throws on length mismatch — guard so a wrong-length token
     // is a clean "false" instead of a thrown 500.
@@ -171,7 +174,7 @@ function verificationUnavailable() {
     return NextResponse.json({ error: 'تعذّر التحقق مؤقتًا؛ ستُعاد المحاولة.' }, { status: 503, headers: { 'Retry-After': '30' } });
 }
 
-export async function validateSyncUser(request: Request): Promise<SyncUser | NextResponse> {
+async function validateSyncUserCore(request: Request): Promise<SyncUser | NextResponse> {
     const h = request.headers as Headers;
 
     // ── 1. Sync token (desktop after login) ─────────────────────────────────
@@ -262,6 +265,30 @@ export async function validateSyncUser(request: Request): Promise<SyncUser | Nex
         throw e;
     }
 
+}
+
+export async function validateSyncUser(request: Request): Promise<SyncUser | NextResponse> {
+    const user = await validateSyncUserCore(request);
+    if (user instanceof NextResponse) return user;
+    const token = request.headers.get('x-sync-token') || '';
+    if (!token && !request.headers.get('x-device-license-key')) return user;
+    const parts = token.split('.');
+    try {
+        const rejected = await enforceDeviceSignature(request, token.startsWith('d1.')
+            ? {keyId:parts[1],fingerprint:parts[2]} : undefined);
+        return rejected || user;
+    } catch {
+        return NextResponse.json({error:'تعذر التحقق من الجهاز مؤقتًا؛ العمليات محفوظة لإعادة المحاولة.'}, {status:503});
+    }
+}
+
+// Bootstrap/recovery can only propose a public key for administrator approval.
+// Never use this for business operations: it intentionally skips device signing.
+export async function validateDeviceEnrollmentUser(request: Request): Promise<SyncUser | NextResponse> {
+    const user = await validateSyncUserCore(request);
+    if (user instanceof NextResponse) return user;
+    if (user.role === 'DEVICE' || !user.branchId) return NextResponse.json({error:'Employee login required'}, {status:403});
+    return user;
 }
 
 /**

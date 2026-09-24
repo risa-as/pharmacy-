@@ -114,6 +114,20 @@ describe('N20: branches and billing', () => {
 });
 
 describe('N20: unknown ownership is hidden until SUPER_ADMIN settles it', () => {
+    it('rolls back ownership if the audit record cannot be saved', async () => {
+        const row = await db.insuranceCompany.create({ data: { name: 'audit rollback ' + randomUUID() } });
+        state.session = { user: { id: f.superAdmin.id, role: 'SUPER_ADMIN' } };
+        const transaction = db.$transaction.bind(db);
+        const intercept = vi.spyOn(db, '$transaction').mockImplementationOnce((async (callback: any) => transaction(async (tx: any) => {
+            tx.auditLog.create = async () => { throw new Error('simulated audit failure'); };
+            return callback(tx);
+        })) as any);
+        try {
+            await expect(settleOwnership(form({ kind: 'insurance', id: row.id, target: f.A.org.id }))).rejects.toThrow('simulated audit failure');
+        } finally { intercept.mockRestore(); }
+        expect((await db.insuranceCompany.findUnique({ where: { id: row.id } }))!.organizationId).toBeNull();
+        expect(await db.auditLog.count({ where: { entityId: row.id } })).toBe(0);
+    });
     const visible = async () => {
         const ctx: any = await getTenantContext();
         return (await db.insuranceCompany.findMany({ where: readableByTenant(ctx), select: { id: true } })).map(c => c.id);
@@ -132,6 +146,10 @@ describe('N20: unknown ownership is hidden until SUPER_ADMIN settles it', () => 
         state.session = { user: { id: f.superAdmin.id, role: 'SUPER_ADMIN' } };
         await settle('insurance', f.legacyCompany.id, f.A.org.id);
         await settle('discount', f.legacyDiscount.id, 'shared');
+        const audit = await db.auditLog.findFirst({ where: { action: 'SETTLE_OWNERSHIP', entityId: f.legacyCompany.id } });
+        expect(audit?.userId).toBe(f.superAdmin.id);
+        expect(JSON.parse(audit!.details!)).toEqual({ before: { organizationId: null, isPlatformShared: false }, after: { organizationId: f.A.org.id, isPlatformShared: false } });
+        await expect(settle('discount', f.legacyDiscount.id, f.A.org.id)).rejects.toThrow();
         await expect(settle('insurance', f.companyB.id, f.A.org.id)).rejects.toThrow(); // owned rows are never reassigned here
         state.session = { user: { id: f.A.admin.id } };
         expect(await visible()).toContain(f.legacyCompany.id);
