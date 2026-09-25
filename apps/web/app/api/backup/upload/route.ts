@@ -20,9 +20,9 @@ export async function POST(req: Request) {
         if (licenseKey && headerBranchId) {
             const license = await prisma.deviceLicense.findFirst({
                 where: { licenseKey, branchId: headerBranchId, isActive: true },
-                select: { branchId: true },
+                select: { branchId: true, expiresAt: true },
             });
-            if (!license) {
+            if (!license || (license.expiresAt && license.expiresAt.getTime() <= Date.now())) {
                 // Safe diagnostics — no secret/key values leaked.
                 console.warn(
                     `[backup/upload] license auth failed: no active license for branch=${headerBranchId} keyLen=${licenseKey.length}`,

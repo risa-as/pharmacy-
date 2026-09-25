@@ -42,4 +42,11 @@ describe('backup upload auth (N05)', () => {
         expect((await upload({ 'x-device-license-key': 'k', 'x-branch-id': 'own' })).status).toBe(200);
         expect(mocks.backup.mock.calls[0][0].data.branchId).toBe('own');
     });
+
+    it('rejects an expired device license before sending a file to storage', async () => {
+        mocks.license.mockResolvedValue({branchId:'own',expiresAt:new Date('2000-01-01')});
+        expect((await upload({'x-device-license-key':'k','x-branch-id':'own'})).status).toBe(401);
+        expect(mocks.upload).not.toHaveBeenCalled();
+        expect(mocks.backup).not.toHaveBeenCalled();
+    });
 });
