@@ -1,8 +1,8 @@
 import { createBackup } from './backup';
 import store from './store';
 import fs from 'fs';
-import formData from 'form-data';
-import fetch from 'node-fetch'; // Electron uses Node's fetch or compatible
+import { net } from 'electron';
+import path from 'node:path';
 
 declare const __CLOUD_API_URL__: string;
 
@@ -39,13 +39,13 @@ export async function uploadBackup(filePath: string, branchId: string = "default
         const licenseKey = store.get('licenseKey') as string | undefined;
         if (!licenseKey) return { ok: false, error: "فعّل ترخيص الجهاز لرفع النسخة الاحتياطية." };
 
-        const form = new formData();
-        form.append('file', fs.createReadStream(filePath));
+        const form = new FormData();
+        form.append('file', new Blob([await fs.promises.readFile(filePath)]), path.basename(filePath));
         form.append('branchId', branchId);
-        const response = await fetch(targetUrl, {
+        const response = await net.fetch(targetUrl, {
             method: 'POST',
             body: form,
-            headers: { ...form.getHeaders(), "x-device-license-key": licenseKey, "x-branch-id": branchId },
+            headers: { "x-device-license-key": licenseKey, "x-branch-id": branchId },
         });
 
         if (response.ok) {
