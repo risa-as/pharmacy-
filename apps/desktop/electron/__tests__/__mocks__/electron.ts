@@ -7,3 +7,4 @@ export const app = {
 };
 
 export const BrowserWindow = { getAllWindows: () => [] };
+export const net = { fetch: (input: any, init?: any) => globalThis.fetch(input, init) };

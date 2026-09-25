@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { ipcMain } from 'electron';
+import { ipcMain, net } from 'electron';
 import store from './store';
 import { getApiBaseUrl, getApiCandidates } from './api-config';
 import { tpmCommand, tpmPublicKey } from './tpm-worker';
@@ -17,7 +17,7 @@ export async function deviceFetch(input: string | URL | Request, init: RequestIn
   const headers = new Headers(init.headers);
   const licensedRequest = headers.has('x-sync-token') || headers.has('x-device-license-key');
   if (!state?.fingerprint || !licensedRequest || !getApiCandidates().some(base => url.startsWith(base.replace(/\/$/,'')+'/')))
-    return globalThis.fetch(input,init);
+    return net.fetch(input instanceof URL ? input.href : input,init);
   if (input instanceof Request || (init.body != null && typeof init.body !== 'string')) throw Error('Unsupported signed request body');
   const license = String(store.get('licenseKey') || '');
   if (!headers.has('x-device-license-key')) headers.set('x-device-license-key',license);
@@ -29,7 +29,7 @@ export async function deviceFetch(input: string | URL | Request, init: RequestIn
   headers.set('x-device-key-id',state.keyId||'');
   headers.set('x-device-time',time); headers.set('x-device-nonce',nonce);
   headers.set('x-device-fingerprint',state.fingerprint); headers.set('x-device-signature',signature);
-  const response = await globalThis.fetch(input,{...init,headers});
+  const response = await net.fetch(input instanceof URL ? input.href : input,{...init,headers});
   if (!response.ok) {
     const data = await response.clone().json().catch(()=>null);
     if (data?.code?.startsWith('DEVICE_')) {

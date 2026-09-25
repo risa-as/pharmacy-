@@ -1,6 +1,6 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 const h=vi.hoisted(()=>({handlers:new Map<string,any>(),store:new Map<string,any>()}));
-vi.mock('electron',()=>({ipcMain:{handle:(name:string,fn:any)=>h.handlers.set(name,fn)}}));
+vi.mock('electron',()=>({ipcMain:{handle:(name:string,fn:any)=>h.handlers.set(name,fn)},net:{fetch:(input:any,init:any)=>globalThis.fetch(input,init)}}));
 vi.mock('../store',()=>({default:{get:(key:string)=>h.store.get(key)}}));
 vi.mock('../api-config',()=>({getApiBaseUrl:()=> 'https://example.test/api'}));
 import {registerOperations} from '../operations';

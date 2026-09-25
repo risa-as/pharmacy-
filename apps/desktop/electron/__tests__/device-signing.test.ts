@@ -1,11 +1,18 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 import {createHash} from 'node:crypto';
 const h=vi.hoisted(()=>({data:{} as Record<string,any>,sign:vi.fn(),fetch:vi.fn()}));
+vi.mock('electron',()=>({ipcMain:{handle:vi.fn()},net:{fetch:h.fetch}}));
 vi.mock('../store',()=>({default:{get:(k:string)=>h.data[k],set:(k:string,v:any)=>{h.data[k]=v;}}}));
 vi.mock('../tpm-worker',()=>({tpmCommand:h.sign,tpmPublicKey:vi.fn()}));
 vi.mock('../api-config',()=>({getApiCandidates:()=>['https://app.test/api'],getApiBaseUrl:()=> 'https://app.test/api'}));
 import {deviceFetch,requestDigest} from '../device-signing';
 beforeEach(()=>{h.data={deviceSigning:{fingerprint:'fp'},licenseKey:'license'};h.sign.mockReset().mockResolvedValue('signature');h.fetch.mockReset().mockImplementation(()=>Promise.resolve(new Response('{}')));vi.stubGlobal('fetch',h.fetch);});
+it('uses the Electron network stack even when Node TLS transport fails',async()=>{
+ vi.stubGlobal('fetch',vi.fn(()=>{throw Error('UNABLE_TO_VERIFY_LEAF_SIGNATURE');}));
+ await deviceFetch('https://app.test/api/health');
+ await deviceFetch('https://app.test/api/sync/sales',{headers:{'x-sync-token':'token'}});
+ expect(h.fetch).toHaveBeenCalledTimes(2);
+});
 it('signs away from the renderer and binds the exact payload and credentials',async()=>{
  await deviceFetch('https://app.test/api/sync/sales',{method:'POST',body:'{}',headers:{'x-sync-token':'token'}});
  const [url,init]=h.fetch.mock.calls[0];const headers=init.headers as Headers;
