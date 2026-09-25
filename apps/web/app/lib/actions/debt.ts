@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getTenantContext, TenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
+import { loyaltyRateForSale } from '@/app/lib/loyalty-rate';
 
 // Sale scope for debt queries: the tenant scope, optionally narrowed to one
 // branch. A client-supplied branchId (URL ?branch= or a direct server-action
@@ -256,6 +257,7 @@ export async function makeDebtPayment(
                 data: {
                     saleId,
                     amount: finalAmount,
+                    loyaltyRate: await loyaltyRateForSale(prisma, saleId),
                     method: method as any,
                     note: note || null,
                 },
@@ -410,7 +412,7 @@ export async function makePatientDebtPayment(
 
             ops.push(
                 prisma.debtPayment.create({
-                    data: { saleId: sale.id, amount: payAmount, method: method as any, note: note || null },
+                    data: { saleId: sale.id, amount: payAmount, loyaltyRate: await loyaltyRateForSale(prisma, sale.id), method: method as any, note: note || null },
                 })
             );
 

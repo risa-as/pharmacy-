@@ -12,6 +12,7 @@ vi.mock('@/app/lib/audit', () => ({ logAudit: vi.fn(), resolveUserName: vi.fn() 
 
 import { POST as syncSales } from '../app/api/sync/sales/route';
 import { POST as syncDebts } from '../app/api/sync/debt-payments/route';
+import { POST as allocateNumber } from '../app/api/sales/allocate-number/route';
 
 const db = new PrismaClient({ datasources: { db: { url: process.env.TEST_DATABASE_URL } } });
 state.db = db;
@@ -249,27 +250,91 @@ describe('invoice numbering on synchronization', () => {
   expect((await send(after)).invoiceNumbers[after.id]).toBe(first.invoiceNumbers[before.id]+1);
  });
 });
-
-describe('sync/sales: a device never chooses the invoice number', () => {
+describe('sync/sales: a device keeps only a number reserved for it', () => {
     const send = async (s: object) => (await syncSales(post('/api/sync/sales', { branchId: f.branch.id, sales: [s] }))).json();
-    it('keeps an issued, unused number from an older desktop; replaces an invented or reused one', async () => {
-        const org = f.branch.organizationId;
-        const issued = (await send(sale(f.cashier.id))).invoiceNumbers;
-        const used = Number(Object.values(issued)[0]);
-        // The counter has issued everything below nextNumber; reserve one unused number.
-        const [c] = await db.$queryRaw<{ nextNumber: number }[]>`UPDATE "InvoiceCounter" SET "nextNumber" = "nextNumber" + 1 WHERE "organizationId" = ${org} RETURNING "nextNumber"`;
-        const reserved = Number(c.nextNumber) - 1;
+    const reserve = async () => (await (await allocateNumber(post('/api/sales/allocate-number', { branchId: f.branch.id }))).json()).invoiceNumber as number;
+    const numberOf = async (id: string) => (await db.sale.findUnique({ where: { id }, select: { invoiceNumber: true } }))!.invoiceNumber;
 
+    it('keeps a number reserved by the same account, once', async () => {
+        const reserved = await reserve();
         const legacy = sale(f.cashier.id, { invoiceNumber: String(reserved) });
         expect((await send(legacy)).invoiceNumbers[legacy.id]).toBe(reserved);
+        // The same reservation cannot number a second sale.
+        const replay = sale(f.cashier.id, { invoiceNumber: String(reserved) });
+        await send(replay);
+        expect(await numberOf(replay.id)).not.toBe(reserved);
+    });
 
-        const future = sale(f.cashier.id, { invoiceNumber: String(reserved + 1000) });
-        const reused = sale(f.cashier.id, { invoiceNumber: String(used) });
-        const a = (await send(future)).invoiceNumbers[future.id];
-        const b = (await send(reused)).invoiceNumbers[reused.id];
-        expect([a, b]).not.toContain(reserved + 1000);
-        expect(b).not.toBe(used);
-        const all = await db.sale.findMany({ where: { branchId: f.branch.id, invoiceNumber: { not: null } }, select: { invoiceNumber: true } });
+    it('replaces an issued but unreserved number, another account\'s reservation, and an invented one', async () => {
+        const org = f.branch.organizationId;
+        // A gap below the counter that nobody reserved (e.g. a number from before reservations).
+        const [c] = await db.$queryRaw<{ nextNumber: number }[]>`UPDATE "InvoiceCounter" SET "nextNumber" = "nextNumber" + 1 WHERE "organizationId" = ${org} RETURNING "nextNumber"`;
+        const gap = Number(c.nextNumber) - 1;
+        state.session = { user: { id: f.cashier.id } };
+        const othersReservation = await reserve();
+        state.session = { user: { id: f.admin.id } };
+        const cases = [
+            sale(f.cashier.id, { invoiceNumber: String(gap) }),
+            sale(f.cashier.id, { invoiceNumber: String(othersReservation) }),
+            sale(f.cashier.id, { invoiceNumber: String(gap + 100000) }),
+        ];
+        for (const s of cases) await send(s);
+        expect(await numberOf(cases[0].id)).not.toBe(gap);
+        expect(await numberOf(cases[1].id)).not.toBe(othersReservation);
+        expect(await numberOf(cases[2].id)).not.toBe(gap + 100000);
+        const all = await db.sale.findMany({ where: { branch: { organizationId: org }, invoiceNumber: { not: null } }, select: { invoiceNumber: true } });
         expect(new Set(all.map(s => s.invoiceNumber)).size).toBe(all.length);
+    });
+});
+
+describe('reservations bound to the device license; the replaced number stays findable', () => {
+    const withLicense = (path: string, body: unknown, licenseKey: string) => new NextRequest(`http://localhost${path}`, {
+        method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json', 'x-device-license-key': licenseKey },
+    });
+    it('keeps a licensed reservation only for the same license, and records the printed number otherwise', async () => {
+        const a = await db.deviceLicense.create({ data: { branchId: f.branch.id, licenseKey: randomUUID() } });
+        const b = await db.deviceLicense.create({ data: { branchId: f.branch.id, licenseKey: randomUUID() } });
+        const reserve = async (key: string) => (await (await allocateNumber(withLicense('/api/sales/allocate-number', { branchId: f.branch.id }, key))).json()).invoiceNumber as number;
+        const send = async (s: object, key?: string) => (await syncSales(key
+            ? withLicense('/api/sync/sales', { branchId: f.branch.id, sales: [s] }, key)
+            : post('/api/sync/sales', { branchId: f.branch.id, sales: [s] }))).json();
+
+        const forA = await reserve(a.licenseKey);
+        // Same account, another device (license b), and no license at all: refused.
+        const onB = sale(f.cashier.id, { invoiceNumber: String(forA) });
+        await send(onB, b.licenseKey);
+        const noLicense = sale(f.cashier.id, { invoiceNumber: String(forA) });
+        await send(noLicense);
+        for (const s of [onB, noLicense]) {
+            const row = await db.sale.findUnique({ where: { id: s.id }, select: { invoiceNumber: true, printedReference: true } });
+            expect(row!.invoiceNumber).not.toBe(forA);
+            expect(row!.printedReference).toBe(String(forA));
+        }
+        // The device it was reserved for keeps it.
+        const onA = sale(f.cashier.id, { invoiceNumber: String(forA) });
+        expect((await send(onA, a.licenseKey)).invoiceNumbers[onA.id]).toBe(forA);
+        expect((await db.sale.findUnique({ where: { id: onA.id } }))!.printedReference).toBeNull();
+    });
+});
+
+describe('operations with no identified employee (device-license login)', () => {
+    const asDevice = async (path: string, body: unknown) => {
+        const license = await db.deviceLicense.create({ data: { branchId: f.branch.id, licenseKey: randomUUID() } });
+        state.session = null;
+        return new NextRequest(`http://localhost${path}`, { method: 'POST', body: JSON.stringify(body),
+            headers: { 'content-type': 'application/json', 'x-device-license-key': license.licenseKey, 'x-branch-id': f.branch.id } });
+    };
+    it('accepts them while REQUIRE_OPERATION_OPERATOR is off (today), and keeps them for review when it is on', async () => {
+        const accepted = sale(undefined as any);
+        const on = await (await syncSales(await asDevice('/api/sync/sales', { branchId: f.branch.id, sales: [accepted] }))).json();
+        expect(on.syncedIds).toEqual([accepted.id]);
+        vi.stubEnv('REQUIRE_OPERATION_OPERATOR', 'true');
+        try {
+            const held = sale(undefined as any);
+            const body = await (await syncSales(await asDevice('/api/sync/sales', { branchId: f.branch.id, sales: [held] }))).json();
+            expect(body.syncedIds).toEqual([]);
+            expect(body.conflicts[0].message).toContain('بلا موظف معروف');
+            expect(await db.sale.count({ where: { id: held.id } })).toBe(0);
+        } finally { vi.unstubAllEnvs(); }
     });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { loyaltyRateForSale } from '@/app/lib/loyalty-rate';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
                     data: {
                         saleId: sale.id,
                         amount: payForSale,
+                        loyaltyRate: await loyaltyRateForSale(prisma, sale.id),
                         method: 'CASH',
                         note: note || null,
                     },

@@ -1,16 +1,17 @@
 {
     "name": "desktop",
-    "version": "1.0.14",
+    "version": "1.0.20",
     "description": "Faramace POS — نظام إدارة الصيدليات",
     "author": "Faramace",
     "main": "dist-electron/main.js",
     "scripts": {
-        "dev": "vite",
+        "dev": "node scripts/build-tpm-helper.cjs && vite --config vite.config.ts",
+        "dev:watch": "node scripts/build-tpm-helper.cjs && vite --config vite.config.ts --mode development-watch",
         "clean": "node scripts/clean-release.mjs",
-        "build": "node scripts/clean-release.mjs && prisma generate && tsc && vite build && electron-builder",
-        "build:fresh": "node scripts/clean-release.mjs && prisma generate && tsc && vite build && electron-builder --win nsis --config.directories.output=../../../FaramaceBuilds/desktop-installer-new",
-        "release": "node scripts/clean-release.mjs && prisma generate && tsc && vite build && node scripts/publish.mjs",
-        "preview": "vite preview",
+        "build": "node scripts/clean-release.mjs && prisma generate && tsc && node scripts/build-tpm-helper.cjs && vite build --config vite.config.ts && node scripts/renderer-smoke.cjs && electron-builder",
+        "build:fresh": "node scripts/clean-release.mjs && prisma generate && tsc && node scripts/build-tpm-helper.cjs && vite build --config vite.config.ts && node scripts/renderer-smoke.cjs && electron-builder --win nsis --config.directories.output=../../../FaramaceBuilds/desktop-installer-new",
+        "release": "node scripts/clean-release.mjs && prisma generate && tsc && node scripts/build-tpm-helper.cjs && vite build --config vite.config.ts && node scripts/renderer-smoke.cjs && node scripts/publish.mjs",
+        "preview": "vite preview --config vite.config.ts",
         "test": "vitest run",
         "lint": "eslint .",
         "prisma:seed-interactions": "node prisma/seed-interactions.js"
@@ -47,6 +48,7 @@
             "node_modules/@prisma/client/query-engine*"
         ],
         "extraResources": [
+            { "from": "resources/tpm-signer.exe", "to": "tpm-signer.exe" },
             {
                 "from": "prisma",
                 "to": "prisma",

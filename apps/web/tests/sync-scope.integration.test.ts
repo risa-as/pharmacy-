@@ -42,6 +42,7 @@ beforeAll(async () => {
     // Points move only against a sale of the same branch and patient (N02-R).
     // Paid 1000 at the default 0.01 points per dinar: up to 10 points may be earned.
     const patientSale = await db.sale.create({ data: { branchId: A.branch.id, patientId: A.patient.id, total: 1000 } });
+    await db.payment.create({ data: { saleId: patientSale.id, method: 'CASH', amount: 1000 } });
     f = { A, B, foreignShift, foreignAccount, foreignLoyaltyTx, patientSale };
 });
 afterAll(() => db.$disconnect());

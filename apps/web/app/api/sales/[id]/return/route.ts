@@ -1,5 +1,6 @@
 import { calculateRefund } from '@faramace/shared';
 import { restoreSaleReturnStock } from '@/app/lib/sale-return-stock';
+import { settleSaleLoyalty } from '@/app/lib/loyalty-settlement';
 import { Prisma } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
@@ -149,6 +150,10 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                     }
                 });
             }
+
+            // 3. Loyalty follows the refund: earned points taken back, redeemed
+            //    points given back (idempotent, see settleSaleLoyalty).
+            await settleSaleLoyalty(tx, sale.id);
 
             // 4. Record the key in the same transaction as the return itself
             if (idempotencyKey) {

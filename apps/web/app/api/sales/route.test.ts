@@ -13,6 +13,8 @@ beforeEach(()=>{
   batch:{updateMany:vi.fn().mockResolvedValue({count:1})}, safe:{findFirst:vi.fn().mockResolvedValue({id:'safe-a'}),update:vi.fn().mockResolvedValue({})},
   sale:{create:vi.fn(async({data}:any)=>({id:'sale-a',...data}))},payment:{create:vi.fn().mockResolvedValue({})},transaction:{create:vi.fn().mockResolvedValue({})},
   patient:{findFirst:vi.fn().mockResolvedValue(null),update:vi.fn().mockResolvedValue({})},
+  // The sale is stamped with the organisation's loyalty rate (0 when the programme is off).
+  branch:{findUnique:vi.fn().mockResolvedValue({organization:{loyaltyEnabled:false,loyaltyPointsPerDinar:0.01}})},
  });
 });
 const submit=(body:any)=>POST(new Request('http://audit.invalid/api/sales',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}));

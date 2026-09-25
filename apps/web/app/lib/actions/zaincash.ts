@@ -4,6 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 import { requireActionTenant } from '../action-tenant';
+import { loyaltyRateForSale } from '@/app/lib/loyalty-rate';
 
 // Zain Cash Configuration
 const ZAINCASH_MERCHANT_ID = process.env.ZAINCASH_MERCHANT_ID || "";
@@ -141,6 +142,7 @@ export async function verifyZainCashPayment(token: string) {
                     data: {
                         saleId: payload.orderId,
                         amount: payload.amount,
+                        loyaltyRate: await loyaltyRateForSale(prisma, payload.orderId),
                         method: "ZAIN_CASH",
                         note: `سداد إلكتروني (Zain Cash: ${payload.transactionId})`,
                     },

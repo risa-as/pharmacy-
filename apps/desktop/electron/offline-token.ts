@@ -11,6 +11,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { app } from "electron";
+import './runtime-crypto';
 import { jwtVerify, importSPKI } from "jose";
 
 export interface OfflineTokenPayload {

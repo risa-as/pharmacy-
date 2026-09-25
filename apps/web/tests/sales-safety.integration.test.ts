@@ -133,3 +133,20 @@ it('requires physical expiry for a missing lot and never creates an invented dat
  expect((await review('2030-06-01T00:00:00.000Z')).status).toBe(200);
  const batch=await db.batch.findFirstOrThrow({where:{inventoryId:f.inv.id}});expect(batch).toMatchObject({quantity:1,costPrice:70,batchNumber:'PHYSICAL-LOT'});expect(batch.expiryDate.toISOString()).toBe('2030-06-01T00:00:00.000Z');
 });
+
+it('returns settle loyalty through both return paths, once, and the desktop receives the new balance', async () => {
+ await db.organization.update({where:{id:h.tenant.organizationId},data:{loyaltyEnabled:true,loyaltyPointsPerDinar:1}});
+ const patient=await db.patient.create({data:{name:'Loyal',phone:randomUUID(),branchId:f.branch.id}});
+ const sale=(await (await sell(request({items:[{drugId:f.drug.id,quantity:2,price:100}],totalAmount:200,patientId:patient.id}))).json()).sale;
+ expect((await db.sale.findUniqueOrThrow({where:{id:sale.id}})).loyaltyRate).toBe(1); // stamped by the server
+ const account=await db.loyaltyAccount.create({data:{patientId:patient.id,totalPoints:200,lifetimePoints:200}});
+ await db.loyaltyTransaction.create({data:{accountId:account.id,type:'EARN',points:200,saleId:sale.id}});
+ const id=randomUUID();
+ const body={branchId:f.branch.id,returns:[{id,saleId:sale.id,userId:h.tenant.user.id,total:100,createdAt:new Date().toISOString(),refundVersion:2,items:[{drugId:f.drug.id,quantity:1,price:100}]}]};
+ for(let n=0;n<2;n++) { // the second send is a resend after a lost response
+  const result=await (await syncRefund(new NextRequest('http://test.invalid',{method:'POST',body:JSON.stringify(body)}))).json();
+  expect(result.accountBalances).toEqual([expect.objectContaining({patientId:patient.id,totalPoints:100})]);
+ }
+ expect(await refund(request({items:[{drugId:f.drug.id,quantity:1}]}),{params:Promise.resolve({id:sale.id})})).toHaveProperty('status',200);
+ expect(await db.loyaltyAccount.findUniqueOrThrow({where:{id:account.id}})).toMatchObject({totalPoints:0,lifetimePoints:0});
+});

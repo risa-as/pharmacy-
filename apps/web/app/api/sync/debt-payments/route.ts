@@ -3,9 +3,10 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
+import { validateSyncUser, operatorPermissions, operatorRequired, UNIDENTIFIED_OPERATOR_MESSAGE } from '@/app/lib/sync-auth';
 import { checkOperator, requestDeviceId } from '@/app/lib/operator-proof';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
+import { loyaltyRateForBranch } from '@/app/lib/loyalty-rate';
 
 async function validateBranchAccess(syncUser: any, branchId: string): Promise<NextResponse | null> {
     const userRole = syncUser.role;
@@ -139,6 +140,10 @@ export async function POST(request: NextRequest) {
                 continue;
             }
             const perms = await operatorPermissions(prisma, payment.userId, branchId, syncUser);
+            if (perms === 'unattributed' && operatorRequired()) {
+                conflicts.push({ id: payment.id, message: UNIDENTIFIED_OPERATOR_MESSAGE });
+                continue;
+            }
             if (perms === null || (perms !== 'unattributed' && !perms.canPayDebt)) {
                 conflicts.push({ id: payment.id, message: 'صلاحية تحصيل الديون غير متاحة لمنفذ العملية؛ تتطلب العملية مراجعة.' });
                 continue;
@@ -158,6 +163,7 @@ export async function POST(request: NextRequest) {
                         userId: payment.userId || null,
                         operatorVerified,
                         amount: payment.amount,
+                        loyaltyRate: await loyaltyRateForBranch(tx, branchId),
                         method: (payment.method || "CASH") as any,
                         note: payment.note || null,
                         createdAt: new Date(payment.createdAt),

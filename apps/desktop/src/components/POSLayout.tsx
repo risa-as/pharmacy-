@@ -15,7 +15,7 @@ import AppAlertModal from "./AppAlertModal";
 import { showAlert, showConfirm } from "../lib/dialog";
 import ZainCashModal from "./pos/ZainCashModal";
 import { HeldInvoicesListModal } from "./pos/HeldInvoicesModal";
-import { ipcInvoke, generateInvoiceNumber, loadHeldInvoices, saveHeldInvoices, formatIQD } from "./pos/pos-utils";
+import { ipcInvoke, loadHeldInvoices, saveHeldInvoices, formatIQD, saleLabel } from "./pos/pos-utils";
 import type { Product, CartItem, Patient, ShiftSummary, DrugInteraction, SaleData, HeldInvoice } from "./pos/pos-types";
 
 export default function POSLayout({ user }: { user: any }) {
@@ -92,7 +92,9 @@ export default function POSLayout({ user }: { user: any }) {
     const loyaltyRedemptionValue = companySettings?.loyaltyRedemptionValue || 2.5;
     const loyaltyMinRedemption = companySettings?.loyaltyMinRedemption || 500;
     const maxLoyaltyAmount = Math.max(0, subTotal - manualDiscount);
-    const patientPoints = selectedPatient?.loyaltyAccount?.totalPoints || 0;
+    // A return can leave the balance negative (points it took back were already
+    // spent); nothing is redeemable until later earnings restore it.
+    const patientPoints = Math.max(0, selectedPatient?.loyaltyAccount?.totalPoints || 0);
     const maxPointsForBill = Math.floor(maxLoyaltyAmount / loyaltyRedemptionValue);
     const step = 100;
     const steppedPointsToRedeem = Math.floor(Math.min(patientPoints, maxPointsForBill) / step) * step;
@@ -467,7 +469,7 @@ export default function POSLayout({ user }: { user: any }) {
             const invoiceData: SaleData = {
                 items: cart.map(item => ({ name: item.name, quantity: item.quantity, price: item.price, originalPrice: item.originalPrice })),
                 total: finalTotal,
-                invoiceNumber: result.invoiceNumber || generateInvoiceNumber(),
+                invoiceNumber: saleLabel({ id: result.saleId, invoiceNumber: result.invoiceNumber }),
                 date: new Date(),
                 patientName: selectedPatient?.name,
                 patientPhone: selectedPatient?.phone,
@@ -485,7 +487,7 @@ export default function POSLayout({ user }: { user: any }) {
                 setShowPrintPreview(true);
             } else {
                 setShowSuccess(true);
-                setTimeout(() => setShowSuccess(false), 1800);
+                setTimeout(() => setShowSuccess(false), 800);
             }
             // Deduct sold quantities from local products state — no full reload needed
             setProducts(prev => prev.map(p => {

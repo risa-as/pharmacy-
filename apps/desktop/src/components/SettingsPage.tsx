@@ -1,3 +1,4 @@
+import DeviceProtection from "./DeviceProtection";
 import { useState, useEffect } from "react";
 import { Database, FolderOpen, Download, RotateCcw, Check, AlertCircle, Shield, HardDrive, Clock, Info, RefreshCcw, Loader2, ChevronDown, ShoppingCart } from "lucide-react";
 import SyncFailuresTab from "./SyncFailuresTab";
@@ -456,6 +457,7 @@ export default function SettingsPage({initialTab = "backups"}:{initialTab?: "bac
             ) : (
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                     <div className="max-w-xl mx-auto space-y-4">
+                        <DeviceProtection />
                         {/* App identity */}
                         <div className="bg-card rounded-xl border border-border p-6 flex items-center gap-4">
                             <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">

@@ -1,9 +1,9 @@
 import StaffSalesPage from "./components/StaffSalesPage";
 import StaffSupplyPage from "./components/StaffSupplyPage";
-import StaffAlertsPage from "./components/StaffAlertsPage";
 import StaffSyncStatus from "./components/StaffSyncStatus";
 import { useState, useMemo, useEffect } from 'react';
-import CloudOperationsPage from './components/CloudOperationsPage';
+import StocktakePage from './components/StocktakePage';
+import WarehouseReceiptsPage from './components/WarehouseReceiptsPage';
 import DashboardPage from './components/DashboardPage';
 import POSLayout from './components/POSLayout';
 import DebtsPage from './components/DebtsPage';
@@ -13,25 +13,23 @@ import LoginScreen from './components/LoginScreen';
 import LicenseScreen, { SubscriptionLockReason } from './components/LicenseScreen';
 import UpdateBanner from './components/UpdateBanner';
 
-import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, HandCoins, ClipboardList, PackageCheck, ReceiptText, ArrowLeftRight, Bell, Moon, Sun, Loader2 } from 'lucide-react';
+import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, HandCoins, ClipboardList, PackageCheck, ReceiptText, ArrowLeftRight, Moon, Sun, Loader2 } from 'lucide-react';
 import logoUrl from './assets/logo.png';
 
 
 
 
-type Page = 'dashboard' | 'pos' | 'settings' | 'inventory' | 'debts' | 'receipts' | 'stocktake' | 'sales' | 'transfers' | 'orders' | 'alerts';
+type Page = 'dashboard' | 'pos' | 'settings' | 'inventory' | 'debts' | 'receipts' | 'stocktake' | 'sales' | 'transfers';
 
 const allNavItems: { id: Page; icon: any; label: string; roles: string[] }[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'لوحة المعلومات', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
     { id: 'pos', icon: ShoppingCart, label: 'نقطة البيع', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
     { id: 'debts', icon: HandCoins, label: 'الديون', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
     { id: 'inventory', icon: Package, label: 'المخزن', roles: ['ADMIN', 'PHARMACIST', 'CASHIER'] },
-    { id: 'receipts', icon: PackageCheck, label: 'استلام المذاخر', roles: ['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER'] },
+    { id: 'receipts', icon: PackageCheck, label: 'المذاخر', roles: ['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER'] },
     { id: 'stocktake', icon: ClipboardList, label: 'جرد المخزون', roles: ['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER'] },
     { id: 'sales', icon: ReceiptText, label: 'سجل المبيعات', roles: ['ADMIN','PHARMACIST','CASHIER'] },
     { id: 'transfers', icon: ArrowLeftRight, label: 'تحويلات الفروع', roles: ['ADMIN','PHARMACIST','CASHIER'] },
-    { id: 'orders', icon: PackageCheck, label: 'متابعة المذاخر', roles: ['ADMIN','PHARMACIST','CASHIER'] },
-    { id: 'alerts', icon: Bell, label: 'تنبيهات العمل', roles: ['ADMIN','PHARMACIST','CASHIER'] },
     { id: 'settings', icon: Settings, label: 'الإعدادات', roles: ['ADMIN'] },
 ];
 
@@ -73,7 +71,6 @@ function App() {
         if(currentUser) window.ipcRenderer.invoke('operations:access').then((result:any)=>{if(active && result?.success)setOperationsAccess(result);}).catch(()=>{});
         return ()=>{active=false;};
     },[currentUser?.id]);
-    const [alertTarget, setAlertTarget] = useState<{page:string,id:string}|null>(null);
     const [settingsTab,setSettingsTab] = useState<"backups"|"failures">("backups");
     const [sessionLoading, setSessionLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -216,7 +213,6 @@ function App() {
             if(operationsAccess) {
                 const permission: Record<string,string> = {sales:'canViewSales',inventory:'canViewInventory',debts:'canViewDebts',pos:'canSell'};
                 if(permission[item.id] && !operationsAccess.permissions[permission[item.id]]) return false;
-                if(item.id === 'orders') return operationsAccess.permissions.canViewWarehouseOrders && operationsAccess.features.warehouseManagement;
             }
             if(item.id === 'stocktake'  && operationsAccess) return operationsAccess.permissions.canDoStocktake;
             if(item.id === 'receipts' && operationsAccess) return operationsAccess.permissions.canViewSuppliers && operationsAccess.features.warehouseManagement;
@@ -309,7 +305,7 @@ function App() {
                             key={item.id}
                             title={item.label}
                             aria-label={item.label}
-                            onClick={() => {setAlertTarget(null);setCurrentPage(item.id);}}
+                            onClick={() => setCurrentPage(item.id)}
                             className={`relative group shrink-0 p-2 rounded-lg transition-all duration-200 ${isActive
                                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30'
                                 : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
@@ -366,13 +362,11 @@ function App() {
                 {currentPage === 'dashboard'  && <DashboardPage user={currentUser} />}
                 {currentPage === 'pos' && <POSLayout user={currentUser} />}
                 {currentPage === 'debts' && <DebtsPage />}
-                {currentPage === 'inventory' && <InventoryPage key={currentUser.id+String(alertTarget?.id)} user={currentUser} initialSearch={alertTarget?.page==='inventory'?alertTarget.id:undefined} />}
-                {currentPage === 'receipts' && <CloudOperationsPage key={currentUser.id+'-receipts'} mode="receipts" initialId={alertTarget?.page==='receipts'?alertTarget.id:undefined} />}
-                {currentPage === 'stocktake' && <CloudOperationsPage key={currentUser.id+'-stocktake'} mode="stocktake" initialId={alertTarget?.page==='stocktake'?alertTarget.id:undefined} />}
+                {currentPage === 'inventory' && <InventoryPage key={JSON.stringify([currentUser.id,currentUser.branchId,currentUser.role])} user={currentUser} />}
+                {currentPage === 'receipts' && <WarehouseReceiptsPage key={currentUser.id+'-receipts'} userId={currentUser.id} />}
+                {currentPage === 'stocktake' && <StocktakePage key={currentUser.id+'-stocktake'} userId={currentUser.id} />}
                 {currentPage === 'sales' && <StaffSalesPage key={currentUser.id} user={currentUser} />}
-                {currentPage === 'transfers' && <StaffSupplyPage key={currentUser.id+'-transfers'} mode="transfers" initialId={alertTarget?.page==='transfers'?alertTarget.id:undefined} onReceive={()=>setCurrentPage('receipts')} />}
-                {currentPage === 'orders' && <StaffSupplyPage key={currentUser.id+'-orders'} mode="orders" onReceive={()=>setCurrentPage('receipts')} />}
-                {currentPage === 'alerts' && <StaffAlertsPage key={currentUser.id} navigate={(page,id)=>{setAlertTarget(id?{page,id}:null);setCurrentPage(page);}} />}
+                {currentPage === 'transfers' && <StaffSupplyPage key={currentUser.id+'-transfers'} />}
                 {currentPage === 'settings'  && <SettingsPage key={settingsTab} initialTab={settingsTab} />}
                 </div>
             </div>

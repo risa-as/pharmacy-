@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
+import { withDatabaseQuery } from './database-maintenance';
 
 // Dynamic require prevents Vite from bundling the entire Prisma runtime into main.js.
 // Without this, Prisma's error-formatting code gets minified and breaks at runtime.
@@ -59,6 +60,11 @@ export function getDbPath(): string {
     }
 }
 
+/** Independent, read-only connection for validating a staged backup. */
+export function openBackupReader(filePath: string) {
+    return new PrismaClient({ datasources: { db: { url: `file:${filePath}?mode=ro&connection_limit=1` } } });
+}
+
 const dbUrl = `file:${getDbPath()}`;
 
 export const prisma = new PrismaClient({
@@ -68,6 +74,7 @@ export const prisma = new PrismaClient({
         }
     }
 });
+prisma.$use((params: any, next: any) => withDatabaseQuery(() => next(params)));
 
 /**
  * Runs additive schema migrations for existing databases.
@@ -269,6 +276,7 @@ export async function runMigrations(): Promise<void> {
     await addColumn('Sale', 'safeId', 'TEXT');
     await addColumn('Sale', 'discount', 'REAL NOT NULL DEFAULT 0');
     await addColumn('Sale', 'invoiceNumber', 'TEXT');
+    await addColumn('Sale', 'printedReference', 'TEXT');
     await addColumn('Sale', 'patientId', 'TEXT');
     await addColumn('Inventory', 'branchId', 'TEXT');
     await addColumn('Inventory', 'costPrice', 'REAL NOT NULL DEFAULT 0');

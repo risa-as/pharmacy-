@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
+import { validateSyncUser, operatorPermissions, operatorRequired, UNIDENTIFIED_OPERATOR_MESSAGE } from '@/app/lib/sync-auth';
 import { checkOperator, requestDeviceId } from '@/app/lib/operator-proof';
+import { saleLoyaltyStamp } from '@/app/lib/loyalty-rate';
 import { z } from "zod";
 import { logAudit } from '@/app/lib/audit';
 
@@ -121,20 +122,33 @@ export async function POST(req: NextRequest) {
                     }
 
                     // Current desktops send no number; the server allocates it here.
-                    // Older desktops reserved one at sale time and printed it, so it
-                    // is kept only if this organisation's counter really issued it and
-                    // no other sale holds it. Anything else (invented, future, reused)
-                    // gets a fresh number: a device never chooses a sale's number.
+                    // Older desktops reserved one at sale time and printed it. It is kept
+                    // only when allocate-number reserved it for this sender and it is still
+                    // unused; claiming the reservation marks it used by this sale (one row,
+                    // one sale). "This sender": a reservation made with a device license
+                    // needs that same license; one made without a license, the same
+                    // account. Anything else — invented, someone else's, a gap in the
+                    // counter, reused — gets a fresh number, and the printed one is kept
+                    // as printedReference so the customer's receipt still finds the sale.
                     let invoiceNumber: number | undefined;
+                    let printedReference: string | undefined;
                     const providedNumber = sale.invoiceNumber != null ? Number(sale.invoiceNumber) : NaN;
-                    if (resolvedOrgId && Number.isSafeInteger(providedNumber) && providedNumber > 0) {
-                        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${resolvedOrgId + ':invoice:' + providedNumber}::text, 0))`;
-                        const counter = await tx.invoiceCounter.findUnique({ where: { organizationId: resolvedOrgId }, select: { nextNumber: true } });
-                        const issued = !!counter && providedNumber < counter.nextNumber;
-                        const taken = issued && !!await tx.sale.findFirst({
+                    if (resolvedOrgId && Number.isSafeInteger(providedNumber) && providedNumber > 0 && providedNumber <= 2147483647) {
+                        const claimed = await tx.invoiceNumberReservation.updateMany({
+                            where: {
+                                organizationId: resolvedOrgId, number: providedNumber, saleId: null,
+                                OR: [
+                                    ...(deviceId ? [{ licenseId: deviceId }] : []),
+                                    { licenseId: null, userId: syncUser.id },
+                                ],
+                            },
+                            data: { saleId: sale.id },
+                        });
+                        const taken = claimed.count === 1 && !!await tx.sale.findFirst({
                             where: { invoiceNumber: providedNumber, branch: { organizationId: resolvedOrgId } }, select: { id: true },
                         });
-                        if (issued && !taken) invoiceNumber = providedNumber;
+                        if (claimed.count === 1 && !taken) invoiceNumber = providedNumber;
+                        else printedReference = String(providedNumber);
                     }
                     if (invoiceNumber === undefined && resolvedOrgId) {
                         const [counter] = await tx.$queryRaw<[{ nextNumber: bigint }]>`
@@ -154,6 +168,7 @@ export async function POST(req: NextRequest) {
                     // conflict: the desktop keeps the sale in its sync-failures list.
                     const perms = await operatorPermissions(tx, sale.userId, branchId, syncUser);
                     if (perms === null) throw new SyncSaleConflictError('منفذ البيع خارج الفرع أو حسابه معطل؛ تتطلب العملية مراجعة.');
+                    if (perms === 'unattributed' && operatorRequired()) throw new SyncSaleConflictError(UNIDENTIFIED_OPERATOR_MESSAGE);
                     if (perms !== 'unattributed') {
                         if (!perms.canSell) throw new SyncSaleConflictError('صلاحية البيع غير متاحة لمنفذ البيع؛ تتطلب العملية مراجعة.');
                         if (sale.discount > 0 && !perms.canApplyDiscount) throw new SyncSaleConflictError('صلاحية الخصم غير متاحة لمنفذ البيع؛ تتطلب العملية مراجعة.');
@@ -285,6 +300,8 @@ export async function POST(req: NextRequest) {
                             operatorVerified,
                             patientId: resolvedPatientId,
                             ...(invoiceNumber !== undefined ? { invoiceNumber } : {}),
+                            printedReference,
+                            ...await saleLoyaltyStamp(tx, branchId),
                             items: {
                                 create: saleItemsData
                             }

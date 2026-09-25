@@ -311,6 +311,15 @@ model Sale {
   documentNumber String @unique @default(dbgenerated("next_document_reference('INV'::text)"))
   id               String        @id @default(uuid())
   invoiceNumber    Int?
+  /// Number an older desktop printed on the receipt when the server did not keep it
+  /// (not reserved for that device). A searchable alternative reference, never official.
+  printedReference String?
+  /// Loyalty points per dinar in force when the server recorded the sale (0 when the
+  /// programme was off); null for sales recorded before this column. The earn cap uses it.
+  loyaltyRate      Float?
+  /// Discount value of one redeemed point in force when the server recorded the sale;
+  /// null for older sales. Limits the points a redemption on this sale may use.
+  loyaltyRedemptionValue Float?
   branchId         String
   safeId           String? // The safe where the cash for this sale went
   patientId        String? // Linked to CRM
@@ -332,12 +341,27 @@ model Sale {
   @@index([branchId])
   @@index([createdAt])
   @@index([branchId, createdAt])
+  @@index([printedReference])
 }
 
 model InvoiceCounter {
   organizationId String       @id
   nextNumber     Int          @default(1)
   organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+/// A number /api/sales/allocate-number handed to an older desktop at sale time.
+/// /api/sync/sales keeps a device-supplied number only when it was reserved here
+/// for the same device license or account and is unused; saleId marks it used.
+model InvoiceNumberReservation {
+  organizationId String
+  number         Int
+  licenseId      String?
+  userId         String?
+  saleId         String?  @unique
+  createdAt      DateTime @default(now())
+
+  @@id([organizationId, number])
 }
 
 enum PaymentMethod {
@@ -766,6 +790,8 @@ model DebtPayment {
   /// proof; false = attribution claimed but not proven; null = not a desktop sync.
   operatorVerified Boolean?
   amount    Float
+  /// Loyalty points per dinar in force when the server recorded the payment (see Sale.loyaltyRate).
+  loyaltyRate Float?
   method    PaymentMethod @default(CASH)
   note      String?
   createdAt DateTime      @default(now())

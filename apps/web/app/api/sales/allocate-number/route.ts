@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { validateSyncUser, isBranchInSyncScope, hasSyncPermission } from '@/app/lib/sync-auth';
+import { requestDeviceId } from '@/app/lib/operator-proof';
 
 /**
  * POST /api/sales/allocate-number
@@ -45,14 +46,21 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Organization not resolved' }, { status: 400 });
         }
 
-        const [counter] = await prisma.$queryRaw<[{ nextNumber: bigint }]>`
-            INSERT INTO "InvoiceCounter" ("organizationId", "nextNumber")
-            VALUES (${orgId}::text, 2)
-            ON CONFLICT ("organizationId")
-            DO UPDATE SET "nextNumber" = "InvoiceCounter"."nextNumber" + 1
-            RETURNING "nextNumber"
-        `;
-        const invoiceNumber = Number(counter.nextNumber) - 1;
+        // The reservation names who received the number, so /sync/sales keeps it
+        // only for a sale sent by the same device license or account.
+        const licenseId = branchId ? await requestDeviceId(prisma, req, branchId) : null;
+        const invoiceNumber = await prisma.$transaction(async (tx) => {
+            const [counter] = await tx.$queryRaw<[{ nextNumber: bigint }]>`
+                INSERT INTO "InvoiceCounter" ("organizationId", "nextNumber")
+                VALUES (${orgId}::text, 2)
+                ON CONFLICT ("organizationId")
+                DO UPDATE SET "nextNumber" = "InvoiceCounter"."nextNumber" + 1
+                RETURNING "nextNumber"
+            `;
+            const number = Number(counter.nextNumber) - 1;
+            await tx.invoiceNumberReservation.create({ data: { organizationId: orgId!, number, licenseId, userId: syncUser.id } });
+            return number;
+        });
 
         return NextResponse.json({ success: true, invoiceNumber });
     } catch (error) {

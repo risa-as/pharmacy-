@@ -17,11 +17,6 @@ export function allowedOperation(path: string, method: string): boolean {
     )
   )
     return false;
-  if (
-    method === "GET" &&
-    /^\/warehouses\/orders(?:\/[a-zA-Z0-9-]+(?:\/returns)?)?$/.test(route)
-  )
-    return true;
   if (method === "GET")
     return /^\/(purchases(?:\/[a-zA-Z0-9-]+)?|inventory\/(stocktake(?:\/[a-zA-Z0-9-]+)?|transfers|operation-batches))$/.test(
       route,
@@ -30,9 +25,11 @@ export function allowedOperation(path: string, method: string): boolean {
     return (
       route === "/inventory/stocktake" ||
       route === "/inventory/transfers" ||
-      /^\/warehouses\/orders\/[a-zA-Z0-9-]+\/returns$/.test(route) ||
       /^\/purchases\/[a-zA-Z0-9-]+\/receive$/.test(route)
     );
+  // Deleting a stocktake draft (the server only cancels a PENDING one).
+  if (method === "DELETE")
+    return /^\/inventory\/stocktake\/[a-zA-Z0-9-]+$/.test(route);
   return (
     method === "PUT" &&
     (/^\/inventory\/stocktake\/[a-zA-Z0-9-]+$/.test(route) ||
@@ -40,13 +37,9 @@ export function allowedOperation(path: string, method: string): boolean {
   );
 }
 
-/** Separate receipt and return delegation from purchase creation. */
+/** Desktop supply operations are limited to purchase receiving. */
 export function allowedSupplyOperation(route: string, method: string, permissions: Record<string, boolean>): boolean {
-  const warehouse = route.startsWith('/warehouses/');
-  if (!(warehouse ? permissions.canViewWarehouseOrders : permissions.canViewSuppliers)) return false;
-  if (method === 'GET') return true;
-  if (method !== 'POST') return false;
-  if (/^\/warehouses\/orders\/[^/]+\/returns$/.test(route)) return permissions.canReturnWarehouseOrder === true;
-  if (/^\/purchases\/[^/]+\/receive$/.test(route)) return permissions.canReceivePurchase === true;
-  return false;
+  if (!permissions.canViewSuppliers) return false;
+  if (method === 'GET') return /^\/purchases(?:\/[a-zA-Z0-9-]+)?$/.test(route);
+  return method === 'POST' && /^\/purchases\/[a-zA-Z0-9-]+\/receive$/.test(route) && permissions.canReceivePurchase === true;
 }

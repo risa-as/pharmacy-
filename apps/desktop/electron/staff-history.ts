@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { saleIdPrefix } from "./sale-ref";
 export function registerStaffHistory(
   db: any,
   authorize: (permission: string) => Promise<any>,
@@ -18,7 +19,10 @@ export function registerStaffHistory(
       if (query)
         where.OR = [
           { invoiceNumber: { contains: query } },
+          { printedReference: query },
           { id: query },
+          // Local reference printed before sync (every matching sale is listed).
+          ...(saleIdPrefix(query) ? [{ id: { startsWith: saleIdPrefix(query)! } }] : []),
           { patient: { name: { contains: query } } },
           { patient: { phone: { contains: query } } },
         ];
@@ -81,53 +85,6 @@ export function registerStaffHistory(
       return {
         success: false,
         error: e instanceof Error ? e.message : "تعذر تحميل الفواتير",
-      };
-    }
-  });
-  ipcMain.handle("staff:stock-alerts", async () => {
-    try {
-      const session = await authorize("canViewInventory");
-      const until = new Date();
-      until.setDate(until.getDate() + 90);
-      const batches = await db.batch.findMany({
-        where: {
-          inventory: { branchId: session.who.branch },
-          quantity: { gt: 0 },
-          expiryDate: { lte: until },
-        },
-        include: { inventory: { include: { drug: true } } },
-        orderBy: { expiryDate: "asc" },
-        take: 100,
-      });
-      const inventory = await db.inventory.findMany({
-        where: { branchId: session.who.branch, drug: { isActive: true } },
-        include: {
-          drug: true,
-          batches: { select: { quantity: true, expiryDate: true } },
-        },
-      });
-      const low = inventory
-        .map((i: any) => ({
-          ...i,
-          available: i.batches
-            .filter((b: any) => b.expiryDate > new Date())
-            .reduce((n: number, b: any) => n + Math.max(0, b.quantity), 0),
-        }))
-        .filter((i: any) => i.available <= 0 || i.available < i.minStock)
-        .sort((a: any, b: any) => a.available - b.available)
-        .slice(0, 100)
-        .map((i: any) => ({
-          id: i.id,
-          name: i.drug.tradeName,
-          available: i.available,
-          minStock: i.minStock,
-        }));
-      session.assertCurrent();
-      return { success: true, batches, low };
-    } catch (e) {
-      return {
-        success: false,
-        error: e instanceof Error ? e.message : "تعذر تحميل التنبيهات",
       };
     }
   });

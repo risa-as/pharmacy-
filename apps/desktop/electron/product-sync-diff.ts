@@ -44,3 +44,40 @@ export function hasChangedProductSyncData(
 ): boolean {
     return Object.keys(changedProductSyncData(current, incoming)).length > 0;
 }
+
+export function isValidPackUnits(value: unknown): value is number {
+    return typeof value === 'number'
+        && Number.isInteger(value)
+        && value > 0
+        && value <= 2147483647;
+}
+
+export function shouldPreservePendingPackUnits(input: {
+    hasPendingLocalEdits: boolean;
+    localUnitsPerPack?: number | null;
+    localUnitsPerPackConfirmedAt?: Date | string | null;
+    cloudUnitsPerPack?: number | null;
+    cloudUnitsPerPackConfirmedAt?: Date | string | null;
+}): boolean {
+    if (!input.hasPendingLocalEdits) return false;
+    if (!isValidPackUnits(input.localUnitsPerPack)) return false;
+    if (input.localUnitsPerPackConfirmedAt == null) return false;
+
+    return input.cloudUnitsPerPack !== input.localUnitsPerPack
+        || input.cloudUnitsPerPackConfirmedAt == null;
+}
+
+export function mergePendingInventoryUpdatePayload(
+    previousPayload: Record<string, unknown> | null | undefined,
+    nextPayload: Record<string, unknown>,
+): Record<string, unknown> {
+    if (
+        previousPayload
+        && nextPayload.unitsPerPack === undefined
+        && previousPayload.unitsPerPack !== undefined
+    ) {
+        return { ...previousPayload, ...nextPayload, unitsPerPack: previousPayload.unitsPerPack };
+    }
+
+    return { ...(previousPayload || {}), ...nextPayload };
+}

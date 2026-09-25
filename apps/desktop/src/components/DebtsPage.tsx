@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, ArrowRight, ArrowLeft, BookOpen, HandCoins, Banknote, User, Users, Printer, X, RefreshCw, CheckCircle2, Cloud, CloudOff, Wallet, ReceiptText, TrendingUp, CalendarDays } from 'lucide-react';
+import { Search, ArrowRight, ChevronLeft, BookOpen, HandCoins, Banknote, User, Users, Printer, X, RefreshCw, CheckCircle2, Cloud, CloudOff, Wallet, ReceiptText, TrendingUp, CalendarDays } from 'lucide-react';
 import { showAlert } from '../lib/dialog';
 
 interface Debtor {
@@ -59,6 +59,10 @@ export default function DebtsPage() {
     const [loadError, setLoadError] = useState("");
     const [debtors, setDebtors] = useState<Debtor[]>([]);
     const [loading, setLoading] = useState(false);
+    // False until the first list arrives: until then the table shows placeholders,
+    // never the "no debtors" empty state.
+    const [loaded, setLoaded] = useState(false);
+    const firstFetch = useRef(true);
     const [details, setDetails] = useState<DebtorDetails | null>(null);
 
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -150,12 +154,16 @@ export default function DebtsPage() {
                 setLoadError(err instanceof Error?err.message:"تعذر تحميل الديون");
             } finally {
                 setLoading(false);
+                setLoaded(true);
             }
         }
     };
 
     useEffect(() => {
-        const debounce = setTimeout(fetchDebtors, 300);
+        // The debounce is for typing; opening the page loads at once.
+        const delay = firstFetch.current ? 0 : 300;
+        firstFetch.current = false;
+        const debounce = setTimeout(fetchDebtors, delay);
         return () => clearTimeout(debounce);
     }, [searchTerm]);
 
@@ -559,11 +567,11 @@ export default function DebtsPage() {
                                 <th className="px-5 py-3">رقم الهاتف</th>
                                 <th className="px-5 py-3">إجمالي الدين</th>
                                 <th className="px-5 py-3">آخر حركة</th>
-                                <th className="px-5 py-3 text-center">فتح</th>
+                                <th className="px-5 py-3 text-center">كشف الحساب</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-border">
-                            {loading ? (
+                        <tbody className={`divide-y divide-border transition-opacity ${loading && loaded ? 'opacity-60' : ''}`}>
+                            {!loaded ? (
                                 [...Array(5)].map((_, i) => (
                                     <tr key={i} className="animate-pulse">
                                         <td className="px-5 py-4">
@@ -575,7 +583,7 @@ export default function DebtsPage() {
                                         <td className="px-5 py-4"><div className="h-3.5 w-24 bg-muted rounded" /></td>
                                         <td className="px-5 py-4"><div className="h-6 w-28 bg-muted rounded-lg" /></td>
                                         <td className="px-5 py-4"><div className="h-3.5 w-20 bg-muted rounded" /></td>
-                                        <td className="px-5 py-4"><div className="h-8 w-8 bg-muted rounded-lg mx-auto" /></td>
+                                        <td className="px-5 py-4"><div className="h-8 w-24 bg-muted rounded-lg mx-auto" /></td>
                                     </tr>
                                 ))
                             ) : debtors.length === 0 ? (
@@ -626,10 +634,13 @@ export default function DebtsPage() {
                                             <td className="px-5 py-3.5 text-center">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleSelectDebtor(debtor.id); }}
-                                                    title="فتح كشف الحساب"
-                                                    className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                                    title={`فتح كشف حساب ${debtor.name}`}
+                                                    aria-label={`فتح كشف حساب ${debtor.name}`}
+                                                    className="group/open inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                                                 >
-                                                    <ArrowLeft className="w-5 h-5" />
+                                                    <ReceiptText className="w-4 h-4" />
+                                                    عرض
+                                                    <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover/open:-translate-x-0.5" />
                                                 </button>
                                             </td>
                                         </tr>

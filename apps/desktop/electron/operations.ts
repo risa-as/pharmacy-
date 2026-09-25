@@ -1,3 +1,4 @@
+import { deviceFetch as fetch } from './device-signing';
 import { operationJson } from "./operations-response";
 import { ipcMain } from "electron";
 import store from "./store";
@@ -14,7 +15,19 @@ export function registerOperations(
     branch: String(store.get("branchId") || ""),
     token: String(store.get("syncToken") || ""),
   });
+  // Share only an in-flight verification for the exact same credentials.
+  // Completed results are never cached: permission revocation remains immediate.
+  let verification: { key: string; promise: ReturnType<typeof verifySession> } | undefined;
   async function session() {
+    const key = JSON.stringify([identity(), getApiBaseUrl(), store.get("syncOrgId"),
+      store.get("syncUserRole"), store.get("syncSessionVersion"), store.get("licenseKey")]);
+    if (verification?.key === key) return verification.promise;
+    const pending = { key, promise: verifySession() };
+    verification = pending;
+    try { return await pending.promise; }
+    finally { if (verification === pending) verification = undefined; }
+  }
+  async function verifySession() {
     const who = identity();
     if (!who.id || who.id !== store.get("syncUserId") || !who.token)
       throw Error(
@@ -97,17 +110,6 @@ export function registerOperations(
         ) {
           throw Error("ليس لديك صلاحية إدارة مشتريات المذاخر");
         }
-        // Scope order details/returns to the device, including managers with wider tenant access.
-        if (/^\/warehouses\/orders\//.test(route)) {
-          const root = route.replace(/\/returns$/, "");
-          const check = await fetch(`${getApiBaseUrl()}${root}`, {
-            headers: { Authorization: `Bearer ${access.token}` },
-            signal: AbortSignal.timeout(15000),
-          });
-          const entity = await operationJson(check);
-          if (!check.ok || entity.order?.branchId !== who.branch)
-            throw Error("الطلب لا ينتمي لفرع هذا الجهاز");
-        }
         if (route.startsWith("/inventory/transfers/") && method === "PUT") {
           const check = await fetch(
             `${getApiBaseUrl()}/inventory/transfers?branchId=${encodeURIComponent(who.branch)}&type=incoming&id=${encodeURIComponent(route.split("/")[3])}`,
@@ -144,9 +146,13 @@ export function registerOperations(
           if (recordPath.startsWith("/purchases/") && !entity.warehouseOrderId)
             throw Error("هذه الشاشة مخصصة لمشتريات المذاخر");
         }
+        // Unsynced local sales/stock must reach the cloud before counting or
+        // changing stock: once per count sheet, not once per page of batches.
         if (
           method !== "GET" ||
-          input.path.startsWith("/inventory/operation-batches")
+          input.path.startsWith("/inventory/operation-batches") ||
+          (/^\/inventory\/stocktake\/[a-zA-Z0-9-]+$/.test(route) &&
+            new URLSearchParams(input.path.split("?")[1] || "").get("type") === "sheet")
         )
           await prepare();
         if (JSON.stringify(who) !== JSON.stringify(identity()))
@@ -189,7 +195,7 @@ export function registerOperations(
         if (
           input.path.endsWith("/receive") ||
           (method !== "GET" &&
-            (route === "/inventory/transfers" || route.endsWith("/returns"))) ||
+            route === "/inventory/transfers") ||
           (method === "PUT" && result.stocktake?.status === "COMPLETED")
         ) {
           try {

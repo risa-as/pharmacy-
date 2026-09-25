@@ -1,3 +1,6 @@
+import { registerDeviceSigning } from './device-signing';
+import { stopTpmWorker } from './tpm-worker';
+import { deviceFetch as fetch } from './device-signing';
 import {recordSyncSuccess} from "./sync-success";
 import { registerStaffHistory } from "./staff-history";
 import { registerOperations } from "./operations";
@@ -32,11 +35,9 @@ import {
   pushUpdateInventoryToCloud,
   pushQuickSaleToggle,
   pushSaleReturnToCloud,
-  allocateInvoiceNumber,
-  takeCachedInvoiceNumber,
-  prefetchInvoiceNumber,
   refreshOfflineToken,
 } from "./sync";
+import { mergePendingInventoryUpdatePayload } from "./product-sync-diff";
 import {
   createBackup,
   restoreBackup,
@@ -46,6 +47,7 @@ import {
 import { initBackupScheduler, uploadBackup } from "./cloudBackup";
 import store from "./store";
 import { saveOperatorProof } from "./operator-proofs";
+import { saleIdPrefix } from "./sale-ref";
 import { getApiCandidates, setApiBaseUrl } from "./api-config";
 import crypto from "crypto";
 
@@ -53,7 +55,6 @@ import crypto from "crypto";
 declare const __ZAINCASH_MERCHANT_ID__: string;
 declare const __ZAINCASH_SECRET__: string;
 declare const __ZAINCASH_BASE_URL__: string;
-declare const __BACKUP_SECRET_KEY__: string;
 declare const __OFFLINE_TOKEN_PUBLIC_KEY__: string;
 
 // Zain Cash Configuration
@@ -416,7 +417,14 @@ function normalizePendingSyncActions(
     if (action.type === "update-inventory") {
       const inventoryId = String(action.payload.inventoryId || "").trim();
       if (!inventoryId) continue;
-      updateInventoryById.set(inventoryId, action);
+      const previous = updateInventoryById.get(inventoryId);
+      updateInventoryById.set(inventoryId, previous
+        ? {
+            ...action,
+            payload: mergePendingInventoryUpdatePayload(previous.payload, action.payload),
+          }
+        : action,
+      );
       continue;
     }
   }
@@ -530,6 +538,25 @@ function enqueuePendingSyncAction(
     attempts: 0,
   });
   setPendingSyncActions(actions);
+}
+
+function parseOptionalPackUnits(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new Error("عدد الأشرطة في الباكيت يجب أن يكون رقماً صحيحاً أكبر من صفر.");
+  }
+  if (typeof value === "string" && value.trim() === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 2147483647) {
+    throw new Error("عدد الأشرطة في الباكيت يجب أن يكون رقماً صحيحاً أكبر من صفر.");
+  }
+
+  return parsed;
 }
 
 async function executePendingSyncAction(
@@ -993,6 +1020,7 @@ function setupAutoUpdater(): void {
 }
 
 app.whenReady().then(async () => {
+  registerDeviceSigning();
   // Apply any missing schema changes before anything else touches the DB.
   // Also pre-warms the Prisma engine so the first user query (login) is fast.
   try {
@@ -1031,7 +1059,7 @@ app.whenReady().then(async () => {
       console.log(`[Startup] Recovering ${unsyncedInventory.length} unqueued inventory update(s)...`);
       const branchId = String(store.get("branchId") || "");
       for (const inv of unsyncedInventory) {
-        enqueuePendingSyncAction("update-inventory", {
+        const recoveredPayload: Record<string, unknown> = {
           inventoryId: inv.id,
           drugId: inv.drugId,
           branchId: inv.branchId || branchId,
@@ -1039,7 +1067,11 @@ app.whenReady().then(async () => {
           costPrice: inv.costPrice,
           minStock: inv.minStock,
           maxStock: inv.maxStock,
-        });
+        };
+        if (inv.drug?.unitsPerPackConfirmedAt && inv.drug?.unitsPerPack != null) {
+          recoveredPayload.unitsPerPack = inv.drug.unitsPerPack;
+        }
+        enqueuePendingSyncAction("update-inventory", recoveredPayload);
       }
     }
   } catch (e) {
@@ -1068,9 +1100,6 @@ app.whenReady().then(async () => {
   startSyncService();
   setTimeout(() => {
     void processPendingSyncActions();
-    // Bank an invoice number for the first sale of the session (needs the
-    // connectivity check above to have marked the device online first).
-    void prefetchInvoiceNumber();
   }, 7000);
   setInterval(() => {
     void processPendingSyncActions();
@@ -1557,8 +1586,6 @@ app.whenReady().then(async () => {
               void syncSuppliers().catch((err: unknown) => {
                 console.error("Background supplier sync failed:", err);
               });
-              // Bank an invoice number so the first sale after login is instant.
-              void prefetchInvoiceNumber();
             }
 
             store.set("loggedInUserId", safeUser.id);
@@ -2573,12 +2600,35 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
     const updCost = parseFloat(costPrice);
     const updMin = parseInt(minStock, 10);
     const updMax = parseInt(maxStock, 10);
+    const parsedUnitsPerPack = parseOptionalPackUnits(data.unitsPerPack);
 
-    // 1. Update GlobalDrug price
-    const updatedDrug = await prisma.globalDrug.update({
-      where: { id: drugId },
-      data: { price: isNaN(updPrice) ? 0 : updPrice },
-    });
+    // 1. Update GlobalDrug and Inventory together. syncPending=true marks the
+    //    inventory row as needing cloud push; if the app crashes before
+    //    enqueuePendingSyncAction runs, startup recovery will re-queue it.
+    const [updatedDrug, updatedInventory] = await prisma.$transaction([
+      prisma.globalDrug.update({
+        where: { id: drugId },
+        data: {
+          price: isNaN(updPrice) ? 0 : updPrice,
+          ...(parsedUnitsPerPack === undefined
+            ? {}
+            : {
+                unitsPerPack: parsedUnitsPerPack,
+                unitsPerPackConfirmedAt: new Date(),
+              }),
+        },
+      }),
+      prisma.inventory.update({
+        where: { id },
+        data: {
+          costPrice: isNaN(updCost) ? 0 : updCost,
+          minStock: isNaN(updMin) ? 10 : updMin,
+          maxStock: isNaN(updMax) ? 100 : updMax,
+          syncPending: true,
+        },
+        include: { drug: true },
+      }),
+    ]);
     console.log(
       "!!! DB: Updated GlobalDrug:",
       updatedDrug.id,
@@ -2586,19 +2636,8 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
       updatedDrug.price,
     );
 
-    // 2. Update Inventory item (syncPending=true marks it as needing cloud push;
-    //    if the app crashes before enqueuePendingSyncAction runs, startup recovery
-    //    will re-queue it automatically).
-    const updatedInventory = await prisma.inventory.update({
-      where: { id },
-      data: {
-        costPrice: isNaN(updCost) ? 0 : updCost,
-        minStock: isNaN(updMin) ? 10 : updMin,
-        maxStock: isNaN(updMax) ? 100 : updMax,
-        syncPending: true,
-      },
-      include: { drug: true },
-    });
+    // 2. Queue the same confirmed value. If the app crashes before this runs,
+    //    startup recovery reads the local GlobalDrug value and re-queues it.
     console.log(
       "!!! DB: Updated Inventory:",
       updatedInventory.id,
@@ -2609,7 +2648,7 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
     // 3. Push update to cloud
     const branchId =
       updatedInventory.branchId || String(store.get("branchId") || "");
-    enqueuePendingSyncAction("update-inventory", {
+    const updatePayload: Record<string, unknown> = {
       inventoryId: id,
       drugId,
       branchId,
@@ -2617,7 +2656,11 @@ ipcMain.handle("update-inventory-item", async (_, data) => {
       costPrice: isNaN(updCost) ? 0 : updCost,
       minStock: isNaN(updMin) ? 10 : updMin,
       maxStock: isNaN(updMax) ? 100 : updMax,
-    });
+    };
+    if (parsedUnitsPerPack !== undefined) {
+      updatePayload.unitsPerPack = parsedUnitsPerPack;
+    }
+    enqueuePendingSyncAction("update-inventory", updatePayload);
     void processPendingSyncActions();
 
     return {
@@ -2888,18 +2931,8 @@ ipcMain.handle(
   ) => {
     try {
       const tStart = Date.now();
-      // Invoice number resolution, fastest first:
-      // 1. A prefetched number banked by the previous sale — instant, no network.
-      // 2. Inline cloud allocation racing the local transaction below (waits
-      //    max(network, tx) instead of their sum, capped at 1.5s).
-      // 3. Null — /sync/sales allocates the real sequential number later and
-      //    reconciles it back; the receipt shows a temporary display number.
-      const cachedNumber = takeCachedInvoiceNumber();
-      const allocationPromise: Promise<string | null> = cachedNumber
-        ? Promise.resolve(cachedNumber)
-        : allocateInvoiceNumber()
-            .then((n) => (n != null ? String(n) : null))
-            .catch(() => null);
+      // Never wait for the cloud to confirm a locally committed sale.
+      // The server assigns the final number atomically during synchronization.
 
       const result = await prisma.$transaction(async (tx: any) => {
         const validUser = userId
@@ -3170,43 +3203,14 @@ ipcMain.handle(
       const tTx = Date.now();
 
       if (result.success) {
-        // Stamp the cloud-allocated number BEFORE syncSales pushes the sale —
-        // pushing a null number would make the server allocate a second,
-        // different number for the same sale.
-        const allocatedNumber = await allocationPromise;
-        if (allocatedNumber != null) {
-          try {
-            // Conditional stamp: if the background sync already pushed this sale
-            // (server assigned a number) in the meantime, keep the server's.
-            const stamped = await prisma.sale.updateMany({
-              where: { id: result.saleId, invoiceNumber: null },
-              data: { invoiceNumber: String(allocatedNumber) },
-            });
-            if (stamped.count > 0) {
-              result.invoiceNumber = String(allocatedNumber);
-            } else {
-              const current = await prisma.sale.findUnique({
-                where: { id: result.saleId },
-                select: { invoiceNumber: true },
-              });
-              if (current?.invoiceNumber) result.invoiceNumber = current.invoiceNumber;
-            }
-          } catch (e) {
-            // Sale already committed — a failed stamp just means the sync
-            // reconciliation assigns the number instead.
-            console.error("[Sale] Failed to stamp invoice number:", e);
-          }
-        }
         console.log(
-          `[Sale] tx=${tTx - tStart}ms alloc-wait=${Date.now() - tTx}ms total=${Date.now() - tStart}ms number=${result.invoiceNumber ?? "local"}`,
+          `[Sale] tx=${tTx - tStart}ms total=${Date.now() - tStart}ms number=${result.invoiceNumber ?? "local"}`,
         );
 
         // Trigger sync immediately after success
         syncSales().catch((err) =>
           console.error("Immediate sync failed:", err),
         );
-        // Bank the next invoice number so the NEXT checkout skips the network.
-        void prefetchInvoiceNumber();
       }
 
       return result;
@@ -3747,13 +3751,27 @@ ipcMain.handle("search-sale", async (_event, query) => {
       payment: true,
       returns: { include: { items: true } },
     };
-    // Search by invoiceNumber first (what's printed on receipt), then fall back to id prefix
-    const sale =
-      (await prisma.sale.findFirst({ where: { ...scoped, invoiceNumber: normalized }, include })) ||
-      (await prisma.sale.findFirst({ where: { ...scoped, id: { startsWith: normalized } }, include }));
+    // Search by invoiceNumber first (what's printed on receipt), then by the local
+    // reference printed before sync. A reference can match more than one sale:
+    // then every match is returned for the user to choose, never one at random.
+    // Official number, an older build's printed number the server replaced
+    // (printedReference, may repeat), and the local reference are searched
+    // together: the same digits can be one sale's official number and another's
+    // old printed one, so any ambiguity is listed for the user, never resolved
+    // by picking one.
+    const idPrefix = saleIdPrefix(normalized);
+    const matches = await prisma.sale.findMany({
+      where: { ...scoped, OR: [
+        { invoiceNumber: normalized },
+        { printedReference: normalized },
+        ...(idPrefix ? [{ id: { startsWith: idPrefix } }] : []),
+      ] },
+      include, orderBy: { createdAt: "desc" }, take: 20,
+    });
     auth.assertCurrent();
-    if (!sale) return { success: false, error: "الفاتورة غير موجودة" };
-    return { success: true, sale };
+    if (matches.length === 0) return { success: false, error: "الفاتورة غير موجودة" };
+    if (matches.length > 1) return { success: true, sales: matches };
+    return { success: true, sale: matches[0] };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -3935,3 +3953,5 @@ ipcMain.handle(
 app.whenReady().then(() => {
   initBackupScheduler();
 });
+
+app.on('will-quit', () => stopTpmWorker());

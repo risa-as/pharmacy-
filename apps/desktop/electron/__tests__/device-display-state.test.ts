@@ -1,0 +1,11 @@
+import {expect,it} from 'vitest';
+import {deviceDisplayState as state} from '../device-display-state';
+const config={fingerprint:'fp',keyId:'id'};
+const token='d1.id.fp.'+'a'.repeat(64);
+it('restores approved display from existing device-bound login without registering again',()=>{expect(state(config,token,'u','u','')).toEqual({status:'ACTIVE',sessionReady:true});});
+it('keeps pending status until bound login or confirmed enrollment',()=>{expect(state({...config,status:'PENDING'},'legacy','u','u','')).toEqual({status:'PENDING',sessionReady:false});});
+it('requires login after explicit approval',()=>{expect(state({...config,status:'ACTIVE'},'legacy','u','u','')).toEqual({status:'ACTIVE',sessionReady:false});});
+it.each(['d1.other.fp.'+'a'.repeat(64),'d1.id.other.'+'a'.repeat(64),'legacy'])('does not infer approval from a different or old token', t=>{expect(state(config,t,'u','u','').status).toBeNull();});
+it('does not use another employee session',()=>{expect(state(config,token,'other','u','').sessionReady).toBe(false);});
+it('does not hide a device error behind cached approval',()=>{expect(state({...config,status:'ACTIVE'},token,'u','u','failed')).toEqual({status:null,sessionReady:false});});
+it('preserves explicit revocation despite cached bound token',()=>{expect(state({...config,status:'REVOKED'},token,'u','u','')).toEqual({status:'REVOKED',sessionReady:false});});

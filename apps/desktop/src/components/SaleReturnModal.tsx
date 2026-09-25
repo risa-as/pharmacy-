@@ -2,6 +2,7 @@ import { previewRefund } from '@faramace/shared';
 import { useState, useMemo, useRef, useEffect } from "react";
 import { X, Undo2, AlertCircle, Search, Hash, Pill } from "lucide-react";
 import { showAlert, showConfirm } from "../lib/dialog";
+import { saleLabel } from "./pos/pos-utils";
 
 /** Unique id for one return attempt; falls back if randomUUID is unavailable (non-secure context). */
 function newReturnId(): string {
@@ -76,6 +77,9 @@ export default function SaleReturnModal({ isOpen, onClose, user, initialSale }: 
                 const res = await window.ipcRenderer.invoke('search-sale', searchQuery.trim());
                 if (res.success && res.sale) {
                     setSale(res.sale);
+                } else if (res.success && res.sales?.length) {
+                    // Several sales share this reference: list them to choose by date and amount.
+                    setDrugSearchResults(res.sales);
                 } else {
                     setErrorMsg(res.error || "الفاتورة غير موجودة");
                 }
@@ -289,7 +293,7 @@ export default function SaleReturnModal({ isOpen, onClose, user, initialSale }: 
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <span className="font-bold text-gray-800 text-sm">
-                                                {s.invoiceNumber || `#${s.id.slice(0, 8)}`}
+                                                {saleLabel(s)}
                                             </span>
                                             {s.patient?.name && (
                                                 <span className="text-xs text-gray-500 mr-2">— {s.patient.name}</span>

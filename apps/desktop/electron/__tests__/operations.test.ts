@@ -59,8 +59,34 @@ it('allows a transfer-only employee to search batches',async()=>{
  vi.stubGlobal('fetch',vi.fn(async(url:any)=>String(url).endsWith('/session')?response({...access,permissions:{canTransferStock:true},features:{interBranchTransfers:true}}):response({items:[]})));
  expect((await call({path:'/inventory/operation-batches?search=x'})).success).toBe(true);
 });
-it('refreshes stock after reserving a warehouse return',async()=>{
- vi.stubGlobal('fetch',vi.fn(async(url:any)=>String(url).endsWith('/session')?response(access):String(url).endsWith('/orders/o')?response({order:{branchId:'b'}}):response({id:'return'})));
- expect((await call({path:'/warehouses/orders/o/returns',method:'POST',body:{idempotencyKey:'persistent-key',items:[]}})).success).toBe(true);
- expect(refresh).toHaveBeenCalledOnce();
+it('blocks removed warehouse returns before any network request',async()=>{
+ expect((await call({path:'/warehouses/orders/o/returns',method:'POST',body:{items:[]}})).success).toBe(false);
+ expect(fetch).not.toHaveBeenCalled();expect(prepare).not.toHaveBeenCalled();expect(refresh).not.toHaveBeenCalled();
+});
+
+
+it('shares simultaneous access verification but refreshes permissions on the next request', async () => {
+ let release!: (value: any) => void;
+ const pending = new Promise(resolve => { release = resolve; });
+ vi.stubGlobal('fetch', vi.fn(async (url: any) => String(url).endsWith('/session') ? pending : response([])));
+ const accessCall = h.handlers.get('operations:access')();
+ const listCall = call({path:'/purchases'});
+ expect(fetch).toHaveBeenCalledTimes(1);
+ release(response(access));
+ expect((await accessCall).success).toBe(true);
+ expect((await listCall).success).toBe(true);
+ vi.stubGlobal('fetch', vi.fn(async () => response({error:'revoked'}, false)));
+ expect((await h.handlers.get('operations:access')()).success).toBe(false);
+ expect(fetch).toHaveBeenCalledOnce();
+});
+it('does not share an in-flight authorization after switching users', async () => {
+ let release!: (value: any) => void;
+ const pending = new Promise(resolve => { release = resolve; });
+ vi.stubGlobal('fetch', vi.fn().mockReturnValueOnce(pending).mockResolvedValue(response(access)));
+ const first = h.handlers.get('operations:access')();
+ h.store.set('loggedInUserId','other'); h.store.set('syncUserId','other'); h.store.set('syncToken','other-token');
+ expect((await h.handlers.get('operations:access')()).success).toBe(true);
+ release(response(access));
+ expect((await first).success).toBe(false);
+ expect(fetch).toHaveBeenCalledTimes(2);
 });

@@ -1,7 +1,9 @@
+import { acknowledgeSales } from "./sale-sync-ack";
+import { deviceFetch as fetch } from './device-signing';
 import {recordSyncSuccess} from "./sync-success";
 import {recordSyncConflicts as recordConflicts} from "./sync-conflicts";
 import {operatorProofsFor} from "./operator-proofs";
-import {validateSnapshotBarcodes} from "./product-snapshot-validation";
+import {snapshotBarcodeConflicts, preserveConflictingInventory} from "./product-snapshot-validation";
 import { prisma } from './db';
 import { BrowserWindow, app } from 'electron';
 import fs from 'node:fs';
@@ -11,7 +13,7 @@ import store from './store';
 import { buildApiUrl, getApiBaseUrl, getApiCandidates, setApiBaseUrl } from './api-config';
 import { storeOfflineToken } from './offline-token';
 import { buildIdempotencyKey, buildBatchIdempotencyKey } from './idempotency';
-import { changedProductSyncData } from './product-sync-diff';
+import { changedProductSyncData, shouldPreservePendingPackUnits } from './product-sync-diff';
 import { createCoalescedRun } from './sync-coalescer';
 import { fetchProductSyncSnapshotWithCache } from './product-sync-cache';
 import {
@@ -358,14 +360,12 @@ export async function syncSales() {
         const result = await response.json() as { syncedIds?: string[]; invoiceNumbers?: Record<string, number>; conflicts?: { id: string; message: string }[] };
         const syncedIds = result.syncedIds;
 
-        // 3. Mark as synced
-        if (syncedIds && syncedIds.length > 0) {
-            await prisma.sale.updateMany({
-                where: { id: { in: syncedIds } },
-                data: { synced: true }
-            });
-        recordSyncSuccess("المبيعات");
-            console.log(`[Sync] Sales sync completed. Marked ${syncedIds.length} sale(s) as synced.`);
+        // Persist the final number and acknowledgment together. A missing
+        // number or failed local write stays pending and is safe to retry.
+        const acknowledged = await acknowledgeSales(prisma, unsyncedSales, syncedIds ?? [], result.invoiceNumbers ?? {});
+        if (acknowledged > 0) {
+            recordSyncSuccess("المبيعات");
+            console.log(`[Sync] Sales sync completed. Marked ${acknowledged} sale(s) as synced.`);
         }
 
         for (const conflict of result.conflicts ?? []) {
@@ -378,18 +378,6 @@ export async function syncSales() {
             });
         }
 
-        // 4. Reconcile invoice numbers: for offline sales the cloud allocated the
-        // sequential number — pull it back so the local record matches the web.
-        if (result.invoiceNumbers) {
-            for (const [saleId, num] of Object.entries(result.invoiceNumbers)) {
-                try {
-                    await prisma.sale.update({
-                        where: { id: saleId },
-                        data: { invoiceNumber: String(num) },
-                    });
-                } catch { /* sale may have been removed locally — ignore */ }
-            }
-        }
 
     } catch (error: any) {
         if (error.name === 'SyncClientError') {
@@ -679,8 +667,19 @@ export async function syncSaleReturns() {
         const result = await response.json() as {
             syncedIds?: string[];
             conflicts?: Array<{ id: string; message?: string }>;
+            accountBalances?: { patientId: string; totalPoints: number; lifetimePoints: number; tier: string }[];
         };
         const syncedIds = result.syncedIds;
+
+        // A return takes back earned points and gives back redeemed ones on the
+        // server; mirror the authoritative balance so the POS never offers points
+        // the return took back (a negative balance blocks redemption).
+        for (const wb of result.accountBalances ?? []) {
+            await prisma.loyaltyAccount.updateMany({
+                where: { patientId: wb.patientId },
+                data: { totalPoints: wb.totalPoints, lifetimePoints: wb.lifetimePoints, tier: wb.tier },
+            });
+        }
 
         if (syncedIds && syncedIds.length > 0) {
             await prisma.saleReturn.updateMany({
@@ -1288,7 +1287,10 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
         };
 
         const drugs = Array.isArray(data?.drugs) ? data.drugs : [];
-        validateSnapshotBarcodes(drugs);
+        const barcodeConflicts = snapshotBarcodeConflicts(drugs);
+        const protectedDrugIds = new Set<string>([...barcodeConflicts.values()].flatMap(ids => [...ids]));
+        const syncWarnings = new Set<string>([...barcodeConflicts.keys()].map(barcode =>
+            `الباركود ${barcode} مرتبط بأكثر من دواء؛ حُفظت بياناته المحلية دون استبدال.`));
 
         // Safety guard: empty response from cloud should not wipe local inventory.
         // This protects against transient server errors returning an empty snapshot.
@@ -1311,6 +1313,7 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                 .map((drug) => String(drug?.barcode ?? `NOBARCODE_${drug?.id || ''}`))
                 .filter(Boolean),
         ));
+        const inventoryIdsReadyToClearSyncPending = new Set<string>();
 
         // Use generous timeout — large inventories (hundreds of drugs+batches)
         // can exceed Prisma's 5s default.
@@ -1343,6 +1346,7 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
             for (const row of [...prefetchedDrugsById, ...prefetchedDrugsByBarcode]) {
                 drugsById.set(row.id, row);
                 drugsByBarcode.set(row.barcode, row);
+                if (barcodeConflicts.has(row.barcode)) protectedDrugIds.add(row.id);
             }
             const prefetchedInventories = await findManyByFieldChunked(
                 tx.inventory,
@@ -1397,6 +1401,7 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
 
             for (const drug of drugs) {
                 if (!drug?.id) continue;
+                if (protectedDrugIds.has(drug.id)) continue;
               try {
                 // Guard against null/undefined on required String fields —
                 // Prisma rejects null for non-optional columns (Invalid invocation).
@@ -1414,35 +1419,28 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                 const collision = collisionCandidate?.id !== drug.id ? collisionCandidate : null;
 
                 if (collision) {
-                    console.log(`[Sync] Barcode collision '${safeBarcode}'. Replacing local ID ${collision.id} with cloud ID ${drug.id}.`);
-                    const collisionInventories = await tx.inventory.findMany({
-                        where: { drugId: collision.id },
-                        select: { id: true }
-                    });
-                    const collisionInventoryIds = collisionInventories.map((row: any) => row.id);
-                    if (collisionInventoryIds.length > 0) {
-                        await tx.batch.deleteMany({
-                            where: { inventoryId: { in: collisionInventoryIds } }
-                        });
-                        await tx.inventory.deleteMany({
-                            where: { id: { in: collisionInventoryIds } }
-                        });
-                        removeInventoryIdsFromProductSyncMaps(
-                            { inventoriesByDrugId, batchesByInventoryId, batchesById },
-                            collisionInventoryIds,
-                        );
-                    }
-                    await tx.globalDrug.update({
-                        where: { id: collision.id },
-                        data: { barcode: `__REPLACED_${collision.id}`, isActive: false }
-                    });
-                    drugsByBarcode.delete(safeBarcode);
-                    drugsById.set(collision.id, {
-                        ...collision,
-                        barcode: `__REPLACED_${collision.id}`,
-                        isActive: false,
-                    });
+                    // A local identity may hold offline sales or another branch's
+                    // stock. Never destroy its batches to make a barcode fit.
+                    protectedDrugIds.add(collision.id);
+                    protectedDrugIds.add(drug.id);
+                    syncWarnings.add(`الباركود ${safeBarcode} يختلف معرّفه محليًا؛ يلزم مراجعة الربط.`);
+                    continue;
                 }
+
+                const existingDrug = drugsById.get(drug.id) || null;
+                const branchInventories = inventoriesByDrugId.get(drug.id) || [];
+
+                // Prefer the record whose ID matches the cloud ID; fall back to first local record.
+                // This prevents creating duplicate inventory records when IDs diverge
+                // (e.g. item created on desktop then re-created on web with a different UUID).
+                const existingByCloudId = branchInventories.find((row: any) => row.id === cloudInventoryId);
+                const existingInventory = existingByCloudId || branchInventories[0] || null;
+
+                // If the local record has unsaved edits (syncPending=true), the user has
+                // changed costPrice/minStock/maxStock or confirmed unitsPerPack on desktop
+                // but those changes haven't reached the cloud yet. Overwriting them here
+                // would destroy the pending edit.
+                const hasPendingLocalEdits = !!existingInventory?.syncPending;
 
                 // ميزة وحدة التسعير: التعبئة تُسحب من السحابة ليعرف الجهاز أوفلاين
                 // أُعُدّت أشرطة هذا الدواء أم لا. غياب الحقل في الرد (خادم أقدم) يُبقي
@@ -1460,6 +1458,13 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                         : drug.unitsPerPackConfirmedAt
                             ? new Date(drug.unitsPerPackConfirmedAt)
                             : null;
+                const preservePendingPackUnits = shouldPreservePendingPackUnits({
+                    hasPendingLocalEdits,
+                    localUnitsPerPack: existingDrug?.unitsPerPack ?? null,
+                    localUnitsPerPackConfirmedAt: existingDrug?.unitsPerPackConfirmedAt ?? null,
+                    cloudUnitsPerPack: cloudUnits,
+                    cloudUnitsPerPackConfirmedAt: cloudUnitsConfirmedAt,
+                });
 
                 const desiredDrugData = {
                     barcode: safeBarcode,
@@ -1468,15 +1473,14 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                     price: Number(drug.price || 0),
                     isActive: true,
                     isQuickSale: drug.isQuickSale ?? false,
-                    unitsPerPack: cloudUnits,
-                    unitsPerPackConfirmedAt: cloudUnitsConfirmedAt,
+                    unitsPerPack: preservePendingPackUnits ? undefined : cloudUnits,
+                    unitsPerPackConfirmedAt: preservePendingPackUnits ? undefined : cloudUnitsConfirmedAt,
                 };
                 const desiredNewDrugData = {
                     ...desiredDrugData,
                     unitsPerPack: cloudUnits ?? null,
                     unitsPerPackConfirmedAt: cloudUnitsConfirmedAt ?? null,
                 };
-                const existingDrug = drugsById.get(drug.id) || null;
 
                 if (existingDrug) {
                     const drugChanges = changedProductSyncData(existingDrug, desiredDrugData);
@@ -1502,8 +1506,6 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                     drugsByBarcode.set(createdDrug.barcode, createdDrug);
                 }
 
-                const branchInventories = inventoriesByDrugId.get(drug.id) || [];
-
                 const cloudCost = Number(
                     (drug.costPrice && drug.costPrice > 0)
                         ? drug.costPrice
@@ -1513,18 +1515,6 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                                 ? drug.buyPrice
                                 : 0
                 );
-
-                // Prefer the record whose ID matches the cloud ID; fall back to first local record.
-                // This prevents creating duplicate inventory records when IDs diverge
-                // (e.g. item created on desktop then re-created on web with a different UUID).
-                const existingByCloudId = branchInventories.find((row: any) => row.id === cloudInventoryId);
-                const existingInventory = existingByCloudId || branchInventories[0] || null;
-
-                // If the local record has unsaved edits (syncPending=true), the user has
-                // changed costPrice/minStock/maxStock on desktop but those changes haven't
-                // reached the cloud yet. Overwriting them here would destroy the pending edit.
-                // Only sync those fields from cloud once the push succeeds (syncPending=false).
-                const hasPendingLocalEdits = !!existingInventory?.syncPending;
 
                 // Remove orphan duplicates created by previous buggy syncs
                 if (branchInventories.length > 1 && existingInventory) {
@@ -1554,6 +1544,16 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                     minStock: isNaN(safeMinStock) ? 10 : safeMinStock,
                     maxStock: isNaN(safeMaxStock) ? 100 : safeMaxStock,
                 };
+                if (
+                    hasPendingLocalEdits
+                    && existingInventory
+                    && Number(existingInventory.costPrice) === cloudEditableFields.costPrice
+                    && Number(existingInventory.minStock) === cloudEditableFields.minStock
+                    && Number(existingInventory.maxStock) === cloudEditableFields.maxStock
+                    && !preservePendingPackUnits
+                ) {
+                    inventoryIdsReadyToClearSyncPending.add(existingInventory.id);
+                }
 
                 let targetInventoryId: string;
                 if (existingInventory) {
@@ -1746,6 +1746,8 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                     );
                 }
               } catch (drugErr) {
+                protectedDrugIds.add(drug.id);
+                syncWarnings.add(`تعذر تحديث الصنف ${drug.tradeName || drug.id}؛ يلزم مراجعة خطأ المزامنة.`);
                 console.error(`[Sync] Failed to process drug id=${drug.id} barcode=${drug.barcode}:`, drugErr);
                 // Continue with remaining drugs instead of aborting the whole transaction
               }
@@ -1764,16 +1766,18 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
             });
 
             let staleInventoryIds: string[];
+            const removableInventories = allBranchInventories.filter((row: any) =>
+                !preserveConflictingInventory(row, protectedDrugIds));
             if (hasCompleteInventoryIds) {
-                staleInventoryIds = allBranchInventories
+                staleInventoryIds = removableInventories
                     .filter((row: any) => !fetchedInvSet.has(row.id))
                     .map((row: any) => row.id);
             } else if (fetchedDrugIds.length > 0) {
-                staleInventoryIds = allBranchInventories
+                staleInventoryIds = removableInventories
                     .filter((row: any) => !fetchedDrugSet.has(row.drugId))
                     .map((row: any) => row.id);
             } else {
-                staleInventoryIds = allBranchInventories.map((row: any) => row.id);
+                staleInventoryIds = removableInventories.map((row: any) => row.id);
             }
 
             if (staleInventoryIds.length > 0) {
@@ -1788,7 +1792,7 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
             const allDrugs = await tx.globalDrug.findMany({ select: { id: true } });
             const inactiveDrugIds = allDrugs
                 .map((d: any) => d.id)
-                .filter((id: string) => !fetchedDrugSet.has(id));
+                .filter((id: string) => !fetchedDrugSet.has(id) && !protectedDrugIds.has(id));
             if (inactiveDrugIds.length > 0) {
                 // Only deactivate if they have no inventory at all
                 for (let i = 0; i < inactiveDrugIds.length; i += SQLITE_VAR_LIMIT) {
@@ -1799,23 +1803,22 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                     });
                 }
             }
+
+            if (inventoryIdsReadyToClearSyncPending.size > 0) {
+                await updateManyChunked(
+                    tx.inventory,
+                    'id',
+                    Array.from(inventoryIdsReadyToClearSyncPending),
+                    { syncPending: false },
+                );
+            }
         }, { timeout: 120_000 });
 
-        // After a successful pull, clear syncPending for ALL inventory items.
-        // This is safe because:
-        //   1. During the pull above, editable fields were preserved for syncPending=true items
-        //   2. The push action (if it existed) has already been processed or is still queued
-        //   3. On the NEXT pull, syncPending=false lets cloud values through — by then
-        //      the cloud will have committed any pushed writes
-        // If the push permanently fails (DLQ), we still want cloud values to eventually
-        // win to avoid permanent data divergence.
-        try {
-            await prisma.inventory.updateMany({
-                where: { syncPending: true },
-                data: { syncPending: false },
-            });
-        } catch { /* non-critical */ }
-
+        if (syncWarnings.size) {
+            const reason = `تم تحديث الأصناف السليمة. ${[...syncWarnings].join(' ')}`;
+            console.warn('[Sync] Partial inventory update:', reason);
+            return { success: false, reason, count: drugs.filter(drug => !protectedDrugIds.has(drug.id)).length };
+        }
         recordSyncSuccess("المخزون");
         console.log(`[Sync] Product snapshot sync completed. ${drugs.length} cloud product(s) processed.`);
         return { success: true, count: drugs.length };
@@ -2450,6 +2453,7 @@ export async function pushUpdateInventoryToCloud(data: {
     costPrice?: number;
     minStock?: number;
     maxStock?: number;
+    unitsPerPack?: number | null;
 }, options?: { actionId?: string }): Promise<boolean> {
     try {
         if (!await checkConnection()) {
@@ -2465,7 +2469,8 @@ export async function pushUpdateInventoryToCloud(data: {
             price: data.price,
             costPrice: data.costPrice,
             minStock: data.minStock,
-            maxStock: data.maxStock
+            maxStock: data.maxStock,
+            ...(data.unitsPerPack === undefined ? {} : { unitsPerPack: data.unitsPerPack }),
         };
 
         console.log(`[CloudSync] ▶ PUSH inventory update to ${targetUrl}`);
@@ -2493,7 +2498,15 @@ export async function pushUpdateInventoryToCloud(data: {
             message?: string;
             ack?: SyncAckPayload;
             success?: boolean;
-            data?: { id?: string; minStock?: number; maxStock?: number; cost?: number; price?: number };
+            data?: {
+                id?: string;
+                minStock?: number;
+                maxStock?: number;
+                cost?: number;
+                price?: number;
+                unitsPerPack?: number | null;
+                unitsPerPackConfirmedAt?: string | null;
+            };
         }>(response);
         const ack = body?.ack;
 
@@ -2510,6 +2523,12 @@ export async function pushUpdateInventoryToCloud(data: {
             return false;
         }
 
+        if (data.unitsPerPack !== undefined && !body?.data) {
+            console.error("[CloudSync] ⚠ MISMATCH after push! cloud response omitted data for unitsPerPack verification");
+            syncLog("  ⚠ MISMATCH! missing data.unitsPerPack confirmation");
+            return false;
+        }
+
         // Verify: compare what we sent with what the cloud returned
         if (body?.data) {
             const cloud = body.data;
@@ -2520,9 +2539,12 @@ export async function pushUpdateInventoryToCloud(data: {
                 mismatches.push(`maxStock: sent=${data.maxStock} cloud=${cloud.maxStock}`);
             if (data.costPrice !== undefined && cloud.cost !== data.costPrice)
                 mismatches.push(`cost: sent=${data.costPrice} cloud=${cloud.cost}`);
+            if (data.unitsPerPack !== undefined && cloud.unitsPerPack !== data.unitsPerPack)
+                mismatches.push(`unitsPerPack: sent=${data.unitsPerPack} cloud=${cloud.unitsPerPack}`);
             if (mismatches.length > 0) {
                 console.error(`[CloudSync] ⚠ MISMATCH after push! ${mismatches.join(', ')}`);
                 syncLog(`  ⚠ MISMATCH! ${mismatches.join(', ')}`);
+                return false;
             } else {
                 console.log(`[CloudSync] ✓ Verified: cloud values match sent values`);
                 syncLog(`  ✓ Verified OK`);
@@ -2548,69 +2570,6 @@ export async function pushUpdateInventoryToCloud(data: {
         // sync-failures review list instead of retrying it forever.
         if (error instanceof SyncClientError && error.status === 403) throw error;
         return false;
-    }
-}
-
-/**
- * Allocate the next per-organization sequential invoice number from the cloud,
- * so the printed receipt matches the number shown on the web dashboard.
- * Returns the number on success, or null when offline / on any failure — callers
- * must fall back to a local number in that case.
- */
-/**
- * Invoice-number prefetch cache: one number is allocated in the background
- * (after each sale / at startup) and persisted in the store, so checkout can
- * consume it instantly instead of waiting a network round-trip. Persisting it
- * means an unused number survives app restarts and is used by the next sale —
- * sequence gaps only occur if the device never sells again.
- */
-export function takeCachedInvoiceNumber(): string | null {
-    const cached = String(store.get('nextInvoiceNumber') || '');
-    if (!cached) return null;
-    store.set('nextInvoiceNumber', '');
-    return cached;
-}
-
-export async function prefetchInvoiceNumber(): Promise<void> {
-    try {
-        if (store.get('nextInvoiceNumber')) return; // already have one banked
-        const n = await allocateInvoiceNumber();
-        if (n != null) {
-            store.set('nextInvoiceNumber', String(n));
-            console.log(`[Sale] Prefetched next invoice number: ${n}`);
-        }
-    } catch {
-        // Purely opportunistic — checkout falls back to inline allocation.
-    }
-}
-
-export async function allocateInvoiceNumber(): Promise<number | null> {
-    if (!isOnline) return null;
-    // Direct fetch with a short timeout and NO retries: allocating a number must
-    // never stall the checkout. If it can't return quickly we fall back to a
-    // local number and let /sync/sales assign the sequential one later.
-    // 1.5s cap — a slow/cold server must not hold the cashier hostage; the
-    // reconciliation path exists precisely for this case.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
-    try {
-        const response = await fetch(buildApiUrl('/sales/allocate-number'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getDeviceAuthHeaders() },
-            body: JSON.stringify({ branchId: getBranchId() }),
-            signal: controller.signal,
-        });
-        if (!response.ok) {
-            console.error(`[CloudSync] allocate-number failed: ${response.status}`);
-            return null;
-        }
-        const data = await response.json() as { invoiceNumber?: number };
-        return typeof data.invoiceNumber === 'number' ? data.invoiceNumber : null;
-    } catch (error) {
-        console.error('[CloudSync] allocateInvoiceNumber error:', error);
-        return null;
-    } finally {
-        clearTimeout(timeoutId);
     }
 }
 

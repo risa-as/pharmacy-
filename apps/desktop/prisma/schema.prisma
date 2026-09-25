@@ -119,6 +119,8 @@ model Supplier {
 model Sale {
   id                  String               @id @default(uuid())
   invoiceNumber       String?              @unique
+  /// Number an older build printed when the server later assigned a different one.
+  printedReference    String?
   total               Float
   createdAt           DateTime             @default(now())
   items               SaleItem[]

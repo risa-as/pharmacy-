@@ -246,8 +246,11 @@ export default async function LoyaltyDashboardPage() {
                                             <td className="px-4 py-3 text-sm text-muted-foreground" suppressHydrationWarning>
                                                 {lastTx ? (
                                                     <div className="flex flex-col gap-1">
-                                                        <span className={`font-bold ${lastTx.type === "EARN" ? "text-success" : "text-destructive"}`}>
-                                                            {lastTx.type === "EARN" ? "+" : ""}{lastTx.points.toLocaleString()} نقطة
+                                                        {/* Credits: earned, or redeemed points given back by a return.
+                                                            Debits: redeemed, or earned points a return took back.
+                                                            Stored signs vary by source, so the sign comes from the type. */}
+                                                        <span className={`font-bold ${lastTx.type === "EARN" || lastTx.type === "RETURN_REDEEM" ? "text-success" : "text-destructive"}`}>
+                                                            {lastTx.type === "EARN" || lastTx.type === "RETURN_REDEEM" ? "+" : "−"}{Math.abs(lastTx.points).toLocaleString()} نقطة
                                                         </span>
                                                         <span className="text-xs text-muted-foreground">
                                                             {new Date(lastTx.createdAt).toLocaleDateString("ar-IQ", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" })}

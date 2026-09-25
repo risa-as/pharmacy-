@@ -6,8 +6,19 @@ export function formatIQD(amount: number): string {
     }).format(amount) + " د.ع";
 }
 
-export function generateInvoiceNumber(): string {
-    return Math.floor(10000000 + Math.random() * 90000000).toString();
+/**
+ * Short, stable reference for a sale that has no cloud invoice number yet: the
+ * first 12 hex characters of its id (48 bits, so two sales of one organisation
+ * sharing it is very unlikely; the searches still list every match). It never
+ * changes, so a receipt printed before sync still leads to its sale.
+ */
+export function localSaleRef(saleId: string): string {
+    return "م-" + saleId.replace(/-/g, "").slice(0, 12).toUpperCase();
+}
+
+/** The number to print or show for a sale: the cloud number, else the local reference. */
+export function saleLabel(sale: { id: string; invoiceNumber?: string | number | null }): string {
+    return sale.invoiceNumber ? String(sale.invoiceNumber) : localSaleRef(sale.id);
 }
 
 export function ipcInvoke<T = any>(channel: string, ...args: any[]): Promise<T> {

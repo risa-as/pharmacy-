@@ -102,13 +102,19 @@ type SortField = "name" | "quantity" | "price" | "costPrice" | "profit";
 type SortDir = "asc" | "desc";
 type StockFilter = "all" | "out" | "low" | "good" | "over";
 
-export default function InventoryPage({ user, initialSearch = "" }: { user: any; initialSearch?: string }) {
+// One in-memory snapshot only; never shared between users, branches or roles.
+let lastInventoryView: { key: string; items: InventoryItem[]; quickSale: Record<string, boolean> } | null = null;
+
+export default function InventoryPage({ user }: { user: any }) {
+  const viewKey = user?.id && user?.branchId ? JSON.stringify([user.id, user.branchId, user.role]) : '';
+  const cached = useRef(viewKey && lastInventoryView?.key === viewKey ? lastInventoryView : null).current;
   const isAdmin = user?.role === "ADMIN";
   const [barcode, setBarcode] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isChecking, setIsChecking] = useState(false);
-  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>(cached?.items ?? []);
+  const [loaded, setLoaded] = useState(!!cached);
   const [loading, setLoading] = useState(true);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [isUploadingPending, setIsUploadingPending] = useState(false);
@@ -123,11 +129,16 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
   const searchInputRef = useRef<HTMLInputElement>(null);
   const syncingRef = useRef(false); // guard: prevent overlapping sync button clicks
   const inventoryMutationRevisionRef = useRef(0);
+  const inventoryRequestRef = useRef(0);
+  const inventoryMountedRef = useRef(true);
 
   // Quick-Sale Toggle State
   const [quickSaleState, setQuickSaleState] = useState<Record<string, boolean>>(
-    {},
+    cached?.quickSale ?? {},
   );
+  useEffect(() => {
+    if (viewKey && loaded) lastInventoryView = { key: viewKey, items, quickSale: quickSaleState };
+  }, [viewKey, loaded, items, quickSaleState]);
   const [togglingQuickSale, setTogglingQuickSale] = useState<string | null>(
     null,
   );
@@ -652,20 +663,29 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
   const fetchInventory = async () => {
     if (window.ipcRenderer) {
       const snapshotStartedAtRevision = inventoryMutationRevisionRef.current;
+      const request = ++inventoryRequestRef.current;
       setLoading(true);
       try {
         // Use direct invoke (no 12s timeout wrapper) — these are local
         // SQLite queries that should be fast, and the timeout was causing
         // silent failures when called after sync completion.
-        const [data, pending, health] = await Promise.all([
-          window.ipcRenderer.invoke("get-inventory-items", {
-            searchTerm: "",
-            user,
-          }),
+        // Sync diagnostics must not hold the inventory table in loading state.
+        void Promise.all([
           window.ipcRenderer.invoke("get-pending-sync-count"),
           window.ipcRenderer.invoke("get-sync-health"),
-        ]);
+        ]).then(([pending, health]) => {
+          if (!inventoryMountedRef.current || request !== inventoryRequestRef.current) return;
+          const pendingCount = Number(health?.pendingCount ?? pending?.count ?? 0);
+          setPendingSyncCount(Number.isFinite(pendingCount) ? pendingCount : 0);
+          setSyncHealth(health ?? null);
+        }).catch(error => console.error("Inventory sync diagnostics unavailable:", error));
+        const data = await window.ipcRenderer.invoke("get-inventory-items", {
+          searchTerm: "",
+          user,
+        });
+        if (!inventoryMountedRef.current || request !== inventoryRequestRef.current) return;
         if (data?.success === false) throw new Error(data.error);
+        if (!Array.isArray(data)) throw new Error('تعذر تحميل المخزون');
         setLoadError("");
         if (Array.isArray(data)) {
           const canApplySnapshot = shouldApplyInventorySnapshot(
@@ -674,6 +694,7 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
           );
           if (canApplySnapshot) {
             setItems(data);
+            setLoaded(true);
             setQuickSaleState(
               Object.fromEntries(
                 data.map((i: InventoryItem) => [
@@ -684,15 +705,17 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
             );
           }
         }
-        const pendingCount = Number(
-          health?.pendingCount ?? pending?.count ?? 0,
-        );
-        setPendingSyncCount(Number.isFinite(pendingCount) ? pendingCount : 0);
-        setSyncHealth(health ?? null);
       } catch (error) {
+        if (!inventoryMountedRef.current || request !== inventoryRequestRef.current) return;
+        const message = error instanceof Error ? error.message : '';
+        if (/صلاحية|صلاحيات|غير مصرح|الجلسة|تسجيل الدخول|unauthorized|forbidden/i.test(message)) {
+          lastInventoryView = null;
+          setItems([]);
+          setLoaded(false);
+        }
         setLoadError(error instanceof Error?error.message:"تعذر تحميل المخزون");
       } finally {
-        setLoading(false);
+        if (inventoryMountedRef.current && request === inventoryRequestRef.current) setLoading(false);
       }
     }
   };
@@ -837,7 +860,9 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
   ]);
 
   useEffect(() => {
+    inventoryMountedRef.current = true;
     fetchInventory();
+    return () => { inventoryMountedRef.current = false; inventoryRequestRef.current++; };
   }, []);
 
   // Auto-focus barcode input on page load
@@ -926,6 +951,7 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
         costPrice: formData.get("costPrice"),
         minStock: formData.get("minStock"),
         maxStock: formData.get("maxStock"),
+        unitsPerPack: formData.get("unitsPerPack")?.toString().trim() || undefined,
       });
       if (!res?.success) {
         setUploadToast({
@@ -1326,7 +1352,7 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
 
   return (
     <div dir="rtl" className="h-full flex flex-col bg-background">
-      {loadError && <div role="alert" className="m-3 rounded-lg border border-destructive/30 text-destructive p-3 text-sm">{loadError}<button className="mr-3 underline" onClick={()=>void fetchInventory()}>إعادة المحاولة</button></div>}
+      {loadError && <div role="alert" className="m-3 rounded-lg border border-destructive/30 text-destructive p-3 text-sm">{loadError}{loaded && ' — تعذر تحديث البيانات؛ المعروض هو آخر بيانات محمّلة.'}<button className="mr-3 underline" onClick={()=>void fetchInventory()}>إعادة المحاولة</button></div>}
       {/* ======= شريط استعادة المسودة ======= */}
       {/* لا يُفتح النموذج تلقائياً: الاستعادة بقرار المستخدم، مع إظهار عمر
           المسودة ليحكم إن كانت ما تزال صالحة. */}
@@ -1676,14 +1702,7 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
 
       {/* ======= TABLE ======= */}
       <div className="flex-1 overflow-auto px-6 pb-6">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-4">
-            <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-muted-foreground font-bold text-sm">
-              جاري تحميل البيانات...
-            </p>
-          </div>
-        ) : (
+        {loading && <p role="status" className="mb-3 text-xs text-muted-foreground">{loaded ? 'جارٍ تحديث المخزون…' : 'جارٍ تحميل المخزون…'}</p>}
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             <table className="w-full text-right border-collapse">
               <thead>
@@ -1758,6 +1777,7 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
+                {loading && !loaded && Array.from({ length: 8 }, (_, row) => <tr key={'loading-'+row} aria-hidden="true">{Array.from({ length: isAdmin ? 8 : 6 }, (_, column) => <td key={column} className="px-4 py-5"><div className="h-4 rounded bg-muted motion-safe:animate-pulse" style={{ width: column === 0 ? '75%' : '60%' }} /></td>)}</tr>)}
                 {paginatedItems.map((item) => {
                   const stockPct = getStockPercent(item);
                   const isOut = item.quantity <= 0;
@@ -1939,7 +1959,7 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
                     </tr>
                   );
                 })}
-                {paginatedItems.length === 0 && (
+                {!loading && !loadError && paginatedItems.length === 0 && (
                   <tr>
                     <td
                       colSpan={isAdmin ? 7 : 5}
@@ -2011,7 +2031,6 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
               </div>
             )}
           </div>
-        )}
       </div>
 
       {/* ======= TOAST ======= */}
@@ -2100,6 +2119,25 @@ export default function InventoryPage({ user, initialSearch = "" }: { user: any;
                   disabled
                   className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-muted-foreground text-sm"
                 />
+              </div>
+              <div>
+                <label htmlFor="editUnitsPerPack" className="block text-xs font-bold text-muted-foreground mb-1.5">
+                  عدد الأشرطة في الباكيت الواحد
+                </label>
+                <input
+                  id="editUnitsPerPack"
+                  name="unitsPerPack"
+                  type="number"
+                  min="1"
+                  max="2147483647"
+                  step="1"
+                  defaultValue={showEditModal.drug.unitsPerPack ?? ""}
+                  placeholder="مثال: 3"
+                  className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  عدد الأشرطة داخل علبة واحدة، وليس كمية المخزون. حفظ القيمة يؤكدها لهذا الدواء؛ اترك الحقل فارغًا للإبقاء على القيمة السابقة.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
+import { saleLoyaltyStamp } from '@/app/lib/loyalty-rate';
 
 export async function getWebProducts(searchTerm: string = "") {
     const tenantCtx = await getTenantContext('read');
@@ -201,6 +202,7 @@ export async function processWebSale(data: {
 
             const sale = await tx.sale.create({
                 data: {
+                    ...await saleLoyaltyStamp(tx, branchId),
                     total: data.total,
                     discount: data.discount || 0,
                     userId: user.id,

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
+import { validateSyncUser, operatorPermissions, operatorRequired, UNIDENTIFIED_OPERATOR_MESSAGE } from '@/app/lib/sync-auth';
 import { z } from "zod";
 
 
@@ -28,8 +28,9 @@ const REFERENCE_WAIT_MS = 24 * 60 * 60 * 1000;
 const DOCUMENT_TYPES = { SALE: 'IN', SALE_RETURN: 'OUT' } as const;
 const KNOWN_REFERENCE_TYPES = new Set(['SALE', 'SALE_RETURN', 'SHIFT_CASH_DROP']);
 
-type Outcome = 'done' | 'duplicate' | 'foreign' | 'pending' | 'unmatched' | 'mismatch' | 'unreferenced' | 'forbidden';
+type Outcome = 'done' | 'duplicate' | 'foreign' | 'pending' | 'unmatched' | 'mismatch' | 'unreferenced' | 'forbidden' | 'unidentified';
 const CONFLICT_MESSAGES: Partial<Record<Outcome, string>> = {
+    unidentified: UNIDENTIFIED_OPERATOR_MESSAGE,
     forbidden: 'صلاحية البيع غير متاحة لمنفذ الإيداع أو السحب النقدي أو للجلسة؛ تتطلب العملية مراجعة.',
     foreign: 'الحركة تشير إلى حركة أو مستخدم أو مستند من فرع أو مؤسسة أخرى.',
     unmatched: 'حركة الصندوق لفاتورة أو مرتجع لم يصل إلى السحابة خلال يوم (قد يكون رُفض للمراجعة)؛ تتطلب مراجعة.',
@@ -186,6 +187,7 @@ export async function POST(req: NextRequest) {
                         // the shift: the desktop offers the drop to any cashier on shift.
                         // Sale cash needs no check here; its sale was checked on sync.
                         const perms = await operatorPermissions(tx, txn.userId, branchId, syncUser);
+                        if (perms === 'unattributed' && operatorRequired()) return 'unidentified';
                         if (perms === null || (perms !== 'unattributed' && !perms.canSell)) return 'forbidden';
                     }
 

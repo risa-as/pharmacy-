@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { validateSyncUser, operatorPermissions } from '@/app/lib/sync-auth';
+import { loyaltyTier, settleSaleLoyalty } from '@/app/lib/loyalty-settlement';
 import { z } from "zod";
 
 /** How long a movement waits for its sale before review, counted from the
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
                     // patient. A sale not in the cloud yet waits (sales may sync later),
                     // and becomes a review item after a day.
                     if (!txData.saleId) return 'unlinked';
-                    const sale = await prismaTx.sale.findUnique({ where: { id: txData.saleId }, select: { branchId: true, patientId: true, discount: true } });
+                    const sale = await prismaTx.sale.findUnique({ where: { id: txData.saleId }, select: { branchId: true, patientId: true, discount: true, loyaltyRedemptionValue: true } });
                     const waitKey = 'loyalty:' + txData.id;
                     // Waits (first sight on the server clock), then goes to review after a day.
                     const wait = async (late: 'unmatched' | 'insufficient') => {
@@ -170,28 +171,43 @@ export async function POST(req: NextRequest) {
 
                     // Limits recomputed on the server; the device's point count is a claim.
                     //  - EARN: all sale-linked points ever earned by the patient stay within
-                    //    the organisation's rate times what the patient actually paid (non-
-                    //    credit sales plus debt payments). Per patient, not per sale: the
-                    //    desktop attaches debt-payment points to the patient's last sale.
-                    //  - REDEEM: within the current balance (else wait: an earlier earn may
-                    //    still be syncing), and worth no more than the sale's discount.
+                    //    what the patient provably paid, each payment valued at the rate
+                    //    stamped when the server recorded it (the current rate only for rows
+                    //    recorded before stamping). Paid = completed non-credit sale payments
+                    //    (their amount) plus debt payments. A sale with no payment record, or
+                    //    a pending/failed one, counts as unpaid. Per patient, not per sale:
+                    //    the desktop attaches debt-payment points to the patient's last sale.
+                    //    Gross of returns: returns take points back as their own movements.
+                    //  - REDEEM: all redemptions on the sale together are worth no more than
+                    //    its discount, and within the current balance (else wait: an earlier
+                    //    earn may still be syncing; a balance made negative by a return
+                    //    holds redemptions until later earnings restore it).
+                    // Web sales store REDEEM as negative points, desktop ones as positive: ABS.
                     if (txData.type === 'EARN') {
-                        const rate = branch.organization?.loyaltyPointsPerDinar ?? 0;
-                        const [{ paid }] = await prismaTx.$queryRaw`
+                        const current = branch.organization?.loyaltyEnabled ? branch.organization.loyaltyPointsPerDinar : 0;
+                        const [{ allowed }] = await prismaTx.$queryRaw`
                             SELECT (
-                                COALESCE((SELECT SUM(s.total) FROM "Sale" s LEFT JOIN "Payment" p ON p."saleId" = s.id
-                                          WHERE s."patientId" = ${txData.patientId} AND (p.method IS NULL OR p.method::text <> 'CREDIT')), 0)
-                              + COALESCE((SELECT SUM(dp.amount) FROM "DebtPayment" dp JOIN "Sale" s ON s.id = dp."saleId"
+                                COALESCE((SELECT SUM(p.amount * COALESCE(s."loyaltyRate", ${current}))
+                                          FROM "Sale" s JOIN "Payment" p ON p."saleId" = s.id
+                                          WHERE s."patientId" = ${txData.patientId} AND p.method::text <> 'CREDIT'
+                                            AND p.status::text = 'COMPLETED'), 0)
+                              + COALESCE((SELECT SUM(dp.amount * COALESCE(dp."loyaltyRate", ${current}))
+                                          FROM "DebtPayment" dp JOIN "Sale" s ON s.id = dp."saleId"
                                           WHERE s."patientId" = ${txData.patientId}), 0)
-                            )::float8 AS paid`;
-                        const earned = await prismaTx.loyaltyTransaction.aggregate({
-                            where: { accountId: account!.id, type: 'EARN', saleId: { not: null } }, _sum: { points: true },
-                        });
+                            )::float8 AS allowed`;
+                        const [{ earned }] = await prismaTx.$queryRaw`
+                            SELECT COALESCE(SUM(ABS(points)), 0)::int AS earned FROM "LoyaltyTransaction"
+                            WHERE "accountId" = ${account!.id} AND type = 'EARN' AND "saleId" IS NOT NULL`;
                         // +1 absorbs floating-point rounding of the device's floor().
-                        if ((earned._sum.points ?? 0) + txData.points > Math.floor(Number(paid) * rate) + 1) return 'excess';
+                        if (Number(earned) + txData.points > Math.floor(Number(allowed)) + 1) return 'excess';
                     } else {
-                        const value = branch.organization?.loyaltyRedemptionValue ?? 0;
-                        if (Math.floor(txData.points * value) > (sale.discount ?? 0) + 0.01) return 'excess';
+                        // A point's value as stamped on the sale; current value only for older sales.
+                        const value = sale.loyaltyRedemptionValue ?? branch.organization?.loyaltyRedemptionValue ?? 0;
+                        const [{ redeemed }] = await prismaTx.$queryRaw`
+                            SELECT COALESCE(SUM(ABS(points)), 0)::int AS redeemed FROM "LoyaltyTransaction"
+                            WHERE "saleId" = ${txData.saleId} AND type = 'REDEEM'`;
+                        const onSale = Number(redeemed) + txData.points;
+                        if (Math.floor(onSale * value) > (sale.discount ?? 0) + 0.01) return 'excess';
                         if (txData.points > account!.totalPoints) return wait('insufficient');
                     }
                     await prismaTx.syncMovementWait.deleteMany({ where: { transactionId: waitKey } });
@@ -232,10 +248,7 @@ export async function POST(req: NextRequest) {
                         where: { id: account!.id }
                     });
                     if (updatedAccount) {
-                        let newTier = "BRONZE";
-                        if (updatedAccount.lifetimePoints >= 20000) newTier = "GOLD";
-                        else if (updatedAccount.lifetimePoints >= 5000) newTier = "SILVER";
-
+                        const newTier = loyaltyTier(updatedAccount.lifetimePoints);
                         if (newTier !== updatedAccount.tier) {
                             await prismaTx.loyaltyAccount.update({
                                 where: { id: account!.id },
@@ -243,6 +256,10 @@ export async function POST(req: NextRequest) {
                             });
                         }
                     }
+
+                    // 5. The sale may already have returns (they can sync first): settle
+                    // them now that these points exist. Idempotent.
+                    await settleSaleLoyalty(prismaTx, txData.saleId);
 
                     updatedAccountIds.add(account!.id);
                     return 'done';

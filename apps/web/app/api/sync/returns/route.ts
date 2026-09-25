@@ -9,6 +9,7 @@ import { validateSyncUser } from '@/app/lib/sync-auth';
 import { logAudit, resolveUserName } from '@/app/lib/audit';
 import { z } from "zod";
 import { getUserPermissions } from '@/app/lib/permissions';
+import { settleSaleLoyalty } from '@/app/lib/loyalty-settlement';
 
 
 const SyncReturnSchema = z.object({
@@ -132,6 +133,9 @@ export async function POST(req: NextRequest) {
                         });
                     }
 
+                    // Loyalty follows the refund: earned points taken back, redeemed points
+                    // given back (idempotent, see settleSaleLoyalty).
+                    await settleSaleLoyalty(tx, ret.saleId);
                     return { status: 'processed' as const };
                 }, {
                     maxWait: 5000,
@@ -167,7 +171,17 @@ export async function POST(req: NextRequest) {
         }
 
         const records = await prisma.saleReturn.findMany({ where: { id: { in: processedIds }, branchId }, include: { items: true } });
-        return NextResponse.json({ success: conflicts.length === 0, syncedIds: processedIds, conflicts, records });
+        // Authoritative balances of every patient whose sale was returned here,
+        // including a resend after a lost response, so the desktop stops offering
+        // points a return took back (same shape as sync/loyalty).
+        const returnedFor = processedIds.length ? await prisma.sale.findMany({
+            where: { returns: { some: { id: { in: processedIds } } }, patientId: { not: null } }, select: { patientId: true },
+        }) : [];
+        const accountBalances = returnedFor.length ? await prisma.loyaltyAccount.findMany({
+            where: { patientId: { in: returnedFor.map(s => s.patientId!) } },
+            select: { patientId: true, totalPoints: true, lifetimePoints: true, tier: true },
+        }) : [];
+        return NextResponse.json({ success: conflicts.length === 0, syncedIds: processedIds, conflicts, records, accountBalances });
 
     } catch (error) {
         console.error("Sync Returns Error:", error);

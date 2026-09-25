@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { z } from 'zod';
 import { getTenantContext } from '@/app/lib/tenant-utils';
+import { saleLoyaltyStamp } from '@/app/lib/loyalty-rate';
 
 class SaleConflictError extends Error {}
 const SaleInput = z.object({
@@ -40,15 +41,20 @@ async function searchSalesForReturn(mode: 'invoice' | 'drug', rawQuery: string, 
         if (/^\d+$/.test(normalized)) {
             const n = Number(normalized);
             if (n <= MAX_INT32) or.push({ invoiceNumber: n });
+            // The number an older desktop printed before the server gave the sale a
+            // different one (Sale.printedReference). An alternative reference only:
+            // a device supplied it, so it may repeat; every match is listed.
+            or.push({ printedReference: normalized });
         }
         // Id prefix only for sales without a number: only those show their id to
         // users (formatInvoiceNumber), and a numbered sale's uuid can start with
         // another invoice's digits (e.g. #13743 has id "138880f1-…").
         if (normalized.length >= 4) or.push({ invoiceNumber: null, id: { startsWith: normalized.toLowerCase() } });
-        // A desktop receipt printed before sync carries "م-" + the id's first 8
-        // characters; the prefix marks it as an id, so it matches numbered sales too.
-        const localRef = /^م-([0-9a-f]{8})$/i.exec(normalized);
-        if (localRef) or.push({ id: { startsWith: localRef[1].toLowerCase() } });
+        // A desktop receipt printed before sync carries "م-" + the id's first 12
+        // hex characters; the prefix marks it as an id, so it matches numbered
+        // sales too. Every match is listed.
+        const localRef = /^م-([0-9a-f]{8})-?([0-9a-f]{4})?$/i.exec(normalized);
+        if (localRef) or.push({ id: { startsWith: (localRef[2] ? `${localRef[1]}-${localRef[2]}` : localRef[1]).toLowerCase() } });
         if (or.length === 0) return NextResponse.json([]);
 
         const sales = await prisma.sale.findMany({
@@ -293,6 +299,7 @@ export async function POST(request: Request) {
             // 5. Create Sale (linked to the safe only for CASH)
             const newSale = await tx.sale.create({
                 data: {
+                    ...await saleLoyaltyStamp(tx, user.branchId!),
                     branchId: user.branchId!,
                     userId: user.id,
                     total: calculatedTotal,

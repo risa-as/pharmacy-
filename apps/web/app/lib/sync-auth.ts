@@ -104,8 +104,23 @@ export async function operatorPermissions(
         if (!session) return own;
         return Object.fromEntries(Object.keys(own).map(k => [k, own[k as keyof UserPermissions] && session[k as keyof UserPermissions]])) as unknown as UserPermissions;
     }
-    return session ?? 'unattributed';
+    if (session) return session;
+    // Counted in the server logs so the volume is known before requiring an
+    // operator (REQUIRE_OPERATION_OPERATOR); no ids or amounts are logged.
+    console.warn(`[sync] operation without an identified employee (device auth), branch=${branchId}`);
+    return 'unattributed';
 }
+
+/**
+ * When REQUIRE_OPERATION_OPERATOR=true, a financial operation synced by a device
+ * login with no identified employee is not accepted automatically: it becomes a
+ * review conflict and is kept on the device, never deleted. Off by default until
+ * the logged volume shows what enabling it would send to review.
+ */
+export function operatorRequired(): boolean {
+    return process.env.REQUIRE_OPERATION_OPERATOR === 'true';
+}
+export const UNIDENTIFIED_OPERATOR_MESSAGE = 'العملية بلا موظف معروف (دخول بترخيص الجهاز فقط)؛ محفوظة للمراجعة ولم تُعتمد.';
 
 function getSyncSecret(): string {
     const secret = process.env.SYNC_TOKEN_SECRET;

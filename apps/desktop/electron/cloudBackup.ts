@@ -5,7 +5,6 @@ import formData from 'form-data';
 import fetch from 'node-fetch'; // Electron uses Node's fetch or compatible
 
 declare const __CLOUD_API_URL__: string;
-declare const __BACKUP_SECRET_KEY__: string;
 
 // Store the interval ID to clear it if needed
 let backupInterval: NodeJS.Timeout | null = null;
@@ -34,35 +33,20 @@ export async function uploadBackup(filePath: string, branchId: string = "default
             || "http://127.0.0.1:3000/api";
         const targetUrl = `${cloudBase}/backup/upload`;
 
-        const legacySecret = (typeof __BACKUP_SECRET_KEY__ !== "undefined" && __BACKUP_SECRET_KEY__)
-            || process.env.BACKUP_SECRET_KEY || "";
+        // Device license only: the server binds the backup to the license's branch.
+        // No shared secret is built into the app; anything shipped in an installer
+        // can be extracted.
         const licenseKey = store.get('licenseKey') as string | undefined;
+        if (!licenseKey) return { ok: false, error: "فعّل ترخيص الجهاز لرفع النسخة الاحتياطية." };
 
-        // Each attempt needs a fresh form — the file read-stream is single-use.
-        const attempt = (authHeaders: Record<string, string>) => {
-            const form = new formData();
-            form.append('file', fs.createReadStream(filePath));
-            form.append('branchId', branchId);
-            return fetch(targetUrl, {
-                method: 'POST',
-                body: form,
-                headers: { ...form.getHeaders(), ...authHeaders },
-            });
-        };
-
-        // Prefer per-device license auth (server validates the key against the
-        // branch). Fall back to the legacy shared secret only on a 401 so a
-        // mis-bound license can't permanently block backups.
-        let response;
-        if (licenseKey) {
-            response = await attempt({ "x-device-license-key": licenseKey, "x-branch-id": branchId });
-            if (response.status === 401) {
-                console.warn("[Backup] License auth rejected (401) — retrying with legacy secret.");
-                response = await attempt({ "x-backup-secret": legacySecret });
-            }
-        } else {
-            response = await attempt({ "x-backup-secret": legacySecret });
-        }
+        const form = new formData();
+        form.append('file', fs.createReadStream(filePath));
+        form.append('branchId', branchId);
+        const response = await fetch(targetUrl, {
+            method: 'POST',
+            body: form,
+            headers: { ...form.getHeaders(), "x-device-license-key": licenseKey, "x-branch-id": branchId },
+        });
 
         if (response.ok) {
             const data = await response.json();
