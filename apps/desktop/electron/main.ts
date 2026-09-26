@@ -50,40 +50,9 @@ import { saveOperatorProof } from "./operator-proofs";
 import { saleIdPrefix } from "./sale-ref";
 import { withStockGate } from "./stock-gate";
 import { getApiCandidates, setApiBaseUrl } from "./api-config";
-import crypto from "crypto";
 
-// These globals are baked in at build time by vite.config.ts define.
-declare const __ZAINCASH_MERCHANT_ID__: string;
-declare const __ZAINCASH_SECRET__: string;
-declare const __ZAINCASH_BASE_URL__: string;
+// Public verification material only; payment-provider secrets belong on the server.
 declare const __OFFLINE_TOKEN_PUBLIC_KEY__: string;
-
-// Zain Cash Configuration
-const ZAINCASH_MERCHANT_ID =
-  (typeof __ZAINCASH_MERCHANT_ID__ !== "undefined" && __ZAINCASH_MERCHANT_ID__) ||
-  process.env.ZAINCASH_MERCHANT_ID || "5ffacf6612b5777c6d44d6d6";
-const ZAINCASH_SECRET =
-  (typeof __ZAINCASH_SECRET__ !== "undefined" && __ZAINCASH_SECRET__) ||
-  process.env.ZAINCASH_SECRET ||
-  "$2y$10$hBbAZo2GfSSvyqAyV2SaqOfYnjJLUGwdahiZYuy2CI3af8v1YIDC6";
-const ZAINCASH_BASE_URL =
-  (typeof __ZAINCASH_BASE_URL__ !== "undefined" && __ZAINCASH_BASE_URL__) ||
-  process.env.ZAINCASH_BASE_URL || "https://test.zaincash.iq";
-
-function generateZainCashToken(payload: object): string {
-  const header = { alg: "HS256", typ: "JWT" };
-  const base64Header = Buffer.from(JSON.stringify(header)).toString(
-    "base64url",
-  );
-  const base64Payload = Buffer.from(JSON.stringify(payload)).toString(
-    "base64url",
-  );
-  const signature = crypto
-    .createHmac("sha256", ZAINCASH_SECRET)
-    .update(`${base64Header}.${base64Payload}`)
-    .digest("base64url");
-  return `${base64Header}.${base64Payload}.${signature}`;
-}
 
 const distPath = path.join(__dirname, "../dist");
 process.env.DIST = distPath;
@@ -3262,86 +3231,15 @@ ipcMain.handle("seed-products", async () => {
   return "Already seeded";
 });
 
-// ===== IPC Handlers Zain Cash =====
-
-ipcMain.handle(
-  "initiate-zain-cash-payment",
-  async (_event, { amount, saleId }) => {
-    try {
-      const transactionData = {
-        amount: amount,
-        serviceType: "pharmacy_payment",
-        msisdn: ZAINCASH_MERCHANT_ID,
-        orderId: saleId,
-        redirectUrl: `${ZAINCASH_BASE_URL}/transaction/pay?id=`, // Not used for redirection in Desktop, but required payload
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      };
-
-      const token = generateZainCashToken(transactionData);
-
-      const response = await fetch(`${ZAINCASH_BASE_URL}/transaction/init`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          merchantId: ZAINCASH_MERCHANT_ID,
-          lang: "ar",
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.err) {
-        return {
-          success: false,
-          error:
-            result.err.msg || "فشل في إنشاء معاملة Zain Cash",
-        };
-      }
-
-      const redirectUrl = `${ZAINCASH_BASE_URL}/transaction/pay?id=${result.id}`;
-      return { success: true, transactionId: result.id, redirectUrl };
-    } catch (error: any) {
-      console.error("Zain Cash Init Error:", error);
-      return { success: false, error: error.message };
-    }
-  },
-);
-
-ipcMain.handle("check-zain-cash-status", async (_event, { transactionId }) => {
-  try {
-    const payload = {
-      id: transactionId,
-      msisdn: ZAINCASH_MERCHANT_ID,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    };
-
-    const token = generateZainCashToken(payload);
-
-    const response = await fetch(`${ZAINCASH_BASE_URL}/transaction/get`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        merchantId: ZAINCASH_MERCHANT_ID,
-      }),
-    });
-
-    const result = await response.json();
-
-    if (result.err) {
-      return { success: false, error: result.err.msg };
-    }
-
-    // result.status: "success", "pending", "failed"
-    return { success: true, status: result.status, amount: result.amount };
-  } catch (error: any) {
-    console.error("Zain Cash Check Error:", error);
-    return { success: false, error: error.message };
-  }
-});
+// Legacy payment IPC remains fail-closed for old renderers. No provider token
+// may be signed or payment initiated using secrets distributed with the app.
+for (const channel of ['initiate-zain-cash-payment', 'check-zain-cash-status']) {
+  ipcMain.handle(channel, async () => ({
+    success: false,
+    code: 'SERVER_PAYMENT_REQUIRED',
+    error: 'الدفع الإلكتروني يتطلب خدمة دفع مفعّلة على الخادم. لم تُنشأ أو تُؤكد أي عملية دفع.',
+  }));
+}
 
 ipcMain.handle("open-external-url", async (_event, url) => {
   await shell.openExternal(url);

@@ -311,6 +311,9 @@ model Sale {
   documentNumber String @unique @default(dbgenerated("next_document_reference('INV'::text)"))
   id               String        @id @default(uuid())
   invoiceNumber    Int?
+  /// Derived by the database from branchId, including writes by older servers.
+  /// A client-supplied scope cannot bypass invoice-number uniqueness.
+  invoiceOrganizationId String @default("")
   /// Number an older desktop printed on the receipt when the server did not keep it
   /// (not reserved for that device). A searchable alternative reference, never official.
   printedReference String?
@@ -342,6 +345,7 @@ model Sale {
   @@index([createdAt])
   @@index([branchId, createdAt])
   @@index([printedReference])
+  @@unique([invoiceOrganizationId, invoiceNumber])
 }
 
 model InvoiceCounter {

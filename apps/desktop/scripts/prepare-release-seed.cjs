@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process');
 
 module.exports = async function prepareReleaseSeed() {
     const root = path.resolve(__dirname, '..');
+    require('./check-client-secrets.cjs').checkClientSecrets(root);
     const directory = path.join(root, 'release-seed');
     mkdirSync(directory, { recursive: true });
     // Generate into a new file each time. Only the validated empty DB is published.
