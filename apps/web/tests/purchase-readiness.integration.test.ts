@@ -4,6 +4,8 @@ import { PrismaClient } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { receivePurchaseStock } from '../app/lib/purchase-receipt';
+import { mergeReceiptInventory } from '../app/lib/merge-receipt-inventory';
+import { requestWarehouseReturn } from '../app/lib/warehouse-return-settlement';
 
 const state = vi.hoisted(() => ({ tenant: null as any, warehouse: null as any, db: null as any }));
 vi.mock('@/app/lib/prisma', () => ({ get prisma() { return state.db; } }));
@@ -58,6 +60,57 @@ async function quotedOrder() {
 }
 
 describe('Receipt on real PostgreSQL', () => {
+    it.each(['name','pack'])('rejects a conflicting %s before receiving stock',async(kind)=>{
+        const own=await db.globalDrug.create({data:{barcode:fixture.drug.barcode,tradeName:kind==='name'?'Different':'Test drug',scientificName:'Test',organizationId:fixture.org.id,unitsPerPack:kind==='pack'?5:1}});
+        await db.inventory.create({data:{branchId:fixture.branch.id,drugId:own.id,price:999,cost:80}});
+        const p=await purchase();await expect(receivePurchaseStock(db,p.id,{branchId:fixture.branch.id},receipt(p))).rejects.toThrow('لا تتطابق');
+        expect(await db.batch.count({where:{inventory:{branchId:fixture.branch.id}}})).toBe(0);
+    });
+    it('does not reuse another institution inventory with the same barcode',async()=>{
+        const org=await db.organization.create({data:{name:'Foreign'}});const branch=await db.branch.create({data:{name:'Foreign',organizationId:org.id}});
+        const own=await db.globalDrug.create({data:{barcode:fixture.drug.barcode,tradeName:'Test drug',scientificName:'Test',organizationId:org.id}});
+        const inv=await db.inventory.create({data:{branchId:branch.id,drugId:own.id,price:999,cost:80}});
+        const p=await purchase();await receivePurchaseStock(db,p.id,{branchId:fixture.branch.id},receipt(p));
+        expect(await db.batch.count({where:{inventoryId:inv.id}})).toBe(0);
+        expect(await db.inventory.count({where:{branchId:fixture.branch.id,drugId:fixture.drug.id}})).toBe(1);
+    });
+    it('receives global order into existing private inventory without changing its selling price', async () => {
+        const own = await db.globalDrug.create({data:{barcode:fixture.drug.barcode,tradeName:'Test drug',scientificName:'Test',organizationId:fixture.org.id,unitsPerPack:1}});
+        const inv = await db.inventory.create({data:{branchId:fixture.branch.id,drugId:own.id,price:999,cost:80}});
+        const p=await purchase();
+        const order=await db.warehouseOrder.create({data:{warehouseId:fixture.warehouse.id,branchId:fixture.branch.id,status:'DELIVERED',totalAmount:1000,items:{create:{drugId:fixture.drug.id,quantity:10,unitPrice:100,quotedPrice:100,quotedQuantity:10,status:'AVAILABLE',unitsPerPack:1}}}});
+        await db.purchase.update({where:{id:p.id},data:{warehouseOrderId:order.id}});
+        await receivePurchaseStock(db,p.id,{branchId:fixture.branch.id},receipt(p));
+        expect(await db.inventory.count({where:{branchId:fixture.branch.id}})).toBe(1);
+        expect(await db.inventory.findUnique({where:{id:inv.id}})).toMatchObject({price:999});
+        expect(await db.purchaseItem.findUnique({where:{id:p.items[0].id}})).toMatchObject({drugId:fixture.drug.id,receivedDrugId:own.id});
+        expect((await db.batch.findFirst({where:{purchaseItemId:p.items[0].id}}))?.inventoryId).toBe(inv.id);
+        await db.$transaction(tx=>requestWarehouseReturn(tx,order.id,{branchId:fixture.branch.id},{items:[{barcode:fixture.drug.barcode,quantity:1}]},'test'));
+        expect((await db.batch.findFirst({where:{purchaseItemId:p.items[0].id}}))?.quantity).toBe(9);
+    });
+    it('refuses existing ambiguous stock rather than silently picking a price or medicine',async()=>{
+        const own=await db.globalDrug.create({data:{barcode:fixture.drug.barcode,tradeName:'Test drug',scientificName:'Test',organizationId:fixture.org.id}});
+        for(const drugId of [own.id,fixture.drug.id]) await db.inventory.create({data:{branchId:fixture.branch.id,drugId,price:999,cost:80}});
+        const p=await purchase();await expect(receivePurchaseStock(db,p.id,{branchId:fixture.branch.id},receipt(p))).rejects.toThrow('مخزونان');
+        expect(await db.batch.count({where:{inventory:{branchId:fixture.branch.id}}})).toBe(0);
+    });
+    it('merges reviewed stock retaining batch IDs, quantities, source receipt and private price',async()=>{
+        const own=await db.globalDrug.create({data:{barcode:fixture.drug.barcode,tradeName:'Test drug',scientificName:'Test',organizationId:fixture.org.id}});
+        const target=await db.inventory.create({data:{branchId:fixture.branch.id,drugId:own.id,price:999,cost:80,minStock:30}});
+        const source=await db.inventory.create({data:{branchId:fixture.branch.id,drugId:fixture.drug.id,price:105,cost:100}});
+        const p=await purchase();const b=await db.batch.create({data:{inventoryId:source.id,quantity:10,initialQuantity:10,costPrice:100,expiryDate:expiry(),batchNumber:'KEEP',purchaseItemId:p.items[0].id}});
+        const admin=await db.user.create({data:{email:randomUUID()+'@test.invalid',password:'unused',role:'SUPER_ADMIN'}});
+        const args={branchId:fixture.branch.id,sourceId:source.id,targetId:target.id,actorId:admin.id};
+        await expect(mergeReceiptInventory(db,{...args,actorId:fixture.owner.id})).rejects.toThrow('مدير المنصة');
+        await mergeReceiptInventory(db,{...args,dryRun:true});expect(await db.inventory.findUnique({where:{id:source.id}})).not.toBeNull();
+        await expect(mergeReceiptInventory(db,{...args,expectedPlanHash:'changed'})).rejects.toThrow('تغيرت البيانات');
+        expect((await db.batch.findUnique({where:{id:b.id}}))?.inventoryId).toBe(source.id);
+        await mergeReceiptInventory(db,args);
+        expect(await db.batch.findUnique({where:{id:b.id}})).toMatchObject({inventoryId:target.id,quantity:10,costPrice:100,purchaseItemId:p.items[0].id});
+        expect(await db.inventory.findUnique({where:{id:target.id}})).toMatchObject({price:999,minStock:30});
+        expect(await db.globalDrug.findUnique({where:{id:fixture.drug.id}})).not.toBeNull();
+        expect(await db.purchaseItem.findUnique({where:{id:p.items[0].id}})).toMatchObject({drugId:fixture.drug.id,receivedDrugId:own.id});
+    });
     it('receives existing inventory plus free bonus, preserves selling price and records debt once', async () => {
         const inv = await db.inventory.create({ data: { drugId: fixture.drug.id, branchId: fixture.branch.id, price: 150, cost: 90 } });
         const p = await purchase(true);

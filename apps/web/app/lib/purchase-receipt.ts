@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { decideNewInventoryPricing } from "./inventory-pricing";
+import { receiptInventoryDrugs } from './receipt-drug-identity';
 
 export class PurchaseReceiptError extends Error {
   constructor(
@@ -174,10 +175,13 @@ export async function receivePurchaseStock(
             0,
           ),
       );
+      let receiptIdentities: Map<string,string>;
+      try { receiptIdentities = await receiptInventoryDrugs(tx, purchase.branchId, lines.map(l=>l.item.drugId)); }
+      catch (error) { throw new PurchaseReceiptError(error instanceof Error ? error.message : 'تعذر مطابقة صنف الاستلام.', 409); }
       const existing = await tx.inventory.findMany({
         where: {
           branchId: purchase.branchId,
-          drugId: { in: lines.map((l) => l.item.drugId) },
+          drugId: { in: Array.from(receiptIdentities.values()) },
         },
         select: { drugId: true },
       });
@@ -186,6 +190,8 @@ export async function receivePurchaseStock(
       // Paid lines first: a free bonus must not establish the selling price at zero.
       lines.sort((a, b) => b.cost - a.cost);
       for (const { item, quantity, expiry, batchNumber, cost } of lines) {
+        const inventoryDrugId = receiptIdentities.get(item.drugId)!;
+        await tx.purchaseItem.update({where:{id:item.id},data:{receivedDrugId:inventoryDrugId}});
         const pricing = decideNewInventoryPricing({
           cost,
           minProfitMargin: purchase.branch.organization.minProfitMargin,
@@ -193,12 +199,12 @@ export async function receivePurchaseStock(
         const inventory = await tx.inventory.upsert({
           where: {
             drugId_branchId: {
-              drugId: item.drugId,
+              drugId: inventoryDrugId,
               branchId: purchase.branchId,
             },
           },
           create: {
-            drugId: item.drugId,
+            drugId: inventoryDrugId,
             branchId: purchase.branchId,
             cost: pricing.cost,
             price: pricing.price,
@@ -217,8 +223,8 @@ export async function receivePurchaseStock(
             supplierId: purchase.supplierId,
           },
         });
-        if (!known.has(item.drugId)) createdInventoryCount++;
-        known.add(item.drugId);
+        if (!known.has(inventoryDrugId)) createdInventoryCount++;
+        known.add(inventoryDrugId);
       }
       const paidAmount = isPaid ? total : purchase.paidAmount;
       const amountToPay = Math.max(paidAmount - purchase.paidAmount, 0);

@@ -513,6 +513,8 @@ model PurchaseItem {
   id          String     @id @default(uuid())
   purchaseId  String
   drugId      String
+  /// Actual inventory identity chosen at receipt; the ordered catalogue identity stays unchanged.
+  receivedDrugId String?
   quantity    Int
   cost        Float
   expiryDate  DateTime?

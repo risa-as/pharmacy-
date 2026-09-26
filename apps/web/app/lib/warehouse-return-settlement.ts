@@ -50,7 +50,10 @@ export async function requestWarehouseReturn(tx: Prisma.TransactionClient, order
         let remaining = raw.quantity * line.unitsPerPack!;
         const receiptItems = purchase.items.filter(i => i.drugId === line.drugId && i.cost > 0);
         const receiptIds = new Set(receiptItems.map(item => item.id));
-        const batches = receiptBatches.filter(batch => batch.purchaseItemId && receiptIds.has(batch.purchaseItemId) && batch.inventory.drugId === line.drugId);
+        const batches = receiptBatches.filter(batch => {
+            const receipt = receiptItems.find(item => item.id === batch.purchaseItemId);
+            return receipt && receiptIds.has(receipt.id) && batch.inventory.drugId === (receipt.receivedDrugId || receipt.drugId);
+        });
         if (!batches.length) throw new WarehouseOperationError(`دفعات استلام «${line.drug.tradeName}» غير مربوطة بالفاتورة الأصلية. راجع ربط دفعات الاستلام من تفاصيل الطلب؛ وجود رصيد عام لا يكفي لإثبات مصدره.`);
         const available = batches.reduce((sum, batch) => sum + Math.max(0, batch.quantity), 0);
         if (available < remaining) throw new WarehouseOperationError(`رصيد دفعات «${line.drug.tradeName}» المرتبطة لا يكفي: المطلوب ${remaining} من وحدات المخزون، والمتاح ${available} (كل وحدة طلب = ${line.unitsPerPack} من وحدات المخزون).`);

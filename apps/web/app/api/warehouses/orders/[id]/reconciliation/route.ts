@@ -34,7 +34,10 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     const receiptLinked = !!linked && order.items.filter(item => effectiveLine(item).quantity > 0).every(item => {
         if (!item.unitsPerPack) return false;
         const receiptIds = new Set(linked.items.filter(i => i.drugId === item.drugId && i.cost > 0).map(i => i.id));
-        return batches.filter(b => b.purchaseItemId && receiptIds.has(b.purchaseItemId) && b.inventory.drugId === item.drugId).reduce((sum, b) => sum + b.initialQuantity, 0) >= effectiveLine(item).quantity * item.unitsPerPack;
+        return batches.filter(b => {
+            const receipt = linked.items.find(i => i.id === b.purchaseItemId);
+            return receipt && receiptIds.has(receipt.id) && b.inventory.drugId === (receipt.receivedDrugId || receipt.drugId);
+        }).reduce((sum, b) => sum + b.initialQuantity, 0) >= effectiveLine(item).quantity * item.unitsPerPack;
     });
     return NextResponse.json({ receiptLinked, purchases, batches, supplierPayments, proposals: events.filter(e => e.type === 'PAYMENT_MATCH_PROPOSED' && !completed.has(e.id)).map(e => ({ id: e.id, ...e.payload as object })) });
 }
@@ -123,7 +126,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 if (linked.some(batch => !line.batchIds.includes(batch.id))) throw new WarehouseOperationError('لا يمكن إهمال دفعات مرتبطة سابقًا ببند الاستلام.');
                 let initialQuantity = 0;
                 for (const batchId of line.batchIds) {
-                    const batch = await tx.batch.findFirst({ where: { id: batchId, inventory: { branchId: order.branchId, drugId: item.drugId }, supplierId: purchase.supplierId } });
+                    const batch = await tx.batch.findFirst({ where: { id: batchId, inventory: { branchId: order.branchId, drugId: receipt.receivedDrugId || item.drugId }, supplierId: purchase.supplierId } });
                     if (!batch || (batch.purchaseItemId && batch.purchaseItemId !== receipt.id) || Math.abs(batch.costPrice - receipt.cost) > 0.001) throw new WarehouseOperationError('الدفعة لا تطابق الفرع والمورد والدواء والتكلفة.');
                     initialQuantity += batch.initialQuantity;
                     const changed = await tx.batch.updateMany({ where: { id: batchId, OR: [{ purchaseItemId: null }, { purchaseItemId: receipt.id }] }, data: { purchaseItemId: receipt.id } });
