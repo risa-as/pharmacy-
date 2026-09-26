@@ -32,7 +32,14 @@ export default function DeviceProtection() {
       const local=await refreshLocalState();
       setMessage(r.status==='ACTIVE'?(local.sessionReady?'الجهاز معتمد وجلسة الدخول مرتبطة به. لا يلزم إجراء إضافي.':'الجهاز معتمد. سجّل الخروج ثم الدخول مجددًا لإكمال التفعيل.'):r.status==='REVOKED'?'اعتماد الجهاز ملغى؛ تواصل مع مدير المنصة.':'تم إرسال الطلب. شارك رمز المطابقة مع مدير المنصة لاعتماد هذا الجهاز.');
     } catch(e) {setMessage(e instanceof Error?e.message:'تعذر تسجيل الجهاز.');}
-    finally {setBusy(false);}
+    finally {
+      // Enrollment can discover a different local key before the server rejects
+      // it. Refresh even on failure: never show the previous comparison code
+      // beside an error concerning the newly discovered key.
+      try {await refreshLocalState();}
+      catch {setFingerprint('');setStatus(null);setSessionReady(false);}
+      setBusy(false);
+    }
   }
   async function copy() {
     try {await navigator.clipboard.writeText(code); setCopied(true);}
