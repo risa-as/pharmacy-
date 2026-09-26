@@ -73,6 +73,10 @@ export function registerOperations(
     "operations:request",
     async (_event, input: { path: string; method?: string; body?: any }) => {
       let acquired = false;
+      const started = Date.now();
+      let checkpoint = started;
+      const timings: Record<string, number> = {};
+      const mark = (phase: string) => { const now = Date.now(); timings[phase] = now - checkpoint; checkpoint = now; };
       try {
         const method = input?.method || "GET";
         if (!allowedOperation(input?.path, method))
@@ -81,6 +85,7 @@ export function registerOperations(
         busy = true;
         acquired = true;
         const { who, data: access } = await session();
+        mark("session");
         const url = new URL(`${getApiBaseUrl()}${input.path}`);
         url.searchParams.set("branchId", who.branch);
         const route = input.path.split("?")[0];
@@ -146,6 +151,7 @@ export function registerOperations(
           if (recordPath.startsWith("/purchases/") && !entity.warehouseOrderId)
             throw Error("هذه الشاشة مخصصة لمشتريات المذاخر");
         }
+        mark("documentChecks");
         // Unsynced local sales/stock must reach the cloud before counting or
         // changing stock: once per count sheet, not once per page of batches.
         if (
@@ -155,6 +161,7 @@ export function registerOperations(
             new URLSearchParams(input.path.split("?")[1] || "").get("type") === "sheet")
         )
           await prepare();
+        mark("prepare");
         if (JSON.stringify(who) !== JSON.stringify(identity()))
           throw Error("تغيرت الجلسة؛ أعد المحاولة");
         const response = await fetch(url, {
@@ -177,6 +184,7 @@ export function registerOperations(
           signal: AbortSignal.timeout(45000),
         });
         const result = await operationJson(response);
+        mark("server");
         if (!response.ok)
           throw Error(result.message || result.error || "تعذر تنفيذ العملية");
         if (JSON.stringify(who) !== JSON.stringify(identity()))
@@ -208,6 +216,7 @@ export function registerOperations(
               "حُفظت العملية على الخادم، لكن تعذّر تحديث المخزون المحلي. أعد المزامنة.";
           }
         }
+        mark("stockRefresh");
         return { success: true, data: result, warning };
       } catch (e) {
         return {
@@ -219,6 +228,10 @@ export function registerOperations(
         };
       } finally {
         if (acquired) busy = false;
+        if (acquired && input?.path?.endsWith('/receive')) {
+          // Phase durations only: no document ids, credentials or financial data.
+          console.info('[OperationsTiming]', JSON.stringify({operation:'receive',...timings,totalMs:Date.now()-started}));
+        }
       }
     },
   );

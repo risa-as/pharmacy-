@@ -23,6 +23,7 @@ import {
   syncSales,
   syncSaleReturns,
   syncProducts,
+  syncProductsFresh,
   syncSuppliers,
   syncShifts,
   syncTransactions,
@@ -1641,10 +1642,7 @@ app.whenReady().then(async () => {
     const pulled=await syncProducts();
     if(!pulled.success || (await pending()).inventory) throw new Error("لم تكتمل مزامنة المخزون؛ أعد المحاولة بعد المزامنة.");
   }, async () => {
-    // Drain a pull that may have started before the cloud mutation, then request a fresh one.
-    const first=await syncProducts();
-    if(!first.success) return first;
-    return await syncProducts();
+    return await syncProductsFresh();
   });
   registerStaffHistory(prisma, authorizeOperations);
   ipcMain.handle("get-session-user", async () => {

@@ -1,12 +1,12 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 import {createHash} from 'node:crypto';
-const h=vi.hoisted(()=>({data:{} as Record<string,any>,sign:vi.fn(),fetch:vi.fn()}));
+const h=vi.hoisted(()=>({data:{} as Record<string,any>,sign:vi.fn(),key:vi.fn(),fetch:vi.fn()}));
 vi.mock('electron',()=>({ipcMain:{handle:vi.fn()},net:{fetch:h.fetch}}));
 vi.mock('../store',()=>({default:{get:(k:string)=>h.data[k],set:(k:string,v:any)=>{h.data[k]=v;}}}));
-vi.mock('../tpm-worker',()=>({tpmCommand:h.sign,tpmPublicKey:vi.fn()}));
+vi.mock('../tpm-worker',()=>({tpmCommand:h.sign,tpmPublicKey:h.key}));
 vi.mock('../api-config',()=>({getApiCandidates:()=>['https://app.test/api'],getApiBaseUrl:()=> 'https://app.test/api'}));
 import {deviceFetch,requestDigest} from '../device-signing';
-beforeEach(()=>{h.data={deviceSigning:{fingerprint:'fp'},licenseKey:'license'};h.sign.mockReset().mockResolvedValue('signature');h.fetch.mockReset().mockImplementation(()=>Promise.resolve(new Response('{}')));vi.stubGlobal('fetch',h.fetch);});
+beforeEach(()=>{h.data={deviceSigning:{fingerprint:'fp'},licenseKey:'license'};h.sign.mockReset().mockResolvedValue('signature');h.key.mockReset().mockResolvedValue({fingerprint:'fp'});h.fetch.mockReset().mockImplementation(()=>Promise.resolve(new Response('{}')));vi.stubGlobal('fetch',h.fetch);});
 it('uses the Electron network stack even when Node TLS transport fails',async()=>{
  vi.stubGlobal('fetch',vi.fn(()=>{throw Error('UNABLE_TO_VERIFY_LEAF_SIGNATURE');}));
  await deviceFetch('https://app.test/api/health');
@@ -33,4 +33,38 @@ it('returns device rejection as retryable error without changing the operation q
 it('matches the versioned server protocol',()=>{
  const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
  expect(requestDigest('post','https://app.test/api/sync/sales?q=1','{}','123','nonce','t','l')).toBe(createHash('sha256').update(JSON.stringify(['faramace-device-request:v1','POST','/api/sync/sales?q=1','123','nonce',hash('{}'),hash('t'),hash('l'),hash(''),''])).digest('base64'));
+});
+
+const invalid = () => new Response(JSON.stringify({code:'DEVICE_SIGNATURE_INVALID',error:'invalid'}),{status:403});
+it('re-signs a rejected session once after checking the existing public key',async()=>{
+ h.fetch.mockResolvedValueOnce(invalid()).mockResolvedValueOnce(new Response('{}'));
+ await deviceFetch('https://app.test/api/desktop/operations/session',{method:'POST',headers:{'x-sync-token':'token'}});
+ expect(h.fetch).toHaveBeenCalledTimes(2);expect(h.key).toHaveBeenCalledWith(false);
+ const a=h.fetch.mock.calls[0][1].headers,b=h.fetch.mock.calls[1][1].headers;
+ expect(a.get('x-device-nonce')).not.toBe(b.get('x-device-nonce'));
+ expect(h.sign).toHaveBeenCalledTimes(2);expect(h.data.deviceSigningError).toBe('');
+ expect(h.data.deviceSigning).toEqual({fingerprint:'fp'});
+});
+it('stops after a second rejection and preserves enrollment and pending work',async()=>{
+ h.data.pendingSyncActions=[{id:'sale'}];h.fetch.mockImplementation(async()=>invalid());
+ await expect(deviceFetch('https://app.test/api/desktop/operations/session',{method:'POST',headers:{'x-sync-token':'token'}})).rejects.toThrow('invalid');
+ expect(h.fetch).toHaveBeenCalledTimes(2);expect(h.data.pendingSyncActions).toEqual([{id:'sale'}]);expect(h.data.deviceSigning.fingerprint).toBe('fp');
+});
+it('does not retry if the real key differs, and never creates a replacement',async()=>{
+ h.key.mockResolvedValue({fingerprint:'other'});h.fetch.mockResolvedValue(invalid());
+ await expect(deviceFetch('https://app.test/api/desktop/operations/session',{method:'POST',headers:{'x-sync-token':'token'}})).rejects.toThrow('invalid');
+ expect(h.fetch).toHaveBeenCalledOnce();expect(h.key).toHaveBeenCalledWith(false);expect(h.data.deviceSigning.fingerprint).toBe('fp');
+});
+it.each(['DEVICE_KEY_REVOKED','DEVICE_REPLAY','DEVICE_KEY_UNKNOWN'])('does not retry session rejection %s',async(code)=>{
+ h.fetch.mockResolvedValue(new Response(JSON.stringify({code,error:'denied'}),{status:403}));
+ await expect(deviceFetch('https://app.test/api/desktop/operations/session',{method:'POST',headers:{'x-sync-token':'token'}})).rejects.toThrow('denied');
+ expect(h.fetch).toHaveBeenCalledOnce();expect(h.key).not.toHaveBeenCalled();
+});
+it('never retries rejected business writes or a lost session response',async()=>{
+ h.fetch.mockResolvedValue(invalid());
+ await expect(deviceFetch('https://app.test/api/sync/sales',{method:'POST',headers:{'x-sync-token':'token'},body:'{}'})).rejects.toThrow('invalid');
+ expect(h.fetch).toHaveBeenCalledOnce();
+ h.fetch.mockReset().mockRejectedValue(Error('lost response'));
+ await expect(deviceFetch('https://app.test/api/desktop/operations/session',{method:'POST',headers:{'x-sync-token':'token'}})).rejects.toThrow('lost response');
+ expect(h.fetch).toHaveBeenCalledOnce();
 });

@@ -21,25 +21,37 @@ export async function deviceFetch(input: string | URL | Request, init: RequestIn
   if (input instanceof Request || (init.body != null && typeof init.body !== 'string')) throw Error('Unsupported signed request body');
   const license = String(store.get('licenseKey') || '');
   if (!headers.has('x-device-license-key')) headers.set('x-device-license-key',license);
-  const time = String(Date.now()), nonce = randomUUID();
-  const digest = requestDigest(init.method || 'GET',url,(init.body as string)||'',time,nonce,headers.get('x-sync-token')||'',headers.get('x-device-license-key')||'',headers.get('x-idempotency-key')||'',state.keyId||'');
-  let signature: string;
-  try { signature = await tpmCommand('sign',digest); }
-  catch(e) { store.set('deviceSigningError','مفتاح الجهاز غير متاح؛ المزامنة معلقة والعمليات محفوظة.'); throw e; }
-  headers.set('x-device-key-id',state.keyId||'');
-  headers.set('x-device-time',time); headers.set('x-device-nonce',nonce);
-  headers.set('x-device-fingerprint',state.fingerprint); headers.set('x-device-signature',signature);
-  const response = await net.fetch(input instanceof URL ? input.href : input,{...init,headers});
-  if (!response.ok) {
-    const data = await response.clone().json().catch(()=>null);
-    if (data?.code?.startsWith('DEVICE_')) {
-      store.set('deviceSigningError',data.error);
-      // Not a permanent per-sale rejection: leave the entire original queue
-      // intact for retry after device recovery, never mark it synchronized.
-      throw new Error(data.error || 'تعذر إثبات الجهاز؛ العمليات محفوظة.');
-    }
-  } else { store.set('deviceSigningError',''); }
-  return response;
+  // Retry only the read-only session exchange after an explicit pre-auth rejection.
+  // Never retry a business mutation, transport failure, revocation or replay.
+  const sessionCheck = new URL(url).pathname === '/api/desktop/operations/session' && (init.method || 'GET').toUpperCase() === 'POST';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const time = String(Date.now()), nonce = randomUUID();
+    const digest = requestDigest(init.method || 'GET',url,(init.body as string)||'',time,nonce,headers.get('x-sync-token')||'',headers.get('x-device-license-key')||'',headers.get('x-idempotency-key')||'',state.keyId||'');
+    let signature: string;
+    try { signature = await tpmCommand('sign',digest); }
+    catch(e) { store.set('deviceSigningError','مفتاح الجهاز غير متاح؛ المزامنة معلقة والعمليات محفوظة.'); throw e; }
+    headers.set('x-device-key-id',state.keyId||'');
+    headers.set('x-device-time',time); headers.set('x-device-nonce',nonce);
+    headers.set('x-device-fingerprint',state.fingerprint); headers.set('x-device-signature',signature);
+    const response = await net.fetch(input instanceof URL ? input.href : input,{...init,headers:new Headers(headers)});
+    if (!response.ok) {
+      const data = await response.clone().json().catch(()=>null);
+      if (data?.code?.startsWith('DEVICE_')) {
+        console.warn('[DeviceAuth]', JSON.stringify({path:new URL(url).pathname,code:data.code,status:response.status,attempt:attempt+1,elapsedMs:Date.now()-Number(time)}));
+        if (sessionCheck && attempt === 0 && response.status === 403 && data.code === 'DEVICE_SIGNATURE_INVALID' && !init.signal?.aborted) {
+          const key = await tpmPublicKey(false);
+          if (key.fingerprint === state.fingerprint) continue;
+          // A different real key is not a transient failure; preserve enrollment.
+        }
+        store.set('deviceSigningError',data.error);
+        // Not a permanent per-sale rejection: leave the entire original queue
+        // intact for retry after device recovery, never mark it synchronized.
+        throw new Error(data.error || 'تعذر إثبات الجهاز؛ العمليات محفوظة.');
+      }
+    } else { store.set('deviceSigningError',''); }
+    return response;
+  }
+  throw new Error('تعذر إثبات الجهاز؛ العمليات محفوظة.');
 }
 
 export function registerDeviceSigning() {

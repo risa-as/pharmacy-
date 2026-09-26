@@ -16,7 +16,7 @@ import { buildIdempotencyKey, buildBatchIdempotencyKey } from './idempotency';
 import { changedProductSyncData, shouldPreservePendingPackUnits } from './product-sync-diff';
 import { createCoalescedRun } from './sync-coalescer';
 import { fetchProductSyncSnapshotWithCache } from './product-sync-cache';
-import { tryWithStockGate } from './stock-gate';
+import { tryWithStockGate, withStockGate } from './stock-gate';
 import { readPendingStockIds, pendingStockInTx, queuedInventoryIds, PendingStockIds } from './stock-pull';
 import { fetchStockSnapshot as fetchStockSnapshotWith } from './stock-snapshot-fetch';
 import { planDrugStock, SYNTHETIC_BATCH_NUMBER } from './stock-reconcile';
@@ -1263,6 +1263,12 @@ export const syncProducts = createCoalescedRun<SyncProductsResult>(
         onTimeout: () => console.warn('[Sync] Product sync wait timed out after 60 s'),
     },
 );
+
+/** Post-mutation snapshot: wait for any old snapshot, then fetch exactly once.
+ * Do not join a coalesced snapshot that may predate the server write. */
+export async function syncProductsFresh(): Promise<SyncProductsResult> {
+    return withStockGate(() => syncProductsExclusive(), 60_000);
+}
 
 async function syncProductsExclusive(): Promise<SyncProductsResult> {
     const taskName = "products";
