@@ -150,3 +150,25 @@ it('returns settle loyalty through both return paths, once, and the desktop rece
  expect(await refund(request({items:[{drugId:f.drug.id,quantity:1}]}),{params:Promise.resolve({id:sale.id})})).toHaveProperty('status',200);
  expect(await db.loyaltyAccount.findUniqueOrThrow({where:{id:account.id}})).toMatchObject({totalPoints:0,lifetimePoints:0});
 });
+
+it('maps a local-only return drawer within the branch, with one refund on retry', async () => {
+  await db.safe.update({where:{id:f.safe.id},data:{type:'CASH_DRAWER'}});
+  const sale = (await (await sell(saleRequest(2))).json()).sale;
+  await db.sale.update({where:{id:sale.id},data:{safeId:null}});
+  const ret = {id:randomUUID(),saleId:sale.id,safeId:randomUUID(),userId:h.tenant.user.id,refundVersion:2,total:100,createdAt:new Date().toISOString(),items:[{drugId:f.drug.id,quantity:1,price:100}]};
+  const send=()=>syncRefund(new NextRequest('http://test.invalid',{method:'POST',body:JSON.stringify({branchId:f.branch.id,returns:[ret]})}));
+  for(const response of await Promise.all([send(),send()])) expect((await response.json()).syncedIds).toEqual([ret.id]);
+  expect((await db.safe.findUniqueOrThrow({where:{id:f.safe.id}})).balance).toBe(100);
+  expect(await db.transaction.count({where:{referenceType:'SALE_RETURN',referenceId:ret.id}})).toBe(1);
+  expect((await db.batch.findUniqueOrThrow({where:{id:f.batch.id}})).quantity).toBe(4);
+});
+it('never refunds a card sale from the cash drawer', async () => {
+  const sale = (await (await sell(saleRequest(1))).json()).sale;
+  await db.payment.update({where:{saleId:sale.id},data:{method:'CARD'}});
+  const before=(await db.safe.findUniqueOrThrow({where:{id:f.safe.id}})).balance;
+  const ret={id:randomUUID(),saleId:sale.id,safeId:f.safe.id,userId:h.tenant.user.id,refundVersion:2,total:100,createdAt:new Date().toISOString(),items:[{drugId:f.drug.id,quantity:1,price:100}]};
+  const result=await (await syncRefund(new NextRequest('http://test.invalid',{method:'POST',body:JSON.stringify({branchId:f.branch.id,returns:[ret]})}))).json();
+  expect(result.syncedIds).toEqual([ret.id]);
+  expect((await db.safe.findUniqueOrThrow({where:{id:f.safe.id}})).balance).toBe(before);
+  expect(await db.transaction.count({where:{referenceId:ret.id}})).toBe(0);
+});

@@ -48,6 +48,7 @@ import { initBackupScheduler, uploadBackup } from "./cloudBackup";
 import store from "./store";
 import { saveOperatorProof } from "./operator-proofs";
 import { saleIdPrefix } from "./sale-ref";
+import { withStockGate } from "./stock-gate";
 import { getApiCandidates, setApiBaseUrl } from "./api-config";
 import crypto from "crypto";
 
@@ -3058,8 +3059,13 @@ ipcMain.handle(
           });
         }
 
+        const cashShift = (paymentMethod || "CASH") === "CASH" && validUser?.id
+          ? await tx.shift.findFirst({ where: { userId: validUser.id, branchId: saleBranchId, status: "OPEN" } }) : null;
+        if ((paymentMethod || "CASH") === "CASH" && !cashShift?.safeId)
+          throw new Error("افتح وردية بصندوق قبل تسجيل البيع النقدي.");
         const sale = await tx.sale.create({
           data: {
+            safeId: cashShift?.safeId ?? null,
             total,
             invoiceNumber: null,
             discount: discount || 0,
@@ -3081,10 +3087,8 @@ ipcMain.handle(
         });
 
         // If Cash sale, update Safe and create Safe Transaction
-        if (!isCredit && paymentMethod === "CASH" && validUser?.id) {
-          const activeShift = await tx.shift.findFirst({
-            where: { userId: validUser.id, status: "OPEN" },
-          });
+        if (!isCredit && (paymentMethod || "CASH") === "CASH" && validUser?.id) {
+          const activeShift = cashShift;
 
           if (activeShift && activeShift.safeId) {
             await tx.transaction.create({
@@ -3095,6 +3099,7 @@ ipcMain.handle(
                 referenceType: "SALE",
                 // Lets the cloud post this cash only once the sale itself is accepted (N02-R2).
                 referenceId: sale.id,
+                userId: validUser.id,
                 description: `مبيعات نقدية فاتورة #${sale.id.slice(0, 8)}`,
               },
             });
@@ -3506,6 +3511,8 @@ ipcMain.handle(
       const auth = await authorizeOperations("canPayDebt");
       if(!await prisma.patient.findFirst({where:{id:patientId,branchId:auth.who.branch}})) throw Error("العميل خارج فرع الجهاز");
       auth.assertCurrent();
+      if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0)
+        throw new Error("مبلغ التحصيل غير صالح.");
       // Find recent credit sale to attach this payment to (simplification for now,
       // ideally we attach to specific sale or just general ledger if schema supports)
 
@@ -3518,7 +3525,7 @@ ipcMain.handle(
       // Best approach: Find the oldest unpaid sale, or just the most recent sale.
 
       const lastSale = await prisma.sale.findFirst({
-        where: { patientId: patientId },
+        where: { patientId: patientId, payment: { method: "CREDIT" } },
         orderBy: { createdAt: "desc" },
       });
 
@@ -3530,11 +3537,18 @@ ipcMain.handle(
       }
 
       const result = await prisma.$transaction(async (tx: any) => {
+        const collectorId = auth.who.id;
+        auth.assertCurrent();
+        if (!collectorId) throw new Error("يلزم تسجيل دخول الموظف للتحصيل.");
+        const shift = await tx.shift.findFirst({ where: { userId: collectorId, branchId: auth.who.branch, status: "OPEN" } });
+        if (!shift?.safeId) throw new Error("افتح وردية بصندوق قبل التحصيل النقدي.");
+        const outstanding = await tx.patient.findUnique({ where: { id: patientId } });
+        if (!outstanding || amount > outstanding.balance) throw new Error("المبلغ يتجاوز الدين المتبقي.");
         // 1. Create Payment
         const payment = await tx.debtPayment.create({
           data: {
             saleId: lastSale.id, // Linking to last sale for reference
-            userId: (store.get("loggedInUserId") as string) || null,
+            userId: collectorId,
             amount: amount,
             method: "CASH",
             note: note || "تسديد دفعة",
@@ -3542,6 +3556,13 @@ ipcMain.handle(
           },
         });
 
+        // This movement is transported by its debt document, never pushed alone.
+        await tx.transaction.create({ data: {
+          safeId: shift.safeId, type: "IN", amount, referenceType: "DEBT_PAYMENT",
+          referenceId: payment.id, userId: collectorId, description: "تحصيل دين نقدي",
+          synced: true,
+        } });
+        await tx.safe.update({ where: { id: shift.safeId }, data: { balance: { increment: amount } } });
         // 2. Update Patient Balance
         const patient = await tx.patient.update({
           where: { id: patientId },
@@ -3594,6 +3615,7 @@ ipcMain.handle(
           }
         }
 
+        auth.assertCurrent();
         return { payment, patient };
       });
 
@@ -3858,6 +3880,9 @@ ipcMain.handle(
         // using the local sale price keeps the request self-describing.
         price: Number(sale.items.find((line: any) => line.drugId === item.drugId)?.price ?? 0),
       }));
+      // The server call and its local mirror run under the stock gate, so a
+      // stock snapshot never lands between them and restocks twice.
+      const gated = await withStockGate(async () => {
       const cloudResult = await pushSaleReturnToCloud({
         id: effectiveReturnId,
         saleId,
@@ -3869,7 +3894,7 @@ ipcMain.handle(
         notes: notes || null,
         items: cloudItems,
       });
-      if (!cloudResult.success) return { success: false, error: cloudResult.error };
+      if (!cloudResult.success) return { failure: String(cloudResult.error || "") };
 
       const result = await prisma.$transaction(async (tx: any) => {
         // The cloud has already accepted and validated this exact return under
@@ -3907,7 +3932,7 @@ ipcMain.handle(
             where: { id: sale.patientId },
             data: { balance: { decrement: returnAmount } },
           });
-        } else if (returnSafeId) {
+        } else if (sale.payment?.method === "CASH" && returnSafeId) {
           await tx.safe.update({
             where: { id: returnSafeId },
             data: { balance: { decrement: returnAmount } },
@@ -3919,6 +3944,7 @@ ipcMain.handle(
               amount: returnAmount,
               referenceType: "SALE_RETURN",
               referenceId: saleReturn.id,
+              userId: (store.get("loggedInUserId") as string) || null,
               description: `إرجاع فاتورة #${saleId.slice(0, 8)}`,
             },
           });
@@ -3937,6 +3963,10 @@ ipcMain.handle(
         }
         return saleReturn;
       });
+      return { cloudResult, result };
+      });
+      if ('failure' in gated) return { success: false, error: gated.failure };
+      const { cloudResult, result } = gated;
 
       return { success: true, returnId: result.id, message: cloudResult.record!.items.some(i => i.stockStatus === 'QUARANTINED') ? 'تم رد المبلغ. اعزل الأصناف غير الموثقة؛ يراجعها المدير من صفحة المرتجعات قبل إعادتها للبيع.' : 'تم الإرجاع إلى دفعات البيع الأصلية.' };
     } catch (error: any) {

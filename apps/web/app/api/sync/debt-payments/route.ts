@@ -1,3 +1,4 @@
+import { resolveSyncSafe, SyncSafeConflict } from '@/app/lib/sync-safe';
 export const dynamic = 'force-dynamic';
 
 import { Prisma } from '@prisma/client';
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
             payments: Array<{
                 id: string;
                 saleId: string;
+                safeId?: string | null;
                 userId?: string | null;
                 amount: number;
                 method: string;
@@ -130,6 +132,10 @@ export async function POST(request: NextRequest) {
             // Skip if already synced
             const existing = await prisma.debtPayment.findUnique({ where: { id: payment.id } });
             if (existing) {
+                if (existing.saleId !== payment.saleId || existing.amount !== payment.amount || existing.method !== (payment.method || "CASH")) {
+                    conflicts.push({ id: payment.id, message: 'معرف التحصيل مستخدم لعملية مختلفة.' });
+                    continue;
+                }
                 syncedIds.push(payment.id);
                 continue;
             }
@@ -137,6 +143,10 @@ export async function POST(request: NextRequest) {
             // A non-positive amount would increase the patient's debt.
             if (typeof payment.amount !== 'number' || !Number.isFinite(payment.amount) || payment.amount <= 0) {
                 conflicts.push({ id: payment.id, message: 'مبلغ التحصيل غير صالح؛ تتطلب العملية مراجعة.' });
+                continue;
+            }
+            if (!['CASH', 'CARD', 'ZAIN_CASH', 'MOBILE_WALLET', 'BANK_TRANSFER', 'STRIPE'].includes(payment.method || 'CASH')) {
+                conflicts.push({ id: payment.id, message: 'طريقة دفع التحصيل غير صالحة.' });
                 continue;
             }
             const perms = await operatorPermissions(prisma, payment.userId, branchId, syncUser);
@@ -155,7 +165,17 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
+            try {
             await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+                await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"debt:" + payment.id}, 0))::text`;
+                const duplicate = await tx.debtPayment.findUnique({ where: { id: payment.id } });
+                if (duplicate) {
+                    if (duplicate.saleId !== payment.saleId || duplicate.amount !== payment.amount || duplicate.method !== (payment.method || "CASH"))
+                        throw new SyncSafeConflict('معرف التحصيل مستخدم لعملية مختلفة.');
+                    return;
+                }
+                const cashSafe = (payment.method || 'CASH') === 'CASH'
+                    ? await resolveSyncSafe(tx, branchId, payment.safeId) : null;
                 await tx.debtPayment.create({
                     data: {
                         id: payment.id,
@@ -170,6 +190,15 @@ export async function POST(request: NextRequest) {
                     },
                 });
 
+                if (cashSafe) {
+                    await tx.transaction.create({ data: {
+                        safeId: cashSafe, type: 'IN', amount: payment.amount,
+                        referenceType: 'DEBT_PAYMENT', referenceId: payment.id,
+                        userId: payment.userId || null, description: 'تحصيل دين نقدي',
+                        createdAt: new Date(payment.createdAt),
+                    } });
+                    await tx.safe.update({ where: { id: cashSafe }, data: { balance: { increment: payment.amount } } });
+                }
                 if (sale.patientId) {
                     await tx.patient.update({
                         where: { id: sale.patientId },
@@ -178,6 +207,13 @@ export async function POST(request: NextRequest) {
                 }
             });
 
+            } catch (error) {
+                if (error instanceof SyncSafeConflict) {
+                    conflicts.push({ id: payment.id, message: error.message });
+                    continue;
+                }
+                throw error;
+            }
             syncedIds.push(payment.id);
             await logAudit({
                 userId: payment.userId ?? syncUser.id,

@@ -21,7 +21,6 @@ export default defineConfig(({ mode }) => {
                         define: {
                             __API_URL__: JSON.stringify(env.VITE_API_URL || ''),
                             __CLOUD_API_URL__: JSON.stringify(env.VITE_CLOUD_API_URL || ''),
-                            __BACKUP_SECRET_KEY__: JSON.stringify(env.BACKUP_SECRET_KEY || ''),
                             __ZAINCASH_MERCHANT_ID__: JSON.stringify(env.ZAINCASH_MERCHANT_ID || ''),
                             __ZAINCASH_SECRET__: JSON.stringify(env.ZAINCASH_SECRET || ''),
                             __ZAINCASH_BASE_URL__: JSON.stringify(env.ZAINCASH_BASE_URL || ''),

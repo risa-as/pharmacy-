@@ -107,9 +107,10 @@ describe('sync/transactions stays inside the organisation', () => {
         const beforeB = (await db.safe.findUnique({ where: { id: f.B.safe.id } }))!.balance;
         const t = await fundedTxn({ safeId: f.B.safe.id });
         const body = await (await syncTransactions(post('/api/sync/transactions', { branchId: f.A.branch.id, transactions: [t] }))).json();
-        expect(body.syncedIds).toEqual([t.id]);
+        expect(body.syncedIds).toEqual([]);
+        expect(body.conflicts).toHaveLength(1);
         expect((await db.safe.findUnique({ where: { id: f.B.safe.id } }))!.balance).toBe(beforeB);
-        expect((await db.transaction.findUnique({ where: { id: t.id } }))?.safeId).toBe(f.A.safe.id);
+        expect(await db.transaction.findUnique({ where: { id: t.id } })).toBeNull();
     });
 
     it('refuses invalid or foreign-attributed movements and keeps the rest of the batch', async () => {

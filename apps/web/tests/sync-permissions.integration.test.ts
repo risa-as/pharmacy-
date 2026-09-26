@@ -338,3 +338,43 @@ describe('operations with no identified employee (device-license login)', () => 
         } finally { vi.unstubAllEnvs(); }
     });
 });
+
+describe('installed cash collection regression', () => {
+    it('posts cash once even with simultaneous retry and a local-only safe id', async () => {
+        const safe = await db.safe.findFirst({where:{branchId:f.branch.id,type:'CASH_DRAWER'}})
+            ?? await db.safe.create({data:{name:'Cash',type:'CASH_DRAWER',branchId:f.branch.id}});
+        const before = (await db.safe.findUniqueOrThrow({where:{id:safe.id}})).balance;
+        const debtBefore = (await db.patient.findUniqueOrThrow({where:{id:f.patient.id}})).balance;
+        const payment = {id:randomUUID(),saleId:f.creditSale.id,userId:f.admin.id,safeId:randomUUID(),amount:7,method:'CASH',createdAt:new Date().toISOString()};
+        const send = () => syncDebts(post('/api/sync/debt-payments',{branchId:f.branch.id,payments:[payment]}));
+        const responses = await Promise.all([send(),send()]);
+        for(const response of responses) expect((await response.json()).syncedIds).toEqual([payment.id]);
+        expect((await (await send()).json()).syncedIds).toEqual([payment.id]);
+        expect((await db.safe.findUniqueOrThrow({where:{id:safe.id}})).balance).toBe(before+7);
+        expect((await db.patient.findUniqueOrThrow({where:{id:f.patient.id}})).balance).toBe(debtBefore-7);
+        expect(await db.transaction.count({where:{referenceType:'DEBT_PAYMENT',referenceId:payment.id}})).toBe(1);
+        expect((await db.transaction.findFirstOrThrow({where:{referenceId:payment.id}})).userId).toBe(f.admin.id);
+    });
+    it('does not put card collection into cash and rejects a foreign safe atomically', async () => {
+        const payment = {id:randomUUID(),saleId:f.creditSale.id,userId:f.admin.id,amount:3,method:'CARD',createdAt:new Date().toISOString()};
+        expect((await (await syncDebts(post('/api/sync/debt-payments',{branchId:f.branch.id,payments:[payment]}))).json()).syncedIds).toEqual([payment.id]);
+        expect(await db.transaction.count({where:{referenceId:payment.id}})).toBe(0);
+        const other = await db.branch.create({data:{name:'Other',organizationId:(await db.branch.findUniqueOrThrow({where:{id:f.branch.id}})).organizationId}});
+        const foreign = await db.safe.create({data:{name:'Other',branchId:other.id}});
+        const bad = {...payment,id:randomUUID(),method:'CASH',safeId:foreign.id};
+        const before = (await db.patient.findUniqueOrThrow({where:{id:f.patient.id}})).balance;
+        const result = await (await syncDebts(post('/api/sync/debt-payments',{branchId:f.branch.id,payments:[bad]}))).json();
+        expect(result.conflicts).toHaveLength(1);
+        expect(await db.debtPayment.count({where:{id:bad.id}})).toBe(0);
+        expect((await db.patient.findUniqueOrThrow({where:{id:f.patient.id}})).balance).toBe(before);
+    });
+    it('rejects ambiguous drawers without committing the payment', async () => {
+        const extra = await db.safe.create({data:{name:'Second',type:'CASH_DRAWER',branchId:f.branch.id}});
+        try {
+            const payment = {id:randomUUID(),saleId:f.creditSale.id,userId:f.admin.id,amount:1,method:'CASH',createdAt:new Date().toISOString()};
+            const result = await (await syncDebts(post('/api/sync/debt-payments',{branchId:f.branch.id,payments:[payment]}))).json();
+            expect(result.conflicts).toHaveLength(1);
+            expect(await db.debtPayment.count({where:{id:payment.id}})).toBe(0);
+        } finally { await db.safe.delete({where:{id:extra.id}}); }
+    });
+});

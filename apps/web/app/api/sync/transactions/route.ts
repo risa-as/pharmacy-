@@ -1,3 +1,4 @@
+import { resolveSyncSafe, SyncSafeConflict } from '@/app/lib/sync-safe';
 export const dynamic = 'force-dynamic';
 
 import { Prisma } from '@prisma/client';
@@ -93,31 +94,6 @@ export async function POST(req: NextRequest) {
         // for review, never written and never silently dropped.
         const conflicts: { id: string; message: string }[] = [];
 
-        // Resolve a desktop-local safe id to this branch's canonical CASH_DRAWER
-        // safe. Prevents duplicate "الصندوق الرئيسي" safes when the desktop's local
-        // safe id differs from the cloud's, and never uses a safe of another branch.
-        const resolveSafeId = async (tx: Prisma.TransactionClient, incomingSafeId: string): Promise<string> => {
-            // 1. The exact safe already exists in this branch → use it as-is.
-            const exact = await tx.safe.findUnique({ where: { id: incomingSafeId }, select: { id: true, branchId: true } });
-            if (exact && exact.branchId === branchId) return exact.id;
-
-            // 2. A CASH_DRAWER safe already exists for this branch → reuse it.
-            const existing = await tx.safe.findFirst({
-                where: { branchId, type: 'CASH_DRAWER' },
-                orderBy: { createdAt: 'asc' },
-                select: { id: true },
-            });
-            if (existing) return existing.id;
-
-            // 3. No safe exists yet → create the canonical one (keep the incoming id
-            //    unless another branch already uses it).
-            const created = await tx.safe.create({
-                data: { ...(exact ? {} : { id: incomingSafeId }), name: 'الصندوق الرئيسي', type: 'CASH_DRAWER', balance: 0, branchId },
-                select: { id: true },
-            });
-            return created.id;
-        };
-
         // One transaction per record, so a refused or failing record neither rolls
         // back nor blocks the others.
         for (const txn of transactions) {
@@ -192,7 +168,7 @@ export async function POST(req: NextRequest) {
                     }
 
                     // Map the desktop's safe id onto the branch's canonical safe.
-                    const resolvedSafeId = await resolveSafeId(tx, txn.safeId);
+                    const resolvedSafeId = await resolveSyncSafe(tx, branchId, txn.safeId);
 
                     await tx.transaction.create({
                         data: {
@@ -203,7 +179,9 @@ export async function POST(req: NextRequest) {
                             referenceType: txn.referenceType,
                             referenceId: txn.referenceId,
                             description: txn.description,
-                            userId: txn.userId,
+                            userId: txn.referenceType === 'SALE' && txn.referenceId
+                                ? (await tx.sale.findUnique({ where: { id: txn.referenceId }, select: { userId: true } }))?.userId
+                                : txn.userId,
                             createdAt: new Date(txn.createdAt),
                             updatedAt: new Date(txn.updatedAt)
                         }
@@ -220,6 +198,7 @@ export async function POST(req: NextRequest) {
                 if (conflictMessage) conflicts.push({ id: txn.id, message: conflictMessage });
                 else if (outcome === 'done' || outcome === 'duplicate') processedIds.push(txn.id);
             } catch (txnErr: any) {
+                if (txnErr instanceof SyncSafeConflict) conflicts.push({ id: txn.id, message: txnErr.message });
                 console.error(`[Transaction Sync] Failed to sync transaction ${txn.id}:`, txnErr.message);
             }
         }

@@ -1,3 +1,4 @@
+import { resolveSyncSafe, SyncSafeConflict } from '@/app/lib/sync-safe';
 import { calculateRefund } from '@faramace/shared';
 import { restoreSaleReturnStock } from '@/app/lib/sale-return-stock';
 export const dynamic = 'force-dynamic';
@@ -87,9 +88,8 @@ export async function POST(req: NextRequest) {
                     let validated;
                     try { validated = calculateRefund(sale, ret.items); } catch (e) { throw new ReturnConflictError((e as Error).message); }
                     const stockItems = await restoreSaleReturnStock(tx, branchId, sale.items, sale.returns, validated.items);
-                    const returnSafeId = ret.safeId || sale.safeId;
-                    if (returnSafeId && !await tx.safe.findFirst({ where: { id: returnSafeId, branchId }, select: { id: true } }))
-                        throw new ReturnConflictError('الصندوق لا يتبع فرع المرتجع.');
+                    const returnSafeId = sale.payment?.method === 'CASH'
+                        ? await resolveSyncSafe(tx, branchId, ret.safeId || sale.safeId) : null;
                     const actor = await tx.user.findFirst({ where: { id: ret.userId || syncUser.id, branchId, isActive: true }, select: { id: true, role: true, permissions: true } });
                     if (!actor || !getUserPermissions(actor).canProcessReturn)
                         throw new ReturnConflictError('منفذ المرتجع غير مخول في هذا الفرع؛ تتطلب العملية مراجعة المدير.');
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
                 }
             } catch (err) {
                 console.error(`Failed to sync sale return ${ret.id}:`, err);
-                if (err instanceof ReturnConflictError) {
+                if (err instanceof ReturnConflictError || err instanceof SyncSafeConflict) {
                     conflicts.push({ id: ret.id, message: err.message });
                 } else {
                     // Network, deadlock, and database errors remain retryable;

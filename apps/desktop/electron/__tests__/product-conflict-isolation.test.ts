@@ -4,6 +4,7 @@ import { expect, it, vi } from 'vitest';
 import * as validation from '../product-snapshot-validation';
 import * as maps from '../product-sync-maps';
 import * as diff from '../product-sync-diff';
+import { planDrugStock, SYNTHETIC_BATCH_NUMBER } from '../stock-reconcile';
 
 // Execute the real pull function, including its cleanup phase. Network and
 // storage are controlled; no customer database or Electron instance is opened.
@@ -26,7 +27,7 @@ async function run(localConflictId = 'a', collisionOnly = false) {
  const end=source.indexOf('\n}',start)+2;
  const helpers=source.slice(source.indexOf('const SQLITE_VAR_LIMIT'),source.indexOf('// Debug log file'));
  const code=ts.transpileModule(helpers+'\n'+source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
- const deps:any={...validation,...maps,...diff,beginSyncTask:()=>true,endSyncTask:()=>{},checkConnection:async()=>true,getBranchId:()=> 'branch',getApiBaseUrl:()=> 'isolated',getDeviceAuthHeaders:()=>({}),fetchProductSyncSnapshotWithCache:async()=>({snapshot:{drugs}}),prisma:{$transaction:async(fn:any)=>fn(tx)},recordSyncSuccess:vi.fn(),console:{log:vi.fn(),warn:vi.fn(),error:vi.fn()}};
+ const deps:any={...validation,...maps,...diff,beginSyncTask:()=>true,endSyncTask:()=>{},checkConnection:async()=>true,getBranchId:()=> 'branch',getApiBaseUrl:()=> 'isolated',getDeviceAuthHeaders:()=>({}),fetchProductSyncSnapshotWithCache:async()=>({snapshot:{drugs}}),readPendingStockIds:async()=>({saleIds:[],returnIds:[],protectedInventoryIds:new Set()}),fetchStockSnapshot:async()=>({snapshot:{drugs},applied:null,fromCache:false}),pendingStockInTx:async()=>({byDrug:new Map(),unallocatedDrugs:new Set()}),queuedInventoryIds:()=>new Set(),planDrugStock,SYNTHETIC_BATCH_NUMBER,prisma:{$transaction:async(fn:any)=>fn(tx)},recordSyncSuccess:vi.fn(),console:{log:vi.fn(),warn:vi.fn(),error:vi.fn()}};
  const result=await new Function(...Object.keys(deps),code+';return syncProductsExclusive();')(...Object.values(deps));
  return {result,inventories,batches,tx};
 }
