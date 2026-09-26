@@ -1669,13 +1669,32 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                     const staleBatchIds = existingBatches.map((b: any) => b.id).filter((id: string) => !keptBatchIds.has(id));
 
                     if (staleBatchIds.length > 0) {
-                        await tx.batch.deleteMany({ where: { id: { in: staleBatchIds } } });
+                        // Old local stocktakes retain a foreign key to their lot.
+                        // Keep those historical lots at zero instead of deleting
+                        // the audit trail or allowing their old stock to be sold.
+                        const historicalItems = await findManyByFieldChunked(
+                            tx.stocktakeItem, 'batchId', staleBatchIds, { select: { batchId: true } },
+                        );
+                        const historicalBatchIds = new Set<string>(historicalItems.map((item: any) => item.batchId));
+                        for (const batchId of historicalBatchIds) {
+                            await tx.batch.update({ where: { id: batchId }, data: { quantity: 0 } });
+                            const previous = batchesById.get(batchId);
+                            if (previous) upsertBatchInProductSyncMaps(
+                                { batchesByInventoryId, batchesById }, { ...previous, quantity: 0 },
+                            );
+                            keptBatchIds.add(batchId);
+                        }
+                        const deletableBatchIds = staleBatchIds.filter(id => !historicalBatchIds.has(id));
+                        for (let i = 0; i < deletableBatchIds.length; i += SQLITE_VAR_LIMIT) {
+                            await tx.batch.deleteMany({ where: { id: { in: deletableBatchIds.slice(i, i + SQLITE_VAR_LIMIT) } } });
+                        }
                         for (const staleBatchId of staleBatchIds) {
-                            batchesById.delete(staleBatchId);
+                            if (!historicalBatchIds.has(staleBatchId)) batchesById.delete(staleBatchId);
                         }
                         batchesByInventoryId.set(
                             targetInventoryId,
-                            existingBatches.filter((batch: any) => keptBatchIds.has(batch.id)),
+                            existingBatches.filter((batch: any) => keptBatchIds.has(batch.id))
+                                .map((batch: any) => batchesById.get(batch.id) || batch),
                         );
                     }
 
@@ -1785,10 +1804,11 @@ async function syncProductsExclusive(): Promise<SyncProductsResult> {
                     );
                 }
               } catch (drugErr) {
-                protectedDrugIds.add(drug.id);
-                syncWarnings.add(`تعذر تحديث الصنف ${drug.tradeName || drug.id}؛ يلزم مراجعة خطأ المزامنة.`);
                 console.error(`[Sync] Failed to process drug id=${drug.id} barcode=${drug.barcode}:`, drugErr);
-                // Continue with remaining drugs instead of aborting the whole transaction
+                // Unexpected write failures must roll back the snapshot. Continuing
+                // here used to commit the new total with old/partly written lots.
+                // Expected identity conflicts are handled before writes above.
+                throw drugErr;
               }
             }
 

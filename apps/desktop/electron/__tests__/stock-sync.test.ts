@@ -39,6 +39,7 @@ function store(local: Local) {
         sale: local.sales ?? [], saleItem: local.saleItems ?? [],
         saleReturn: local.returns ?? [], saleReturnItem: local.returnItems ?? [],
         syncFailure: local.failures ?? [],
+        stocktakeItem: [],
     } as Record<string, any[]>;
 }
 
