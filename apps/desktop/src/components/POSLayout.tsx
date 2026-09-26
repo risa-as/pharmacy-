@@ -836,7 +836,16 @@ export default function POSLayout({ user }: { user: any }) {
 
             <SaleReturnModal
                 isOpen={showReturnModal}
-                onClose={() => setShowReturnModal(false)}
+                onClose={() => {
+                    setShowReturnModal(false);
+                    // Returns change local stock without remounting the POS.
+                    // Refresh both product lists so the next sale sees the new quantity.
+                    void ipcInvoke('get-products', { searchTerm, branchId: user?.branchId })
+                        .then(setProducts).catch(console.error);
+                    void ipcInvoke('get-quick-sale-products', { branchId: user?.branchId })
+                        .then((data: Product[]) => setQuickSaleProducts((data || []).sort((a, b) => a.name.localeCompare(b.name, 'ar'))))
+                        .catch(console.error);
+                }}
                 user={user}
             />
 

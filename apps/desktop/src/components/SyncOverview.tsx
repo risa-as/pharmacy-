@@ -87,6 +87,7 @@ export default function SyncOverview({
     ["مبيعات", health?.salesPending],
     ["مرتجعات", health?.returnsPending],
     ["تحصيل", health?.debtsPending],
+    ["صندوق", health?.transactionsPending],
     ["مخزون", health?.inventoryPending],
   ].filter(([, n]) => Number(n) > 0);
   return (

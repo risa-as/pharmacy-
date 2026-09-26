@@ -309,7 +309,7 @@ export default function SaleReturnModal({ isOpen, onClose, user, initialSale }: 
                                         <span className="text-xs text-red-600 font-medium">{matchingDrugs}</span>
                                         <span className="text-xs text-gray-400">— {(s.total || 0).toLocaleString()} د.ع</span>
                                         <span className={`text-xs px-1.5 py-0.5 rounded ${s.payment?.method === 'CREDIT' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                                            {s.payment?.method === 'CREDIT' ? 'آجل' : 'نقدي'}
+                                            {({ CASH: 'نقدي', CREDIT: 'آجل', CARD: 'بطاقة' } as Record<string, string>)[s.payment?.method] || s.payment?.method || 'غير محددة'}
                                         </span>
                                     </div>
                                 </button>
@@ -326,7 +326,7 @@ export default function SaleReturnModal({ isOpen, onClose, user, initialSale }: 
                                 <div>
                                     <span className="text-gray-500">طريقة الدفع:</span>
                                     <span className={`font-bold ml-1 mr-2 px-2 py-0.5 rounded ${sale.payment?.method === 'CREDIT' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                                        {sale.payment?.method === 'CREDIT' ? 'آجل' : 'نقدي'}
+                                        {({ CASH: 'نقدي', CREDIT: 'آجل', CARD: 'بطاقة' } as Record<string, string>)[sale.payment?.method] || sale.payment?.method || 'غير محددة'}
                                     </span>
                                 </div>
                                 <div className="flex gap-4">

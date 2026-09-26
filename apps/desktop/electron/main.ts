@@ -1978,10 +1978,10 @@ ipcMain.handle("set-branch-id", (_, branchId) => {
 let staffSyncBusy = false;
 async function staffSyncHealth() {
   if(!store.get("loggedInUserId")) throw Error("سجل الدخول أولاً");
-  const [sales,returns,debts,failed]=await Promise.all([prisma.sale.count({where:{synced:false}}),prisma.saleReturn.count({where:{synced:false}}),prisma.debtPayment.count({where:{synced:false}}),prisma.syncFailure.count()]);
+  const [sales,returns,debts,transactions,failed]=await Promise.all([prisma.sale.count({where:{synced:false}}),prisma.saleReturn.count({where:{synced:false}}),prisma.debtPayment.count({where:{synced:false}}),prisma.transaction.count({where:{synced:false}}),prisma.syncFailure.count()]);
   const health=buildSyncHealthSnapshot();
   const lastSuccess=store.get("lastSuccessfulSync");
-  return {...health,retryableIssues:getPendingSyncActions().filter(a=>a.lastError).map(a=>({id:a.id,type:a.type,error:a.lastError})),lastSuccess:lastSuccess?.branchId===String(store.get("branchId")||"")?lastSuccess:null,failedCount:health.failedCount+failed,inventoryPending:health.pendingCount,pendingCount:health.pendingCount+sales+returns+debts,salesPending:sales,returnsPending:returns,debtsPending:debts,inProgress:health.inProgress||staffSyncBusy||isSyncRunning(),lastStaffSyncAt:store.get("lastStaffSyncAt")};
+  return {...health,retryableIssues:getPendingSyncActions().filter(a=>a.lastError).map(a=>({id:a.id,type:a.type,error:a.lastError})),lastSuccess:lastSuccess?.branchId===String(store.get("branchId")||"")?lastSuccess:null,failedCount:health.failedCount+failed,inventoryPending:health.pendingCount,pendingCount:health.pendingCount+sales+returns+debts+transactions,salesPending:sales,returnsPending:returns,debtsPending:debts,transactionsPending:transactions,inProgress:health.inProgress||staffSyncBusy||isSyncRunning(),lastStaffSyncAt:store.get("lastStaffSyncAt")};
 }
 ipcMain.handle("staff:sync-health",()=>staffSyncHealth());
 ipcMain.handle("trigger-sync", async () => {
@@ -1989,14 +1989,14 @@ ipcMain.handle("trigger-sync", async () => {
   staffSyncBusy=true;
   try {
     if(!store.get("loggedInUserId") || store.get("loggedInUserId")!==store.get("syncUserId")) throw Error("سجّل الدخول بالحساب الحالي عبر الإنترنت أولاً");
-    await syncSales(); await syncSaleReturns(); await syncDebtPayments();
+    await syncSales(); await syncSaleReturns(); await syncDebtPayments(); await syncTransactions();
     await processPendingSyncActions();
     const inventory=await syncProducts();
     const health=await staffSyncHealth();
     if(!inventory.success) throw Error(inventory.reason || "لم تكتمل مزامنة المخزون");
     if(health.pendingCount || health.failedCount) throw Error("لم تكتمل مزامنة جميع العمليات؛ راجع العدادات ثم أعد المحاولة عند استقرار الاتصال.");
     store.set("lastStaffSyncAt",new Date().toISOString());
-    recordSyncSuccess("المبيعات والمرتجعات والتحصيل والمخزون");
+    recordSyncSuccess("المبيعات والمرتجعات والتحصيل والصندوق والمخزون");
     return {success:true};
   }catch(error){return {success:false,error:error instanceof Error?error.message:String(error)};}
   finally{staffSyncBusy=false;for(const window of BrowserWindow.getAllWindows())window.webContents.send("staff-sync-updated");}
