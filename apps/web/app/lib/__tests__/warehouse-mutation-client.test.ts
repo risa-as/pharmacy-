@@ -275,6 +275,31 @@ describe('a key from the previous version (sessionStorage, no owner) is resolved
         expect(keyOf(fetcher, 0)).not.toBe(LEGACY);
         expect(legacy.getItem(legacySlot)).toBeNull();
     });
+    it('the old-version storage cannot be read → nothing is sent and the server is not bypassed', async () => {
+        vi.stubGlobal('sessionStorage', fakeStorage(new Map([[legacySlot, LEGACY]]), { get: () => { throw new DOMException('blocked', 'SecurityError'); } }));
+        const fetcher = server(async () => new Response('{"recorded":false,"voided":true}'));
+        vi.stubGlobal('fetch', fetcher);
+        const warehouseMutation = await load();
+        await expect(warehouseMutation(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
+        await expect(warehouseMutation(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
+        expect(fetcher).not.toHaveBeenCalled();
+    });
+    it('once that storage reads again, the old key is resolved on the server first, then a new key is used', async () => {
+        const store = new Map([[legacySlot, LEGACY]]);
+        let broken = true;
+        vi.stubGlobal('sessionStorage', fakeStorage(store, { get: (k) => { if (broken) throw new DOMException('blocked', 'SecurityError'); return store.get(k) ?? null; } }));
+        const fetcher = server(async () => new Response('{"recorded":false,"voided":true}'));
+        vi.stubGlobal('fetch', fetcher);
+        const warehouseMutation = await load();
+        await expect(warehouseMutation(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
+        broken = false;
+        await warehouseMutation(PAY, init, me);
+        expect(fetcher.mock.calls[0][0]).toBe(STATUS);
+        expect(JSON.parse((fetcher.mock.calls[0][1] as any).body)).toEqual({ url: PAY, key: LEGACY });
+        expect(paymentCalls(fetcher)).toHaveLength(1);
+        expect(keyOf(fetcher, 0)).not.toBe(LEGACY);
+        expect(store.has(legacySlot)).toBe(false);
+    });
     it('recorded but the old entry cannot be removed → keeps stopping (no bypass)', async () => {
         vi.stubGlobal('sessionStorage', fakeStorage(new Map([[legacySlot, LEGACY]]), { remove: () => undefined }));
         const fetcher = server(async () => new Response('{"recorded":true}'));
