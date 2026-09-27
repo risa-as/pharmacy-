@@ -1,4 +1,5 @@
 'use client';
+import { readStorage } from '../../../../../../../packages/shared/src/safe-storage';
 import { prepareSmartOrderDraft } from '@/app/lib/actions/purchase-actions';
 
 // المرحلة 3 و4 من خطة «طلب الأدوية حسب الاحتياج»: قائمة الاحتياج ثم المراجعة والإرسال.
@@ -207,7 +208,7 @@ export default function NeedListClient({
 
     async function importSmartDraft() {
         if (!smartDraft || importingSmart || sending) return;
-        if (lines.length || groups.length || recoveryError || sessionStorage.getItem(`wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`) || sessionStorage.getItem(`wh-need-send:${userId}:${organizationId}:${smartDraft.branchId}`)) {
+        if (lines.length || groups.length || recoveryError || readStorage('session', `wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`) || readStorage('session', `wh-need-send:${userId}:${organizationId}:${smartDraft.branchId}`)) {
             toast.error('توجد مسودة أو عملية سابقة؛ راجعها أولاً حتى لا تُستبدل مختاراتك.'); return;
         }
         setImportingSmart(true);

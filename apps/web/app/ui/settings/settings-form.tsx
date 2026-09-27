@@ -1,5 +1,6 @@
 "use client";
 
+import { removeStorage } from "../../../../../packages/shared/src/safe-storage";
 import { useState } from "react";
 import { Button } from "@faramace/ui";
 import { Loader2, Save, Download, Upload, Sparkles } from "lucide-react";
@@ -307,8 +308,10 @@ export default function SettingsForm({ initialSettings }: SettingsFormProps) {
                 </p>
                 <Button
                     onClick={() => {
-                        localStorage.removeItem("faramace_onboarding_completed");
-                        toast.success("سيتم عرض الجولة التعريفية عند الذهاب للوحة التحكم");
+                        if (removeStorage("local", "faramace_onboarding_completed"))
+                            toast.success("سيتم عرض الجولة التعريفية عند الذهاب للوحة التحكم");
+                        else
+                            toast.error("تعذر الوصول لتخزين المتصفح؛ قد لا تظهر الجولة التعريفية.");
                         setTimeout(() => window.location.href = "/dashboard", 1000);
                     }}
                     variant="outline"

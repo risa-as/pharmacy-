@@ -1,3 +1,4 @@
+import { writeStorage } from "../../../../packages/shared/src/safe-storage";
 import { useState } from 'react';
 import { KeyRound, Shield, AlertTriangle, Loader2, CheckCircle2, Pill, ShieldAlert, WifiOff } from 'lucide-react';
 
@@ -90,7 +91,8 @@ export default function LicenseScreen({ onActivated, errorMessage, subscriptionL
                 setMessage('تم تفعيل الترخيص بنجاح! جاري تحميل النظام...');
 
                 // Save license key locally for future verification
-                localStorage.setItem('faramace_license_key', trimmedKey);
+                // Activation already succeeded on the server; failing to keep the key locally must not undo it.
+                writeStorage('local', 'faramace_license_key', trimmedKey);
 
                 // Save tenant context (org + branch) to electron-store
                 if (data.organizationId && data.branchId) {

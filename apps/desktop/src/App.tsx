@@ -1,3 +1,4 @@
+import { readStorage, removeStorage } from "../../../packages/shared/src/safe-storage";
 import StaffSalesPage from "./components/StaffSalesPage";
 import StaffSupplyPage from "./components/StaffSupplyPage";
 import StaffSyncStatus from "./components/StaffSyncStatus";
@@ -103,7 +104,8 @@ function App() {
 
     useEffect(() => {
         const verifyLicense = async () => {
-            const savedKey = localStorage.getItem('faramace_license_key');
+            // Unreadable storage counts as no saved key (activation screen), never a stuck check.
+            const savedKey = readStorage('local', 'faramace_license_key');
             if (!savedKey) { setLicenseStatus('no-key'); return; }
             try {
                 const identity = await window.electronLicense?.getHardwareId();
@@ -131,7 +133,8 @@ function App() {
                     } else {
                         setLicenseError('الترخيص غير صالح. الرجاء إعادة التفعيل.');
                     }
-                    localStorage.removeItem('faramace_license_key');
+                    // Guarded on its own: a throw here would reach the catch below and mark the license valid.
+                    removeStorage('local', 'faramace_license_key');
                 }
             } catch {
                 console.warn('[License] IPC error, allowing offline mode.');
@@ -170,7 +173,7 @@ function App() {
     const handleRetryOnlineCheck = () => {
         // Pass the activation key the renderer still holds so the main process
         // can self-heal a lost store key and actually reach the server.
-        const licenseKey = localStorage.getItem('faramace_license_key') || undefined;
+        const licenseKey = readStorage('local', 'faramace_license_key') || undefined;
         window.ipcRenderer?.invoke('subscription:recheck', licenseKey);
     };
     // ==================== End Offline Subscription Lock ====================

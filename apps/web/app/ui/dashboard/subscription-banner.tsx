@@ -7,6 +7,7 @@
  * dashboard page when the subscription is approaching expiry or in grace period.
  */
 
+import { readStorage, writeStorage } from "../../../../../packages/shared/src/safe-storage";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle, X } from "lucide-react";
@@ -57,7 +58,7 @@ export default function SubscriptionBanner({
 
     // Restore dismiss preference from sessionStorage
     useEffect(() => {
-        if (state === "warning" && sessionStorage.getItem("sub-banner-dismissed") === "1") {
+        if (state === "warning" && readStorage("session", "sub-banner-dismissed") === "1") {
             setDismissed(true);
         }
     }, [state]);
@@ -104,7 +105,8 @@ export default function SubscriptionBanner({
                 {isWarning && (
                     <button
                         onClick={() => {
-                            sessionStorage.setItem("sub-banner-dismissed", "1");
+                            // Hidden now even when the choice cannot be remembered.
+                            writeStorage("session", "sub-banner-dismissed", "1");
                             setDismissed(true);
                         }}
                         className="text-amber-600 hover:text-amber-800 dark:text-amber-400"

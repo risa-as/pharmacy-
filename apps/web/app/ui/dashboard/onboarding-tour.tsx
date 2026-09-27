@@ -1,4 +1,5 @@
 "use client";
+import { readStorage, writeStorage } from "../../../../../packages/shared/src/safe-storage";
 import { HandCoins } from "@/app/ui/debts/debt-icon";
 
 
@@ -518,7 +519,7 @@ export default function OnboardingTour() {
 
     useEffect(() => {
         setMounted(true);
-        if (!localStorage.getItem(ONBOARDING_KEY)) setIsOpen(true);
+        if (!readStorage("local", ONBOARDING_KEY)) setIsOpen(true);
     }, []);
 
     const goToSlide = useCallback(
@@ -545,7 +546,7 @@ export default function OnboardingTour() {
 
     const handleClose = () => {
         setIsOpen(false);
-        localStorage.setItem(ONBOARDING_KEY, "true");
+        writeStorage("local", ONBOARDING_KEY, "true");
     };
 
     if (!mounted || !isOpen) return null;

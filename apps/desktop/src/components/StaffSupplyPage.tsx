@@ -1,3 +1,4 @@
+import { readStorage, writeStorage, removeStorage } from "../../../../packages/shared/src/safe-storage";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, Package, Search, Plus, Trash2, RefreshCw, } from "lucide-react";
 import { showConfirm } from "../lib/dialog";
@@ -93,14 +94,15 @@ export default function StaffSupplyPage() {
         const hash = JSON.stringify(body);
         let saved: any;
         try {
-            saved = JSON.parse(localStorage.getItem(storageKey()) || "null");
+            saved = JSON.parse(readStorage("local", storageKey()) || "null");
         }
         catch { }
         if (saved?.hash === hash && typeof saved.key === "string")
             attempt.current = saved;
         else if (attempt.current.hash !== hash)
             attempt.current = { hash, key: crypto.randomUUID() };
-        localStorage.setItem(storageKey(), JSON.stringify(attempt.current));
+        // Without storage the key stays in memory for this session (same send, same key).
+        writeStorage("local", storageKey(), JSON.stringify(attempt.current));
         return { ...body, idempotencyKey: attempt.current.key };
     }
     async function send() {
@@ -126,7 +128,7 @@ export default function StaffSupplyPage() {
             })),
         };
         await api("/inventory/transfers", "POST", keyed(body));
-        localStorage.removeItem(storageKey());
+        removeStorage("local", storageKey());
         attempt.current = { hash: "", key: "" };
         setLines([]);
         setDraft(false);
