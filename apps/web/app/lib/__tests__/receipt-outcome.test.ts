@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { classifyReceiptFailure, receiptNeedsStatusCheck, receiptSucceeded, settleReceipt, RECEIPT_ERROR_CODES } from '../../../../../packages/shared/src/receipt-outcome';
+import { classifyReceiptFailure, receiptNeedsStatusCheck, receiptResendBlocked, receiptSucceeded, recheckReceipt, settleReceipt, RECEIPT_ERROR_CODES } from '../../../../../packages/shared/src/receipt-outcome';
 
 // One classification for web, mobile and desktop: a failed or unanswered receipt
 // is never reported as a successful one.
@@ -98,5 +98,23 @@ describe('settleReceipt: send once, check the document only when the answer was 
   });
   it('lost and the check fails too: unconfirmed', async () => {
     expect((await settleReceipt(fail({ lost: true }), vi.fn().mockRejectedValue(new Error('offline')))).kind).toBe('UNCONFIRMED');
+  });
+});
+
+describe('one resend rule for web, mobile and desktop', () => {
+  it('blocks sending again while the result is unconfirmed or the document is closed', () => {
+    expect(receiptResendBlocked(classifyReceiptFailure({ lost: true }, null))).toBe(true);
+    expect(receiptResendBlocked(classifyReceiptFailure({ lost: true }, 'COMPLETED'))).toBe(true);
+    expect(receiptResendBlocked(classifyReceiptFailure({ status: 409, code: RECEIPT_ERROR_CODES.CANCELLED }))).toBe(true);
+  });
+  it('allows sending again after a rejection (corrected entries) or a confirmed non-receipt', () => {
+    expect(receiptResendBlocked(null)).toBe(false);
+    expect(receiptResendBlocked(classifyReceiptFailure({ status: 400, message: 'x' }))).toBe(false);
+    expect(receiptResendBlocked(classifyReceiptFailure({ lost: true }, 'PENDING'))).toBe(false);
+  });
+  it('recheck reads the document and stays unconfirmed when the read fails', async () => {
+    expect((await recheckReceipt(vi.fn().mockResolvedValue('PENDING'))).kind).toBe('NOT_RECEIVED_AFTER_LOST_RESPONSE');
+    expect((await recheckReceipt(vi.fn().mockResolvedValue('COMPLETED'))).kind).toBe('RECEIVED_AFTER_LOST_RESPONSE');
+    expect((await recheckReceipt(vi.fn().mockRejectedValue(new Error('offline')))).kind).toBe('UNCONFIRMED');
   });
 });

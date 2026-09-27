@@ -1,4 +1,5 @@
-import { readStorage, writeStorage, removeStorage } from "../../../../packages/shared/src/safe-storage";
+import { removeStorage } from "../../../../packages/shared/src/safe-storage";
+import { transferAttempt } from "../lib/transfer-attempt";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, Package, Search, Plus, Trash2, RefreshCw, } from "lucide-react";
 import { showConfirm } from "../lib/dialog";
@@ -91,18 +92,7 @@ export default function StaffSupplyPage() {
         return `staff-attempt:${access.userId}:${access.branchId}:transfers`;
     }
     function keyed(body: any) {
-        const hash = JSON.stringify(body);
-        let saved: any;
-        try {
-            saved = JSON.parse(readStorage("local", storageKey()) || "null");
-        }
-        catch { }
-        if (saved?.hash === hash && typeof saved.key === "string")
-            attempt.current = saved;
-        else if (attempt.current.hash !== hash)
-            attempt.current = { hash, key: crypto.randomUUID() };
-        // Without storage the key stays in memory for this session (same send, same key).
-        writeStorage("local", storageKey(), JSON.stringify(attempt.current));
+        attempt.current = transferAttempt(body, storageKey(), attempt.current);
         return { ...body, idempotencyKey: attempt.current.key };
     }
     async function send() {

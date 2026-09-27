@@ -49,3 +49,14 @@ describe.each(['local', 'session'] as const)('%sStorage', (kind) => {
     expect(removeStorage(kind, 'k')).toBe(true);
   });
 });
+
+describe('writeStorage confirms by reading back', () => {
+  it('reports failure when setItem silently stores nothing', () => {
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+    expect(writeStorage('local', 'k', 'v')).toBe(false);
+  });
+  it('reports failure when a different value is read back', () => {
+    vi.stubGlobal('localStorage', { getItem: () => 'old', setItem: () => undefined, removeItem: () => undefined });
+    expect(writeStorage('local', 'k', 'v')).toBe(false);
+  });
+});
