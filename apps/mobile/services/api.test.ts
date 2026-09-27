@@ -194,7 +194,7 @@ describe('purchase receipt submission', () => {
         await expect(apiService.receivePurchase('p', [])).rejects.toMatchObject({ status: 409, code: 'PURCHASE_CANCELLED', message: 'الفاتورة ملغاة' });
     });
     it('reads the document status from the server, not from a cache, after a failure', async () => {
-        const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 'p', status: 'COMPLETED' }));
+        const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ id: 'p', status: 'COMPLETED' }));
         vi.stubGlobal('fetch', fetchMock);
         await expect(apiService.getPurchaseStatus('p')).resolves.toBe('COMPLETED');
         await expect(apiService.getPurchaseStatus('p')).resolves.toBe('COMPLETED');

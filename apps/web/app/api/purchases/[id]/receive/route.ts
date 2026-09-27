@@ -28,7 +28,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         });
         return NextResponse.json({ success: true, receivedCount: receipt.receivedCount, createdInventoryCount: receipt.createdInventoryCount });
     } catch (error) {
-        if (error instanceof PurchaseReceiptError) return NextResponse.json({ message: error.message }, { status: error.status });
+        if (error instanceof PurchaseReceiptError) return NextResponse.json({ message: error.message, ...(error.code ? { code: error.code } : {}) }, { status: error.status });
         console.error('Receive Purchase API Error:', error);
         return NextResponse.json({ message: 'تعذر استلام المشتريات.' }, { status: 500 });
     }

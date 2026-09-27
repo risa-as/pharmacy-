@@ -269,7 +269,7 @@ describe('supplier payments and ledger', () => {
         await as(f.pharmacist); // can receive, may not pay (default)
         const p1 = await pendingPurchase();
         expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p1), isPaid: true }), params(p1.id))).status).toBe(403);
-        await expect(receivePurchase(p1.id, lines(p1).map((l: any) => ({ ...l, expiryDate: new Date(l.expiryDate) })), true)).rejects.toThrow('تسديد الموردين');
+        await expect(receivePurchase(p1.id, lines(p1).map((l: any) => ({ ...l, expiryDate: new Date(l.expiryDate) })), true)).resolves.toMatchObject({ ok: false, status: 403, message: expect.stringContaining('تسديد الموردين') });
         expect(await state(p1.id)).toEqual(['PENDING', 0]);
         expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p1), isPaid: false }), params(p1.id))).status).toBe(200);
         expect(await state(p1.id)).toEqual(['COMPLETED', 0]);

@@ -136,6 +136,11 @@ function _invalidateInventoryCaches() {
 // of firing a duplicate network request.
 const _inflight = new Map<string, Promise<unknown>>();
 
+/** A definite HTTP error answer: keeps the status and the server's code. */
+export class ApiError extends Error {
+    constructor(message: string, readonly status: number, readonly code?: string) { super(message); this.name = 'ApiError'; }
+}
+
 export class SessionChangedError extends Error {
     constructor(message = 'Session changed while the request was in flight') { super(message); this.name = 'SessionChangedError'; }
 }
@@ -305,12 +310,14 @@ async function fetchOnce<T>(
         if (!response.ok) {
             const errorText = await response.text();
             let serverMessage: string | undefined;
+            let serverCode: string | undefined;
             try {
                 const errorJson = JSON.parse(errorText);
                 const message = errorJson.message || errorJson.error;
                 if (typeof message === 'string' && message.trim()) serverMessage = message;
+                if (typeof errorJson.code === 'string') serverCode = errorJson.code;
             } catch { /* Non-JSON error pages must not be shown as raw HTML. */ }
-            throw new Error(serverMessage || `HTTP ${response.status}: ${response.statusText}`);
+            throw new ApiError(serverMessage || `HTTP ${response.status}: ${response.statusText}`, response.status, serverCode);
         }
 
         const result = await response.json() as T;
@@ -329,7 +336,7 @@ async function request<T>(
     endpoint: string,
     options: RequestInit = {},
     noAutoLogout = false,
-    behavior: { forceRefresh?: boolean } = {},
+    behavior: { forceRefresh?: boolean; noRetry?: boolean } = {},
 ): Promise<T> {
     const isGet = !options.method || options.method.toUpperCase() === 'GET';
     const cacheScope = _cacheScope(endpoint);
@@ -357,7 +364,9 @@ async function request<T>(
 
     const cacheGeneration = _cacheGenerations.get(cacheScope) ?? 0;
 
-    const MAX_RETRIES = 2;
+    // A write whose answer was lost may have been applied: resending it is the
+    // caller's decision (after checking the record), not an automatic retry.
+    const MAX_RETRIES = behavior.noRetry ? 0 : 2;
     const BACKOFF_MS = [300, 800];
     const timeoutMs = _requestTimeout(endpoint);
 
@@ -808,13 +817,19 @@ export const apiService = {
         }
     },
 
-    // Receive Purchase
+    /** Current status of one purchase, always from the server (used after a lost receipt answer). */
+    async getPurchaseStatus(id: string): Promise<string | null> {
+        const purchase = await request<{ status?: unknown }>(`/purchases/${id}`, {}, false, { forceRefresh: true });
+        return typeof purchase?.status === 'string' ? purchase.status : null;
+    },
+
+    // Receive Purchase: sent once. Failures keep status/code (ApiError); no status = no answer.
     async receivePurchase(id: string, items: any[]) {
         try {
             return await request(`/purchases/${id}/receive`, {
                 method: 'POST',
                 body: JSON.stringify({ items }),
-            });
+            }, false, { noRetry: true });
         } catch (error) {
             console.error('API Error receivePurchase:', error);
             throw error;

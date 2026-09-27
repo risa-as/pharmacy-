@@ -1,11 +1,14 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { decideNewInventoryPricing } from "./inventory-pricing";
 import { receiptInventoryDrugs } from './receipt-drug-identity';
+import { RECEIPT_ERROR_CODES } from '../../../../packages/shared/src/receipt-outcome';
 
 export class PurchaseReceiptError extends Error {
   constructor(
     message: string,
     public readonly status = 400,
+    /** Set only for "already received" and "cancelled": clients must tell them apart from a rejection. */
+    public readonly code?: string,
   ) {
     super(message);
   }
@@ -69,9 +72,21 @@ export async function receivePurchaseStock(
       const linkedOrder = linkedId
         ? await tx.warehouseOrder.findUnique({ where: { id: linkedId } })
         : null;
+      if (purchase.status === "CANCELLED")
+        throw new PurchaseReceiptError(
+          "طلب الشراء ملغى؛ لا يمكن استلامه.",
+          409,
+          RECEIPT_ERROR_CODES.CANCELLED,
+        );
+      if (purchase.status === "COMPLETED")
+        throw new PurchaseReceiptError(
+          "طلب الشراء مستلم سابقاً؛ لم تُضف أي كمية.",
+          409,
+          RECEIPT_ERROR_CODES.ALREADY_RECEIVED,
+        );
       if (purchase.status !== "PENDING")
         throw new PurchaseReceiptError(
-          "تمت معالجة طلب الشراء أو إلغاؤه مسبقاً.",
+          "حالة طلب الشراء لا تسمح بالاستلام.",
           409,
         );
       if (linkedOrder && !["SHIPPED", "DELIVERED"].includes(linkedOrder.status))

@@ -20,6 +20,7 @@ import {
   StateBlock,
 } from "../../../components/ui/Kit";
 import { formatNumber } from "../../../utils/format";
+import { settleReceipt } from "../../../../../packages/shared/src/receipt-outcome";
 
 interface ReceiveItem {
   id: string;
@@ -223,25 +224,19 @@ export default function ReceiveItemsScreen() {
           ).toISOString(),
         cost: Number(item.unitCost),
       }));
-      await apiService.receivePurchase(id as string, payload);
-      Alert.alert("تم الاستلام", "أُضيفت المواد إلى المخزون.", [
-        { text: "تم", onPress: () => router.back() },
-      ]);
-    } catch (error) {
-      const current: any = await apiService
-        .getPurchaseDetails(id as string)
-        .catch(() => null);
-      if (current && ["COMPLETED", "RECEIVED"].includes(current.status))
-        Alert.alert(
-          "تم الاستلام بالفعل",
-          "أكد الخادم أن الفاتورة مستلمة. لن تضاف الكميات مرة أخرى.",
-          [{ text: "تم", onPress: () => router.back() }],
-        );
-      else
-        Alert.alert(
-          "تعذر الاستلام",
-          error instanceof Error ? error.message : "يرجى المحاولة مرة أخرى",
-        );
+      // Sent once (no automatic resend). A refusal keeps its status/code; with no
+      // answer the document status is read before anything is concluded.
+      const outcome = await settleReceipt(
+        () => apiService.receivePurchase(id as string, payload),
+        () => apiService.getPurchaseStatus(id as string),
+      );
+      Alert.alert(
+        outcome.title,
+        outcome.message,
+        outcome.closed
+          ? [{ text: "تم", onPress: () => router.back() }]
+          : [{ text: "حسناً" }],
+      );
     } finally {
       receiptLock.current = false;
       setSubmitting(false);

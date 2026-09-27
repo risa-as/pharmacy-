@@ -21,6 +21,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { showConfirm } from "../lib/dialog";
+import { settleReceipt } from "../../../../packages/shared/src/receipt-outcome";
 
 // Receiving warehouse (مذخر) purchases: same server contract as before
 // (operations:access / operations:request, /purchases, /purchases/:id/receive)
@@ -165,7 +166,9 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
 
   const api = async (path: string, method = "GET", body?: any) => {
     const res = await window.ipcRenderer.invoke("operations:request", { path, method, body });
-    if (!res?.success) throw Error(res?.error || "تعذر الاتصال بالخادم");
+    // status/code/lost travel with the error so a receipt can be judged (settleReceipt).
+    if (!res?.success)
+      throw Object.assign(Error(res?.error || "تعذر الاتصال بالخادم"), { status: res?.status, code: res?.code, lost: res?.lost === true });
     if (res.warning && live.current) setNotice(res.warning);
     return res.data;
   };
@@ -254,18 +257,34 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
       }))
     )
       return;
-    await api(`/purchases/${detail.id}/receive`, "POST", {
-      isPaid: false,
-      items: lines.map((l) => ({
-        itemId: l.itemId,
-        quantity: Number(l.quantity),
-        cost: Number(l.cost),
-        batchNumber: l.batchNumber.trim(),
-        expiryDate: l.expiryDate,
-      })),
-    });
-    await open(detail.id);
-    await load();
+    const id = detail.id;
+    const outcome = await settleReceipt(
+      () =>
+        api(`/purchases/${id}/receive`, "POST", {
+          isPaid: false,
+          items: lines.map((l) => ({
+            itemId: l.itemId,
+            quantity: Number(l.quantity),
+            cost: Number(l.cost),
+            batchNumber: l.batchNumber.trim(),
+            expiryDate: l.expiryDate,
+          })),
+        }),
+      async () => (await api(`/purchases/${id}`))?.status ?? null,
+    );
+    if (outcome.kind === "RECEIVED") {
+      await open(id);
+      await load();
+      return;
+    }
+    // Show the document as the server has it now; a failed reload must not hide the outcome.
+    await open(id).catch(() => undefined);
+    await load().catch(() => undefined);
+    if (outcome.tone === "warning") {
+      if (live.current) setNotice(`${outcome.title}: ${outcome.message}`);
+      return;
+    }
+    throw Error(`${outcome.title}: ${outcome.message}`);
   };
 
   const editable =

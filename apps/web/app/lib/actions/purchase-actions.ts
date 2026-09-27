@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
-import { receivePurchaseStock } from '@/app/lib/purchase-receipt';
+import { PurchaseReceiptError, receivePurchaseStock } from '@/app/lib/purchase-receipt';
 import { computeShippedBatchPrefill, type ShippedBatchPrefill } from '@/app/lib/shipped-batch-prefill';
 
 export async function getSmartPurchasingData(branchId?: string, from?: string, to?: string) {
@@ -324,15 +324,29 @@ export async function getReceiptPaymentOptions(purchaseId: string): Promise<{ ca
     return { canPay: true, safes };
 }
 
-export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false, safeId: string | null = null) {
+/**
+ * A receipt's result is returned, never thrown: production redacts thrown server
+ * action messages, and the page must tell "already received", "cancelled" and a
+ * rejection apart. A throw reaching the page means no answer (see settleReceipt).
+ */
+export type ReceivePurchaseResult =
+    | { ok: true; receivedCount: number; createdInventoryCount: number }
+    | { ok: false; status: number; code?: string; message: string };
+
+export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false, safeId: string | null = null): Promise<ReceivePurchaseResult> {
     const tenantCtx = await getTenantContext('write');
-    if (tenantCtx instanceof NextResponse) throw new Error('غير مصرح');
-    if (!tenantCtx.userPermissions.canReceivePurchase) throw new Error('ليس لديك صلاحية استلام المشتريات.');
-    if (typeof isPaid !== 'boolean') throw new Error('حالة الدفع غير صالحة.');
+    if (tenantCtx instanceof NextResponse) return { ok: false, status: 401, message: 'غير مصرح' };
+    if (!tenantCtx.userPermissions.canReceivePurchase) return { ok: false, status: 403, message: 'ليس لديك صلاحية استلام المشتريات.' };
+    if (typeof isPaid !== 'boolean') return { ok: false, status: 400, message: 'حالة الدفع غير صالحة.' };
     // Receiving as paid is a supplier payment: same permission as paying from the ledger.
-    if (isPaid && !tenantCtx.userPermissions.canPaySupplier) throw new Error('ليس لديك صلاحية تسديد الموردين؛ استلم الفاتورة غير مدفوعة.');
-    const result = await receivePurchaseStock(prisma, purchaseId, tenantCtx.tenantBranchWhere, items, isPaid, tenantCtx.user, { safeId });
-    revalidatePath('/dashboard/purchases');
-    revalidatePath(`/dashboard/purchases/${purchaseId}`);
-    return result;
+    if (isPaid && !tenantCtx.userPermissions.canPaySupplier) return { ok: false, status: 403, message: 'ليس لديك صلاحية تسديد الموردين؛ استلم الفاتورة غير مدفوعة.' };
+    try {
+        const result = await receivePurchaseStock(prisma, purchaseId, tenantCtx.tenantBranchWhere, items, isPaid, tenantCtx.user, { safeId });
+        revalidatePath('/dashboard/purchases');
+        revalidatePath(`/dashboard/purchases/${purchaseId}`);
+        return { ok: true, receivedCount: result.receivedCount, createdInventoryCount: result.createdInventoryCount };
+    } catch (error) {
+        if (error instanceof PurchaseReceiptError) return { ok: false, status: error.status, code: error.code, message: error.message };
+        throw error;
+    }
 }

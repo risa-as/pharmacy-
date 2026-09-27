@@ -73,6 +73,10 @@ export function registerOperations(
     "operations:request",
     async (_event, input: { path: string; method?: string; body?: any }) => {
       let acquired = false;
+      // A write was handed to the network, and whether a definite HTTP answer
+      // came back: a sent write without one is "lost" (it may have been applied).
+      let sent = false;
+      let answered: { status: number; code?: string } | undefined;
       const started = Date.now();
       let checkpoint = started;
       const timings: Record<string, number> = {};
@@ -164,6 +168,7 @@ export function registerOperations(
         mark("prepare");
         if (JSON.stringify(who) !== JSON.stringify(identity()))
           throw Error("تغيرت الجلسة؛ أعد المحاولة");
+        sent = method !== "GET";
         const response = await fetch(url, {
           method,
           headers: {
@@ -183,10 +188,19 @@ export function registerOperations(
             : {}),
           signal: AbortSignal.timeout(45000),
         });
-        const result = await operationJson(response);
+        let result: any;
+        try {
+          result = await operationJson(response);
+        } catch (e) {
+          // An unreadable error page is still a refusal; an unreadable 2xx is not.
+          if (!response.ok) answered = { status: response.status };
+          throw e;
+        }
         mark("server");
-        if (!response.ok)
+        if (!response.ok) {
+          answered = { status: response.status, ...(typeof result.code === "string" ? { code: result.code } : {}) };
           throw Error(result.message || result.error || "تعذر تنفيذ العملية");
+        }
         if (JSON.stringify(who) !== JSON.stringify(identity()))
           throw Error(
             "تغيرت الجلسة أثناء الطلب؛ تحقق من سجل العملية قبل إعادة المحاولة",
@@ -219,12 +233,18 @@ export function registerOperations(
         mark("stockRefresh");
         return { success: true, data: result, warning };
       } catch (e) {
+        const lost = sent && !answered;
+        // A lost receipt may have been applied: pull stock so the local copy matches
+        // the server either way (the renderer then checks the document status).
+        if (lost && input?.path?.endsWith("/receive")) await refresh().catch(() => undefined);
         return {
           success: false,
           error:
             e instanceof Error
               ? e.message
               : "تعذر الاتصال. تحقق من سجل الطلب قبل إعادة الإرسال.",
+          ...answered,
+          ...(lost ? { lost: true } : {}),
         };
       } finally {
         if (acquired) busy = false;

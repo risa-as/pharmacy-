@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, use, Fragment } from 'react';
-import { Toaster, toast } from 'sonner';
+import { toast } from 'sonner';
+import { classifyReceiptFailure, settleReceipt, type ReceiptOutcome } from '../../../../../../../packages/shared/src/receipt-outcome';
 
 export default function ReceivePurchasePage(props: { params: Promise<{ id: string }> }) {
     const params = use(props.params);
@@ -16,7 +17,8 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
     const [purchase, setPurchase] = useState<any>(null);
     const [receivedItems, setReceivedItems] = useState<any>({});
     // Paid at receipt needs canPaySupplier and a drawer of the purchase's branch: the
-    // cash leaves that drawer in the same transaction as the receipt.
+    // cash leaves that drawer in the same transaction as the receipt. Unpaid and no
+    // drawer by default: the employee ticks «paid» and picks the drawer explicitly.
     const [isPaid, setIsPaid] = useState(false);
     const [canPay, setCanPay] = useState(false);
     const [safes, setSafes] = useState<{ id: string; name: string; balance: number }[]>([]);
@@ -26,12 +28,12 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
             .then((options) => {
                 setCanPay(options.canPay);
                 setSafes(options.safes);
-                setSafeId(options.safes[0]?.id ?? '');
-                setIsPaid(options.canPay && options.safes.length > 0);
             })
             .catch(() => setCanPay(false));
     }, [params.id]);
     const [submitting, setSubmitting] = useState(false);
+    // Result of the last submission when it was not a plain success.
+    const [outcome, setOutcome] = useState<ReceiptOutcome | null>(null);
 
     useEffect(() => {
         getPurchaseDetails(params.id).then((data) => {
@@ -113,6 +115,7 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
             return;
         }
         setSubmitting(true);
+        setOutcome(null);
         try {
             const itemsToSubmit = Object.entries(receivedItems).map(([itemId, data]: [string, any]) => ({
                 itemId,
@@ -121,19 +124,45 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
                 batchNumber: String(data.batchNumber).trim(),
             }));
 
-            await receivePurchase(params.id, itemsToSubmit, isPaid, isPaid ? safeId : null);
-            toast.success('تم استلام الطلب وإضافة الأدوية إلى الدفعات والمخزون');
-            // القادم من «طلبات المذاخر» يعود إليها ليرى حالة «استُلمت» — قيمة ثابتة لا مسار حر.
-            const fromWarehouseOrders = new URLSearchParams(window.location.search).get('return') === 'warehouse-orders';
-            router.push(fromWarehouseOrders ? '/dashboard/purchases/warehouse-orders' : '/dashboard/purchases');
-            router.refresh();
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'حدث خطأ أثناء الاستلام');
-            console.error(error);
-            setLoading(false);
+            // Sent once. A refusal comes back as a result; a throw means no answer,
+            // and then the document status decides (never counted as received blindly).
+            const result = await settleReceipt(
+                async () => {
+                    const r = await receivePurchase(params.id, itemsToSubmit, isPaid, isPaid ? safeId : null);
+                    if (!r.ok) throw r;
+                },
+                async () => (await getPurchaseDetails(params.id))?.status ?? null,
+            );
+            if (result.kind === 'RECEIVED') {
+                toast.success('تم استلام الطلب وإضافة الأدوية إلى الدفعات والمخزون');
+                leave();
+                return;
+            }
+            setOutcome(result);
+            if (result.tone === 'warning') toast.warning(result.title, { description: result.message });
+            else toast.error(result.title, { description: result.message });
+            if (result.closed) router.refresh();
         } finally {
             setSubmitting(false);
         }
+    };
+    // After an unanswered submission whose check also failed: read the document again.
+    const recheck = async () => {
+        setSubmitting(true);
+        try {
+            const status = await getPurchaseDetails(params.id).then((p) => p?.status ?? null, () => null);
+            const next = classifyReceiptFailure({ lost: true }, status);
+            setOutcome(next);
+            if (next.closed) router.refresh();
+        } finally {
+            setSubmitting(false);
+        }
+    };
+    const leave = () => {
+        // القادم من «طلبات المذاخر» يعود إليها ليرى حالة «استُلمت» — قيمة ثابتة لا مسار حر.
+        const fromWarehouseOrders = new URLSearchParams(window.location.search).get('return') === 'warehouse-orders';
+        router.push(fromWarehouseOrders ? '/dashboard/purchases/warehouse-orders' : '/dashboard/purchases');
+        router.refresh();
     };
 
     if (loading) return (
@@ -155,6 +184,7 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
         </div>
     );
     if (!purchase) return <div>الطلب غير موجود</div>;
+    if (purchase.status === 'CANCELLED') return <div>هذا الطلب ملغى؛ لا يمكن استلامه.</div>;
     if (purchase.status !== 'PENDING') return <div>هذا الطلب تم استلامه مسبقاً</div>;
 
     return (
@@ -303,9 +333,11 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
                             <select
                                 value={safeId}
                                 onChange={(e) => setSafeId(e.target.value)}
-                                className="ms-auto rounded-lg border border-border px-3 py-2 text-foreground"
+                                className={`ms-auto rounded-lg border px-3 py-2 text-foreground ${safeId ? 'border-border' : 'border-destructive'}`}
                                 aria-label="الصندوق الذي يُدفع منه"
+                                aria-invalid={!safeId}
                             >
+                                <option value="" disabled>اختر الصندوق…</option>
                                 {safes.map((s) => (
                                     <option key={s.id} value={s.id}>{s.name} — الرصيد {s.balance.toLocaleString('ar-IQ')} د.ع</option>
                                 ))}
@@ -328,13 +360,31 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
                 </p>
             )}
 
-            <Button
-                onClick={handleConfirm}
-                disabled={submitting || incompleteCount > 0}
-                className="w-full h-12 text-lg"
-            >
-                {submitting ? 'جارٍ الاستلام…' : 'تأكيد واستلام المواد'}
-            </Button>
+            {outcome && (
+                <div
+                    role="alert"
+                    className={`rounded-lg border p-4 space-y-2 ${outcome.tone === 'warning' ? 'border-warning/40 bg-warning/10' : 'border-destructive/40 bg-destructive/10'}`}
+                >
+                    <p className="font-bold">{outcome.title}</p>
+                    <p className="text-sm">{outcome.message}</p>
+                    {outcome.closed && (
+                        <Button variant="outline" onClick={leave}>العودة إلى المشتريات</Button>
+                    )}
+                    {outcome.kind === 'UNCONFIRMED' && (
+                        <Button variant="outline" onClick={recheck} disabled={submitting}>تحقّق من حالة المستند</Button>
+                    )}
+                </div>
+            )}
+
+            {!outcome?.closed && (
+                <Button
+                    onClick={handleConfirm}
+                    disabled={submitting || incompleteCount > 0 || (outcome !== null && !outcome.canRetry && outcome.kind !== 'REJECTED')}
+                    className="w-full h-12 text-lg"
+                >
+                    {submitting ? 'جارٍ الاستلام…' : 'تأكيد واستلام المواد'}
+                </Button>
+            )}
         </div>
     );
 }
