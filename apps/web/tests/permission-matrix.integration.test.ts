@@ -279,6 +279,21 @@ describe('supplier payments and ledger', () => {
         expect(await state(p2.id)).toEqual(['COMPLETED', 100]);
     });
 
+    it('waits for a payment still being written before answering its status', async () => {
+        const requestId = randomUUID();
+        let answered: unknown = null;
+        await db.$transaction(async (tx: any) => {
+            // An attempt mid-way: lock taken and row written, not committed yet.
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'supplier-payment:' + requestId}, 0))::text`;
+            await tx.supplierPayment.create({ data: { id: requestId, supplierId: f.supplierA.id, branchId: f.a1.id, amount: 1, method: 'TRANSFER' } });
+            getSupplierPaymentStatus(requestId).then((r) => { answered = r; });
+            await new Promise((r) => setTimeout(r, 300));
+            expect(answered).toBeNull(); // not "not recorded" a moment before the commit
+        });
+        await new Promise((r) => setTimeout(r, 300));
+        expect(answered).toEqual({ status: 'recorded', amount: 1, method: 'TRANSFER' });
+    });
+
     it('reports a committed payment as recorded even if a follow-up step fails', async () => {
         const requestId = randomUUID();
         state.audit = async () => { throw Error('audit store down'); };

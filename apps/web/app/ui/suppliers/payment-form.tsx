@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { CreditCard, X, Loader2 } from 'lucide-react';
 import { getSupplierPaymentStatus, recordSupplierPayment } from '@/app/lib/actions/supplier-ledger-actions';
-import { loadPendingPayments, savePendingPayment, settlePendingPayment } from './pending-payment';
+import { decideAfterRefusal, decideOnOpen, loadPendingPayments, savePendingPayment, settlePendingPayment, type AttemptStatus } from './pending-payment';
 
 /** localStorage, or undefined where it is unavailable (it can throw). */
 const browserStorage = () => { try { return window.localStorage; } catch { return undefined; } };
@@ -60,6 +60,8 @@ function PaymentModal({
     const [requestId, setRequestId] = useState(() => crypto.randomUUID());
     const [notice, setNotice] = useState('');
     const [checking, setChecking] = useState(false);
+    // Set when an attempt turned out to be recorded: a final result, not a ready-to-send form.
+    const [finished, setFinished] = useState('');
     const firstSafe = (branchId: string) => safes.find(s => s.branchId === branchId)?.id || '';
     const [form, setForm] = useState({
         amount: '',
@@ -73,36 +75,48 @@ function PaymentModal({
 
     useEffect(() => { setMounted(true); }, []);
 
-    // Settle the unsettled attempts for this supplier (other tabs included): each is
-    // removed only once the server says whether it was recorded. The oldest one not
-    // recorded is resumed with its own id and values; unverifiable ones are kept.
+    // Settle the unsettled attempts for this supplier (other tabs included). Recorded
+    // ones are closed; any other one is resumed with its own id (resending it is safe),
+    // and no new payment is started while one remains (pending-payment.ts).
     useEffect(() => {
         const attempts = loadPendingPayments(browserStorage(), supplierId);
         if (!attempts.length) return;
         setChecking(true);
         (async () => {
-            let recorded = 0, unknown = 0;
-            let resume: (typeof attempts)[number] | null = null;
+            const checked: { attempt: (typeof attempts)[number]; status: AttemptStatus }[] = [];
             for (const attempt of attempts) {
                 const answer = await getSupplierPaymentStatus(attempt.requestId).catch(() => ({ status: 'unknown' as const }));
-                if (answer.status === 'recorded') { settlePendingPayment(browserStorage(), supplierId, attempt.requestId); recorded++; }
-                else if (answer.status === 'not_recorded') resume ??= attempt;
-                else unknown++;
+                checked.push({ attempt, status: answer.status });
             }
-            const notes: string[] = [];
-            if (recorded) { notes.push(`${recorded} دفعة سابقة سُجّلت فعلاً ولن تُسجَّل مرة أخرى.`); router.refresh(); }
-            if (resume) {
-                setRequestId(resume.requestId);
-                setForm(resume.values);
-                notes.push('محاولة سابقة لم تُسجَّل؛ بياناتها معروضة. أعد الإرسال بالبيانات نفسها، ولن تُسجَّل مرتين.');
+            const decision = decideOnOpen(checked);
+            for (const id of decision.settle) settlePendingPayment(browserStorage(), supplierId, id);
+            if (decision.recorded) router.refresh();
+            if (decision.resume) {
+                setRequestId(decision.resume.requestId);
+                setForm(decision.resume.values);
+                setNotice([
+                    decision.recorded ? `${decision.recorded} دفعة سابقة سُجّلت فعلاً ولن تُسجَّل مرة أخرى.` : '',
+                    decision.unverified
+                        ? 'تعذّر التحقق من محاولة سابقة؛ بياناتها معروضة. أعد إرسالها كما هي: إن كانت سُجّلت فلن تُسجَّل مرة ثانية.'
+                        : 'محاولة سابقة لم تكتمل؛ بياناتها معروضة. أعد الإرسال: لن تُسجَّل مرتين.',
+                ].filter(Boolean).join(' '));
+            } else if (decision.recorded) {
+                setFinished(`${decision.recorded} دفعة سابقة سُجّلت فعلاً، ولن تُسجَّل مرة أخرى. راجع كشف الحساب.`);
             }
-            if (unknown) notes.push('تعذّر التحقق من محاولة سابقة؛ راجع كشف الحساب قبل تسجيل دفعة مماثلة.');
-            setNotice(notes.join(' '));
         })().finally(() => setChecking(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supplierId]);
 
     if (!mounted) return null;
+
+    /** An explicit choice to start another payment: new id, empty amount. */
+    const startNewPayment = () => {
+        setRequestId(crypto.randomUUID());
+        setForm((f) => ({ ...f, amount: '', reference: '', notes: '' }));
+        setFinished('');
+        setNotice('');
+        setError('');
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -151,19 +165,15 @@ function PaymentModal({
                 router.refresh();
                 return;
             }
-            // A refusal does not prove this attempt was never recorded (a retry may be
-            // refused after the first one succeeded): ask the server before settling.
+            // Only a recorded payment ends the attempt; otherwise the same id is kept,
+            // so neither a resend nor an earlier request finishing late pays twice.
             const answer = await getSupplierPaymentStatus(requestId).catch(() => ({ status: 'unknown' as const }));
-            if (answer.status === 'recorded') {
+            if (decideAfterRefusal(answer.status) === 'finished') {
                 settlePendingPayment(browserStorage(), supplierId, requestId);
-                setRequestId(crypto.randomUUID());
-                setNotice('هذه الدفعة سُجّلت فعلاً في محاولة سابقة، ولن تُسجَّل مرة أخرى. راجع كشف الحساب.');
+                setFinished('هذه الدفعة سُجّلت فعلاً في محاولة سابقة، ولم تُسجَّل مرة أخرى. راجع كشف الحساب.');
                 router.refresh();
-            } else if (answer.status === 'not_recorded') {
-                settlePendingPayment(browserStorage(), supplierId, requestId);
-                setError(result.error || 'فشل في تسجيل الدفعة');
             } else {
-                setError(`${result.error || 'فشل في تسجيل الدفعة'} — تعذّر التحقق من نتيجة هذه المحاولة؛ ستُتحقق عند فتح النموذج مجدداً.`);
+                setError(`${result.error || 'فشل في تسجيل الدفعة'} — المحاولة محفوظة بالمعرّف نفسه؛ يمكنك التصحيح وإعادة الإرسال دون خطر التكرار.`);
             }
         });
     };
@@ -185,7 +195,16 @@ function PaymentModal({
                     </button>
                 </div>
 
-                {/* Form */}
+                {finished ? (
+                    // The payment exists: no ready-to-send form until the user explicitly starts a new one.
+                    <div className="p-6 space-y-4">
+                        <div className="p-3 bg-success/10 border border-success/30 rounded-lg text-sm text-foreground">{finished}</div>
+                        <div className="flex gap-3">
+                            <button type="button" onClick={onClose} className="flex-1 bg-success hover:bg-success/90 text-success-foreground font-bold py-3 rounded-lg">إغلاق</button>
+                            <button type="button" onClick={startNewPayment} className="flex-1 border border-border font-bold py-3 rounded-lg hover:bg-muted">تسجيل دفعة أخرى</button>
+                        </div>
+                    </div>
+                ) : (
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
                     {/* Amount */}
                     <div>
@@ -340,6 +359,7 @@ function PaymentModal({
                         )}
                     </button>
                 </form>
+                )}
             </div>
         </div>
     , document.body);

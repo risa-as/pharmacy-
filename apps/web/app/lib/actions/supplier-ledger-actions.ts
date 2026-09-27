@@ -332,7 +332,12 @@ export async function getSupplierPaymentStatus(requestId: string): Promise<
     const tenantCtx = await supplierContext('read', 'pay');
     if (!tenantCtx) return { status: 'unknown' };
     if (typeof requestId !== 'string' || !UUID.test(requestId)) return { status: 'not_recorded' };
-    const payment = await prisma.supplierPayment.findFirst({
+    // Same lock as the payment transaction: an attempt still being written is waited
+    // for, so it is not reported "not recorded" a moment before it commits. A request
+    // that has not reached the server yet can still arrive later: the form keeps the id.
+    const payment = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'supplier-payment:' + requestId}, 0))::text`;
+        return tx.supplierPayment.findFirst({
         where: {
             id: requestId,
             // Organisation, not branch: an employee moved to another branch still sees
@@ -340,6 +345,7 @@ export async function getSupplierPaymentStatus(requestId: string): Promise<
             ...(tenantCtx.organizationId ? { supplier: { organizationId: tenantCtx.organizationId } } : {}),
         },
         select: { amount: true, method: true },
+        });
     });
     return payment ? { status: 'recorded', amount: payment.amount, method: payment.method } : { status: 'not_recorded' };
 }

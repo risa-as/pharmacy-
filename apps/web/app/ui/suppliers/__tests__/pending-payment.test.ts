@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadPendingPayments, savePendingPayment, settlePendingPayment } from '../pending-payment';
+import { decideAfterRefusal, decideOnOpen, loadPendingPayments, savePendingPayment, settlePendingPayment } from '../pending-payment';
 
 /** A browser-like Storage shared by the tabs of one site. */
 function memoryStorage() {
@@ -56,5 +56,23 @@ describe('pending supplier payments', () => {
             key: () => { throw Error('blocked'); }, get length(): number { throw Error('blocked'); } };
         expect(loadPendingPayments(broken, 's')).toEqual([]);
         expect(() => settlePendingPayment(broken, 's', id1)).not.toThrow();
+    });
+});
+
+describe('settling attempts', () => {
+    const attempt = (requestId: string, savedAt: number) => ({ requestId, savedAt, values });
+    it('on opening, settles recorded attempts and resumes the oldest other one, unknown included', () => {
+        const d = decideOnOpen([
+            { attempt: attempt(id1, 1), status: 'unknown' },
+            { attempt: attempt(id2, 2), status: 'recorded' },
+        ]);
+        expect(d).toEqual({ settle: [id2], recorded: 1, resume: attempt(id1, 1), unverified: 1 });
+        // "Not recorded" is resumed too, never dropped: a request may still complete.
+        expect(decideOnOpen([{ attempt: attempt(id1, 1), status: 'not_recorded' }]).resume?.requestId).toBe(id1);
+    });
+    it('after a refusal, only a recorded payment ends the attempt; otherwise the same id is kept', () => {
+        expect(decideAfterRefusal('recorded')).toBe('finished');
+        expect(decideAfterRefusal('not_recorded')).toBe('keep');
+        expect(decideAfterRefusal('unknown')).toBe('keep');
     });
 });

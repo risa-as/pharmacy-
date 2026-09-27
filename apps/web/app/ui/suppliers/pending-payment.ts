@@ -76,3 +76,27 @@ export function loadPendingPayments(storage: StorageLike | undefined, supplierId
 export function settlePendingPayment(storage: StorageLike | undefined, supplierId: string, requestId: string) {
     try { storage?.removeItem(prefix(supplierId) + requestId); } catch { /* storage unavailable */ }
 }
+
+export type AttemptStatus = 'recorded' | 'not_recorded' | 'unknown';
+
+/**
+ * When the form opens: recorded attempts are settled; every other attempt stays
+ * saved, and the oldest of them is resumed with its own id. "Not recorded" is not
+ * final (a request may still be completing), and "unknown" cannot be verified, so
+ * neither is dropped and no new id is started while one of them remains.
+ */
+export function decideOnOpen(checked: { attempt: PendingPayment; status: AttemptStatus }[]) {
+    const settle = checked.filter((c) => c.status === 'recorded').map((c) => c.attempt.requestId);
+    const open = checked.filter((c) => c.status !== 'recorded');
+    return { settle, recorded: settle.length, resume: open[0]?.attempt ?? null, unverified: open.filter((c) => c.status === 'unknown').length };
+}
+
+/**
+ * After the server refused a send: only "recorded" settles the attempt (the
+ * payment exists: show a final result, never a ready-to-send form). Otherwise the
+ * same id is kept, so a resend, or an earlier request finishing late, can never
+ * produce a second payment.
+ */
+export function decideAfterRefusal(status: AttemptStatus): 'finished' | 'keep' {
+    return status === 'recorded' ? 'finished' : 'keep';
+}
