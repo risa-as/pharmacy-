@@ -8,7 +8,9 @@ import { PrismaClient } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 
-const state = vi.hoisted(() => ({ db: null as any, session: null as any }));
+const state = vi.hoisted(() => ({ db: null as any, session: null as any, audit: async (_entry: unknown) => {} }));
+// The audit log is replaceable so a test can make it fail after a payment committed.
+vi.mock('@/app/lib/audit', () => ({ logAudit: (entry: unknown) => state.audit(entry) }));
 vi.mock('@/app/lib/prisma', () => ({ get prisma() { return state.db; } }));
 vi.mock('@/auth', () => ({ auth: async () => state.session }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -241,7 +243,7 @@ describe('supplier payments and ledger', () => {
         const drawer = await safeBalance(f.safeA1.id), balance = await supplierBalance();
         const body = { branchId: f.a1.id, amount: 11, method: 'CASH', safeId: f.safeA1.id, requestId };
         await paySupplier(send('/x', 'POST', body), params(f.supplierA.id)); // answer lost
-        expect(await getSupplierPaymentStatus(requestId)).toEqual({ recorded: true, amount: 11, method: 'CASH' });
+        expect(await getSupplierPaymentStatus(requestId)).toEqual({ status: 'recorded', amount: 11, method: 'CASH' });
         expect((await paySupplier(send('/x', 'POST', body), params(f.supplierA.id))).status).toBe(200); // resent anyway
         expect(await db.supplierPayment.count({ where: { id: requestId } })).toBe(1);
         expect(await movements(requestId)).toHaveLength(1);
@@ -251,11 +253,12 @@ describe('supplier payments and ledger', () => {
         expect(edited.status).toBe(400);
         expect(await safeBalance(f.safeA1.id)).toBe(drawer - 11);
         // Never recorded, or not visible to the caller: reads as not recorded.
-        expect(await getSupplierPaymentStatus(randomUUID())).toEqual({ recorded: false });
+        expect(await getSupplierPaymentStatus(randomUUID())).toEqual({ status: 'not_recorded' });
         const foreign = await db.supplierPayment.findFirst({ where: { supplierId: f.supplierB.id } });
-        expect(await getSupplierPaymentStatus(foreign!.id)).toEqual({ recorded: false });
+        expect(await getSupplierPaymentStatus(foreign!.id)).toEqual({ status: 'not_recorded' });
+        // Without the permission the caller cannot verify: "unknown", never "not recorded".
         await as(f.pharmacist, { canPaySupplier: false });
-        expect(await getSupplierPaymentStatus(requestId)).toEqual({ recorded: false });
+        expect(await getSupplierPaymentStatus(requestId)).toEqual({ status: 'unknown' });
     });
 
     it('requires canPaySupplier to receive a purchase as paid, and receives it unpaid without it', async () => {
@@ -274,6 +277,34 @@ describe('supplier payments and ledger', () => {
         const p2 = await pendingPurchase();
         expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p2), isPaid: true }), params(p2.id))).status).toBe(200);
         expect(await state(p2.id)).toEqual(['COMPLETED', 100]);
+    });
+
+    it('reports a committed payment as recorded even if a follow-up step fails', async () => {
+        const requestId = randomUUID();
+        state.audit = async () => { throw Error('audit store down'); };
+        try {
+            const response = await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 2, method: 'TRANSFER', requestId }), params(f.supplierA.id));
+            expect(response.status).toBe(200);
+        } finally { state.audit = async () => {}; }
+        expect(await db.supplierPayment.count({ where: { id: requestId } })).toBe(1);
+    });
+
+    it('counts what was paid at receipt in the ledger, summary and recalculation', async () => {
+        // A purchase received fully paid owes nothing: before the fix it showed as debt,
+        // and recalculation turned the balance from 0 into the purchase total.
+        const supplier = await db.supplier.create({ data: { name: 'Paid at receipt ' + key, organizationId: f.orgA.id } });
+        const p = await db.purchase.create({ data: { branchId: f.a1.id, supplierId: supplier.id, total: 100,
+            items: { create: [{ drugId: f.drug.id, quantity: 2, cost: 50 }] } }, include: { items: true } });
+        await as(f.admin);
+        const lines = p.items.map((i: any) => ({ itemId: i.id, quantity: i.quantity, expiryDate: '2031-06-01', batchNumber: 'PM-PAID' }));
+        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines, isPaid: true }), params(p.id))).status).toBe(200);
+        expect((await db.supplier.findUnique({ where: { id: supplier.id } }))!.balance).toBe(0);
+        const ledger: any[] = await getSupplierLedger(supplier.id);
+        expect(ledger[0].runningBalance).toBe(0);
+        expect(ledger.map((e) => [e.type, e.amount]).sort()).toEqual([['payment', 100], ['purchase', 100]]);
+        expect(await getSupplierSummary(supplier.id)).toMatchObject({ totalPurchased: 100, totalPayments: 100, balance: 0 });
+        expect(await recalculateSupplierBalance(supplier.id)).toBe(0);
+        expect((await db.supplier.findUnique({ where: { id: supplier.id } }))!.balance).toBe(0);
     });
 
     it('enforces the same rules when the server actions are called directly', async () => {

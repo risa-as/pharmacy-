@@ -100,7 +100,8 @@ export async function getSupplierSummary(supplierId: string) {
         totalPurchased: totalPurchases._sum.total || 0,
         totalPaidOnPurchases: totalPurchases._sum.paidAmount || 0,
         purchaseCount: totalPurchases._count,
-        totalPayments: totalPayments._sum.amount || 0,
+        // Everything paid: separate payments plus what was paid when a purchase was received.
+        totalPayments: (totalPayments._sum.amount || 0) + (totalPurchases._sum.paidAmount || 0),
         paymentCount: totalPayments._count,
         balance: supplier.balance,
     };
@@ -161,6 +162,16 @@ export async function getSupplierLedger(supplierId: string) {
             branch: p.branch?.name || '',
             reference: p.invoiceNumber === 'OPENING-BALANCE' ? null : p.invoiceNumber,
             isOpening: p.invoiceNumber === 'OPENING-BALANCE',
+        })),
+        // Paid when the purchase was received (isPaid): a credit against that purchase.
+        ...purchases.filter((p: any) => p.paidAmount > 0).map((p: any) => ({
+            id: `${p.id}:paid-at-receipt`,
+            type: 'payment' as const,
+            date: p.createdAt,
+            amount: p.paidAmount,
+            description: `مدفوع عند استلام فاتورة ${p.invoiceNumber || '#' + p.documentNumber}`,
+            branch: p.branch?.name || '',
+            reference: p.invoiceNumber,
         })),
         ...payments.map((p: any) => ({
             id: p.id,
@@ -285,18 +296,22 @@ export async function recordSupplierPayment(data: {
         if (outcome === 'conflict') return { success: false, code: 'REQUEST_CONFLICT', error: 'سُجّلت دفعة سابقة بهذا الطلب ببيانات مختلفة؛ راجع كشف الحساب قبل الدفع مجدداً.' };
         if (outcome === 'duplicate') return { success: true, duplicate: true };
 
-        await logAudit({
-            userId: tenantCtx.user.id,
-            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
-            action: 'CREATE',
-            entity: 'SUPPLIER_PAYMENT',
-            details: JSON.stringify({ supplierId, amount, method, safeId }),
-            branchId,
-        });
-
-        revalidatePath(`/dashboard/suppliers/${supplierId}`);
-        revalidatePath('/dashboard/suppliers');
-        revalidatePath('/dashboard/finance/safes');
+        // The payment is committed: a failure from here on must not report it as failed.
+        try {
+            await logAudit({
+                userId: tenantCtx.user.id,
+                userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+                action: 'CREATE',
+                entity: 'SUPPLIER_PAYMENT',
+                details: JSON.stringify({ supplierId, amount, method, safeId }),
+                branchId,
+            });
+            revalidatePath(`/dashboard/suppliers/${supplierId}`);
+            revalidatePath('/dashboard/suppliers');
+            revalidatePath('/dashboard/finance/safes');
+        } catch (error) {
+            console.error('Supplier payment recorded; follow-up step failed:', error);
+        }
         return { success: true };
     } catch (error) {
         if (error instanceof SupplierPaymentRefused) return { success: false, error: error.message };
@@ -307,21 +322,26 @@ export async function recordSupplierPayment(data: {
 
 /**
  * Whether a payment attempt (by its request id) was recorded: lets the form
- * settle an attempt whose response was lost, instead of paying again. Only the
- * caller's organisation's payments are visible; anything else reads as "not recorded".
+ * settle an attempt whose response was lost, instead of paying again.
+ * - recorded: a payment with this id exists in the caller's scope;
+ * - not_recorded: the caller may see it and it does not exist;
+ * - unknown: the caller cannot verify (no session or permission): keep the attempt.
  */
-export async function getSupplierPaymentStatus(requestId: string) {
+export async function getSupplierPaymentStatus(requestId: string): Promise<
+    { status: 'recorded'; amount: number; method: string } | { status: 'not_recorded' } | { status: 'unknown' }> {
     const tenantCtx = await supplierContext('read', 'pay');
-    if (!tenantCtx || typeof requestId !== 'string' || !UUID.test(requestId)) return { recorded: false };
+    if (!tenantCtx) return { status: 'unknown' };
+    if (typeof requestId !== 'string' || !UUID.test(requestId)) return { status: 'not_recorded' };
     const payment = await prisma.supplierPayment.findFirst({
         where: {
             id: requestId,
+            // Organisation, not branch: an employee moved to another branch still sees
+            // their earlier attempt as recorded instead of paying it again.
             ...(tenantCtx.organizationId ? { supplier: { organizationId: tenantCtx.organizationId } } : {}),
-            branch: tenantCtx.branchModelWhere,
         },
         select: { amount: true, method: true },
     });
-    return payment ? { recorded: true, amount: payment.amount, method: payment.method } : { recorded: false };
+    return payment ? { status: 'recorded', amount: payment.amount, method: payment.method } : { status: 'not_recorded' };
 }
 
 /**
@@ -400,7 +420,7 @@ export async function recalculateSupplierBalance(supplierId: string) {
 
     const purchases = await prisma.purchase.aggregate({
         where: { supplierId, status: 'COMPLETED' },
-        _sum: { total: true },
+        _sum: { total: true, paidAmount: true },
     });
 
     const payments = await prisma.supplierPayment.aggregate({
@@ -408,7 +428,8 @@ export async function recalculateSupplierBalance(supplierId: string) {
         _sum: { amount: true },
     });
 
-    const correctBalance = (purchases._sum.total || 0) - (payments._sum.amount || 0);
+    // Owed = purchases − what was paid at receipt − separate payments (receipt adds only the unpaid part).
+    const correctBalance = (purchases._sum.total || 0) - (purchases._sum.paidAmount || 0) - (payments._sum.amount || 0);
 
     await prisma.supplier.update({
         where: { id: supplierId },
