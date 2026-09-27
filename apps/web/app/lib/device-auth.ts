@@ -12,12 +12,26 @@ function logDeviceRejection(request: Request, code: string, detail: Record<strin
 
 /** Only desktop credentials participate; mobile and web keep their own auth. */
 export async function enforceDeviceSignature(request: Request, bound?: {keyId: string; fingerprint: string}): Promise<NextResponse | null> {
-  if (!deviceSigningEnabled()) return bound || process.env.REQUIRE_TPM_SYNC === 'true' ? NextResponse.json({error:'Device signing unavailable'}, {status:503}) : null;
+  if (!deviceSigningEnabled()) {
+    if (!bound && process.env.REQUIRE_TPM_SYNC !== 'true') return null;
+    logDeviceRejection(request, 'DEVICE_SIGNING_UNAVAILABLE', {reason: 'server-signing-disabled', bound: !!bound});
+    return NextResponse.json({error:'Device signing unavailable'}, {status:503});
+  }
   const licenseKey = request.headers.get('x-device-license-key');
   const required = process.env.REQUIRE_TPM_SYNC === 'true';
-  if (!licenseKey && !bound) return required ? NextResponse.json({error:'يلزم اعتماد الجهاز وتسجيل الدخول مجددًا.',code:'DEVICE_SIGNATURE_REQUIRED'}, {status:403}) : null;
+  if (!licenseKey && !bound) {
+    if (!required) return null;
+    logDeviceRejection(request, 'DEVICE_SIGNATURE_REQUIRED', {reason: 'no-license-header'});
+    return NextResponse.json({error:'يلزم اعتماد الجهاز وتسجيل الدخول مجددًا.',code:'DEVICE_SIGNATURE_REQUIRED'}, {status:403});
+  }
   const key = await prisma.deviceSigningKey.findFirst({where: bound ? {id:bound.keyId} : {license:{licenseKey:licenseKey!}} ,include:{license:true}});
-  if (!key) return bound || required ? NextResponse.json({error:'الجهاز غير معتمد.',code:'DEVICE_SIGNATURE_REQUIRED'}, {status:403}) : null;
+  if (!key) {
+    if (!bound && !required) return null;
+    // Bound: the session names a key that no longer exists. Otherwise: no key is
+    // registered for this license while signing is required.
+    logDeviceRejection(request, 'DEVICE_SIGNATURE_REQUIRED', {reason: bound ? 'bound-key-missing' : 'no-key-for-license'});
+    return NextResponse.json({error:'الجهاز غير معتمد.',code:'DEVICE_SIGNATURE_REQUIRED'}, {status:403});
+  }
   if (key.status === 'PENDING' && !bound && !required) return null;
   const revoked = key.status !== 'ACTIVE' ? 'key-status-' + String(key.status).toLowerCase()
     : !key.license.isActive ? 'license-inactive'

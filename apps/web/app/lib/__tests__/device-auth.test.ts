@@ -66,3 +66,28 @@ describe('server-side reason for a refused device proof', () => {
             expect(text).not.toContain(secret);
     });
 });
+
+describe('rejections before a signature is checked', () => {
+    it('logs a missing license header, a missing key and disabled signing when signing is required', async () => {
+        vi.stubEnv('REQUIRE_TPM_SYNC', 'true');
+        const noLicense = new Request('https://app.test/api/sync/sales', { method: 'POST', body: '{}' });
+        expect((await enforceDeviceSignature(noLicense))?.status).toBe(403);
+        db.key = null;
+        expect((await enforceDeviceSignature(request()))?.status).toBe(403);
+        expect((await enforceDeviceSignature(request(), { keyId: 'gone', fingerprint: 'x' }))?.status).toBe(403);
+        vi.stubEnv('TPM_DEVICE_AUTH_ENABLED', 'false');
+        expect((await enforceDeviceSignature(request()))?.status).toBe(503);
+        const text = logged();
+        for (const reason of ['no-license-header', 'no-key-for-license', 'bound-key-missing', 'server-signing-disabled'])
+            expect(text).toContain(`"reason":"${reason}"`);
+        expect(text).not.toContain(LICENSE);
+    });
+
+    it('stays silent when signing is optional and the device is not enrolled', async () => {
+        vi.stubEnv('REQUIRE_TPM_SYNC', 'false');
+        db.key = null;
+        expect(await enforceDeviceSignature(request())).toBeNull();
+        expect(await enforceDeviceSignature(new Request('https://app.test/api/sync/sales'))).toBeNull();
+        expect(warn).not.toHaveBeenCalled();
+    });
+});
