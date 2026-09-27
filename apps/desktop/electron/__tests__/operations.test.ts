@@ -90,3 +90,20 @@ it('does not share an in-flight authorization after switching users', async () =
  expect((await first).success).toBe(false);
  expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+it('passes a refused receipt status and code to the renderer instead of only a message',async()=>{
+ const normal=fetch;vi.stubGlobal('fetch',vi.fn(async(url:any,opts:any)=>String(url).includes('/receive')?{ok:false,status:409,json:async()=>({message:'الفاتورة ملغاة',code:'PURCHASE_CANCELLED'})}:normal(url,opts)));
+ const result=await call({path:'/purchases/p/receive',method:'POST'});
+ expect(result).toMatchObject({success:false,status:409,code:'PURCHASE_CANCELLED',error:'الفاتورة ملغاة'});
+ expect(result.lost).toBeFalsy();
+ expect(refresh).not.toHaveBeenCalled();
+});
+it('marks a receipt whose answer never arrived as lost, so the renderer checks the document',async()=>{
+ const normal=fetch;vi.stubGlobal('fetch',vi.fn(async(url:any,opts:any)=>{if(String(url).includes('/receive'))throw Error('network lost');return normal(url,opts);}));
+ expect(await call({path:'/purchases/p/receive',method:'POST'})).toMatchObject({success:false,lost:true});
+});
+it('does not mark a receipt refused before sending as lost',async()=>{
+ prepare.mockRejectedValue(Error('pending'));
+ const result=await call({path:'/purchases/p/receive',method:'POST'});
+ expect(result.success).toBe(false);expect(result.lost).toBeFalsy();
+});

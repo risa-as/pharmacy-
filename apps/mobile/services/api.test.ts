@@ -180,3 +180,24 @@ it('does not let a stale refresh replace a different login',()=>{setCachedToken(
 
 it.each(['error','message'])('preserves server validation text from %s',async(key)=>{setCachedToken('validation-'+key);vi.stubGlobal('fetch',vi.fn().mockResolvedValue(jsonResponse({[key]:'اكتب سبب فرق الجرد'},409)));await expect(request('/inventory/stocktake/test',{method:'PUT',body:'{}'})).rejects.toThrow('اكتب سبب فرق الجرد');});
 it('uses a safe HTTP fallback for non-JSON error pages',async()=>{setCachedToken('html-error');vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('<html>internal diagnostics</html>',{status:409})));await expect(request('/inventory/stocktake/test',{method:'PUT',body:'{}'})).rejects.toThrow('HTTP 409');});
+
+describe('purchase receipt submission', () => {
+    beforeEach(() => { vi.restoreAllMocks(); (globalThis as { __DEV__?: boolean }).__DEV__ = false; setCachedToken(`receipt-${Math.random()}`); });
+    it('is sent once when the response is lost: a resend would come back as "already received"', async () => {
+        const fetchMock = vi.fn().mockRejectedValue(new TypeError('Network request failed'));
+        vi.stubGlobal('fetch', fetchMock);
+        await expect(apiService.receivePurchase('p', [])).rejects.toThrow();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    it('keeps the HTTP status and code of a refused receipt', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: 'الفاتورة ملغاة', code: 'PURCHASE_CANCELLED' }, 409)));
+        await expect(apiService.receivePurchase('p', [])).rejects.toMatchObject({ status: 409, code: 'PURCHASE_CANCELLED', message: 'الفاتورة ملغاة' });
+    });
+    it('reads the document status from the server, not from a cache, after a failure', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 'p', status: 'COMPLETED' }));
+        vi.stubGlobal('fetch', fetchMock);
+        await expect(apiService.getPurchaseStatus('p')).resolves.toBe('COMPLETED');
+        await expect(apiService.getPurchaseStatus('p')).resolves.toBe('COMPLETED');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+});
