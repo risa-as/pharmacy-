@@ -68,10 +68,12 @@ const hasMigrationsTable = (db) => psql(db, `SELECT to_regclass('_prisma_migrati
 const baseline = (target, shadow, ...flags) => run('node', ['scripts/baseline-existing-db.mjs', ...flags], {
     cwd: ROOT, env: { TARGET_DATABASE_URL: url(target), SHADOW_DATABASE_URL: url(shadow) },
 });
-const fingerprint = (db) => psql(db, `SELECT md5(string_agg(t, '|' ORDER BY t)) FROM (
-    SELECT table_name||'.'||column_name||':'||data_type t FROM information_schema.columns WHERE table_schema='public'
-    UNION ALL SELECT 'm:'||migration_name FROM _prisma_migrations WHERE to_regclass('_prisma_migrations') IS NOT NULL
-    UNION ALL SELECT 'r:'||count(*) FROM "Organization") x`);
+/** Columns, recorded migrations and row count: equal before/after means nothing was changed. */
+const fingerprint = (db) => [
+    psql(db, `SELECT md5(string_agg(table_name||'.'||column_name||':'||data_type, '|' ORDER BY table_name, column_name)) FROM information_schema.columns WHERE table_schema='public'`),
+    hasMigrationsTable(db) ? recorded(db).join(',') : 'no history',
+    psql(db, `SELECT count(*) FROM "Organization"`),
+].join(' / ');
 
 // SQL objects that only migrations create (Prisma's schema cannot express them).
 const sqlObjects = (names) => {
