@@ -7,13 +7,15 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-export const ROOT = resolve(new URL('..', import.meta.url).pathname);
+export const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const WEB = join(ROOT, 'apps/web');
 export const SCHEMA = join(WEB, 'prisma/schema.prisma');
 export const MIGRATIONS = join(WEB, 'prisma/migrations');
 // pnpm may link the CLI in the app or hoist it to the workspace root.
-const PRISMA = [join(WEB, 'node_modules/.bin/prisma'), join(ROOT, 'node_modules/.bin/prisma')].find((p) => existsSync(p));
+const require = createRequire(join(WEB, 'package.json'));
+const PRISMA = require.resolve('prisma/build/index.js');
 
 export const migrationNames = () => readdirSync(MIGRATIONS, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
 const sqlOf = (name) => readFileSync(join(MIGRATIONS, name, 'migration.sql'), 'utf8');
@@ -30,7 +32,8 @@ export const sameDatabase = (a, b) => a.hostname === b.hostname && (a.port || '5
 
 export function prisma(args, databaseUrl) {
     if (!PRISMA) throw new Error('Prisma CLI not found; run pnpm install.');
-    const r = spawnSync(PRISMA, args, { cwd: WEB, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, DATABASE_URL: databaseUrl ?? '' } });
+    const r = spawnSync(process.execPath, [PRISMA, ...args], { cwd: WEB, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, DATABASE_URL: databaseUrl ?? '' } });
+    if (r.error) throw r.error;
     return { code: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 
@@ -46,7 +49,40 @@ export async function isEmpty(db) {
         WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND c.relkind IN ('r','p','v','m','S','f')`);
     const enums = await db.$queryRawUnsafe(`SELECT t.typname FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
         WHERE t.typtype='e' AND n.nspname NOT IN ('pg_catalog','information_schema')`);
-    return objects.length === 0 && enums.length === 0;
+    const other = await db.$queryRawUnsafe(`SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_%'
+        UNION ALL SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+        WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_%'
+        UNION ALL SELECT 1 FROM pg_namespace WHERE nspname NOT IN ('public','information_schema') AND nspname NOT LIKE 'pg_%'
+        UNION ALL SELECT 1 FROM pg_extension WHERE extname <> 'plpgsql'`);
+    return objects.length === 0 && enums.length === 0 && other.length === 0;
+}
+
+/** Compare definitions with a freshly replayed shadow, not merely object names. */
+export async function sqlObjectDefinitions(db) {
+    return db.$queryRawUnsafe(`
+        SELECT 'function' AS kind, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS identity,
+            pg_get_functiondef(p.oid) AS definition
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public' AND p.prokind IN ('f','p')
+        UNION ALL
+        SELECT 'trigger', c.relname || '.' || t.tgname,
+            pg_get_triggerdef(t.oid) || ' ENABLED=' || t.tgenabled::text
+        FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND NOT t.tgisinternal
+        UNION ALL
+        SELECT 'sequence', c.relname,
+            concat_ws(',', s.seqtypid::regtype::text,s.seqstart,s.seqincrement,s.seqmax,s.seqmin,s.seqcache,s.seqcycle)
+        FROM pg_sequence s JOIN pg_class c ON c.oid=s.seqrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public'
+        ORDER BY kind, identity`);
+}
+
+export async function changedSqlObjects(target, shadow) {
+    const [actual, expected] = await Promise.all([sqlObjectDefinitions(target), sqlObjectDefinitions(shadow)]);
+    const byKey = new Map(actual.map(o => [o.kind + ':' + o.identity, o.definition]));
+    return expected.filter(o => byKey.get(o.kind + ':' + o.identity) !== o.definition)
+        .map(o => o.kind + ':' + o.identity);
 }
 
 /** A migrations directory holding only the first `count` migrations (state after `count`). */

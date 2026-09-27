@@ -10,14 +10,14 @@
 // Run it on a RESTORED COPY first (see docs/database/migration-baseline.md).
 //
 // What it does, in order; it stops without writing anything at the first failure:
-//  1. _prisma_migrations: no failed/rolled-back rows, no unknown names, checksums equal
+//  1. _prisma_migrations: no unresolved failures; completed rows have known names and checksums equal
 //     to the local files.
 //  2. Finds the point k of the chain the database is exactly equal to, with
 //     `prisma migrate diff` (the chain after k migrations, replayed on the shadow
 //     database, against the target): if the history is an exact prefix, k is its
 //     length; otherwise the largest k that matches. No match → refuse.
 //  3. SQL objects the first k migrations create (functions, triggers, sequences),
-//     which migrate diff cannot see, must all exist.
+//     which migrate diff cannot see, match the shadow definitions and trigger state.
 //  4. Unrecorded migrations up to k that contain data steps are listed; --apply
 //     refuses unless --data-steps-reviewed confirms they were checked on this data.
 //  5. --apply: re-checks equality, records the unrecorded migrations up to k with
@@ -30,7 +30,7 @@
 import { writeFileSync } from 'node:fs';
 import {
     SCHEMA, checksum, client, dataSteps, diffAgainstPrefix, diffAgainstSchema, isEmpty, migrationNames,
-    missingObjects, postgresUrl, prisma, sameDatabase, sqlObjects,
+    missingObjects, postgresUrl, prisma, sameDatabase, sqlObjects, changedSqlObjects,
 } from './migration-chain.mjs';
 
 const args = process.argv.slice(2);
@@ -39,7 +39,14 @@ const dataReviewed = args.includes('--data-steps-reviewed');
 const reportPath = args.includes('--report') ? args[args.indexOf('--report') + 1] : null;
 class Refused extends Error {}
 const fail = (message) => { throw new Refused(message); };
-let SHADOW = null, shadowVerified = false;
+let SHADOW = null, shadowVerified = false, targetMayHaveChanged = false;
+async function verifyDefinitions(db) {
+    const shadow = client(SHADOW);
+    try {
+        const changed = await changedSqlObjects(db, shadow);
+        if (changed.length) fail(`SQL object definitions or enabled state differ from the replayed migrations: ${changed.join(', ')}`);
+    } finally { await shadow.$disconnect(); }
+}
 /** Prisma leaves the replayed chain in the shadow; empty it again (only a shadow verified empty at the start). */
 async function resetShadow() {
     const s = client(SHADOW);
@@ -71,13 +78,16 @@ try {
     // 1. Recorded history.
     const hasTable = (await db.$queryRawUnsafe(`SELECT to_regclass('_prisma_migrations') IS NOT NULL AS ok`))[0].ok;
     const rows = hasTable ? await db.$queryRawUnsafe(`SELECT migration_name, checksum, finished_at, rolled_back_at FROM _prisma_migrations ORDER BY migration_name`) : [];
-    const broken = rows.filter((r) => !r.finished_at || r.rolled_back_at);
-    if (broken.length) fail(`unfinished or rolled-back migrations in _prisma_migrations: ${broken.map((r) => r.migration_name).join(', ')}. Resolve them first.`);
-    const unknown = rows.filter((r) => !names.includes(r.migration_name));
+    // Prisma retains rolled-back attempts as audit history; only an unresolved
+    // failure blocks deploy. Validate applied rows, not superseded attempts.
+    const activeRows = rows.filter((r) => !r.rolled_back_at);
+    const broken = activeRows.filter((r) => !r.finished_at);
+    if (broken.length) fail(`unfinished migrations in _prisma_migrations: ${broken.map((r) => r.migration_name).join(', ')}. Resolve them first.`);
+    const unknown = activeRows.filter((r) => !names.includes(r.migration_name));
     if (unknown.length) fail(`the database records migrations that do not exist here: ${unknown.map((r) => r.migration_name).join(', ')}.`);
-    const edited = rows.filter((r) => r.checksum !== checksum(r.migration_name));
+    const edited = activeRows.filter((r) => r.checksum !== checksum(r.migration_name));
     if (edited.length) fail(`recorded checksum differs from the local file for: ${edited.map((r) => `${r.migration_name} (checksum)`).join(', ')}. A migration was edited after it was applied.`);
-    const recorded = new Set(rows.map((r) => r.migration_name));
+    const recorded = new Set(activeRows.map((r) => r.migration_name));
     const lastRecorded = Math.max(-1, ...[...recorded].map((n) => names.indexOf(n)));
     report.recorded = recorded.size;
 
@@ -104,6 +114,7 @@ try {
     // 3. SQL objects the chain up to k creates.
     const toRecord = names.slice(0, k).filter((n) => !recorded.has(n));
     const toApply = names.slice(k);
+    await verifyDefinitions(db);
     if (toRecord.length) {
         const missing = await missingObjects(db, sqlObjects(names, k));
         if (missing.length) fail(`SQL objects that the migrations up to ${names[k - 1]} create are missing: `
@@ -128,16 +139,22 @@ try {
 
         // 5. Record, deploy, verify.
         if (diffAgainstPrefix(names, k, TARGET, SHADOW).code !== 0) fail('the database changed during the check; run again.');
+        await verifyDefinitions(db);
         for (const n of toRecord) {
+            targetMayHaveChanged = true;
             const r = prisma(['migrate', 'resolve', '--applied', n, '--schema', SCHEMA], TARGET);
             if (r.code !== 0) { console.error(r.out); throw new Error(`migrate resolve failed at ${n}; the migrations before it are recorded, re-run this script.`); }
         }
         console.log(`Recorded ${toRecord.length} migration(s).`);
+        targetMayHaveChanged = true;
         const deploy = prisma(['migrate', 'deploy', '--schema', SCHEMA], TARGET);
         if (deploy.code !== 0) { console.error(deploy.out); throw new Error('migrate deploy failed; see the output above.'); }
         console.log(`Applied ${toApply.length} migration(s).`);
         const final = diffAgainstSchema(TARGET);
         if (final.code !== 0) throw new Error(`after deploy the database differs from schema.prisma:\n${final.out}`);
+        if (diffAgainstPrefix(names, names.length, TARGET, SHADOW).code !== 0)
+            throw new Error('The deployed database differs from the full migration chain.');
+        await verifyDefinitions(db);
         const stillMissing = await missingObjects(db, sqlObjects(names, names.length));
         if (stillMissing.length) throw new Error(`after deploy SQL objects are missing: ${stillMissing.map((o) => o.name).join(', ')}`);
         console.log('Verified: the database equals schema.prisma and has every SQL object of the chain.');
@@ -152,7 +169,7 @@ try {
 try {
     await main();
 } catch (e) {
-    if (e instanceof Refused) console.error(`REFUSED: ${e.message}\nNothing was written to the target database.`);
+    if (e instanceof Refused) console.error(`REFUSED: ${e.message}\n${targetMayHaveChanged ? 'The apply phase started; inspect migration history before retrying.' : 'Nothing was written to the target database.'}`);
     else console.error(`FAILED: ${e.message}`);
     process.exitCode = 1;
 } finally {

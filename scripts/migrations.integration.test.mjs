@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 
 const ADMIN = process.env.MIGRATION_TEST_ADMIN_URL;
 if (!ADMIN) throw new Error('MIGRATION_TEST_ADMIN_URL is required (a local PostgreSQL admin connection).');
@@ -25,7 +26,7 @@ const WEB = join(ROOT, 'apps/web');
 const MIGRATIONS = join(WEB, 'prisma/migrations');
 const SCHEMA = join(WEB, 'prisma/schema.prisma');
 // pnpm may link the CLI in the app or hoist it to the workspace root.
-const PRISMA = [join(WEB, 'node_modules/.bin/prisma'), join(ROOT, 'node_modules/.bin/prisma')].find((p) => existsSync(p));
+const PRISMA = createRequire(join(WEB, 'package.json')).resolve('prisma/build/index.js');
 const PREFIX = 'faramace_migration_test_';
 const created = new Set();
 const all = readdirSync(MIGRATIONS, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
@@ -36,11 +37,12 @@ const work = mkdtempSync(join(tmpdir(), 'faramace-migrations-'));
 
 const url = (name) => { const u = new URL(ADMIN); u.pathname = `/${name}`; return u.toString(); };
 const run = (cmd, args, opts = {}) => {
-    const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts, env: { ...process.env, DATABASE_URL: '', ...opts.env } });
+    const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 120_000, maxBuffer: 64 * 1024 * 1024, ...opts, env: { ...process.env, DATABASE_URL: '', ...opts.env } });
+    if (r.error) throw new Error(`Test command ${cmd} failed: ${r.error.code}`);
     return { code: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 };
 const psql = (db, sql) => {
-    const r = run('psql', [url(db), '-v', 'ON_ERROR_STOP=1', '-Atqc', sql]);
+    const r = run('psql', ['-w', url(db), '-v', 'ON_ERROR_STOP=1', '-Atqc', sql]);
     if (r.code !== 0) throw new Error(r.out);
     return r.out.trim();
 };
@@ -51,7 +53,7 @@ const createDb = (suffix) => {
     created.add(name);
     return name;
 };
-const prisma = (args, db, opts = {}) => run(PRISMA, args, { cwd: WEB, ...opts, env: { DATABASE_URL: db ? url(db) : '', ...opts.env } });
+const prisma = (args, db, opts = {}) => run(process.execPath, [PRISMA, ...args], { cwd: WEB, ...opts, env: { DATABASE_URL: db ? url(db) : '', ...opts.env } });
 const schemaDiff = (db) => prisma(['migrate', 'diff', '--from-url', url(db), '--to-schema-datamodel', SCHEMA, '--exit-code'], null).code;
 /** A migrations directory with only the given migrations (for building older states). */
 const chainDir = (names) => {
@@ -107,9 +109,9 @@ const rows = (db) => psql(db, `SELECT (SELECT count(*) FROM "Organization")||'/'
 /** pg_dump → a new database: upgrades always run on the restored copy. */
 const restoreCopy = (source, suffix) => {
     const copy = createDb(suffix);
-    const dump = run('pg_dump', ['--no-owner', '--no-privileges', url(source)]);
+    const dump = run('pg_dump', ['-w', '--no-owner', '--no-privileges', url(source)]);
     if (dump.code !== 0) throw new Error(dump.out);
-    const load = spawnSync('psql', [url(copy), '-v', 'ON_ERROR_STOP=1', '-q'], { input: dump.out, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const load = spawnSync('psql', ['-w', url(copy), '-v', 'ON_ERROR_STOP=1', '-q'], { input: dump.out, encoding: 'utf8', timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
     if (load.status !== 0) throw new Error(load.stderr);
     return copy;
 };
@@ -201,6 +203,48 @@ describe('existing database: upgrade of a restored copy', () => {
 });
 
 describe('existing database: the baseline refuses and changes nothing', () => {
+    it('accepts audited rolled-back attempts but rejects an unresolved failed attempt', () => {
+        const db = createDb('history_attempts');
+        assert.equal(deploy(db).code, 0);
+        const shadow = createDb('shadow_history');
+        psql(db, `INSERT INTO _prisma_migrations(id, checksum, migration_name, started_at, rolled_back_at, applied_steps_count)
+            VALUES ('audit-old-attempt', 'old-failed-checksum', '${all[0]}', now(), now(), 0)`);
+        const before = fingerprint(db);
+        let r = baseline(db, shadow);
+        assert.equal(r.code, 0, r.out);
+        assert.equal(fingerprint(db), before);
+        psql(db, "UPDATE _prisma_migrations SET rolled_back_at=NULL WHERE id='audit-old-attempt'");
+        r = baseline(db, shadow, '--apply');
+        assert.notEqual(r.code, 0);
+        assert.match(r.out, /unfinished/);
+    });
+    it('rejects disabled triggers and changed function bodies despite matching names', () => {
+        const db = createDb('changed_objects');
+        assert.equal(deploy(db).code, 0);
+        const shadow = createDb('shadow_changed');
+        psql(db, 'ALTER TABLE "Sale" DISABLE TRIGGER sale_invoice_scope');
+        const before = fingerprint(db);
+        let r = baseline(db, shadow, '--apply');
+        assert.notEqual(r.code, 0, r.out);
+        assert.match(r.out, /definitions or enabled state/);
+        assert.equal(fingerprint(db), before);
+        psql(db, 'ALTER TABLE "Sale" ENABLE TRIGGER sale_invoice_scope');
+        const fn = psql(db, `SELECT p.proname FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgname='sale_invoice_scope'`);
+        psql(db, `CREATE OR REPLACE FUNCTION "${fn}"() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$`);
+        r = baseline(db, shadow, '--apply');
+        assert.notEqual(r.code, 0, r.out);
+        assert.match(r.out, /function:/);
+        assert.equal(fingerprint(db), before);
+    });
+    it('refuses a shadow containing only a function and preserves it', () => {
+        const db = createDb('function_guard');
+        const shadow = createDb('shadow_function');
+        psql(shadow, 'CREATE FUNCTION keep_me() RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$');
+        const r = baseline(db, shadow);
+        assert.notEqual(r.code, 0);
+        assert.match(r.out, /not empty/);
+        assert.equal(psql(shadow, 'SELECT keep_me()'), '1');
+    });
     it('a SQL object a migration creates is missing (trigger dropped) → refused, even with the data-step review', () => {
         const db = createDb('missing_trigger');
         pushBuilt(db, readFileSync(SCHEMA, 'utf8'), historical);
