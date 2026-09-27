@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, use, Fragment } from 'react';
 import { toast } from 'sonner';
-import { classifyReceiptFailure, settleReceipt, type ReceiptOutcome } from '../../../../../../../packages/shared/src/receipt-outcome';
+import { receiptResendBlocked, recheckReceipt, settleReceipt, type ReceiptOutcome } from '../../../../../../../packages/shared/src/receipt-outcome';
 
 export default function ReceivePurchasePage(props: { params: Promise<{ id: string }> }) {
     const params = use(props.params);
@@ -103,7 +103,7 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
         : 0;
 
     const handleConfirm = async () => {
-        if (submitting) return;
+        if (submitting || receiptResendBlocked(outcome)) return;
         // حارس ثانٍ بعد تعطيل الزر: لا رقم دفعة مُولَّداً ولا تاريخ افتراضياً هنا —
         // البند الناقص يوقف الاستلام بدل أن يُملأ بقيمة مُختلَقة.
         if (incompleteCount > 0) {
@@ -150,8 +150,7 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
     const recheck = async () => {
         setSubmitting(true);
         try {
-            const status = await getPurchaseDetails(params.id).then((p) => p?.status ?? null, () => null);
-            const next = classifyReceiptFailure({ lost: true }, status);
+            const next = await recheckReceipt(async () => (await getPurchaseDetails(params.id))?.status ?? null);
             setOutcome(next);
             if (next.closed) router.refresh();
         } finally {
@@ -379,7 +378,7 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
             {!outcome?.closed && (
                 <Button
                     onClick={handleConfirm}
-                    disabled={submitting || incompleteCount > 0 || (outcome !== null && !outcome.canRetry && outcome.kind !== 'REJECTED')}
+                    disabled={submitting || incompleteCount > 0 || receiptResendBlocked(outcome)}
                     className="w-full h-12 text-lg"
                 >
                     {submitting ? 'جارٍ الاستلام…' : 'تأكيد واستلام المواد'}

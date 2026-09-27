@@ -21,13 +21,17 @@ export function readStorage(kind: StorageKind, key: string): string | null {
   }
 }
 
-/** True only when the value was stored. */
+/**
+ * True only when the value was stored: it is read back and compared, since some
+ * environments accept setItem and keep nothing. Callers that must not continue
+ * without a durable record (such as an idempotency key) rely on this.
+ */
 export function writeStorage(kind: StorageKind, key: string, value: string): boolean {
   try {
     const storage = area(kind);
     if (!storage) return false;
     storage.setItem(key, value);
-    return true;
+    return storage.getItem(key) === value;
   } catch {
     return false;
   }

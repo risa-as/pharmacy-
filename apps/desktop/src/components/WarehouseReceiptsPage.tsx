@@ -21,7 +21,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { showConfirm } from "../lib/dialog";
-import { settleReceipt } from "../../../../packages/shared/src/receipt-outcome";
+import { receiptResendBlocked, recheckReceipt, settleReceipt, type ReceiptOutcome } from "../../../../packages/shared/src/receipt-outcome";
 
 // Receiving warehouse (مذخر) purchases: same server contract as before
 // (operations:access / operations:request, /purchases, /purchases/:id/receive)
@@ -161,6 +161,9 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
   const [filter, setFilter] = useState<Filter>("ACTIVE");
   const [query, setQuery] = useState("");
   const [touched, setTouched] = useState(false);
+  // Last non-success receipt result for the open document; while it blocks
+  // resending, the confirm button is replaced by "check the document".
+  const [outcome, setOutcome] = useState<ReceiptOutcome | null>(null);
   const lock = useRef(false);
   const live = useRef(true);
 
@@ -197,6 +200,7 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
   const open = async (id: string) => {
     const doc = await api(`/purchases/${id}`);
     if (!live.current) return;
+    if (detail?.id !== doc.id) setOutcome(null);
     setDetail(doc);
     setTouched(false);
     setLines(
@@ -244,7 +248,27 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
     };
   }, []);
 
+  // Shows a non-success outcome: a closed document is reloaded as the server has
+  // it; an open one keeps the entered lines. A failed reload must not hide it.
+  const report = async (id: string, result: ReceiptOutcome) => {
+    if (live.current) setOutcome(result);
+    if (result.closed) {
+      await open(id).catch(() => undefined);
+      await load().catch(() => undefined);
+    }
+    if (result.tone === "warning") {
+      if (live.current) setNotice(`${result.title}: ${result.message}`);
+      return;
+    }
+    throw Error(`${result.title}: ${result.message}`);
+  };
+  const recheck = async () => {
+    const id = detail.id;
+    await report(id, await recheckReceipt(async () => (await api(`/purchases/${id}`))?.status ?? null));
+  };
+
   const receive = async () => {
+    if (receiptResendBlocked(outcome)) return;
     setTouched(true);
     if (lines.some((l) => Object.keys(lineIssues(l)).length))
       throw Error("راجع الحقول المعلَّمة: الكمية والتكلفة ورقم الدفعة والصلاحية لكل بند. الصفر مسموح فقط للبونص المعتمد.");
@@ -258,7 +282,7 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
     )
       return;
     const id = detail.id;
-    const outcome = await settleReceipt(
+    const result = await settleReceipt(
       () =>
         api(`/purchases/${id}/receive`, "POST", {
           isPaid: false,
@@ -272,23 +296,13 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
         }),
       async () => (await api(`/purchases/${id}`))?.status ?? null,
     );
-    if (outcome.kind === "RECEIVED") {
+    if (result.kind === "RECEIVED") {
+      if (live.current) setOutcome(null);
       await open(id);
       await load();
       return;
     }
-    // A closed document is shown as the server has it now; an open one keeps the
-    // entered lines so a rejection or a safe retry does not lose them. A failed
-    // reload must not hide the outcome.
-    if (outcome.closed) {
-      await open(id).catch(() => undefined);
-      await load().catch(() => undefined);
-    }
-    if (outcome.tone === "warning") {
-      if (live.current) setNotice(`${outcome.title}: ${outcome.message}`);
-      return;
-    }
-    throw Error(`${outcome.title}: ${outcome.message}`);
+    await report(id, result);
   };
 
   const editable =
@@ -737,10 +751,17 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
                 <span className="font-semibold text-destructive">{num(summary.invalid)} دفعة تحتاج تصحيحاً</span>
               )}
             </div>
-            <button className={primaryBtn} disabled={busy} onClick={() => void run(receive)}>
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />}
-              مراجعة وتأكيد استلام المواد
-            </button>
+            {receiptResendBlocked(outcome) ? (
+              <button className={primaryBtn} disabled={busy} onClick={() => void run(recheck)}>
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                تحقّق من حالة المستند قبل أي إعادة إرسال
+              </button>
+            ) : (
+              <button className={primaryBtn} disabled={busy} onClick={() => void run(receive)}>
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />}
+                مراجعة وتأكيد استلام المواد
+              </button>
+            )}
           </div>
         </div>
       )}

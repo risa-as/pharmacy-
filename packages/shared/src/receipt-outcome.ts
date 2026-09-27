@@ -100,3 +100,19 @@ export async function settleReceipt(send: () => Promise<unknown>, readStatus: ()
     return classifyReceiptFailure(failure, status);
   }
 }
+
+/**
+ * Whether the confirm button must stay disabled after this outcome: the document
+ * is closed, or it is unknown whether the last submission was applied. After a
+ * rejection (entries can be corrected) or a confirmed non-receipt, sending again is
+ * allowed. Web, mobile and desktop all use this rule.
+ */
+export function receiptResendBlocked(outcome: ReceiptOutcome | null): boolean {
+  return !!outcome && (outcome.closed || outcome.kind === 'UNCONFIRMED');
+}
+
+/** "Check the document" after an unconfirmed result: reads the status again. */
+export async function recheckReceipt(readStatus: () => Promise<string | null | undefined>): Promise<ReceiptOutcome> {
+  const status = await readStatus().catch(() => null);
+  return classifyReceiptFailure({ lost: true }, status);
+}

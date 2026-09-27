@@ -20,7 +20,12 @@ import {
   StateBlock,
 } from "../../../components/ui/Kit";
 import { formatNumber } from "../../../utils/format";
-import { settleReceipt } from "../../../../../packages/shared/src/receipt-outcome";
+import {
+  receiptResendBlocked,
+  recheckReceipt,
+  settleReceipt,
+  type ReceiptOutcome,
+} from "../../../../../packages/shared/src/receipt-outcome";
 
 interface ReceiveItem {
   id: string;
@@ -115,6 +120,8 @@ export default function ReceiveItemsScreen() {
   const [failed, setFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [touched, setTouched] = useState(false);
+  // Last non-success result; while it blocks resending, the confirm button is off.
+  const [outcome, setOutcome] = useState<ReceiptOutcome | null>(null);
   const nowYear = new Date().getFullYear();
 
   const fetchDetails = useCallback(async () => {
@@ -230,6 +237,7 @@ export default function ReceiveItemsScreen() {
         () => apiService.receivePurchase(id as string, payload),
         () => apiService.getPurchaseStatus(id as string),
       );
+      setOutcome(outcome.kind === "RECEIVED" ? null : outcome);
       Alert.alert(
         outcome.title,
         outcome.message,
@@ -243,7 +251,30 @@ export default function ReceiveItemsScreen() {
     }
   };
 
+  const recheck = async () => {
+    if (receiptLock.current) return;
+    receiptLock.current = true;
+    setSubmitting(true);
+    try {
+      const next = await recheckReceipt(() =>
+        apiService.getPurchaseStatus(id as string),
+      );
+      setOutcome(next);
+      Alert.alert(
+        next.title,
+        next.message,
+        next.closed
+          ? [{ text: "تم", onPress: () => router.back() }]
+          : [{ text: "حسناً" }],
+      );
+    } finally {
+      receiptLock.current = false;
+      setSubmitting(false);
+    }
+  };
+
   const handleConfirm = () => {
+    if (receiptResendBlocked(outcome)) return;
     setTouched(true);
     if (firstInvalid >= 0) {
       Alert.alert(
@@ -619,12 +650,34 @@ export default function ReceiveItemsScreen() {
           backgroundColor: C.background,
         }}
       >
-        <AppButton
-          label="مراجعة وتأكيد الاستلام"
-          icon="checkmark-circle-outline"
-          loading={submitting}
-          onPress={handleConfirm}
-        />
+        {receiptResendBlocked(outcome) ? (
+          <>
+            {outcome && (
+              <InfoNote tone="warning" title={outcome.title} text={outcome.message} />
+            )}
+            {outcome?.closed ? (
+              <AppButton
+                label="العودة"
+                icon="arrow-back-outline"
+                onPress={() => router.back()}
+              />
+            ) : (
+              <AppButton
+                label="تحقّق من حالة المستند"
+                icon="refresh-outline"
+                loading={submitting}
+                onPress={recheck}
+              />
+            )}
+          </>
+        ) : (
+          <AppButton
+            label="مراجعة وتأكيد الاستلام"
+            icon="checkmark-circle-outline"
+            loading={submitting}
+            onPress={handleConfirm}
+          />
+        )}
       </View>
     </KeyboardAvoidingView>
   );
