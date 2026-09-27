@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 
+const toast = vi.hoisted(() => ({ warning: vi.fn() }));
+vi.mock('sonner', () => ({ toast }));
+
 // A fresh module instance = the page was reloaded (in-memory state is gone).
 const load = async () => { vi.resetModules(); return (await import('../warehouse-mutation-client')).warehouseMutation; };
 const memoryStorage = (store = new Map<string, string>()) => ({ getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k), store });
@@ -9,6 +12,7 @@ const asUser = (id: string | null) => async () => id;
 const me = asUser('user-1');
 let local: ReturnType<typeof memoryStorage>;
 beforeEach(() => {
+    toast.warning.mockClear();
     vi.stubGlobal('crypto', webcrypto);
     local = memoryStorage();
     vi.stubGlobal('localStorage', local);
@@ -64,31 +68,12 @@ describe('the attempt survives a reload and a closed tab', () => {
         await (await load())('/test/pay', init, me);
         expect(keyOf(fetcher, 1)).toBe(keyOf(fetcher, 0));
     });
-    it('reuses a key left in session storage by the previous version', async () => {
-        const fetcher = vi.fn().mockResolvedValue(new Response('{}'));
-        vi.stubGlobal('fetch', fetcher);
-        const legacy = memoryStorage();
-        legacy.setItem('warehouse-pending:' + JSON.stringify(['/test/pay', 'POST', JSON.parse(init.body)]), 'legacy-key-0123456789abcdef');
-        vi.stubGlobal('sessionStorage', legacy);
-        await (await load())('/test/pay', init, me);
-        expect(keyOf(fetcher, 0)).toBe('legacy-key-0123456789abcdef');
-    });
     it('does not hand one user\'s unsettled attempt to another user on the same browser', async () => {
         const fetcher = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
         vi.stubGlobal('fetch', fetcher);
         const warehouseMutation = await load();
         await warehouseMutation('/test/pay', init, asUser('user-1')).catch(() => {});
         await warehouseMutation('/test/pay', init, asUser('user-2')).catch(() => {});
-        expect(keyOf(fetcher, 1)).not.toBe(keyOf(fetcher, 0));
-    });
-    it('does not replay a stale attempt forever: after a day a new key is used', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(new Date('2026-09-27T08:00:00Z'));
-        const fetcher = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-        vi.stubGlobal('fetch', fetcher);
-        await (await load())('/test/pay', init, me).catch(() => {});
-        vi.setSystemTime(new Date('2026-09-28T09:00:00Z'));
-        await (await load())('/test/pay', init, me).catch(() => {});
         expect(keyOf(fetcher, 1)).not.toBe(keyOf(fetcher, 0));
     });
 });
@@ -123,5 +108,81 @@ describe('no send without a stored attempt', () => {
         await (await load())('/test/pay', init, me);
         expect(fetcher).toHaveBeenCalledTimes(2);
         expect(keyOf(fetcher, 1)).toBe(keyOf(fetcher, 0));
+    });
+});
+
+describe('an unsettled attempt is never replaced by a new key', () => {
+    const init = { method: 'POST', body: JSON.stringify({ amount: 50, invoice: 'i1' }) };
+    it('25 hours later the same key is sent again, so the server settles it instead of applying it twice', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-09-27T08:00:00Z'));
+        const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValue(new Response(JSON.stringify({ ok: 1, idempotentReplay: true })));
+        vi.stubGlobal('fetch', fetcher);
+        await (await load())('/test/pay', init, me).catch(() => {});
+        vi.setSystemTime(new Date('2026-09-28T09:00:00Z'));
+        await (await load())('/test/pay', init, me);
+        expect(keyOf(fetcher, 1)).toBe(keyOf(fetcher, 0));
+    });
+    it('a replayed answer is announced: the earlier attempt was applied, no new operation was recorded', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: 1, idempotentReplay: true }))));
+        await (await load())('/test/pay', init, me);
+        expect(toast.warning).toHaveBeenCalledOnce();
+        expect(String(toast.warning.mock.calls[0][0])).toContain('لم تُسجّل عملية جديدة');
+    });
+    it('a first-time answer is not announced as a replay', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"ok":1}')));
+        await (await load())('/test/pay', init, me);
+        expect(toast.warning).not.toHaveBeenCalled();
+    });
+});
+
+describe('a key from the previous version (sessionStorage, no owner) is never imported', () => {
+    const init = { method: 'POST', body: JSON.stringify({ amount: 50, invoice: 'i1' }) };
+    const legacySlot = 'warehouse-pending:' + JSON.stringify(['/test/pay', 'POST', JSON.parse(init.body)]);
+    it('stops for review and sends nothing; the old key is not used by this (or another) user', async () => {
+        const legacy = memoryStorage();
+        legacy.setItem(legacySlot, 'legacy-key-0123456789abcdef');
+        vi.stubGlobal('sessionStorage', legacy);
+        const fetcher = vi.fn().mockResolvedValue(new Response('{}'));
+        vi.stubGlobal('fetch', fetcher);
+        await expect((await load())('/test/pay', init, asUser('user-2'))).rejects.toThrow(/راجع/);
+        expect(fetcher).not.toHaveBeenCalled();
+        // After the review stop, the old entry is gone and a new operation gets its own key.
+        expect(legacy.getItem(legacySlot)).toBeNull();
+        await (await load())('/test/pay', init, asUser('user-2'));
+        expect(keyOf(fetcher, 0)).not.toBe('legacy-key-0123456789abcdef');
+    });
+    it('keeps stopping while the old entry cannot be removed', async () => {
+        vi.stubGlobal('sessionStorage', { getItem: () => 'legacy-key-0123456789abcdef', setItem: () => undefined, removeItem: () => undefined });
+        const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+        const warehouseMutation = await load();
+        await expect(warehouseMutation('/test/pay', init, me)).rejects.toThrow(/راجع/);
+        await expect(warehouseMutation('/test/pay', init, me)).rejects.toThrow(/راجع/);
+        expect(fetcher).not.toHaveBeenCalled();
+    });
+});
+
+describe('a settled attempt is retired for sure before an identical new operation', () => {
+    const init = { method: 'POST', body: JSON.stringify({ amount: 70, invoice: 'i2' }) };
+    it('removal fails but the attempt can be marked settled → the next identical operation gets a new key', async () => {
+        const store = new Map<string, string>();
+        vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: () => { throw new DOMException('blocked', 'SecurityError'); } });
+        const fetcher = vi.fn().mockImplementation(async () => new Response('{}'));
+        vi.stubGlobal('fetch', fetcher);
+        await (await load())('/test/pay', init, me);
+        await (await load())('/test/pay', init, me);
+        expect(keyOf(fetcher, 1)).not.toBe(keyOf(fetcher, 0));
+    });
+    it('nothing can be changed after success → the next identical operation is refused, not sent with the old key', async () => {
+        const store = new Map<string, string>();
+        let frozen = false;
+        vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { if (!frozen) store.set(k, v); }, removeItem: () => undefined });
+        const fetcher = vi.fn().mockImplementation(async () => { frozen = true; return new Response('{}'); });
+        vi.stubGlobal('fetch', fetcher);
+        const warehouseMutation = await load();
+        await warehouseMutation('/test/pay', init, me);
+        await expect(warehouseMutation('/test/pay', init, me)).rejects.toThrow(/لم تُرسل/);
+        expect(fetcher).toHaveBeenCalledTimes(1);
     });
 });
