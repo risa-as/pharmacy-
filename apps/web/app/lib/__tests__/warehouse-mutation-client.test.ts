@@ -21,7 +21,7 @@ const fakeStorage = (store = new Map<string, string>(), hooks: Hooks = {}) => {
     };
 };
 const PAY = '/test/pay';
-const STATUS = '/api/warehouse-operations/status';
+const STATUS = '/api/warehouse-operations/resolve';
 const paymentCalls = (fetcher: any) => fetcher.mock.calls.filter((c: any[]) => String(c[0]) !== STATUS);
 const keyOf = (fetcher: any, call: number) => JSON.parse(paymentCalls(fetcher)[call][1].body).idempotencyKey;
 const asUser = (id: string | null) => async () => id;
@@ -213,6 +213,7 @@ describe('two tabs: an answer retires only its own attempt', () => {
 });
 
 describe('a key from the previous version (sessionStorage, no owner) is resolved on the server before anything else', () => {
+    // «resolve» = the server says «recorded», or voids the key so its old request can never apply later.
     const init = { method: 'POST', body: JSON.stringify({ amount: 50, invoice: 'i1' }) };
     const LEGACY = 'legacy-key-0123456789abcdef';
     const legacySlot = 'warehouse-pending:' + JSON.stringify([PAY, 'POST', JSON.parse(init.body)]);
@@ -221,7 +222,7 @@ describe('a key from the previous version (sessionStorage, no owner) is resolved
 
     it('asks the server about the old key (for this URL) before sending', async () => {
         withLegacy();
-        const fetcher = server(async () => new Response('{"recorded":false}'));
+        const fetcher = server(async () => new Response('{"recorded":false,"voided":true}'));
         vi.stubGlobal('fetch', fetcher);
         await (await load())(PAY, init, me);
         expect(fetcher.mock.calls[0][0]).toBe(STATUS);
@@ -257,9 +258,17 @@ describe('a key from the previous version (sessionStorage, no owner) is resolved
         expect(paymentCalls(fetcher)).toHaveLength(1);
         expect(keyOf(fetcher, 0)).not.toBe(LEGACY);
     });
-    it('not recorded → sent once with a new key (never the ownerless old key)', async () => {
+    it('«not recorded» without the server voiding the key is not enough (the old request could still apply) → blocked', async () => {
         const legacy = withLegacy();
         const fetcher = server(async () => new Response('{"recorded":false}'));
+        vi.stubGlobal('fetch', fetcher);
+        await expect((await load())(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
+        expect(paymentCalls(fetcher)).toHaveLength(0);
+        expect(legacy.getItem(legacySlot)).toBe(LEGACY);
+    });
+    it('voided → sent once with a new key (never the ownerless old key)', async () => {
+        const legacy = withLegacy();
+        const fetcher = server(async () => new Response('{"recorded":false,"voided":true}'));
         vi.stubGlobal('fetch', fetcher);
         await (await load())(PAY, init, me);
         expect(paymentCalls(fetcher)).toHaveLength(1);
@@ -274,5 +283,41 @@ describe('a key from the previous version (sessionStorage, no owner) is resolved
         await expect(warehouseMutation(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
         await expect(warehouseMutation(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
         expect(paymentCalls(fetcher)).toHaveLength(0);
+    });
+});
+
+describe('a stored attempt that cannot be read is never treated as absent', () => {
+    const init = { method: 'POST', body: JSON.stringify({ amount: 90, invoice: 'i4' }) };
+    const lostThenRead = async (breakRead: (name: string) => void) => {
+        const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue(new Response('{}'));
+        vi.stubGlobal('fetch', fetcher);
+        await expect((await load())(PAY, init, me)).rejects.toThrow();
+        const [name] = [...local.store.keys()];
+        breakRead(name);
+        return fetcher;
+    };
+    it('reading the pending entry throws → nothing sent (no new key for a lost payment)', async () => {
+        const fetcher = await lostThenRead((name) => vi.stubGlobal('localStorage', fakeStorage(local.store, { get: (k) => { if (k === name) throw new DOMException('blocked', 'SecurityError'); return local.store.get(k) ?? null; } })));
+        await expect((await load())(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
+        expect(paymentCalls(fetcher)).toHaveLength(1);
+    });
+    it('corrupt entry content → nothing sent', async () => {
+        const fetcher = await lostThenRead((name) => local.store.set(name, '{not json'));
+        await expect((await load())(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
+        expect(paymentCalls(fetcher)).toHaveLength(1);
+    });
+    it('entry content for a different key → nothing sent', async () => {
+        const fetcher = await lostThenRead((name) => local.store.set(name, JSON.stringify({ key: 'someone-else-0123456789abcdef', savedAt: 1, state: 'pending' })));
+        await expect((await load())(PAY, init, me)).rejects.toThrow(/لم تُرسل/);
+        expect(paymentCalls(fetcher)).toHaveLength(1);
+    });
+    it('an entry that was really removed (listed, then gone) is not a blocker', async () => {
+        const fetcher = vi.fn().mockResolvedValue(new Response('{}'));
+        vi.stubGlobal('fetch', fetcher);
+        const ghost = 'warehouse-attempt:v3:user-1:' + JSON.stringify([PAY, 'POST', JSON.parse(init.body)]) + '#' + 'a'.repeat(48);
+        vi.stubGlobal('localStorage', fakeStorage(local.store, { list: () => [ghost, ...local.store.keys()] }));
+        await (await load())(PAY, init, me);
+        expect(paymentCalls(fetcher)).toHaveLength(1);
+        expect(keyOf(fetcher, 0)).not.toBe('a'.repeat(48));
     });
 });
