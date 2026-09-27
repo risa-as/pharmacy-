@@ -4,7 +4,7 @@ import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
 import { applyPayment } from '@/app/lib/warehouse-accounts';
-import { runWarehouseOperation, warehouseCommand, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { runWarehouseOperation, warehouseCommand, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
     const { id } = await props.params;
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             const collection = await tx.warehouseRepCollection.create({ data: { repId: id, warehouseId: ctx.warehouseId, fieldSaleId, amount, notes } });
             return { collection, fieldSale };
         }), { maxWait: 20000, timeout: 20000 });
-        return NextResponse.json(result, { status: 201 });
+        return NextResponse.json(result, { status: 201, headers: replayHeaders(result) });
     } catch (error) {
         if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('warehouse representative collection failed', error);

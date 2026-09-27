@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { warehouseOrderScope } from '@/app/lib/warehouse-access';
-import { warehouseCommand, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { warehouseCommand, runWarehouseOperation, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 import { effectiveLine } from '@/app/lib/warehouse-quote';
 import { computeInvoiceStatus } from '@/app/lib/warehouse-accounts';
 
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 payload: { purchaseId: purchase.id, reference: body.reference.trim(), note: body.note.trim(), actorId: ctx.user.id, lines: body.lines } } });
             return { eventId: event.id };
         }), { maxWait: 20000, timeout: 30000 });
-        return NextResponse.json(result);
+        return NextResponse.json(result, { headers: replayHeaders(result) });
     } catch (error: any) {
         if (error?.code === 'P2002') return NextResponse.json({ error: 'المستند مرتبط مسبقًا؛ راجع سجل المطابقة.' }, { status: 409 });
         if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });

@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
-import { warehouseCommand, warehouseReplay, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { warehouseCommand, warehouseReplay, runWarehouseOperation, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 import { expiryBucket, validateStockMove } from '@/app/lib/warehouse-stock';
 
 interface RawLine {
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const body = await req.json().catch(() => null);
         const command = warehouseCommand(ctx.warehouseId, `rep-load:${params.id}`, body);
         const replay = await warehouseReplay(prisma, command);
-        if (replay) return NextResponse.json({ stock: replay });
+        if (replay) return NextResponse.json({ stock: replay }, { headers: replayHeaders(replay) });
         if (!body || typeof body !== 'object' || Array.isArray(body)) {
             return NextResponse.json({ error: 'طلب غير صالح' }, { status: 400 });
         }
@@ -193,7 +193,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             return tx.warehouseRepStock.findMany({ where: { repId: rep.id }, include: { batch: true } });
         }), { maxWait: 20000, timeout: 20000 });
 
-        return NextResponse.json({ stock: result });
+        return NextResponse.json({ stock: result }, { headers: replayHeaders(result) });
     } catch (e: any) {
         if (e instanceof WarehouseOperationError) return NextResponse.json({ error: e.message }, { status: e.status });
         if (e instanceof ConcurrentLoadError) {

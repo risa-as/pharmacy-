@@ -4,7 +4,7 @@ import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { applyPayment } from '@/app/lib/warehouse-accounts';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
-import { runWarehouseOperation, warehouseCommand, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { runWarehouseOperation, warehouseCommand, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
     const { id } = await props.params;
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             const updated = await tx.warehousePurchase.update({ where: { id }, data: { paidAmount: check.newPaid, status: check.newStatus } });
             return { purchase: updated, payment };
         }), { maxWait: 20000, timeout: 20000 });
-        return NextResponse.json(result, { status: 201 });
+        return NextResponse.json(result, { status: 201, headers: replayHeaders(result) });
     } catch (error) {
         if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('warehouse supplier payment failed', error);

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
-import { warehouseCommand, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { warehouseCommand, runWarehouseOperation, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 import { computeInvoiceStatus } from '@/app/lib/warehouse-accounts';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 type: 'RETURN_REFUNDED', payload: { returnId: id, amount: body.amount, reference: body.reference.trim(), operationKey: command.key } } });
             return { return: updated };
         }), { maxWait: 20000, timeout: 30000 });
-        return NextResponse.json(result);
+        return NextResponse.json(result, { headers: replayHeaders(result) });
     } catch (error: any) {
         if (error?.code === 'P2002') return NextResponse.json({ error: 'مرجع السند مسجل مسبقًا؛ راجع سجل التسويات قبل إعادة الإدخال.' }, { status: 409 });
         if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });

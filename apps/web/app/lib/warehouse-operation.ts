@@ -22,14 +22,25 @@ export function warehouseCommand(warehouseId: string, scope: string, body: any) 
 }
 
 type Command = ReturnType<typeof warehouseCommand>;
-export async function warehouseReplay(db: Pick<PrismaClient, 'warehouseOperation'> | Prisma.TransactionClient, command: Command) {
+export async function warehouseReplay(db: Pick<PrismaClient, 'warehouseOperation'> | Prisma.TransactionClient, command: Command): Promise<any> {
     const previous = await db.warehouseOperation.findUnique({ where: { warehouseId_key: { warehouseId: command.warehouseId, key: command.key } } });
     if (!previous) return null;
     if (previous.scope !== command.scope || previous.requestHash !== command.requestHash) {
         throw new WarehouseOperationError('مفتاح العملية مستخدم لطلب مختلف.');
     }
-    return previous.result as Record<string, any>;
+    return markReplay(previous.result);
 }
+
+// A replay is marked with a symbol: the JSON body stays exactly the stored result,
+// and routes add `replayHeaders(result)` so the client can say "your earlier
+// attempt was applied; no new operation was recorded".
+const REPLAY = Symbol('warehouseReplay');
+function markReplay<T>(result: T): T {
+    if (result && typeof result === 'object') Object.defineProperty(result, REPLAY, { value: true, enumerable: false });
+    return result;
+}
+export const isWarehouseReplay = (value: unknown): boolean => !!value && typeof value === 'object' && (value as any)[REPLAY] === true;
+export const replayHeaders = (value: unknown): Record<string, string> => isWarehouseReplay(value) ? { 'x-idempotent-replay': '1' } : {};
 
 export async function runWarehouseOperation<T>(tx: Prisma.TransactionClient, command: Command, work: () => Promise<T>): Promise<T> {
     const lockKey = `warehouse-operation:${command.warehouseId}:${command.key}`;

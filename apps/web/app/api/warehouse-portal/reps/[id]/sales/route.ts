@@ -28,7 +28,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
-import { warehouseCommand, warehouseReplay, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { warehouseCommand, warehouseReplay, runWarehouseOperation, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 import { customerOutstanding } from '@/app/lib/warehouse-receivables';
 import { checkCreditLimit } from '@/app/lib/warehouse-accounts';
 import { allocateFEFO, expiryBucket, type BatchLike } from '@/app/lib/warehouse-stock';
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const body = await req.json().catch(() => null);
         const command = warehouseCommand(ctx.warehouseId, `rep-sale:${params.id}`, body);
         const replay = await warehouseReplay(prisma, command);
-        if (replay) return NextResponse.json({ fieldSale: replay });
+        if (replay) return NextResponse.json({ fieldSale: replay }, { headers: replayHeaders(replay) });
         if (!body || typeof body !== 'object' || Array.isArray(body)) {
             return NextResponse.json({ error: 'طلب غير صالح' }, { status: 400 });
         }
@@ -360,7 +360,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             return sale;
         }), { maxWait: 20000, timeout: 20000 });
 
-        return NextResponse.json({ fieldSale: created }, { status: 201 });
+        return NextResponse.json({ fieldSale: created }, { status: 201, headers: replayHeaders(created) });
     } catch (e: any) {
         if (e instanceof WarehouseOperationError) return NextResponse.json({ error: e.message }, { status: e.status });
         if (e instanceof ConcurrentRepStockError) {

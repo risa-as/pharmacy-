@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
-import { warehouseCommand, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { warehouseCommand, runWarehouseOperation, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
     const ctx = await getWarehouseContext(); if (ctx instanceof NextResponse) return ctx;
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                     total: invoice.total, targetPaid: Math.max(invoice.paidAmount, current.paidAmount), reference: body.reference.trim(), note: body.note.trim(), actorId: ctx.user.id } } });
             return { proposalId: event.id, message: 'أُرسلت المطابقة إلى مدير الصيدلية؛ لم تتغير الأرصدة.' };
         }), { maxWait: 20000, timeout: 30000 });
-        return NextResponse.json(result);
+        return NextResponse.json(result, { headers: replayHeaders(result) });
     } catch (error) {
         if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('payment match proposal failed', error);

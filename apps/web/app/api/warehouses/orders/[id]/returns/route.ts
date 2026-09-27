@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { warehouseOrderScope } from '@/app/lib/warehouse-access';
-import { warehouseCommand, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { warehouseCommand, runWarehouseOperation, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 import { requestWarehouseReturn, restorePharmacyReservation } from '@/app/lib/warehouse-return-settlement';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const command = warehouseCommand(order.warehouseId, `pharmacy-return:${ctx.organizationId}:${id}`, body);
         const result = await prisma.$transaction(tx => runWarehouseOperation(tx, command,
             () => requestWarehouseReturn(tx, id, scope, body, ctx.user.name ?? ctx.user.email ?? null)), { maxWait: 20000, timeout: 30000 });
-        return NextResponse.json(result, { status: 201 });
+        return NextResponse.json(result, { status: 201, headers: replayHeaders(result) });
     } catch (error) {
         if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('warehouse return request failed', error);

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                     prior.method !== method || prior.reference !== reference || prior.notes !== notes) {
                     return NextResponse.json({ error: 'مفتاح العملية مستخدم لطلب مختلف.' }, { status: 409 });
                 }
-                return NextResponse.json({ invoice, payment: prior, idempotentReplay: true }, { status: 200 });
+                return NextResponse.json({ invoice, payment: prior, idempotentReplay: true }, { status: 200, headers: { 'x-idempotent-replay': '1' } });
             }
             if (invoice.status === 'CANCELLED') return NextResponse.json({ error: 'لا يمكن تسجيل دفعة على فاتورة مُلغاة.' }, { status: 400 });
             const result = applyPayment({ total: invoice.total, paidAmount: invoice.paidAmount, payment: amount });

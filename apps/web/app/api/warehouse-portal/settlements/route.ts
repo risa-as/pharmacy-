@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
-import { warehouseCommand, runWarehouseOperation, WarehouseOperationError } from '@/app/lib/warehouse-operation';
+import { warehouseCommand, runWarehouseOperation, WarehouseOperationError, replayHeaders } from '@/app/lib/warehouse-operation';
 
 export async function GET(req: NextRequest) {
     const ctx = await getWarehouseContext(); if (ctx instanceof NextResponse) return ctx;
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
             await tx.warehouseCustomer.update({ where: { id: customer.id }, data: { openingBalance: remaining } });
             return { entry, remaining };
         }), { maxWait: 20000, timeout: 30000 });
-        return NextResponse.json(result);
+        return NextResponse.json(result, { headers: replayHeaders(result) });
     } catch (error: any) {
         if (error?.code === 'P2002') return NextResponse.json({ error: 'مرجع سند القبض مستخدم؛ راجع السجل.' }, { status: 409 });
         if (error instanceof WarehouseOperationError) return NextResponse.json({ error: error.message }, { status: error.status });

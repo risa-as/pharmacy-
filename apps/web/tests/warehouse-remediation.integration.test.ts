@@ -237,7 +237,10 @@ describe('warehouse remediation on isolated PostgreSQL', () => {
     });
     it('replays supplier payment and rejects changed payload under the same key',async()=>{
         const body={idempotencyKey:randomUUID(),amount:300};
-        expect((await Promise.all([0,1].map(()=>paySupplier(req(body),params(f.payable.id))))).map(r=>r.status)).toEqual([201,201]);
+        const both=await Promise.all([0,1].map(()=>paySupplier(req(body),params(f.payable.id))));
+        expect(both.map(r=>r.status)).toEqual([201,201]);
+        // Exactly one of the two is the applied payment; the other says it is a replay.
+        expect(both.map(r=>r.headers.get('x-idempotent-replay')).sort()).toEqual(['1',null]);
         expect((await db.warehousePurchase.findUniqueOrThrow({where:{id:f.payable.id}})).paidAmount).toBe(300);
         expect(await db.warehouseSupplierPayment.count({where:{purchaseId:f.payable.id}})).toBe(1);
         expect((await paySupplier(req({...body,amount:200}),params(f.payable.id))).status).toBe(409);
