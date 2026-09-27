@@ -15,7 +15,9 @@ export default defineConfig(({ mode }) => {
     let buildCommit = 'unknown'
     try {
         buildCommit = execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim()
-        if (execSync('git status --porcelain --untracked-files=no', { cwd: __dirname }).toString().trim()) buildCommit += '-dirty'
+        // Tracked build outputs, rewritten by tsc/vite during the build itself, do not count.
+        const changes = execSync("git status --porcelain --untracked-files=no -- \":/\" \":(exclude,top)apps/desktop/dist-electron\" \":(exclude,glob)**/*.tsbuildinfo\" \":(exclude,glob)**/next-env.d.ts\"", { cwd: __dirname }).toString().trim()
+        if (changes) buildCommit += '-dirty'
     } catch { /* not a git checkout */ }
 
     return {
