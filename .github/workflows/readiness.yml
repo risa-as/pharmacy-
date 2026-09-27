@@ -38,7 +38,19 @@ jobs:
       - run: node --test scripts/security-compatibility.test.mjs
       - run: node --test scripts/image-size-security.test.mjs
       - run: pnpm --filter web exec prisma generate
-      # Frozen, reviewed baseline for NEW databases; old SQL assumed preexisting tables.
+      # Historical migrations are pinned by hash and never edited.
+      - run: node --test scripts/migrations.test.mjs
+      # pg_dump must match the postgres:17 service.
+      - run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      # New database from the chain alone; upgrade of restored copies; refusals.
+      - run: node --test --test-concurrency=1 scripts/migrations.integration.test.mjs
+        env:
+          MIGRATION_TEST_ADMIN_URL: postgresql://readiness:readiness@127.0.0.1:5432/postgres
+      # New database: prisma migrate deploy only, then verified against schema.prisma.
       - run: node scripts/bootstrap-empty-db.mjs
       - run: pnpm --filter web test
       - run: pnpm --filter desktop test
