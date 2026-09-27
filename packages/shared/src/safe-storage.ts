@@ -46,3 +46,22 @@ export function removeStorage(kind: StorageKind, key: string): boolean {
     return false;
   }
 }
+
+/**
+ * All keys, or null when they cannot be listed. Callers that look for a pending
+ * record must treat null as "unknown", never as "none".
+ */
+export function storageKeys(kind: StorageKind): string[] | null {
+  try {
+    const storage = area(kind);
+    if (!storage) return null;
+    const keys: string[] = [];
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (key !== null) keys.push(key);
+    }
+    return keys;
+  } catch {
+    return null;
+  }
+}

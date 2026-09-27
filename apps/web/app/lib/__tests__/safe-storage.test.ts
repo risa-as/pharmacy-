@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readStorage, removeStorage, writeStorage } from '../../../../../packages/shared/src/safe-storage';
+import { readStorage, removeStorage, storageKeys, writeStorage } from '../../../../../packages/shared/src/safe-storage';
 
 const memory = () => {
   const map = new Map<string, string>();
@@ -58,5 +58,17 @@ describe('writeStorage confirms by reading back', () => {
   it('reports failure when a different value is read back', () => {
     vi.stubGlobal('localStorage', { getItem: () => 'old', setItem: () => undefined, removeItem: () => undefined });
     expect(writeStorage('local', 'k', 'v')).toBe(false);
+  });
+});
+
+describe('storageKeys', () => {
+  it('lists keys, and returns null (not an empty list) when listing fails or storage is missing', () => {
+    const map = new Map([['a', '1'], ['b', '2']]);
+    vi.stubGlobal('localStorage', { key: (i: number) => [...map.keys()][i] ?? null, get length() { return map.size; } });
+    expect(storageKeys('local')).toEqual(['a', 'b']);
+    vi.stubGlobal('localStorage', { key: () => { throw new DOMException('blocked', 'SecurityError'); }, length: 1 });
+    expect(storageKeys('local')).toBeNull();
+    vi.stubGlobal('localStorage', undefined);
+    expect(storageKeys('local')).toBeNull();
   });
 });
