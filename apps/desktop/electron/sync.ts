@@ -800,8 +800,13 @@ export async function refreshOfflineToken(): Promise<void> {
     if (!branchId || !licenseKey) return;
 
     try {
-        const url = buildApiUrl(`/sync/offline-token?branchId=${encodeURIComponent(branchId)}&licenseKey=${encodeURIComponent(licenseKey)}`);
-        const response = await fetch(url, { method: 'GET' });
+        // The license travels in a header, never in the URL (URLs reach access logs).
+        let response = await fetch(buildApiUrl(`/sync/offline-token?branchId=${encodeURIComponent(branchId)}`),
+            { method: 'GET', headers: { 'x-device-license-key': licenseKey } });
+        // A server from before this change reads only the query string and answers
+        // 400: ask once more the old way, until the server is updated.
+        if (response.status === 400)
+            response = await fetch(buildApiUrl(`/sync/offline-token?branchId=${encodeURIComponent(branchId)}&licenseKey=${encodeURIComponent(licenseKey)}`), { method: 'GET' });
         if (!response.ok) {
             // 503 = the license IS valid (it passed the server's license check) but
             // token signing isn't configured server-side. Treat the reachable, valid

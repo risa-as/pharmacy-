@@ -14,14 +14,16 @@ const GRACE_PERIOD_DAYS = 5;
  * locally and verifies offline to enforce subscription state without a
  * network call. Called by sync.ts after every successful check-in.
  *
- * Auth: branchId + licenseKey query params (matches existing sync API pattern).
+ * Auth: branchId + the device license, sent in the x-device-license-key header.
+ * The licenseKey query parameter is still accepted from desktops before 1.0.21;
+ * a credential in the URL can end up in access logs, so new desktops never send it.
  *
  * Env: OFFLINE_TOKEN_PRIVATE_KEY must contain a PEM-encoded RSA-2048 private key.
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const branchId = searchParams.get("branchId");
-    const licenseKey = searchParams.get("licenseKey");
+    const licenseKey = req.headers.get("x-device-license-key") || searchParams.get("licenseKey");
 
     if (!branchId || !licenseKey) {
         return NextResponse.json(
