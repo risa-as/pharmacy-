@@ -3,11 +3,11 @@ import { NextRequest } from 'next/server';
 import { getUserPermissions } from '../permissions';
 import { RECEIPT_ERROR_CODES } from '../../../../../packages/shared/src/receipt-outcome';
 
-const h = vi.hoisted(() => ({ context: vi.fn(), receive: vi.fn() }));
+const h = vi.hoisted(() => ({ context: vi.fn(), receive: vi.fn(), notify: vi.fn() }));
 vi.mock('@/app/lib/tenant-utils', () => ({ getTenantContext: h.context }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: {} }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/app/lib/notifications/notificationTriggers', () => ({ sendAndPersistNotification: vi.fn() }));
+vi.mock('@/app/lib/notifications/notificationTriggers', () => ({ sendAndPersistNotification: h.notify }));
 vi.mock('@/app/lib/purchase-receipt', async (original) => ({ ...(await original<object>()), receivePurchaseStock: h.receive }));
 
 import { PurchaseReceiptError, receivePurchaseStock } from '../purchase-receipt';
@@ -69,4 +69,13 @@ it('the server action reports success explicitly', async () => {
   h.receive.mockResolvedValue({ id: 'p', status: 'COMPLETED', receivedCount: 1, createdInventoryCount: 0 });
   await expect(receivePurchase('p', [{ ...line, expiryDate: new Date(line.expiryDate) }])).resolves.toMatchObject({ ok: true });
   expect(receivePurchaseStock).toHaveBeenCalledOnce();
+});
+
+it('a committed receipt answers 200 even when the expiry notification fails afterwards', async () => {
+  h.receive.mockResolvedValue({ branchId: 'b', receivedCount: 1, createdInventoryCount: 0 });
+  h.notify.mockRejectedValue(new Error('push service down'));
+  const soon = new Date(Date.now() + 5 * 86400000).toISOString();
+  const res = await receivePost(new NextRequest('http://local/api/purchases/p/receive', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items: [{ ...line, expiryDate: soon }] }) }), params);
+  expect(h.notify).toHaveBeenCalledOnce();
+  expect(res.status).toBe(200);
 });

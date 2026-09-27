@@ -277,9 +277,13 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
       await load();
       return;
     }
-    // Show the document as the server has it now; a failed reload must not hide the outcome.
-    await open(id).catch(() => undefined);
-    await load().catch(() => undefined);
+    // A closed document is shown as the server has it now; an open one keeps the
+    // entered lines so a rejection or a safe retry does not lose them. A failed
+    // reload must not hide the outcome.
+    if (outcome.closed) {
+      await open(id).catch(() => undefined);
+      await load().catch(() => undefined);
+    }
     if (outcome.tone === "warning") {
       if (live.current) setNotice(`${outcome.title}: ${outcome.message}`);
       return;

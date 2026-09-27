@@ -234,9 +234,10 @@ export function registerOperations(
         return { success: true, data: result, warning };
       } catch (e) {
         const lost = sent && !answered;
-        // A lost receipt may have been applied: pull stock so the local copy matches
-        // the server either way (the renderer then checks the document status).
-        if (lost && input?.path?.endsWith("/receive")) await refresh().catch(() => undefined);
+        // A lost receipt (or a server error) may have been applied: pull stock so the
+        // local copy matches the server either way (the renderer then checks the document).
+        if ((lost || (answered?.status ?? 0) >= 500) && input?.path?.endsWith("/receive"))
+          await refresh().catch(() => undefined);
         return {
           success: false,
           error:

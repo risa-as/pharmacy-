@@ -21,11 +21,13 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
             return NextResponse.json({ message: 'ليس لديك صلاحية تسديد الموردين؛ استلم الفاتورة غير مدفوعة.' }, { status: 403 });
         const receipt = await receivePurchaseStock(prisma, params.id, ctx.tenantBranchWhere, body.items, body.isPaid ?? false, ctx.user,
             { safeId: typeof body.safeId === 'string' ? body.safeId : null });
+        // The receipt is committed: a failing notification must not turn it into a 500
+        // that clients would have to treat as an unanswered receipt.
         const soon = body.items.filter((item: { expiryDate: string }) => new Date(item.expiryDate).getTime() <= Date.now() + 30 * 86400000);
         if (soon.length) await sendAndPersistNotification({
             type: 'EXPIRY', branchId: receipt.branchId, title: 'تحذير: أدوية قاربت انتهاء الصلاحية',
             body: `${soon.length} دفعة مستلمة ستنتهي صلاحيتها خلال 30 يوماً.`,
-        });
+        }).catch((error) => console.error('Receive Purchase notification error:', error));
         return NextResponse.json({ success: true, receivedCount: receipt.receivedCount, createdInventoryCount: receipt.createdInventoryCount });
     } catch (error) {
         if (error instanceof PurchaseReceiptError) return NextResponse.json({ message: error.message, ...(error.code ? { code: error.code } : {}) }, { status: error.status });

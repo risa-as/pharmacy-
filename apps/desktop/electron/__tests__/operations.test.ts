@@ -107,3 +107,8 @@ it('does not mark a receipt refused before sending as lost',async()=>{
  const result=await call({path:'/purchases/p/receive',method:'POST'});
  expect(result.success).toBe(false);expect(result.lost).toBeFalsy();
 });
+it('pulls stock after a receipt answered with a server error, since it may have been applied',async()=>{
+ const normal=fetch;vi.stubGlobal('fetch',vi.fn(async(url:any,opts:any)=>String(url).includes('/receive')?{ok:false,status:502,json:async()=>({message:'bad gateway'})}:normal(url,opts)));
+ expect(await call({path:'/purchases/p/receive',method:'POST'})).toMatchObject({success:false,status:502});
+ expect(refresh).toHaveBeenCalledOnce();
+});
