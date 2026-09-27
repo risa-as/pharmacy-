@@ -22,6 +22,20 @@ export function readStorage(kind: StorageKind, key: string): string | null {
 }
 
 /**
+ * Like readStorage, but tells a failed read (undefined) apart from a missing
+ * entry (null). Callers deciding whether a record exists need the difference.
+ */
+export function tryReadStorage(kind: StorageKind, key: string): string | null | undefined {
+  try {
+    const storage = area(kind);
+    if (!storage) return undefined;
+    return storage.getItem(key);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * True only when the value was stored: it is read back and compared, since some
  * environments accept setItem and keep nothing. Callers that must not continue
  * without a durable record (such as an idempotency key) rely on this.

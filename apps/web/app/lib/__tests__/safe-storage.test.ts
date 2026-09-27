@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readStorage, removeStorage, storageKeys, writeStorage } from '../../../../../packages/shared/src/safe-storage';
+import { readStorage, removeStorage, storageKeys, tryReadStorage, writeStorage } from '../../../../../packages/shared/src/safe-storage';
 
 const memory = () => {
   const map = new Map<string, string>();
@@ -70,5 +70,16 @@ describe('storageKeys', () => {
     expect(storageKeys('local')).toBeNull();
     vi.stubGlobal('localStorage', undefined);
     expect(storageKeys('local')).toBeNull();
+  });
+});
+
+describe('tryReadStorage', () => {
+  it('null for a missing entry, undefined when the read fails or storage is missing', () => {
+    vi.stubGlobal('localStorage', memory());
+    expect(tryReadStorage('local', 'k')).toBeNull();
+    vi.stubGlobal('localStorage', throwing());
+    expect(tryReadStorage('local', 'k')).toBeUndefined();
+    vi.stubGlobal('localStorage', undefined);
+    expect(tryReadStorage('local', 'k')).toBeUndefined();
   });
 });

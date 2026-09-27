@@ -78,15 +78,20 @@ describe('resolving an unconfirmed key', () => {
         expect(await db.warehouseReturn.count({ where: { orderId: f.order.id } })).toBe(0);
         expect((await ask({ url: `/api/warehouses/orders/${f.foreignOrder.id}/returns`, key: newKey() })).code).toBe(404);
     });
-    it('race: resolve and the old request at the same time → either recorded with one payment, or voided with none', async () => {
-        for (let i = 0; i < 8; i++) {
+    it('race: resolve and the old request at the same time (both orderings exercised) → either recorded with one payment, or voided with none', async () => {
+        const seen = new Set<string>();
+        for (let i = 0; i < 24; i++) {
             const key = newKey();
             const before = await db.warehouseSupplierPayment.count({ where: { purchaseId: f.payable.id } });
-            const [answer, late] = await Promise.all([ask({ url: supplierUrl(), key }), paySupplier(post({ idempotencyKey: key, amount: 10 }), params(f.payable.id))]);
+            // Staggered so both orderings happen: the old request first, or the resolve first.
+            const delayed = new Promise(r => setTimeout(r, (i % 8) * 5)).then(() => ask({ url: supplierUrl(), key }));
+            const [late, answer] = await Promise.all([paySupplier(post({ idempotencyKey: key, amount: 10 }), params(f.payable.id)), delayed]);
+            seen.add(answer.body.recorded ? 'recorded' : 'voided');
             const added = (await db.warehouseSupplierPayment.count({ where: { purchaseId: f.payable.id } })) - before;
             if (answer.body.recorded) { expect(late.status).toBe(201); expect(added).toBe(1); }
             else { expect(answer.body).toEqual({ recorded: false, voided: true }); expect(late.status).toBe(409); expect(added).toBe(0); }
         }
+        expect([...seen].sort()).toEqual(['recorded', 'voided']);
     });
     it('a key voided in one warehouse does not affect another warehouse', async () => {
         const key = newKey();

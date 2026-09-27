@@ -2,7 +2,7 @@
 
 import { getSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { readStorage, removeStorage, storageKeys, writeStorage } from '../../../../packages/shared/src/safe-storage';
+import { readStorage, removeStorage, storageKeys, tryReadStorage, writeStorage } from '../../../../packages/shared/src/safe-storage';
 
 // One operation = one key, kept until its complete success answer arrives, so a
 // lost answer followed by a retry (after a reload, in another tab, or much later)
@@ -19,11 +19,15 @@ import { readStorage, removeStorage, storageKeys, writeStorage } from '../../../
 //   replays it and says so with `x-idempotent-replay`).
 // - A settled attempt is removed and checked gone, else marked settled, else
 //   remembered by this page; it is never sent again as if it were pending.
+// - A stored attempt that cannot be read, or whose content is corrupt, blocks the
+//   send: it may be a payment whose answer was lost. Only an entry that is really
+//   gone (a successful read finds nothing) is skipped.
 // - A key left by the previous version in sessionStorage has no owner. It is kept
-//   until the server says whether it was recorded; until then nothing is sent.
+//   until the server resolves it: «recorded», or voided so that its old request
+//   can never apply later. Only then may a new key be used; until then nothing is sent.
 const PREFIX = 'warehouse-attempt:v3:';
 const LEGACY_PREFIX = 'warehouse-pending:';
-const STATUS_URL = '/api/warehouse-operations/status';
+const RESOLVE_URL = '/api/warehouse-operations/resolve';
 
 type StoredAttempt = { key: string; savedAt: number; state: 'pending' | 'settled' };
 
@@ -39,18 +43,22 @@ async function sessionUserId(): Promise<string | null> {
     return typeof id === 'string' && id ? id : null;
 }
 
-function readAttempt(name: string, key: string): StoredAttempt | null {
+/** The stored attempt; 'gone' only when a successful read finds nothing; 'unreadable' / 'corrupt' otherwise. */
+function readAttempt(name: string, key: string): StoredAttempt | 'gone' | 'unreadable' | 'corrupt' {
+    const raw = tryReadStorage('local', name);
+    if (raw === undefined) return 'unreadable';
+    if (raw === null) return 'gone';
     try {
-        const saved = JSON.parse(readStorage('local', name) ?? 'null');
-        if (saved?.key !== key) return null;
-        return { key, savedAt: Number(saved.savedAt) || 0, state: saved.state === 'settled' ? 'settled' : 'pending' };
+        const saved = JSON.parse(raw);
+        if (!key || saved?.key !== key || (saved.state !== 'pending' && saved.state !== 'settled')) return 'corrupt';
+        return { key, savedAt: Number(saved.savedAt) || 0, state: saved.state };
     } catch {
-        return null;
+        return 'corrupt';
     }
 }
 
-/** Removes the entry and confirms it is gone. */
-const retire = (kind: 'local' | 'session', name: string) => removeStorage(kind, name) && readStorage(kind, name) === null;
+/** Removes the entry and confirms it is gone (a failed read does not count as gone). */
+const retire = (kind: 'local' | 'session', name: string) => removeStorage(kind, name) && tryReadStorage(kind, name) === null;
 
 const newKey = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
 
@@ -67,13 +75,19 @@ async function isReplay(response: Response) {
     return body?.idempotentReplay === true;
 }
 
-/** true / false from the server, or null when it could not answer. */
-async function recordedOnServer(url: string, key: string): Promise<boolean | null> {
+/**
+ * 'recorded', or 'voided' (never applied, and the server will refuse it from now
+ * on), or null when the server could not settle it. A bare «not recorded» without
+ * the void is not an answer: the old request could still arrive.
+ */
+async function resolveOnServer(url: string, key: string): Promise<'recorded' | 'voided' | null> {
     try {
-        const response = await fetch(STATUS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, key }) });
+        const response = await fetch(RESOLVE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, key }) });
         if (!response.ok) return null;
         const body = await response.json();
-        return typeof body?.recorded === 'boolean' ? body.recorded : null;
+        if (body?.recorded === true) return 'recorded';
+        if (body?.recorded === false && body?.voided === true) return 'voided';
+        return null;
     } catch {
         return null;
     }
@@ -84,15 +98,15 @@ async function resolveLegacyAttempt(url: string, fingerprint: string) {
     const legacySlot = LEGACY_PREFIX + fingerprint;
     const legacyKey = readStorage('session', legacySlot);
     if (legacyKey === null) return;
-    const recorded = await recordedOnServer(url, legacyKey);
-    if (recorded === null)
+    const answer = await resolveOnServer(url, legacyKey);
+    if (answer === null)
         throw new WarehouseMutationNotSentError('توجد محاولة سابقة غير مؤكدة لهذه العملية من إصدار أقدم، وتعذّر التحقق من الخادم هل سُجّلت؛ لم تُرسل العملية. أعد المحاولة عند توفر الاتصال.');
     const removed = retire('session', legacySlot);
-    if (recorded)
+    if (answer === 'recorded')
         throw new WarehouseMutationNotSentError(removed
             ? 'المحاولة السابقة لهذه العملية مسجلة على الخادم؛ لم تُرسل عملية جديدة. إن كنت تقصد عملية جديدة مطابقة فأرسلها مرة أخرى.'
             : 'المحاولة السابقة لهذه العملية مسجلة على الخادم وتعذّر إنهاؤها على هذا المتصفح؛ لم تُرسل عملية جديدة. أغلق هذا التبويب ثم أعد المحاولة إن كنت تقصد عملية جديدة.');
-    // Not recorded: the old attempt was never applied, so a new key is safe.
+    // Voided: the old attempt was never applied and can no longer be, so a new key is safe.
 }
 
 export async function warehouseMutation(url: string, init: RequestInit, currentUser: () => Promise<string | null> = sessionUserId): Promise<Response> {
@@ -110,10 +124,12 @@ export async function warehouseMutation(url: string, init: RequestInit, currentU
         throw new WarehouseMutationNotSentError('تعذر قراءة المحاولات المحفوظة على هذا المتصفح؛ لم تُرسل العملية. فعّل تخزين الموقع ثم أعد المحاولة.');
     let pending: { name: string; attempt: StoredAttempt } | null = null;
     let unretired = false;
+    let unknown = false;
     for (const name of names) {
         if (!name.startsWith(base)) continue;
         const attempt = readAttempt(name, name.slice(base.length));
-        if (!attempt) continue;
+        if (attempt === 'gone') continue;
+        if (attempt === 'unreadable' || attempt === 'corrupt') { unknown = true; continue; }
         if (attempt.state === 'settled' || settledHere.has(attempt.key)) {
             // A finished attempt with the same data; tidy it up if the browser lets us.
             if (!retire('local', name)) unretired = true;
@@ -121,6 +137,8 @@ export async function warehouseMutation(url: string, init: RequestInit, currentU
         }
         if (!pending || attempt.savedAt < pending.attempt.savedAt) pending = { name, attempt };
     }
+    if (unknown)
+        throw new WarehouseMutationNotSentError('تعذّرت قراءة محاولة محفوظة لهذه العملية على هذا المتصفح، وقد تكون عملية لم يصل ردها؛ لم تُرسل العملية كي لا تُسجّل مرتين. أعد تحميل الصفحة ثم أعد المحاولة، وإن استمر ذلك فراجع سجل العمليات.');
     if (!pending) {
         // getRandomValues is also available on an HTTP LAN origin; subtle/randomUUID may be absent there.
         const attempt: StoredAttempt = { key: newKey(), savedAt: Date.now(), state: 'pending' };

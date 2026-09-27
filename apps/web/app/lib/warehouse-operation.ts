@@ -22,9 +22,21 @@ export function warehouseCommand(warehouseId: string, scope: string, body: any) 
 }
 
 type Command = ReturnType<typeof warehouseCommand>;
+
+/**
+ * A key voided by /api/warehouse-operations/resolve: its request was confirmed
+ * never applied, and it must never be applied later (the client moved on to a new
+ * key). Stored as a WarehouseOperation row so the unique (warehouseId, key) and
+ * the per-key lock below decide which came first.
+ */
+export const VOIDED_SCOPE = 'voided-attempt';
+export const VOIDED_MESSAGE = 'أُلغيت هذه المحاولة بعد التحقق من أنها لم تُسجّل، فلم تُطبّق. حدّث الصفحة وتحقق من السجل قبل الإرسال.';
+/** The per-key lock taken by every idempotent operation and by resolve. */
+export const operationLockKey = (warehouseId: string, key: string) => `warehouse-operation:${warehouseId}:${key}`;
 export async function warehouseReplay(db: Pick<PrismaClient, 'warehouseOperation'> | Prisma.TransactionClient, command: Command): Promise<any> {
     const previous = await db.warehouseOperation.findUnique({ where: { warehouseId_key: { warehouseId: command.warehouseId, key: command.key } } });
     if (!previous) return null;
+    if (previous.scope === VOIDED_SCOPE) throw new WarehouseOperationError(VOIDED_MESSAGE);
     if (previous.scope !== command.scope || previous.requestHash !== command.requestHash) {
         throw new WarehouseOperationError('مفتاح العملية مستخدم لطلب مختلف.');
     }
@@ -43,7 +55,7 @@ export const isWarehouseReplay = (value: unknown): boolean => !!value && typeof 
 export const replayHeaders = (value: unknown): Record<string, string> => isWarehouseReplay(value) ? { 'x-idempotent-replay': '1' } : {};
 
 export async function runWarehouseOperation<T>(tx: Prisma.TransactionClient, command: Command, work: () => Promise<T>): Promise<T> {
-    const lockKey = `warehouse-operation:${command.warehouseId}:${command.key}`;
+    const lockKey = operationLockKey(command.warehouseId, command.key);
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text`;
     const previous = await warehouseReplay(tx, command);
     if (previous) return previous as T;

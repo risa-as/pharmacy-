@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/prisma';
 import { getWarehouseContext } from '@/app/lib/warehouse-context';
 import { applyPayment } from '@/app/lib/warehouse-accounts';
 import { requireWarehousePermission } from '@/app/lib/warehouse-permission-guard';
+import { VOIDED_MESSAGE, VOIDED_SCOPE } from '@/app/lib/warehouse-operation';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
     const { id } = await props.params;
@@ -28,6 +29,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         return await prisma.$transaction(async tx => {
             // Serialize retries by key, then lock the invoice against payments/cancellation.
             await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))::text`;
+            // Voided by /api/warehouse-operations/resolve (same lock): never apply it.
+            const voided = await tx.warehouseOperation.findUnique({ where: { warehouseId_key: { warehouseId: ctx.warehouseId, key: idempotencyKey } }, select: { scope: true } });
+            if (voided?.scope === VOIDED_SCOPE) return NextResponse.json({ error: VOIDED_MESSAGE }, { status: 409 });
             await tx.$queryRaw`SELECT id FROM "WarehouseInvoice" WHERE id = ${id} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
             const invoice = await tx.warehouseInvoice.findFirst({ where: { id, warehouseId: ctx.warehouseId } });
             if (!invoice) return NextResponse.json({ error: 'الفاتورة غير موجودة ضمن هذا المذخر' }, { status: 404 });
