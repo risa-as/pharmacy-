@@ -1,6 +1,6 @@
 'use client';
 
-import { getPurchaseDetails, receivePurchase } from '@/app/lib/actions/purchase-actions';
+import { canCurrentUserPaySuppliers, getPurchaseDetails, receivePurchase } from '@/app/lib/actions/purchase-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,7 +15,12 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
     const [loading, setLoading] = useState(true);
     const [purchase, setPurchase] = useState<any>(null);
     const [receivedItems, setReceivedItems] = useState<any>({});
-    const [isPaid, setIsPaid] = useState(true);
+    // Paid at receipt needs canPaySupplier: checked by default only for those who may pay.
+    const [isPaid, setIsPaid] = useState(false);
+    const [canPay, setCanPay] = useState(false);
+    useEffect(() => {
+        canCurrentUserPaySuppliers().then((allowed) => { setCanPay(allowed); setIsPaid(allowed); }).catch(() => setCanPay(false));
+    }, []);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -267,18 +272,24 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
                 </Table>
             </div>
 
-            <div className="bg-card p-4 rounded-lg shadow flex items-center gap-2 mb-4">
-                <input
-                    type="checkbox"
-                    id="paid"
-                    className="w-5 h-5"
-                    checked={isPaid}
-                    onChange={(e) => setIsPaid(e.target.checked)}
-                />
-                <label htmlFor="paid" className="font-bold cursor-pointer select-none">
-                    تم الدفع نقداً (تسجيل مصروف بقيمة {purchase.total.toLocaleString()} د.ع)
-                </label>
-            </div>
+            {canPay ? (
+                <div className="bg-card p-4 rounded-lg shadow flex items-center gap-2 mb-4">
+                    <input
+                        type="checkbox"
+                        id="paid"
+                        className="w-5 h-5"
+                        checked={isPaid}
+                        onChange={(e) => setIsPaid(e.target.checked)}
+                    />
+                    <label htmlFor="paid" className="font-bold cursor-pointer select-none">
+                        تم الدفع نقداً (تسجيل مصروف بقيمة {purchase.total.toLocaleString()} د.ع)
+                    </label>
+                </div>
+            ) : (
+                <p className="bg-card p-4 rounded-lg shadow mb-4 text-sm text-muted-foreground">
+                    تُستلم الفاتورة غير مدفوعة ويُضاف مبلغها إلى رصيد المورد؛ التسديد لمن يملك صلاحية «تسديد الموردين».
+                </p>
+            )}
 
             {incompleteCount > 0 && (
                 <p className="text-sm text-destructive">

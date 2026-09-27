@@ -311,11 +311,19 @@ export async function cancelPurchase(purchaseId: string) {
     return { success: true };
 }
 
+/** Whether the signed-in user may pay suppliers (receive a purchase as paid). */
+export async function canCurrentUserPaySuppliers(): Promise<boolean> {
+    const tenantCtx = await getTenantContext('read');
+    return !(tenantCtx instanceof NextResponse) && tenantCtx.userPermissions.canPaySupplier;
+}
+
 export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
     const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) throw new Error('غير مصرح');
     if (!tenantCtx.userPermissions.canReceivePurchase) throw new Error('ليس لديك صلاحية استلام المشتريات.');
     if (typeof isPaid !== 'boolean') throw new Error('حالة الدفع غير صالحة.');
+    // Receiving as paid is a supplier payment: same permission as paying from the ledger.
+    if (isPaid && !tenantCtx.userPermissions.canPaySupplier) throw new Error('ليس لديك صلاحية تسديد الموردين؛ استلم الفاتورة غير مدفوعة.');
     const result = await receivePurchaseStock(prisma, purchaseId, tenantCtx.tenantBranchWhere, items, isPaid, tenantCtx.user);
     revalidatePath('/dashboard/purchases');
     revalidatePath(`/dashboard/purchases/${purchaseId}`);

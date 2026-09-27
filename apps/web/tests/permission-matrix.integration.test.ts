@@ -22,7 +22,9 @@ import { GET as profitExport } from '../app/api/reports/profit/export/route';
 import { GET as loyaltyAccount, POST as openLoyaltyAccount } from '../app/api/loyalty/account/route';
 import { POST as posAlerts } from '../app/api/pos/alerts/route';
 import { GET as debtDetail } from '../app/api/debts/[id]/route';
-import { getSupplierLedger, getSupplierSummary, getSuppliersWithBalances, recordSupplierPayment,
+import { POST as receivePurchaseRoute } from '../app/api/purchases/[id]/receive/route';
+import { receivePurchase } from '../app/lib/actions/purchase-actions';
+import { getSupplierLedger, getSupplierSummary, getSuppliersWithBalances, recordSupplierPayment, getSupplierPaymentStatus,
     setSupplierOpeningBalance, recalculateSupplierBalance } from '../app/lib/actions/supplier-ledger-actions';
 import { GET as backupList } from '../app/api/backup/list/route';
 import { GET as auditLog } from '../app/api/audit-log/route';
@@ -82,7 +84,7 @@ beforeAll(async () => {
     const patientB2 = await db.patient.create({ data: { name: 'No account ' + MARK, phone: randomUUID(), branchId: b1.id } });
     const patientA2 = await db.patient.create({ data: { name: 'Sister patient ' + key, phone: randomUUID(), branchId: a2.id, allergies: ['pmol'] } });
     const patientA1 = await db.patient.create({ data: { name: 'Own debtor ' + key, phone: randomUUID(), branchId: a1.id, balance: 50 } });
-    f = { orgA, a1, a2, b1, admin, pharmacist, cashier, safeA1, safeA2, safeB1, supplierA, supplierB, batchA1, batchA2, batchB1, patientB, patientB2, patientA1, patientA2 };
+    f = { orgA, a1, a2, b1, admin, pharmacist, cashier, safeA1, safeA2, safeB1, drug, supplierA, supplierB, batchA1, batchA2, batchB1, patientB, patientB2, patientA1, patientA2 };
 });
 afterAll(() => db.$disconnect());
 beforeEach(() => as(f.admin));
@@ -92,7 +94,7 @@ describe('supplier payments and ledger', () => {
     const supplierBalance = async () => (await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance;
     const safeBalance = async (id: string) => (await db.safe.findUnique({ where: { id } }))!.balance;
     const movements = (paymentId: string) => db.transaction.findMany({ where: { referenceType: 'SUPPLIER_PAYMENT', referenceId: paymentId } });
-    const transfer = (extra: Record<string, unknown> = {}) => send('/x', 'POST', { branchId: f.a1.id, amount: 5, method: 'TRANSFER', ...extra });
+    const transfer = (extra: Record<string, unknown> = {}) => send('/x', 'POST', { branchId: f.a1.id, amount: 5, method: 'TRANSFER', requestId: randomUUID(), ...extra });
 
     it('never returns another organisation\'s supplier payments', async () => {
         const response = await supplierPayments(get(`/api/suppliers/${f.supplierB.id}/payments`), params(f.supplierB.id));
@@ -183,7 +185,9 @@ describe('supplier payments and ledger', () => {
     it('refuses a drawer of another branch or organisation, and cash without a drawer', async () => {
         const before = await payments(), a2 = await safeBalance(f.safeA2.id), b1 = await safeBalance(f.safeB1.id);
         for (const safeId of [f.safeA2.id, f.safeB1.id, null]) {
-            expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 1, method: 'CASH', safeId }), params(f.supplierA.id))).status).toBe(400);
+            const refused = await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 1, method: 'CASH', safeId, requestId: randomUUID() }), params(f.supplierA.id));
+            expect(refused.status).toBe(400);
+            expect((await refused.json()).message).toMatch(/الصندوق/);
         }
         expect([await payments(), await safeBalance(f.safeA2.id), await safeBalance(f.safeB1.id)]).toEqual([before, a2, b1]);
     });
@@ -221,6 +225,57 @@ describe('supplier payments and ledger', () => {
         expect(await db.purchase.count({ where: { supplierId: f.supplierA.id, branchId: f.b1.id } })).toBe(0);
     });
 
+    it('refuses a payment without a request id, writing nothing', async () => {
+        const before = await payments();
+        for (const requestId of [undefined, 'not-a-uuid']) {
+            const refused = await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5, method: 'TRANSFER', requestId }), params(f.supplierA.id));
+            expect(refused.status).toBe(400);
+            expect((await refused.json()).message).toBe('معرّف الطلب مطلوب وغير صالح');
+        }
+        expect(await payments()).toBe(before);
+    });
+
+    it('settles a payment whose answer was lost when the form is reopened, without paying twice', async () => {
+        // The form keeps the unsettled request id; on reopening it asks the server first.
+        const requestId = randomUUID();
+        const drawer = await safeBalance(f.safeA1.id), balance = await supplierBalance();
+        const body = { branchId: f.a1.id, amount: 11, method: 'CASH', safeId: f.safeA1.id, requestId };
+        await paySupplier(send('/x', 'POST', body), params(f.supplierA.id)); // answer lost
+        expect(await getSupplierPaymentStatus(requestId)).toEqual({ recorded: true, amount: 11, method: 'CASH' });
+        expect((await paySupplier(send('/x', 'POST', body), params(f.supplierA.id))).status).toBe(200); // resent anyway
+        expect(await db.supplierPayment.count({ where: { id: requestId } })).toBe(1);
+        expect(await movements(requestId)).toHaveLength(1);
+        expect([await safeBalance(f.safeA1.id), await supplierBalance()]).toEqual([drawer - 11, balance - 11]);
+        // Reopened with edited values after the lost answer: refused as a conflict, nothing more taken.
+        const edited = await paySupplier(send('/x', 'POST', { ...body, amount: 12 }), params(f.supplierA.id));
+        expect(edited.status).toBe(400);
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer - 11);
+        // Never recorded, or not visible to the caller: reads as not recorded.
+        expect(await getSupplierPaymentStatus(randomUUID())).toEqual({ recorded: false });
+        const foreign = await db.supplierPayment.findFirst({ where: { supplierId: f.supplierB.id } });
+        expect(await getSupplierPaymentStatus(foreign!.id)).toEqual({ recorded: false });
+        await as(f.pharmacist, { canPaySupplier: false });
+        expect(await getSupplierPaymentStatus(requestId)).toEqual({ recorded: false });
+    });
+
+    it('requires canPaySupplier to receive a purchase as paid, and receives it unpaid without it', async () => {
+        const pendingPurchase = () => db.purchase.create({ data: { branchId: f.a1.id, supplierId: f.supplierA.id, total: 100,
+            items: { create: [{ drugId: f.drug.id, quantity: 2, cost: 50 }] } }, include: { items: true } });
+        const lines = (p: any) => p.items.map((i: any) => ({ itemId: i.id, quantity: i.quantity, expiryDate: '2031-06-01', batchNumber: 'PM-RCV' }));
+        const state = async (id: string) => { const p = await db.purchase.findUnique({ where: { id } }); return [p!.status, p!.paidAmount]; };
+        await as(f.pharmacist); // can receive, may not pay (default)
+        const p1 = await pendingPurchase();
+        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p1), isPaid: true }), params(p1.id))).status).toBe(403);
+        await expect(receivePurchase(p1.id, lines(p1).map((l: any) => ({ ...l, expiryDate: new Date(l.expiryDate) })), true)).rejects.toThrow('تسديد الموردين');
+        expect(await state(p1.id)).toEqual(['PENDING', 0]);
+        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p1), isPaid: false }), params(p1.id))).status).toBe(200);
+        expect(await state(p1.id)).toEqual(['COMPLETED', 0]);
+        await as(f.pharmacist, { canPaySupplier: true });
+        const p2 = await pendingPurchase();
+        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p2), isPaid: true }), params(p2.id))).status).toBe(200);
+        expect(await state(p2.id)).toEqual(['COMPLETED', 100]);
+    });
+
     it('enforces the same rules when the server actions are called directly', async () => {
         await as(f.pharmacist, { canViewSuppliers: false, canPaySupplier: true });
         expect(await getSupplierLedger(f.supplierA.id)).toEqual([]);
@@ -228,11 +283,11 @@ describe('supplier payments and ledger', () => {
         expect(await getSuppliersWithBalances()).toEqual([]);
         await as(f.pharmacist, { canPaySupplier: false });
         const balance = await supplierBalance();
-        expect((await recordSupplierPayment({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5, method: 'TRANSFER' })).success).toBe(false);
+        expect((await recordSupplierPayment({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5, method: 'TRANSFER', requestId: randomUUID() })).success).toBe(false);
         expect(await supplierBalance()).toBe(balance);
         await as(f.pharmacist, { canPaySupplier: true });
         expect(await getSupplierSummary(f.supplierA.id)).not.toBeNull();
-        expect((await recordSupplierPayment({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5, method: 'BITCOIN' })).success).toBe(false);
+        expect((await recordSupplierPayment({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5, method: 'BITCOIN', requestId: randomUUID() })).success).toBe(false);
     });
 });
 

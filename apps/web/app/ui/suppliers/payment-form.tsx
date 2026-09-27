@@ -4,7 +4,11 @@ import { useState, useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { CreditCard, X, Loader2 } from 'lucide-react';
-import { recordSupplierPayment } from '@/app/lib/actions/supplier-ledger-actions';
+import { getSupplierPaymentStatus, recordSupplierPayment } from '@/app/lib/actions/supplier-ledger-actions';
+import { clearPendingPayment, loadPendingPayment, savePendingPayment } from './pending-payment';
+
+/** localStorage, or undefined where it is unavailable (it can throw). */
+const browserStorage = () => { try { return window.localStorage; } catch { return undefined; } };
 
 type Branch = { id: string; name: string };
 type Safe = { id: string; name: string; branchId: string; balance: number };
@@ -52,7 +56,10 @@ function PaymentModal({
     const [error, setError] = useState('');
     const [mounted, setMounted] = useState(false);
     // One id per payment: resent unchanged if the user retries, so it is never paid twice.
-    const [requestId] = useState(() => crypto.randomUUID());
+    // An attempt whose answer was lost is kept (pending-payment.ts) and resumed here.
+    const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+    const [notice, setNotice] = useState('');
+    const [checking, setChecking] = useState(false);
     const firstSafe = (branchId: string) => safes.find(s => s.branchId === branchId)?.id || '';
     const [form, setForm] = useState({
         amount: '',
@@ -65,6 +72,31 @@ function PaymentModal({
     });
 
     useEffect(() => { setMounted(true); }, []);
+
+    // Resume an unsettled attempt for this supplier: same id, same values, and ask
+    // the server whether it was recorded before offering to send it again.
+    useEffect(() => {
+        const pending = loadPendingPayment(browserStorage(), supplierId);
+        if (!pending) return;
+        setRequestId(pending.requestId);
+        setForm(pending.values);
+        setChecking(true);
+        getSupplierPaymentStatus(pending.requestId)
+            .then((status) => {
+                if (status.recorded) {
+                    clearPendingPayment(browserStorage(), supplierId);
+                    setRequestId(crypto.randomUUID());
+                    setForm((f) => ({ ...f, amount: '', reference: '', notes: '' }));
+                    setNotice('الدفعة السابقة سُجّلت بنجاح ولن تُسجَّل مرة أخرى. هذا النموذج لدفعة جديدة.');
+                    router.refresh();
+                } else {
+                    setNotice('محاولة سابقة لهذه الدفعة لم تُعرف نتيجتها ولم تُسجَّل. أعد الإرسال بالبيانات نفسها؛ لن تُسجَّل مرتين.');
+                }
+            })
+            .catch(() => setNotice('تعذّر التحقق من المحاولة السابقة. أعد الإرسال بالبيانات نفسها؛ لن تُسجَّل مرتين.'))
+            .finally(() => setChecking(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [supplierId]);
 
     if (!mounted) return null;
 
@@ -83,8 +115,12 @@ function PaymentModal({
             return;
         }
 
+        // Recorded before sending: if the answer is lost, reopening resumes this attempt.
+        savePendingPayment(browserStorage(), supplierId, { requestId, values: form });
         startTransition(async () => {
-            const result = await recordSupplierPayment({
+            let result: Awaited<ReturnType<typeof recordSupplierPayment>>;
+            try {
+                result = await recordSupplierPayment({
                 supplierId,
                 branchId: form.branchId,
                 amount,
@@ -95,11 +131,24 @@ function PaymentModal({
                 notes: form.notes || undefined,
                 date: form.date,
             });
+            } catch {
+                setError('تعذّر التأكد من نتيجة الدفعة. أعد الإرسال بالبيانات نفسها؛ لن تُسجَّل مرتين.');
+                return;
+            }
 
             if (result.success) {
+                clearPendingPayment(browserStorage(), supplierId);
                 onClose();
                 router.refresh();
+            } else if ('code' in result && result.code === 'REQUEST_CONFLICT') {
+                // This attempt was already recorded with other values: never pay again blindly.
+                clearPendingPayment(browserStorage(), supplierId);
+                setRequestId(crypto.randomUUID());
+                setError(result.error || 'فشل في تسجيل الدفعة');
+                router.refresh();
             } else {
+                // Refused: nothing was recorded, so the attempt is settled.
+                clearPendingPayment(browserStorage(), supplierId);
                 setError(result.error || 'فشل في تسجيل الدفعة');
             }
         });
@@ -245,6 +294,12 @@ function PaymentModal({
                         />
                     </div>
 
+                    {notice && (
+                        <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg text-sm text-foreground">
+                            {notice}
+                        </div>
+                    )}
+
                     {/* Error */}
                     {error && (
                         <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
@@ -255,7 +310,7 @@ function PaymentModal({
                     {/* Submit */}
                     <button
                         type="submit"
-                        disabled={isPending}
+                        disabled={isPending || checking}
                         className="w-full flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-success-foreground font-bold py-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isPending ? (

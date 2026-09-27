@@ -204,8 +204,8 @@ export async function recordSupplierPayment(data: {
     method: string;
     /** Drawer the cash leaves; required for CASH, ignored otherwise. */
     safeId?: string | null;
-    /** Chosen once per payment by the form and resent on retry: a retry never pays twice. */
-    requestId?: string;
+    /** Chosen once per payment by the form and resent on retry: a retry never pays twice. Required. */
+    requestId: string;
     reference?: string;
     notes?: string;
     date?: string;
@@ -218,7 +218,7 @@ export async function recordSupplierPayment(data: {
         const method = data.method || 'CASH';
         if (!(SUPPLIER_PAYMENT_METHODS as readonly string[]).includes(method)) return { success: false, error: 'طريقة الدفع غير صالحة' };
         if (!Number.isFinite(amount) || amount <= 0) return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
-        if (requestId !== undefined && !UUID.test(requestId)) return { success: false, error: 'معرّف الطلب غير صالح' };
+        if (typeof requestId !== 'string' || !UUID.test(requestId)) return { success: false, error: 'معرّف الطلب مطلوب وغير صالح' };
         if (!await branchInScope(tenantCtx, branchId)) return { success: false, error: 'الفرع خارج نطاق صلاحياتك' };
 
         // التأكد من وجود المورد وملكيته للمؤسسة
@@ -240,16 +240,14 @@ export async function recordSupplierPayment(data: {
             p.supplierId === supplierId && p.branchId === branchId && p.amount === amount && p.method === method && (p.safeId ?? null) === safeId;
 
         const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            if (requestId) {
-                // Serialises a retry sent while the first attempt is still running.
-                await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'supplier-payment:' + requestId}, 0))::text`;
-                const prior = await tx.supplierPayment.findUnique({ where: { id: requestId } });
-                if (prior) return samePayment(prior) ? 'duplicate' : 'conflict';
-            }
+            // Serialises a retry sent while the first attempt is still running.
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'supplier-payment:' + requestId}, 0))::text`;
+            const prior = await tx.supplierPayment.findUnique({ where: { id: requestId } });
+            if (prior) return samePayment(prior) ? 'duplicate' : 'conflict';
             // Payment, supplier balance and drawer movement: all or nothing.
             const payment = await tx.supplierPayment.create({
                 data: {
-                    ...(requestId ? { id: requestId } : {}),
+                    id: requestId,
                     supplierId,
                     branchId,
                     safeId,
@@ -284,7 +282,7 @@ export async function recordSupplierPayment(data: {
             }
             return 'created';
         });
-        if (outcome === 'conflict') return { success: false, error: 'معرّف الطلب مستخدم لدفعة مختلفة.' };
+        if (outcome === 'conflict') return { success: false, code: 'REQUEST_CONFLICT', error: 'سُجّلت دفعة سابقة بهذا الطلب ببيانات مختلفة؛ راجع كشف الحساب قبل الدفع مجدداً.' };
         if (outcome === 'duplicate') return { success: true, duplicate: true };
 
         await logAudit({
@@ -305,6 +303,25 @@ export async function recordSupplierPayment(data: {
         console.error('Record Supplier Payment Error:', error);
         return { success: false, error: 'فشل في تسجيل الدفعة' };
     }
+}
+
+/**
+ * Whether a payment attempt (by its request id) was recorded: lets the form
+ * settle an attempt whose response was lost, instead of paying again. Only the
+ * caller's organisation's payments are visible; anything else reads as "not recorded".
+ */
+export async function getSupplierPaymentStatus(requestId: string) {
+    const tenantCtx = await supplierContext('read', 'pay');
+    if (!tenantCtx || typeof requestId !== 'string' || !UUID.test(requestId)) return { recorded: false };
+    const payment = await prisma.supplierPayment.findFirst({
+        where: {
+            id: requestId,
+            ...(tenantCtx.organizationId ? { supplier: { organizationId: tenantCtx.organizationId } } : {}),
+            branch: tenantCtx.branchModelWhere,
+        },
+        select: { amount: true, method: true },
+    });
+    return payment ? { recorded: true, amount: payment.amount, method: payment.method } : { recorded: false };
 }
 
 /**
