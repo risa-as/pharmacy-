@@ -8,16 +8,20 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
 
 /**
- * Supplier data needs canViewSuppliers; changing a supplier's balance (payment,
- * opening balance, recalculation) also needs canCreatePurchase. These functions
- * can be called directly as server actions, so the checks live here, not only in
- * the routes and pages that call them.
+ * Supplier data needs canViewSuppliers. Paying a supplier also needs
+ * canPaySupplier. The opening balance and a balance recalculation are
+ * administrative corrections: owner or manager only, not grantable per user.
+ * These functions can be called directly as server actions, so the checks live
+ * here, not only in the routes and pages that call them.
  */
-async function supplierContext(access: 'read' | 'write', changesBalance = false) {
+const MANAGER_ROLES = new Set(['ADMIN', 'MANAGER', 'SUPER_ADMIN']);
+async function supplierContext(access: 'read' | 'write', need: 'view' | 'pay' | 'manage' = 'view') {
     const tenantCtx = await getTenantContext(access);
     if (tenantCtx instanceof NextResponse) return null;
     const p = tenantCtx.userPermissions;
-    if (!p.canViewSuppliers || (changesBalance && !p.canCreatePurchase)) return null;
+    if (!p.canViewSuppliers) return null;
+    if (need === 'pay' && !p.canPaySupplier) return null;
+    if (need === 'manage' && !MANAGER_ROLES.has(tenantCtx.user.role)) return null;
     return tenantCtx;
 }
 /** A branch the caller may act for: their own, or any of their organisation's for admins. */
@@ -25,6 +29,11 @@ async function branchInScope(tenantCtx: { branchModelWhere: Record<string, any> 
     return typeof branchId === 'string' && !!branchId
         && !!await prisma.branch.findFirst({ where: { AND: [tenantCtx.branchModelWhere, { id: branchId }] }, select: { id: true } });
 }
+
+/** Only cash leaves a drawer; a cheque or a transfer does not move any safe. */
+const SUPPLIER_PAYMENT_METHODS = ['CASH', 'CHECK', 'TRANSFER'] as const;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+class SupplierPaymentRefused extends Error {}
 
 // ===================== كشف حساب المورد =====================
 
@@ -193,63 +202,106 @@ export async function recordSupplierPayment(data: {
     branchId: string;
     amount: number;
     method: string;
+    /** Drawer the cash leaves; required for CASH, ignored otherwise. */
+    safeId?: string | null;
+    /** Chosen once per payment by the form and resent on retry: a retry never pays twice. */
+    requestId?: string;
     reference?: string;
     notes?: string;
     date?: string;
 }) {
-    const tenantCtx = await supplierContext('write', true);
+    const tenantCtx = await supplierContext('write', 'pay');
     if (!tenantCtx) return { success: false, error: 'غير مصرح' };
 
     try {
-        const { supplierId, branchId, amount, method, reference, notes, date } = data;
+        const { supplierId, branchId, amount, reference, notes, date, requestId } = data;
+        const method = data.method || 'CASH';
+        if (!(SUPPLIER_PAYMENT_METHODS as readonly string[]).includes(method)) return { success: false, error: 'طريقة الدفع غير صالحة' };
+        if (!Number.isFinite(amount) || amount <= 0) return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
+        if (requestId !== undefined && !UUID.test(requestId)) return { success: false, error: 'معرّف الطلب غير صالح' };
         if (!await branchInScope(tenantCtx, branchId)) return { success: false, error: 'الفرع خارج نطاق صلاحياتك' };
 
-        if (amount <= 0) {
-            return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
-        }
-
         // التأكد من وجود المورد وملكيته للمؤسسة
-        const supplier = await prisma.supplier.findUnique({
-            where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined }
+        const supplier = await prisma.supplier.findFirst({
+            where: { id: supplierId, ...(tenantCtx.organizationId ? { organizationId: tenantCtx.organizationId } : {}) },
         });
         if (!supplier) {
             return { success: false, error: 'المورد غير موجود أو ليس لديك صلاحية' };
         }
 
-        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            // 1. تسجيل الدفعة
-            await tx.supplierPayment.create({
+        // Cash leaves a drawer of the chosen branch; nothing is created or guessed.
+        const safeId = method === 'CASH' ? data.safeId || null : null;
+        if (method === 'CASH') {
+            if (!safeId) return { success: false, error: 'اختر الصندوق الذي يُدفع منه النقد' };
+            if (!await prisma.safe.findFirst({ where: { id: safeId, branchId }, select: { id: true } }))
+                return { success: false, error: 'الصندوق لا يتبع الفرع المختار' };
+        }
+        const samePayment = (p: { supplierId: string; branchId: string; amount: number; method: string; safeId: string | null }) =>
+            p.supplierId === supplierId && p.branchId === branchId && p.amount === amount && p.method === method && (p.safeId ?? null) === safeId;
+
+        const outcome = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            if (requestId) {
+                // Serialises a retry sent while the first attempt is still running.
+                await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'supplier-payment:' + requestId}, 0))::text`;
+                const prior = await tx.supplierPayment.findUnique({ where: { id: requestId } });
+                if (prior) return samePayment(prior) ? 'duplicate' : 'conflict';
+            }
+            // Payment, supplier balance and drawer movement: all or nothing.
+            const payment = await tx.supplierPayment.create({
                 data: {
+                    ...(requestId ? { id: requestId } : {}),
                     supplierId,
                     branchId,
+                    safeId,
                     amount,
-                    method: method || 'CASH',
+                    method,
                     reference: reference || null,
                     notes: notes || null,
                     date: date ? new Date(date) : new Date(),
                 },
             });
-
-            // 2. تحديث رصيد المورد
             await tx.supplier.update({
                 where: { id: supplierId },
                 data: { balance: { decrement: amount } },
             });
+            if (safeId) {
+                const deducted = await tx.safe.updateMany({
+                    where: { id: safeId, balance: { gte: amount } },
+                    data: { balance: { decrement: amount } },
+                });
+                if (deducted.count !== 1) throw new SupplierPaymentRefused('رصيد الصندوق غير كافٍ لهذه الدفعة.');
+                await tx.transaction.create({
+                    data: {
+                        safeId,
+                        type: 'OUT',
+                        amount,
+                        referenceType: 'SUPPLIER_PAYMENT',
+                        referenceId: payment.id,
+                        userId: tenantCtx.user.id,
+                        description: `دفعة نقدية للمورد ${supplier.name}`,
+                    },
+                });
+            }
+            return 'created';
         });
+        if (outcome === 'conflict') return { success: false, error: 'معرّف الطلب مستخدم لدفعة مختلفة.' };
+        if (outcome === 'duplicate') return { success: true, duplicate: true };
 
         await logAudit({
             userId: tenantCtx.user.id,
             userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
             action: 'CREATE',
             entity: 'SUPPLIER_PAYMENT',
-            details: JSON.stringify({ supplierId, amount, method }),
+            details: JSON.stringify({ supplierId, amount, method, safeId }),
             branchId,
         });
 
         revalidatePath(`/dashboard/suppliers/${supplierId}`);
         revalidatePath('/dashboard/suppliers');
+        revalidatePath('/dashboard/finance/safes');
         return { success: true };
     } catch (error) {
+        if (error instanceof SupplierPaymentRefused) return { success: false, error: error.message };
         console.error('Record Supplier Payment Error:', error);
         return { success: false, error: 'فشل في تسجيل الدفعة' };
     }
@@ -264,7 +316,7 @@ export async function setSupplierOpeningBalance(data: {
     amount: number;
     notes?: string;
 }) {
-    const tenantCtx = await supplierContext('write', true);
+    const tenantCtx = await supplierContext('write', 'manage');
     if (!tenantCtx) return { success: false, error: 'غير مصرح' };
 
     const { supplierId, branchId, amount, notes } = data;
@@ -321,7 +373,7 @@ export async function setSupplierOpeningBalance(data: {
  * إعادة حساب رصيد المورد (في حالة عدم التطابق)
  */
 export async function recalculateSupplierBalance(supplierId: string) {
-    const tenantCtx = await supplierContext('write', true);
+    const tenantCtx = await supplierContext('write', 'manage');
     if (!tenantCtx) return 0;
 
     const supplier = await prisma.supplier.findUnique({

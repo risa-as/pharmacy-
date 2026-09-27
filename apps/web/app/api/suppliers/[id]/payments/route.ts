@@ -35,8 +35,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
-        if (!tenantCtx.userPermissions.canViewSuppliers || !tenantCtx.userPermissions.canCreatePurchase)
-            return NextResponse.json({ message: 'ليس لديك صلاحية تسجيل دفعات الموردين' }, { status: 403 });
+        if (!tenantCtx.userPermissions.canViewSuppliers || !tenantCtx.userPermissions.canPaySupplier)
+            return NextResponse.json({ message: 'ليس لديك صلاحية تسديد الموردين' }, { status: 403 });
 
         const body = await req.json();
         const result = await recordSupplierPayment({
@@ -44,6 +44,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
             branchId: body.branchId,
             amount: parseFloat(body.amount),
             method: body.method || 'CASH',
+            safeId: body.safeId ?? null,
+            requestId: body.requestId,
             reference: body.reference,
             notes: body.notes,
             date: body.date,

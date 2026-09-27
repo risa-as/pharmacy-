@@ -42,6 +42,8 @@ export interface UserPermissions {
     // Suppliers & Purchases
     canViewSuppliers: boolean;
     canCreatePurchase: boolean;
+    /** Paying a supplier moves money: separate from creating purchases. */
+    canPaySupplier: boolean;
 
     canViewWarehouseOrders: boolean;
     canCreateWarehouseOrder: boolean;
@@ -78,7 +80,7 @@ const ADMIN_DEFAULTS: UserPermissions = {
     canViewExpenses: true, canCreateExpense: true,
     canViewReports: true, canViewProfitReport: true, canViewEmployeeReport: true, canExportExcel: true,
     canViewPatients: true, canEditPatient: true,
-    canViewSuppliers: true, canCreatePurchase: true,
+    canViewSuppliers: true, canCreatePurchase: true, canPaySupplier: true,
     canManageUsers: true, canManageBranches: true, canViewAuditLog: true, canChangeSettings: true, canBackup: true,
     canViewDebts: true, canPayDebt: true,
 };
@@ -98,7 +100,7 @@ const PHARMACIST_DEFAULTS: UserPermissions = {
     canViewExpenses: false, canCreateExpense: false,
     canViewReports: true, canViewProfitReport: false, canViewEmployeeReport: false, canExportExcel: false,
     canViewPatients: true, canEditPatient: true,
-    canViewSuppliers: true, canCreatePurchase: true,
+    canViewSuppliers: true, canCreatePurchase: true, canPaySupplier: false,
     canManageUsers: false, canManageBranches: false, canViewAuditLog: false, canChangeSettings: false, canBackup: false,
     canViewDebts: true, canPayDebt: true,
 };
@@ -118,7 +120,7 @@ const CASHIER_DEFAULTS: UserPermissions = {
     canViewExpenses: false, canCreateExpense: false,
     canViewReports: false, canViewProfitReport: false, canViewEmployeeReport: false, canExportExcel: false,
     canViewPatients: true, canEditPatient: false,
-    canViewSuppliers: false, canCreatePurchase: false,
+    canViewSuppliers: false, canCreatePurchase: false, canPaySupplier: false,
     canManageUsers: false, canManageBranches: false, canViewAuditLog: false, canChangeSettings: false, canBackup: false,
     canViewDebts: true, canPayDebt: true,
 };
@@ -145,7 +147,7 @@ const ALL_FALSE_DEFAULTS: UserPermissions = {
     canViewExpenses: false, canCreateExpense: false,
     canViewReports: false, canViewProfitReport: false, canViewEmployeeReport: false, canExportExcel: false,
     canViewPatients: false, canEditPatient: false,
-    canViewSuppliers: false, canCreatePurchase: false,
+    canViewSuppliers: false, canCreatePurchase: false, canPaySupplier: false,
     canManageUsers: false, canManageBranches: false, canViewAuditLog: false, canChangeSettings: false, canBackup: false,
     canViewDebts: false, canPayDebt: false,
 };
@@ -235,6 +237,7 @@ export const PERMISSION_LABELS: Record<keyof UserPermissions, { label: string; c
     canEditPatient: { label: 'تعديل بيانات مريض', category: 'العملاء' },
     canViewSuppliers: { label: 'عرض الموردين', category: 'التوريد' },
     canCreatePurchase: { label: 'إنشاء طلب شراء', category: 'التوريد' },
+    canPaySupplier: { label: 'تسديد الموردين', category: 'التوريد' },
     canViewWarehouseOrders: { label: 'عرض طلبات المذاخر', category: 'التوريد' },
     canCreateWarehouseOrder: { label: 'إنشاء طلب من مذخر', category: 'التوريد' },
     canApproveWarehouseOrder: { label: 'اعتماد ورفض وإلغاء طلب المذخر', category: 'التوريد' },

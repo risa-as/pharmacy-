@@ -49,6 +49,17 @@ export default async function SupplierLedgerPage(
   });
 
   const { supplier, totalPurchased, totalPayments, balance } = summary;
+  // Same rules as the server, so buttons are not offered only to be refused:
+  // paying needs canPaySupplier; the opening balance is for owners and managers.
+  const canPay = tenantCtx.userPermissions.canPaySupplier;
+  const canSetOpeningBalance = ['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(tenantCtx.user.role);
+  const safes = canPay
+    ? await prisma.safe.findMany({
+        where: { branchId: { in: branches.map((b) => b.id) } },
+        select: { id: true, name: true, branchId: true, balance: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    : [];
 
   return (
     <div className="w-full" dir="rtl">
@@ -78,11 +89,13 @@ export default async function SupplierLedgerPage(
          * group wraps on narrow screens instead of collapsing to icons.
          */}
         <div className="flex items-center flex-wrap gap-3">
-          <OpeningBalanceButton
-            supplierId={params.id}
-            supplierName={supplier.name}
-            branches={branches}
-          />
+          {canSetOpeningBalance && (
+            <OpeningBalanceButton
+              supplierId={params.id}
+              supplierName={supplier.name}
+              branches={branches}
+            />
+          )}
           <Link
             href={`/dashboard/suppliers/${params.id}/purchases`}
             className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-bold text-foreground transition-all hover:bg-muted shadow-sm"
@@ -90,11 +103,14 @@ export default async function SupplierLedgerPage(
             <ShoppingCart className="h-4 w-4 text-primary" />
             فواتير الشراء
           </Link>
-          <PaymentFormWrapper
-            supplierId={params.id}
-            supplierName={supplier.name}
-            branches={branches}
-          />
+          {canPay && (
+            <PaymentFormWrapper
+              supplierId={params.id}
+              supplierName={supplier.name}
+              branches={branches}
+              safes={safes}
+            />
+          )}
         </div>
       </div>
 

@@ -118,6 +118,7 @@ const GROUPS: { id: string; label: string; icon: LucideIcon; perms: PermMeta[] }
             { key: 'canReturnWarehouseOrder', kind: 'action', requires: 'canViewWarehouseOrders', label: 'إرجاع مشتريات المذخر', desc: 'إرجاع مشتريات المذخر' },
             { key: 'canReconcileWarehouseOrder', kind: 'action', requires: 'canViewWarehouseOrders', label: 'مطابقة الاستلام والسداد', desc: 'للمدير فقط: ربط الاستلام ومطابقة السداد' },
             { key: 'canCreatePurchase', kind: 'action', requires: 'canViewSuppliers', label: 'إنشاء طلب شراء', desc: 'إنشاء أمر شراء جديد من مورد' },
+            { key: 'canPaySupplier', kind: 'action', requires: 'canViewSuppliers', label: 'تسديد الموردين', desc: 'تسجيل دفعة لمورد؛ الدفع النقدي يُخصم من صندوق الفرع' },
         ],
     },
     {

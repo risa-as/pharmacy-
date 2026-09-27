@@ -68,6 +68,8 @@ beforeAll(async () => {
     const supplierA = await db.supplier.create({ data: { name: 'Own supplier ' + key, organizationId: orgA.id } });
     const supplierB = await db.supplier.create({ data: { name: 'Supplier ' + MARK, organizationId: orgB.id } });
     await db.supplierPayment.create({ data: { supplierId: supplierB.id, branchId: b1.id, amount: 999, notes: MARK } });
+    const mkSafe = (branchId: string, name: string) => db.safe.create({ data: { branchId, name, type: 'CASH_DRAWER', balance: 1000 } });
+    const safeA1 = await mkSafe(a1.id, 'Drawer A1'), safeA2 = await mkSafe(a2.id, 'Drawer A2'), safeB1 = await mkSafe(b1.id, 'Drawer ' + MARK);
     const drug = await db.globalDrug.create({ data: { barcode: 'PM-' + key, tradeName: 'PM drug', scientificName: 'Pmol', alternatives: [] } });
     const mkBatch = async (branchId: string, label: string) => {
         const inv = await db.inventory.create({ data: { branchId, drugId: drug.id, price: 10, cost: 5 } });
@@ -80,12 +82,18 @@ beforeAll(async () => {
     const patientB2 = await db.patient.create({ data: { name: 'No account ' + MARK, phone: randomUUID(), branchId: b1.id } });
     const patientA2 = await db.patient.create({ data: { name: 'Sister patient ' + key, phone: randomUUID(), branchId: a2.id, allergies: ['pmol'] } });
     const patientA1 = await db.patient.create({ data: { name: 'Own debtor ' + key, phone: randomUUID(), branchId: a1.id, balance: 50 } });
-    f = { orgA, a1, a2, b1, admin, pharmacist, cashier, supplierA, supplierB, batchA1, batchA2, batchB1, patientB, patientB2, patientA1, patientA2 };
+    f = { orgA, a1, a2, b1, admin, pharmacist, cashier, safeA1, safeA2, safeB1, supplierA, supplierB, batchA1, batchA2, batchB1, patientB, patientB2, patientA1, patientA2 };
 });
 afterAll(() => db.$disconnect());
 beforeEach(() => as(f.admin));
 
 describe('supplier payments and ledger', () => {
+    const payments = () => db.supplierPayment.count({ where: { supplierId: f.supplierA.id } });
+    const supplierBalance = async () => (await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance;
+    const safeBalance = async (id: string) => (await db.safe.findUnique({ where: { id } }))!.balance;
+    const movements = (paymentId: string) => db.transaction.findMany({ where: { referenceType: 'SUPPLIER_PAYMENT', referenceId: paymentId } });
+    const transfer = (extra: Record<string, unknown> = {}) => send('/x', 'POST', { branchId: f.a1.id, amount: 5, method: 'TRANSFER', ...extra });
+
     it('never returns another organisation\'s supplier payments', async () => {
         const response = await supplierPayments(get(`/api/suppliers/${f.supplierB.id}/payments`), params(f.supplierB.id));
         expect(response.status).toBe(404);
@@ -103,51 +111,128 @@ describe('supplier payments and ledger', () => {
         expect((await supplierLedger(get('/x'), params(f.supplierA.id))).status).toBe(403);
     });
 
-    it('requires canCreatePurchase to record a payment, and leaves the balance unchanged when refused', async () => {
-        const count = () => db.supplierPayment.count({ where: { supplierId: f.supplierA.id } });
-        const before = await count();
-        await as(f.pharmacist, { canCreatePurchase: false });
-        expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5 }), params(f.supplierA.id))).status).toBe(403);
-        expect(await count()).toBe(before);
-        await as(f.pharmacist, { canCreatePurchase: true });
-        const paid = await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5 }), params(f.supplierA.id));
+    it('requires canPaySupplier to pay, and leaves the balance unchanged when refused', async () => {
+        const before = await payments(), balance = await supplierBalance();
+        await as(f.pharmacist, { canPaySupplier: false });
+        expect((await paySupplier(transfer(), params(f.supplierA.id))).status).toBe(403);
+        expect([await payments(), await supplierBalance()]).toEqual([before, balance]);
+        await as(f.pharmacist, { canPaySupplier: true });
+        const paid = await paySupplier(transfer(), params(f.supplierA.id));
         expect(paid.status).toBe(200);
         expect((await paid.json()).message).toBe('تم تسجيل الدفعة بنجاح');
-        expect(await count()).toBe(before + 1);
+        expect([await payments(), await supplierBalance()]).toEqual([before + 1, balance - 5]);
     });
 
-    it('lets an employee with canViewSuppliers but not canCreatePurchase view, but not change balances (deliberate change)', async () => {
-        await as(f.pharmacist, { canViewSuppliers: true, canCreatePurchase: false });
-        expect((await supplierLedger(get('/x'), params(f.supplierA.id))).status).toBe(200);
-        expect(await getSupplierSummary(f.supplierA.id)).not.toBeNull();
-        const balance = (await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance;
+    it('follows the agreed role defaults: the owner (ADMIN) pays; pharmacist and cashier only when granted', async () => {
+        // Decision 2026-09-27: a separate canPaySupplier, off by default for pharmacist and cashier.
+        // There is no MANAGER role in the database; ADMIN is the owner/manager.
+        await as(f.admin);
+        expect((await paySupplier(transfer({ amount: 1 }), params(f.supplierA.id))).status).toBe(200);
+        for (const user of [f.pharmacist, f.cashier]) {
+            await as(user);
+            const before = await payments();
+            expect((await paySupplier(transfer({ amount: 1 }), params(f.supplierA.id))).status).toBe(403);
+            expect(await payments()).toBe(before);
+        }
+        // Creating purchases stays with the pharmacist; paying is separate.
+        await as(f.pharmacist);
+        expect((await db.user.findUnique({ where: { id: f.pharmacist.id } }))?.permissions).toBeNull();
+    });
+
+    it('pays only against a branch in the caller\'s scope', async () => {
+        const before = await payments();
+        expect((await paySupplier(transfer({ branchId: f.b1.id }), params(f.supplierA.id))).status).toBe(400);
+        await as(f.pharmacist, { canPaySupplier: true });
+        expect((await paySupplier(transfer({ branchId: f.a2.id }), params(f.supplierA.id))).status).toBe(400);
+        expect(await payments()).toBe(before);
+    });
+
+    it('takes cash from the chosen drawer, in the same transaction, and records the movement', async () => {
+        const requestId = randomUUID();
+        const drawer = await safeBalance(f.safeA1.id), balance = await supplierBalance();
+        const response = await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 40, method: 'CASH', safeId: f.safeA1.id, requestId }), params(f.supplierA.id));
+        expect(response.status).toBe(200);
+        const payment = await db.supplierPayment.findUnique({ where: { id: requestId } });
+        expect(payment).toMatchObject({ safeId: f.safeA1.id, method: 'CASH', amount: 40 });
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer - 40);
+        expect(await supplierBalance()).toBe(balance - 40);
+        expect((await movements(requestId)).map(m => [m.type, m.amount, m.safeId])).toEqual([['OUT', 40, f.safeA1.id]]);
+    });
+
+    it('does not move any drawer for a cheque or a transfer', async () => {
+        const drawer = await safeBalance(f.safeA1.id);
+        for (const method of ['CHECK', 'TRANSFER']) {
+            const requestId = randomUUID();
+            expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 7, method, safeId: f.safeA1.id, requestId }), params(f.supplierA.id))).status).toBe(200);
+            expect((await db.supplierPayment.findUnique({ where: { id: requestId } }))?.safeId).toBeNull();
+            expect(await movements(requestId)).toEqual([]);
+        }
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer);
+    });
+
+    it('refuses cash beyond the drawer balance, writing nothing', async () => {
+        const requestId = randomUUID();
+        const before = await payments(), balance = await supplierBalance(), drawer = await safeBalance(f.safeA1.id);
+        const response = await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: drawer + 1, method: 'CASH', safeId: f.safeA1.id, requestId }), params(f.supplierA.id));
+        expect(response.status).toBe(400);
+        expect((await response.json()).message).toBe('رصيد الصندوق غير كافٍ لهذه الدفعة.');
+        expect([await payments(), await supplierBalance(), await safeBalance(f.safeA1.id)]).toEqual([before, balance, drawer]);
+        expect(await movements(requestId)).toEqual([]);
+    });
+
+    it('refuses a drawer of another branch or organisation, and cash without a drawer', async () => {
+        const before = await payments(), a2 = await safeBalance(f.safeA2.id), b1 = await safeBalance(f.safeB1.id);
+        for (const safeId of [f.safeA2.id, f.safeB1.id, null]) {
+            expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 1, method: 'CASH', safeId }), params(f.supplierA.id))).status).toBe(400);
+        }
+        expect([await payments(), await safeBalance(f.safeA2.id), await safeBalance(f.safeB1.id)]).toEqual([before, a2, b1]);
+    });
+
+    it('never pays twice for one request, whether retried after or during the first attempt', async () => {
+        const drawer = await safeBalance(f.safeA1.id);
+        const pay = (requestId: string, amount = 3) => paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount, method: 'CASH', safeId: f.safeA1.id, requestId }), params(f.supplierA.id));
+        const sequential = randomUUID();
+        expect((await pay(sequential)).status).toBe(200);
+        expect((await pay(sequential)).status).toBe(200);
+        const concurrent = randomUUID();
+        expect((await Promise.all([pay(concurrent), pay(concurrent)])).map(r => r.status)).toEqual([200, 200]);
+        for (const id of [sequential, concurrent]) {
+            expect(await db.supplierPayment.count({ where: { id } })).toBe(1);
+            expect(await movements(id)).toHaveLength(1);
+        }
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer - 6);
+        // The same id with different details is a conflict, not a second payment.
+        expect((await pay(sequential, 99)).status).toBe(400);
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer - 6);
+    });
+
+    it('keeps the opening balance and recalculation to the owner (ADMIN), and they never touch a drawer', async () => {
+        const drawer = await safeBalance(f.safeA1.id), balance = await supplierBalance();
+        await as(f.pharmacist, { canPaySupplier: true });
         expect((await setSupplierOpeningBalance({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5 })).success).toBe(false);
-        expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5 }), params(f.supplierA.id))).status).toBe(403);
-        expect((await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance).toBe(balance);
-    });
-
-    it('records a payment only against a branch in the caller\'s scope', async () => {
-        const count = () => db.supplierPayment.count({ where: { supplierId: f.supplierA.id } });
-        const before = await count();
-        expect((await paySupplier(send('/x', 'POST', { branchId: f.b1.id, amount: 5 }), params(f.supplierA.id))).status).not.toBe(200);
-        await as(f.pharmacist, { canCreatePurchase: true });
-        expect((await paySupplier(send('/x', 'POST', { branchId: f.a2.id, amount: 5 }), params(f.supplierA.id))).status).not.toBe(200);
-        expect(await count()).toBe(before);
-    });
-
-    it('enforces the same rules when the server actions are called directly', async () => {
-        await as(f.pharmacist, { canViewSuppliers: false, canCreatePurchase: false });
-        expect(await getSupplierLedger(f.supplierA.id)).toEqual([]);
-        expect(await getSupplierSummary(f.supplierA.id)).toBeNull();
-        expect(await getSuppliersWithBalances()).toEqual([]);
-        const balance = (await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance;
-        expect((await recordSupplierPayment({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5, method: 'CASH' })).success).toBe(false);
-        expect((await setSupplierOpeningBalance({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5 })).success).toBe(false);
-        await recalculateSupplierBalance(f.supplierA.id);
-        expect((await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance).toBe(balance);
+        expect(await recalculateSupplierBalance(f.supplierA.id)).toBe(0);
+        expect(await supplierBalance()).toBe(balance);
+        await as(f.admin);
+        expect((await setSupplierOpeningBalance({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5 })).success).toBe(true);
+        expect(await supplierBalance()).toBe(balance + 5);
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer);
         await as(f.admin);
         expect((await setSupplierOpeningBalance({ supplierId: f.supplierA.id, branchId: f.b1.id, amount: 5 })).success).toBe(false);
         expect(await db.purchase.count({ where: { supplierId: f.supplierA.id, branchId: f.b1.id } })).toBe(0);
+    });
+
+    it('enforces the same rules when the server actions are called directly', async () => {
+        await as(f.pharmacist, { canViewSuppliers: false, canPaySupplier: true });
+        expect(await getSupplierLedger(f.supplierA.id)).toEqual([]);
+        expect(await getSupplierSummary(f.supplierA.id)).toBeNull();
+        expect(await getSuppliersWithBalances()).toEqual([]);
+        await as(f.pharmacist, { canPaySupplier: false });
+        const balance = await supplierBalance();
+        expect((await recordSupplierPayment({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5, method: 'TRANSFER' })).success).toBe(false);
+        expect(await supplierBalance()).toBe(balance);
+        await as(f.pharmacist, { canPaySupplier: true });
+        expect(await getSupplierSummary(f.supplierA.id)).not.toBeNull();
+        expect((await recordSupplierPayment({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5, method: 'BITCOIN' })).success).toBe(false);
     });
 });
 

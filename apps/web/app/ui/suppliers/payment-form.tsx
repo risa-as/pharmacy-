@@ -7,8 +7,9 @@ import { CreditCard, X, Loader2 } from 'lucide-react';
 import { recordSupplierPayment } from '@/app/lib/actions/supplier-ledger-actions';
 
 type Branch = { id: string; name: string };
+type Safe = { id: string; name: string; branchId: string; balance: number };
 
-export function PaymentFormWrapper({ supplierId, supplierName, branches }: { supplierId: string; supplierName: string; branches: Branch[] }) {
+export function PaymentFormWrapper({ supplierId, supplierName, branches, safes }: { supplierId: string; supplierName: string; branches: Branch[]; safes: Safe[] }) {
     const [isOpen, setIsOpen] = useState(false);
 
     return (
@@ -25,6 +26,7 @@ export function PaymentFormWrapper({ supplierId, supplierName, branches }: { sup
                     supplierId={supplierId}
                     supplierName={supplierName}
                     branches={branches}
+                    safes={safes}
                     onClose={() => setIsOpen(false)}
                 />
             )}
@@ -36,21 +38,27 @@ function PaymentModal({
     supplierId,
     supplierName,
     branches,
+    safes,
     onClose,
 }: {
     supplierId: string;
     supplierName: string;
     branches: Branch[];
+    safes: Safe[];
     onClose: () => void;
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [error, setError] = useState('');
     const [mounted, setMounted] = useState(false);
+    // One id per payment: resent unchanged if the user retries, so it is never paid twice.
+    const [requestId] = useState(() => crypto.randomUUID());
+    const firstSafe = (branchId: string) => safes.find(s => s.branchId === branchId)?.id || '';
     const [form, setForm] = useState({
         amount: '',
         method: 'CASH',
         branchId: branches[0]?.id || '',
+        safeId: firstSafe(branches[0]?.id || ''),
         reference: '',
         notes: '',
         date: new Date().toISOString().split('T')[0],
@@ -70,12 +78,19 @@ function PaymentModal({
             return;
         }
 
+        if (form.method === 'CASH' && !form.safeId) {
+            setError('اختر الصندوق الذي يُدفع منه النقد');
+            return;
+        }
+
         startTransition(async () => {
             const result = await recordSupplierPayment({
                 supplierId,
                 branchId: form.branchId,
                 amount,
                 method: form.method,
+                safeId: form.method === 'CASH' ? form.safeId : null,
+                requestId,
                 reference: form.reference || undefined,
                 notes: form.notes || undefined,
                 date: form.date,
@@ -135,7 +150,7 @@ function PaymentModal({
                             </label>
                             <select
                                 value={form.branchId}
-                                onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                                onChange={(e) => setForm({ ...form, branchId: e.target.value, safeId: firstSafe(e.target.value) })}
                                 className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
                             >
                                 {branches.map((b: any) => (
@@ -160,6 +175,31 @@ function PaymentModal({
                             <option value="TRANSFER">حوالة / تحويل</option>
                         </select>
                     </div>
+
+                    {/* Drawer: only cash leaves a safe */}
+                    {form.method === 'CASH' ? (
+                        <div>
+                            <label className="block text-sm font-bold font-cairo text-foreground mb-1">
+                                الصندوق الذي يُدفع منه *
+                            </label>
+                            {safes.some(s => s.branchId === form.branchId) ? (
+                                <select
+                                    value={form.safeId}
+                                    onChange={(e) => setForm({ ...form, safeId: e.target.value })}
+                                    className="w-full rounded-lg border border-border px-4 py-2.5 text-foreground focus:ring-2 focus:ring-success/50"
+                                >
+                                    {safes.filter(s => s.branchId === form.branchId).map(s => (
+                                        <option key={s.id} value={s.id}>{s.name} — الرصيد {s.balance.toLocaleString('ar-IQ')} د.ع</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <p className="text-sm text-destructive">لا يوجد صندوق في هذا الفرع؛ اختر شيكاً أو حوالة.</p>
+                            )}
+                            <p className="mt-1 text-xs text-muted-foreground">سيُخصم المبلغ من هذا الصندوق ويُسجَّل كحركة صرف.</p>
+                        </div>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">الشيك والحوالة لا يُخصمان من أي صندوق.</p>
+                    )}
 
                     {/* Reference */}
                     {form.method !== 'CASH' && (
