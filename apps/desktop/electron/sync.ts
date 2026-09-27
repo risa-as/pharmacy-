@@ -803,9 +803,13 @@ export async function refreshOfflineToken(): Promise<void> {
         // The license travels in a header, never in the URL (URLs reach access logs).
         let response = await fetch(buildApiUrl(`/sync/offline-token?branchId=${encodeURIComponent(branchId)}`),
             { method: 'GET', headers: { 'x-device-license-key': licenseKey } });
-        // A server from before this change reads only the query string and answers
-        // 400: ask once more the old way, until the server is updated.
-        if (response.status === 400)
+        // A server that reads the header says so; after that the URL form is never used.
+        if (response.headers.get('x-license-transport') === 'header') store.set('offlineTokenLicenseHeader', true);
+        // Only a server from before the header existed may get the URL form: it answers
+        // 400 with its own message, without the marker, and this device has never seen
+        // the marker. Remove this fallback once every server reads the header.
+        else if (response.status === 400 && !store.get('offlineTokenLicenseHeader')
+            && (await response.clone().json().catch(() => null))?.error === 'branchId and licenseKey are required')
             response = await fetch(buildApiUrl(`/sync/offline-token?branchId=${encodeURIComponent(branchId)}&licenseKey=${encodeURIComponent(licenseKey)}`), { method: 'GET' });
         if (!response.ok) {
             // 503 = the license IS valid (it passed the server's license check) but

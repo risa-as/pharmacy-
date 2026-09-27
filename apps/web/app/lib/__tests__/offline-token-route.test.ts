@@ -27,3 +27,8 @@ it('refuses a missing or unknown license', async () => {
     expect((await get('branchId=b')).status).toBe(400);
     expect((await get('branchId=b', { 'x-device-license-key': 'OTHER' })).status).toBe(403);
 });
+
+it('marks every answer as reading the license from the header, so desktops never fall back to the URL', async () => {
+    for (const response of [await get('branchId=b', { 'x-device-license-key': 'LIC' }), await get('branchId=b'), await get('branchId=b', { 'x-device-license-key': 'OTHER' })])
+        expect(response.headers.get('x-license-transport')).toBe('header');
+});

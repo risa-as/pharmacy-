@@ -9,6 +9,8 @@ interface StoreSchema {
     lastSeenAt: string;
     lastStaffSyncAt: string;
     lastSuccessfulSync?: {at:string;kind:string;branchId:string};
+    /** Set once the server confirmed it reads the license from a header: the URL form is never used again. */
+    offlineTokenLicenseHeader?: boolean;
     /** ID of the last successfully logged-in user — used to restore session on app restart. */
     loggedInUserId: string;
     /** Whether to show the receipt/invoice preview after completing a sale. Default: true. */

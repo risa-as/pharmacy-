@@ -20,13 +20,22 @@ const GRACE_PERIOD_DAYS = 5;
  *
  * Env: OFFLINE_TOKEN_PRIVATE_KEY must contain a PEM-encoded RSA-2048 private key.
  */
+/** Tells desktops this server reads the license from the header, so they never
+ * fall back to sending it in the URL. */
+const LICENSE_TRANSPORT_HEADER = "x-license-transport";
+function respond(body: unknown, init?: ResponseInit) {
+    const response = NextResponse.json(body, init);
+    response.headers.set(LICENSE_TRANSPORT_HEADER, "header");
+    return response;
+}
+
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const branchId = searchParams.get("branchId");
     const licenseKey = req.headers.get("x-device-license-key") || searchParams.get("licenseKey");
 
     if (!branchId || !licenseKey) {
-        return NextResponse.json(
+        return respond(
             { error: "branchId and licenseKey are required" },
             { status: 400 }
         );
@@ -47,7 +56,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (!license) {
-        return NextResponse.json({ error: "Invalid or inactive license" }, { status: 403 });
+        return respond({ error: "Invalid or inactive license" }, { status: 403 });
     }
 
     const org = license.branch.organization;
@@ -73,7 +82,7 @@ export async function GET(req: NextRequest) {
     const privateKeyPem = process.env.OFFLINE_TOKEN_PRIVATE_KEY;
     if (!privateKeyPem) {
         console.warn("[OfflineToken] OFFLINE_TOKEN_PRIVATE_KEY not set — skipping JWT signing.");
-        return NextResponse.json({ error: "Offline token signing not configured" }, { status: 503 });
+        return respond({ error: "Offline token signing not configured" }, { status: 503 });
     }
 
     try {
@@ -84,9 +93,9 @@ export async function GET(req: NextRequest) {
             .setExpirationTime(`${MAX_OFFLINE_DAYS + 1}d`) // 1-day buffer after max offline
             .sign(privateKey);
 
-        return NextResponse.json({ token });
+        return respond({ token });
     } catch (err: any) {
         console.error("[OfflineToken] Failed to sign JWT:", err);
-        return NextResponse.json({ error: "Failed to sign offline token" }, { status: 500 });
+        return respond({ error: "Failed to sign offline token" }, { status: 500 });
     }
 }
