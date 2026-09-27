@@ -1,12 +1,15 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 import {createHash} from 'node:crypto';
-const h=vi.hoisted(()=>({data:{} as Record<string,any>,sign:vi.fn(),key:vi.fn(),fetch:vi.fn()}));
-vi.mock('electron',()=>({ipcMain:{handle:vi.fn()},net:{fetch:h.fetch}}));
+import {mkdtempSync,readFileSync,existsSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+const h=vi.hoisted(()=>({data:{} as Record<string,any>,sign:vi.fn(),key:vi.fn(),fetch:vi.fn(),dir:'',getPath:null as any}));
+vi.mock('electron',()=>({ipcMain:{handle:vi.fn()},net:{fetch:h.fetch},app:{getPath:(...a:any[])=>h.getPath(...a),getVersion:()=>'1.0.21'}}));
 vi.mock('../store',()=>({default:{get:(k:string)=>h.data[k],set:(k:string,v:any)=>{h.data[k]=v;}}}));
 vi.mock('../tpm-worker',()=>({tpmCommand:h.sign,tpmPublicKey:h.key}));
 vi.mock('../api-config',()=>({getApiCandidates:()=>['https://app.test/api'],getApiBaseUrl:()=> 'https://app.test/api'}));
 import {deviceFetch,requestDigest} from '../device-signing';
-beforeEach(()=>{h.data={deviceSigning:{fingerprint:'fp'},licenseKey:'license'};h.sign.mockReset().mockResolvedValue('signature');h.key.mockReset().mockResolvedValue({fingerprint:'fp'});h.fetch.mockReset().mockImplementation(()=>Promise.resolve(new Response('{}')));vi.stubGlobal('fetch',h.fetch);});
+beforeEach(()=>{h.dir=mkdtempSync(path.join(tmpdir(),'device-signing-'));h.getPath=()=>h.dir;h.data={deviceSigning:{fingerprint:'fp'},licenseKey:'license'};h.sign.mockReset().mockResolvedValue('signature');h.key.mockReset().mockResolvedValue({fingerprint:'fp'});h.fetch.mockReset().mockImplementation(()=>Promise.resolve(new Response('{}')));vi.stubGlobal('fetch',h.fetch);});
 it('uses the Electron network stack even when Node TLS transport fails',async()=>{
  vi.stubGlobal('fetch',vi.fn(()=>{throw Error('UNABLE_TO_VERIFY_LEAF_SIGNATURE');}));
  await deviceFetch('https://app.test/api/health');
@@ -67,4 +70,31 @@ it('never retries rejected business writes or a lost session response',async()=>
  h.fetch.mockReset().mockRejectedValue(Error('lost response'));
  await expect(deviceFetch('https://app.test/api/desktop/operations/session',{method:'POST',headers:{'x-sync-token':'token'}})).rejects.toThrow('lost response');
  expect(h.fetch).toHaveBeenCalledOnce();
+});
+
+const authLog=()=>{const f=path.join(h.dir,'device-auth.log');return existsSync(f)?readFileSync(f,'utf8').trim().split(/\r?\n/).map(l=>JSON.parse(l)):[];};
+it('records a rejected-then-recovered session durably, with the key check and clock skew, and no secrets',async()=>{
+ h.data={deviceSigning:{fingerprint:'FP-SECRET-000',keyId:'KEY-SECRET-111'},licenseKey:'LIC-SECRET-123'};h.key.mockResolvedValue({fingerprint:'FP-SECRET-000'});
+ h.sign.mockResolvedValue('SIG-SECRET-789');
+ const dated=new Response(JSON.stringify({code:'DEVICE_SIGNATURE_INVALID',error:'invalid'}),{status:403,headers:{date:new Date(Date.now()-5000).toUTCString()}});
+ h.fetch.mockResolvedValueOnce(dated).mockResolvedValueOnce(new Response('{}'));
+ await deviceFetch('https://app.test/api/desktop/operations/session?secret=QUERY-SECRET',{method:'POST',headers:{'x-sync-token':'TOKEN-SECRET-456'},body:'BODY-SECRET'});
+ const events=authLog();
+ expect(events.map((e:any)=>[e.attempt,e.outcome,e.code])).toEqual([[1,'retrying','DEVICE_SIGNATURE_INVALID'],[2,'recovered','OK']]);
+ expect(events[0]).toMatchObject({path:'/api/desktop/operations/session',status:403,localKeyMatchesEnrollment:true,build:expect.stringMatching(/^1\.0\.21\+/)});
+ expect(events[0].clockSkewSeconds).toBeGreaterThanOrEqual(4);
+ const raw=readFileSync(path.join(h.dir,'device-auth.log'),'utf8');
+ for(const secret of ['FP-SECRET','KEY-SECRET','LIC-SECRET','SIG-SECRET','TOKEN-SECRET','QUERY-SECRET','BODY-SECRET'])expect(raw).not.toContain(secret);
+});
+it('records a final rejection when the real key differs, and a TPM signing failure',async()=>{
+ h.key.mockResolvedValue({fingerprint:'other'});h.fetch.mockResolvedValue(invalid());
+ await expect(deviceFetch('https://app.test/api/sync/sales',{method:'POST',headers:{'x-sync-token':'token'},body:'{}'})).rejects.toThrow('invalid');
+ h.sign.mockRejectedValue(new Error('unavailable'));
+ await expect(deviceFetch('https://app.test/api/sync/sales',{headers:{'x-sync-token':'token'}})).rejects.toThrow('unavailable');
+ expect(authLog().map((e:any)=>[e.code,e.outcome,e.localKeyMatchesEnrollment])).toEqual([['DEVICE_SIGNATURE_INVALID','rejected',false],['TPM_SIGN_FAILED','rejected',null]]);
+});
+it('keeps signing and syncing when the diagnostic log cannot be written',async()=>{
+ h.getPath=()=>{throw Error('userData unavailable');};h.fetch.mockResolvedValueOnce(invalid()).mockResolvedValueOnce(new Response('{}'));
+ const response=await deviceFetch('https://app.test/api/desktop/operations/session',{method:'POST',headers:{'x-sync-token':'token'}});
+ expect(response.ok).toBe(true);expect(h.fetch).toHaveBeenCalledTimes(2);
 });

@@ -1,10 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { ipcMain, net } from 'electron';
+import { app, ipcMain, net } from 'electron';
 import store from './store';
 import { getApiBaseUrl, getApiCandidates } from './api-config';
 import { tpmCommand, tpmPublicKey } from './tpm-worker';
 import { deviceDisplayState } from './device-display-state';
 import { readDeviceEnrollmentResponse } from './device-enrollment-response';
+import { clockSkewSeconds, createDeviceAuthLog } from './device-auth-log';
+
+declare const __BUILD_COMMIT__: string;
+const recordDeviceAuth = createDeviceAuthLog({
+  directory: () => app.getPath('userData'),
+  build: () => `${app.getVersion()}+${typeof __BUILD_COMMIT__ !== 'undefined' ? __BUILD_COMMIT__ : 'dev'}`,
+});
 
 export function requestDigest(method: string, url: string, body: string, time: string, nonce: string, token: string, license: string, idempotencyKey = '', keyId = '') {
   const u = new URL(url); const hash = (v: string) => createHash('sha256').update(v).digest('hex');
@@ -27,9 +34,13 @@ export async function deviceFetch(input: string | URL | Request, init: RequestIn
   for (let attempt = 0; attempt < 2; attempt++) {
     const time = String(Date.now()), nonce = randomUUID();
     const digest = requestDigest(init.method || 'GET',url,(init.body as string)||'',time,nonce,headers.get('x-sync-token')||'',headers.get('x-device-license-key')||'',headers.get('x-idempotency-key')||'',state.keyId||'');
+    const path = new URL(url).pathname;
     let signature: string;
     try { signature = await tpmCommand('sign',digest); }
-    catch(e) { store.set('deviceSigningError','مفتاح الجهاز غير متاح؛ المزامنة معلقة والعمليات محفوظة.'); throw e; }
+    catch(e) {
+      recordDeviceAuth({path,code:'TPM_SIGN_FAILED',status:null,attempt:attempt+1,outcome:'rejected',localKeyMatchesEnrollment:null,clockSkewSeconds:null,elapsedMs:Date.now()-Number(time)});
+      store.set('deviceSigningError','مفتاح الجهاز غير متاح؛ المزامنة معلقة والعمليات محفوظة.'); throw e;
+    }
     headers.set('x-device-key-id',state.keyId||'');
     headers.set('x-device-time',time); headers.set('x-device-nonce',nonce);
     headers.set('x-device-fingerprint',state.fingerprint); headers.set('x-device-signature',signature);
@@ -37,18 +48,28 @@ export async function deviceFetch(input: string | URL | Request, init: RequestIn
     if (!response.ok) {
       const data = await response.clone().json().catch(()=>null);
       if (data?.code?.startsWith('DEVICE_')) {
-        console.warn('[DeviceAuth]', JSON.stringify({path:new URL(url).pathname,code:data.code,status:response.status,attempt:attempt+1,elapsedMs:Date.now()-Number(time)}));
-        if (sessionCheck && attempt === 0 && response.status === 403 && data.code === 'DEVICE_SIGNATURE_INVALID' && !init.signal?.aborted) {
-          const key = await tpmPublicKey(false);
-          if (key.fingerprint === state.fingerprint) continue;
-          // A different real key is not a transient failure; preserve enrollment.
-        }
+        // Read the existing key (never create one) to tell a changed key from a
+        // transient rejection. Only the comparison is kept, not the fingerprint.
+        const localKeyMatchesEnrollment = data.code === 'DEVICE_SIGNATURE_INVALID'
+          ? await tpmPublicKey(false).then(key => key.fingerprint === state.fingerprint, () => null) : null;
+        const retry = sessionCheck && attempt === 0 && response.status === 403 && data.code === 'DEVICE_SIGNATURE_INVALID'
+          && !init.signal?.aborted && localKeyMatchesEnrollment === true;
+        const event = {path,code:data.code,status:response.status,attempt:attempt+1,localKeyMatchesEnrollment,
+          clockSkewSeconds:clockSkewSeconds(Number(time),response.headers.get('date')),elapsedMs:Date.now()-Number(time)};
+        console.warn('[DeviceAuth]', JSON.stringify(event));
+        recordDeviceAuth({...event,outcome:retry?'retrying':'rejected'});
+        // A different real key is not a transient failure; preserve enrollment.
+        if (retry) continue;
         store.set('deviceSigningError',data.error);
         // Not a permanent per-sale rejection: leave the entire original queue
         // intact for retry after device recovery, never mark it synchronized.
         throw new Error(data.error || 'تعذر إثبات الجهاز؛ العمليات محفوظة.');
       }
-    } else { store.set('deviceSigningError',''); }
+    } else {
+      store.set('deviceSigningError','');
+      if (attempt > 0) recordDeviceAuth({path,code:'OK',status:response.status,attempt:attempt+1,outcome:'recovered',localKeyMatchesEnrollment:true,
+        clockSkewSeconds:clockSkewSeconds(Number(time),response.headers.get('date')),elapsedMs:Date.now()-Number(time)});
+    }
     return response;
   }
   throw new Error('تعذر إثبات الجهاز؛ العمليات محفوظة.');
