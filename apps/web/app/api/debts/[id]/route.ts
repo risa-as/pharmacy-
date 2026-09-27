@@ -9,6 +9,8 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewDebts)
+            return NextResponse.json({ message: 'ليس لديك صلاحية عرض الديون' }, { status: 403 });
 
         const patient = await prisma.patient.findFirst({
             where: { id: params.id, ...tenantCtx.tenantBranchWhere },

@@ -7,14 +7,33 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/app/lib/audit';
 
+/**
+ * Supplier data needs canViewSuppliers; changing a supplier's balance (payment,
+ * opening balance, recalculation) also needs canCreatePurchase. These functions
+ * can be called directly as server actions, so the checks live here, not only in
+ * the routes and pages that call them.
+ */
+async function supplierContext(access: 'read' | 'write', changesBalance = false) {
+    const tenantCtx = await getTenantContext(access);
+    if (tenantCtx instanceof NextResponse) return null;
+    const p = tenantCtx.userPermissions;
+    if (!p.canViewSuppliers || (changesBalance && !p.canCreatePurchase)) return null;
+    return tenantCtx;
+}
+/** A branch the caller may act for: their own, or any of their organisation's for admins. */
+async function branchInScope(tenantCtx: { branchModelWhere: Record<string, any> }, branchId: unknown) {
+    return typeof branchId === 'string' && !!branchId
+        && !!await prisma.branch.findFirst({ where: { AND: [tenantCtx.branchModelWhere, { id: branchId }] }, select: { id: true } });
+}
+
 // ===================== كشف حساب المورد =====================
 
 /**
  * جلب قائمة الموردين مع الأرصدة
  */
 export async function getSuppliersWithBalances() {
-    const tenantCtx = await getTenantContext('read');
-    if (tenantCtx instanceof NextResponse) return [];
+    const tenantCtx = await supplierContext('read');
+    if (!tenantCtx) return [];
 
     const suppliers = await prisma.supplier.findMany({
         where: tenantCtx.organizationId ? { organizationId: tenantCtx.organizationId } : {},
@@ -40,8 +59,8 @@ export async function getSuppliersWithBalances() {
  * ملخص مورد واحد
  */
 export async function getSupplierSummary(supplierId: string) {
-    const tenantCtx = await getTenantContext('read');
-    if (tenantCtx instanceof NextResponse) return null;
+    const tenantCtx = await supplierContext('read');
+    if (!tenantCtx) return null;
 
     const supplier = await prisma.supplier.findUnique({
         where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined },
@@ -82,8 +101,8 @@ export async function getSupplierSummary(supplierId: string) {
  * كشف حساب كامل (حركات مرتبة بالتاريخ)
  */
 export async function getSupplierLedger(supplierId: string) {
-    const tenantCtx = await getTenantContext('read');
-    if (tenantCtx instanceof NextResponse) return [];
+    const tenantCtx = await supplierContext('read');
+    if (!tenantCtx) return [];
 
     const supplier = await prisma.supplier.findUnique({
         where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined },
@@ -178,11 +197,12 @@ export async function recordSupplierPayment(data: {
     notes?: string;
     date?: string;
 }) {
-    const tenantCtx = await getTenantContext('write');
-    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    const tenantCtx = await supplierContext('write', true);
+    if (!tenantCtx) return { success: false, error: 'غير مصرح' };
 
     try {
         const { supplierId, branchId, amount, method, reference, notes, date } = data;
+        if (!await branchInScope(tenantCtx, branchId)) return { success: false, error: 'الفرع خارج نطاق صلاحياتك' };
 
         if (amount <= 0) {
             return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
@@ -244,10 +264,11 @@ export async function setSupplierOpeningBalance(data: {
     amount: number;
     notes?: string;
 }) {
-    const tenantCtx = await getTenantContext('write');
-    if (tenantCtx instanceof NextResponse) return { success: false, error: 'غير مصرح' };
+    const tenantCtx = await supplierContext('write', true);
+    if (!tenantCtx) return { success: false, error: 'غير مصرح' };
 
     const { supplierId, branchId, amount, notes } = data;
+    if (!await branchInScope(tenantCtx, branchId)) return { success: false, error: 'الفرع خارج نطاق صلاحياتك' };
 
     if (amount <= 0)
         return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
@@ -300,8 +321,8 @@ export async function setSupplierOpeningBalance(data: {
  * إعادة حساب رصيد المورد (في حالة عدم التطابق)
  */
 export async function recalculateSupplierBalance(supplierId: string) {
-    const tenantCtx = await getTenantContext('write');
-    if (tenantCtx instanceof NextResponse) return 0;
+    const tenantCtx = await supplierContext('write', true);
+    if (!tenantCtx) return 0;
 
     const supplier = await prisma.supplier.findUnique({
         where: { id: supplierId, organizationId: tenantCtx.organizationId || undefined }

@@ -5,14 +5,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 
 // GET: Fetch a patient's loyalty account + recent transactions
+/** A patient the caller may see: same scope as the patients list. */
+async function patientInScope(tenantCtx: { tenantBranchWhere: Record<string, any> }, patientId: unknown) {
+    return typeof patientId === "string"
+        && !!await prisma.patient.findFirst({ where: { id: patientId, ...tenantCtx.tenantBranchWhere }, select: { id: true } });
+}
+
 export async function GET(request: NextRequest) {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return tenantCtx;
 
     try {
+        if (!tenantCtx.userPermissions.canViewPatients) {
+            return NextResponse.json({ error: "ليس لديك صلاحية عرض المرضى" }, { status: 403 });
+        }
         const patientId = request.nextUrl.searchParams.get("patientId");
         if (!patientId) {
             return NextResponse.json({ error: "patientId is required" }, { status: 400 });
+        }
+        if (!await patientInScope(tenantCtx, patientId)) {
+            return NextResponse.json({ error: "Patient not found" }, { status: 404 });
         }
 
         const account = await prisma.loyaltyAccount.findUnique({
@@ -42,9 +54,15 @@ export async function POST(request: Request) {
     if (tenantCtx instanceof NextResponse) return tenantCtx;
 
     try {
+        if (!tenantCtx.userPermissions.canEditPatient) {
+            return NextResponse.json({ error: "ليس لديك صلاحية تعديل المرضى" }, { status: 403 });
+        }
         const { patientId } = await request.json();
         if (!patientId) {
             return NextResponse.json({ error: "patientId is required" }, { status: 400 });
+        }
+        if (!await patientInScope(tenantCtx, patientId)) {
+            return NextResponse.json({ error: "Patient not found" }, { status: 404 });
         }
 
         // Check if already exists

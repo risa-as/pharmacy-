@@ -9,6 +9,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canEditDrug) {
+            return NextResponse.json({ error: 'ليس لديك صلاحية تعديل الأصناف' }, { status: 403 });
+        }
 
         const batchId = params.id;
         const body = await req.json();
@@ -24,8 +27,12 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         }
 
         // Tenant isolation check
-        const branchOrgId = batch.inventory.branch?.organizationId;
-        if (tenantCtx.organizationId && branchOrgId !== tenantCtx.organizationId) {
+        // The caller's own branch, or any of their organisation's for admins.
+        const inScope = await prisma.branch.findFirst({
+            where: { AND: [tenantCtx.branchModelWhere, { id: batch.inventory.branchId }] },
+            select: { id: true },
+        });
+        if (!inScope) {
             return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
         }
 

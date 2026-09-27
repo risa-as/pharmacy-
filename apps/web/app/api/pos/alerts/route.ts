@@ -39,8 +39,10 @@ export async function POST(req: NextRequest) {
 
         // 2. Check Patient Allergies
         if (patientId) {
-            const patient = await prisma.patient.findUnique({
-                where: { id: patientId },
+            // The organisation's patients, sister branches included: narrowing to the
+            // caller's branch would silently drop allergy warnings at the counter.
+            const patient = await prisma.patient.findFirst({
+                where: { id: patientId, ...(tenantCtx.organizationId ? { branch: { organizationId: tenantCtx.organizationId } } : {}) },
                 select: { allergies: true }
             });
 

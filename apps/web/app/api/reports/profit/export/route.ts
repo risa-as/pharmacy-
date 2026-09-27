@@ -18,6 +18,9 @@ export async function GET(req: Request) {
 
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return tenantCtx;
+    if (!tenantCtx.userPermissions.canViewProfitReport) {
+      return NextResponse.json({ error: "ليس لديك صلاحية تقرير الأرباح" }, { status: 403 });
+    }
     const { tenantBranchWhere, organizationId } = tenantCtx;
 
     // Same gate as the report page (Pro+).

@@ -10,9 +10,16 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewSuppliers)
+            return NextResponse.json({ message: 'ليس لديك صلاحية عرض الموردين' }, { status: 403 });
+        const supplier = await prisma.supplier.findFirst({
+            where: { id: params.id, ...(tenantCtx.organizationId ? { organizationId: tenantCtx.organizationId } : {}) },
+            select: { id: true },
+        });
+        if (!supplier) return NextResponse.json({ message: 'المورد غير موجود' }, { status: 404 });
 
         const payments = await prisma.supplierPayment.findMany({
-            where: { supplierId: params.id },
+            where: { supplierId: params.id, ...tenantCtx.tenantBranchWhere },
             include: { branch: { select: { name: true } } },
             orderBy: { date: 'desc' }
         });
@@ -28,6 +35,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+        if (!tenantCtx.userPermissions.canViewSuppliers || !tenantCtx.userPermissions.canCreatePurchase)
+            return NextResponse.json({ message: 'ليس لديك صلاحية تسجيل دفعات الموردين' }, { status: 403 });
 
         const body = await req.json();
         const result = await recordSupplierPayment({

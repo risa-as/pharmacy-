@@ -8,6 +8,8 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return tenantCtx;
+    if (!tenantCtx.userPermissions.canViewSuppliers)
+        return NextResponse.json({ message: 'ليس لديك صلاحية عرض الموردين' }, { status: 403 });
 
     try {
         const ledger = await getSupplierLedger(params.id);
