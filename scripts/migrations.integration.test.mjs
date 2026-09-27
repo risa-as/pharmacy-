@@ -111,8 +111,11 @@ const restoreCopy = (source, suffix) => {
     const copy = createDb(suffix);
     const dump = run('pg_dump', ['-w', '--no-owner', '--no-privileges', url(source)]);
     if (dump.code !== 0) throw new Error(dump.out);
-    const load = spawnSync('psql', ['-w', url(copy), '-v', 'ON_ERROR_STOP=1', '-q'], { input: dump.out, encoding: 'utf8', timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
-    if (load.status !== 0) throw new Error(load.stderr);
+    // A file avoids Windows pipe backpressure while psql restores larger dumps.
+    const dumpFile = join(work, `${suffix}.sql`);
+    writeFileSync(dumpFile, dump.out, 'utf8');
+    const load = run('psql', ['-w', url(copy), '-v', 'ON_ERROR_STOP=1', '-q', '-f', dumpFile]);
+    if (load.code !== 0) throw new Error(load.out);
     return copy;
 };
 
