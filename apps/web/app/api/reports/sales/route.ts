@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { operatingExpenseWhere } from '@/app/lib/expense-categories';
+import { returnedCost } from '@/app/lib/profit-math';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
         const expenseWhere: any = { ...operatingExpenseWhere, date: { gte: startDate }, ...tenantBranchWhere };
         if (branchId) expenseWhere.AND = [tenantBranchWhere, { branchId }];
 
-        const [totalSales, salesCount, totalExpenses, saleSeries] = await Promise.all([
+        const [totalSales, salesCount, totalExpenses, saleSeries, returns] = await Promise.all([
             prisma.sale.aggregate({ _sum: { total: true }, where: baseWhere }),
             prisma.sale.count({ where: baseWhere }),
             prisma.expense.aggregate({ _sum: { amount: true }, where: expenseWhere }).catch(() => {
@@ -57,8 +58,16 @@ export async function GET(req: Request) {
             }),
             prisma.sale.findMany({
                 where: baseWhere,
-                select: { createdAt: true, total: true },
+                select: { createdAt: true, total: true, items: { select: { cost: true, quantity: true } } },
                 orderBy: { createdAt: 'asc' },
+            }),
+            prisma.saleReturn.findMany({
+                where: baseWhere,
+                select: {
+                    total: true,
+                    items: { select: { drugId: true, quantity: true } },
+                    sale: { select: { items: { select: { drugId: true, cost: true, quantity: true } } } },
+                },
             }),
         ]);
 
@@ -101,8 +110,11 @@ export async function GET(req: Request) {
 
         const revenue = totalSales._sum.total || 0;
         const expenses = totalExpenses._sum.amount || 0;
+        const cogs = saleSeries.reduce((sum, sale) => sum + sale.items.reduce((cost, item) => cost + item.cost * item.quantity, 0), 0);
+        const refunds = returns.reduce((sum, ret) => sum + ret.total, 0);
+        const costReversal = returns.reduce((sum, ret) => sum + returnedCost(ret.items, ret.sale.items), 0);
 
-        return NextResponse.json({ revenue, expenses, profit: revenue - expenses, transactions: salesCount, chart });
+        return NextResponse.json({ revenue, expenses, profit: revenue - cogs - expenses - refunds + costReversal, transactions: salesCount, chart });
     } catch (error) {
         console.error('Reports API Error:', error);
         return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

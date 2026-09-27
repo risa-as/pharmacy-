@@ -482,15 +482,34 @@ describe('purchases received as paid: drawer, supplier and profit', () => {
             const p = await newPurchase(branch.id, supplier.id);
             await as(f.admin);
             expect((await receive(p, isPaid ? { isPaid: true, safeId: drawer.id } : { isPaid: false })).status).toBe(200);
-            await db.sale.create({ data: { branchId: branch.id, total: 150, items: { create: { drugId: f.drug.id, quantity: 2, price: 75, cost: 50 } } } });
+            const sale = await db.sale.create({ data: { branchId: branch.id, total: 150, items: { create: { drugId: f.drug.id, quantity: 2, price: 75, cost: 50 } } } });
             const summary = async () => (await (await profitReport(get('/api/reports/profit?branchId=' + branch.id))).json()).summary;
+            const mobileSummary = async () => {
+                const response = await salesReport(get('/api/reports/sales?branchId=' + branch.id));
+                expect(response.status).toBe(200);
+                return response.json();
+            };
             expect(await summary()).toMatchObject({ totalRevenue: 150, totalCOGS: 100, totalExpenses: 0, netProfit: 50 });
+            expect(await mobileSummary()).toMatchObject({ revenue: 150, expenses: 0, profit: 50 });
             expect((await db.supplier.findUnique({ where: { id: supplier.id } }))!.balance).toBe(isPaid ? 0 : 100);
             // A legacy "stock purchase" expense stays listed but is not subtracted again.
             const legacy = await db.expense.create({ data: { branchId: branch.id, amount: 100, category: 'مشتريات بضاعة' } });
             await db.expense.create({ data: { branchId: branch.id, amount: 20, category: 'إيجار' } });
             expect(await summary()).toMatchObject({ totalExpenses: 20, netProfit: 30 });
+            expect(await mobileSummary()).toMatchObject({ revenue: 150, expenses: 20, profit: 30 });
             expect(await db.expense.findUnique({ where: { id: legacy.id } })).not.toBeNull(); // kept, never deleted
+            // A partial refund reverses its revenue and cost, not the entire sale's cost.
+            await db.saleReturn.create({ data: { saleId: sale.id, branchId: branch.id, total: 75,
+                items: { create: { drugId: f.drug.id, quantity: 1, price: 75 } } } });
+            expect(await summary()).toMatchObject({ netProfit: 5 });
+            expect(await mobileSummary()).toMatchObject({ revenue: 150, expenses: 20, profit: 5 });
+            // Returning last month's sale changes this period too; its original sale is outside it.
+            const oldSale = await db.sale.create({ data: { branchId: branch.id, createdAt: new Date('2020-01-01'), total: 90,
+                items: { create: { drugId: f.drug.id, quantity: 1, price: 90, cost: 60 } } } });
+            await db.saleReturn.create({ data: { saleId: oldSale.id, branchId: branch.id, total: 90,
+                items: { create: { drugId: f.drug.id, quantity: 1, price: 90 } } } });
+            expect(await summary()).toMatchObject({ netProfit: -25 });
+            expect(await mobileSummary()).toMatchObject({ revenue: 150, expenses: 20, profit: -25 });
         }
     });
 });

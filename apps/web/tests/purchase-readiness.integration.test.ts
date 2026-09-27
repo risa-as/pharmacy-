@@ -142,10 +142,17 @@ describe('Receipt on real PostgreSQL', () => {
         const p = await purchase();
         await expect(receivePurchaseStock(db, p.id, { branchId: 'other-branch' }, receipt(p))).rejects.toMatchObject({ status: 404 });
     });
-    it('paid receipt creates one expense, no supplier debt', async () => {
+    it('concurrent paid receipt takes cash once, without an expense or supplier debt', async () => {
         const p = await purchase();
-        await receivePurchaseStock(db, p.id, { branchId: fixture.branch.id }, receipt(p), true);
-        expect((await db.expense.aggregate({ where: { branchId: fixture.branch.id }, _sum: { amount: true } }))._sum.amount).toBe(1000);
+        const safe = await db.safe.create({ data: { branchId: fixture.branch.id, name: 'Receipt drawer', type: 'CASH_DRAWER', balance: 2000 } });
+        const outcomes = await Promise.allSettled([0, 1].map(() =>
+            receivePurchaseStock(db, p.id, { branchId: fixture.branch.id }, receipt(p), true, { id: fixture.owner.id }, { safeId: safe.id })));
+        expect(outcomes.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+        expect((await db.safe.findUniqueOrThrow({ where: { id: safe.id } })).balance).toBe(1000);
+        expect(await db.transaction.findMany({ where: { referenceType: 'PURCHASE_PAYMENT', referenceId: p.id } }))
+            .toEqual([expect.objectContaining({ type: 'OUT', amount: 1000, safeId: safe.id })]);
+        expect(await db.expense.count({ where: { branchId: fixture.branch.id } })).toBe(0);
+        expect(await db.supplierPayment.count({ where: { supplierId: fixture.supplier.id } })).toBe(0);
         expect((await db.supplier.findUniqueOrThrow({ where: { id: fixture.supplier.id } })).balance).toBe(0);
     });
 });
