@@ -1,7 +1,7 @@
 'use client';
 import type { UserPermissions } from '@/app/lib/permissions';
 import OrderSettlement from './OrderSettlement';
-import { warehouseMutation } from '@/app/lib/warehouse-mutation-client';
+import { warehouseMutation, WarehouseMutationNotSentError } from '@/app/lib/warehouse-mutation-client';
 
 // المرحلة 4 من ميزة المذاخر: عميل متابعة طلبات المذاخر — قائمة بفلترة الحالة +
 // تفاصيل الطلب: العرض (المتوفرة/الجزئية/النافدة والأسعار النهائية) + Timeline +
@@ -384,8 +384,8 @@ function ReturnRequestModal({ order, onClose, onSubmitted }: { order: TrackOrder
             }
             toast.success('أُرسل طلب الإرجاع للمذخر — بانتظار قراره');
             onSubmitted(data.return);
-        } catch {
-            toast.error('تعذر تأكيد النتيجة. أعد المحاولة بنفس البيانات؛ لن يُسجّل الطلب مرتين.');
+        } catch (error) {
+            toast.error(error instanceof WarehouseMutationNotSentError ? error.message : 'تعذر تأكيد النتيجة. أعد المحاولة بنفس البيانات؛ لن يُسجّل الطلب مرتين.');
         } finally {
             sending.current = false;
             setSaving(false);

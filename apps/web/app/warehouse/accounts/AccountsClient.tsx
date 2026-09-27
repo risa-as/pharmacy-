@@ -18,7 +18,7 @@ import PageHeader from "@/app/warehouse/_components/PageHeader";
 import EmptyState from "@/app/warehouse/_components/EmptyState";
 import SharedStatusChip, { type StatusChipVariant } from "@/app/warehouse/_components/StatusChip";
 import Modal from "@/app/warehouse/_components/Modal";
-import { warehouseMutation } from '@/app/lib/warehouse-mutation-client';
+import { warehouseMutation, WarehouseMutationNotSentError } from '@/app/lib/warehouse-mutation-client';
 
 type AgingBucket = "CURRENT" | "D30" | "D60" | "D90" | "D90_PLUS";
 type InvoiceStatus = "UNPAID" | "PARTIAL" | "PAID" | "CANCELLED";
@@ -186,7 +186,7 @@ export default function AccountsClient({
             setPayingId(null);
         } catch (e) {
             console.error("Failed to submit payment:", e);
-            setPayError("تعذر الاتصال بالسيرفر");
+            setPayError(e instanceof WarehouseMutationNotSentError ? e.message : "تعذر الاتصال بالسيرفر");
         } finally {
             setSaving(false);
         }

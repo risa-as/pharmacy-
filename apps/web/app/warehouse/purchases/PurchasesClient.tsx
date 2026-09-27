@@ -1,6 +1,6 @@
 "use client";
 import MoreActions from '@/app/ui/order-more-actions';
-import { warehouseMutation } from '@/app/lib/warehouse-mutation-client';
+import { warehouseMutation, WarehouseMutationNotSentError } from '@/app/lib/warehouse-mutation-client';
 
 // مشتريات المذخر وذممه الدائنة: العميل التفاعلي لصفحة «المشتريات» — إدارة
 // الموردين، تسجيل فواتير شراء جديدة (تُنشئ دفعات مخزون مباشرة)، وتسجيل دفعات
@@ -545,7 +545,7 @@ export default function PurchasesClient({
             setPayingId(null);
         } catch (e) {
             console.error("Failed to submit supplier payment:", e);
-            setPayError("تعذر الاتصال بالسيرفر");
+            setPayError(e instanceof WarehouseMutationNotSentError ? e.message : "تعذر الاتصال بالسيرفر");
         } finally {
             setPaySaving(false);
         }
