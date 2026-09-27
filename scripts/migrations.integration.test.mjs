@@ -68,7 +68,8 @@ const deploy = (db, names = all) => prisma(['migrate', 'deploy', '--schema', cha
 const recorded = (db) => psql(db, `SELECT coalesce(string_agg(migration_name, ',' ORDER BY migration_name), '') FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`).split(',').filter(Boolean);
 const hasMigrationsTable = (db) => psql(db, `SELECT to_regclass('_prisma_migrations') IS NOT NULL`) === 't';
 const baseline = (target, shadow, ...flags) => run('node', ['scripts/baseline-existing-db.mjs', ...flags], {
-    cwd: ROOT, env: { TARGET_DATABASE_URL: url(target), SHADOW_DATABASE_URL: url(shadow) },
+    // A nonmatching historical schema can require replaying every prefix.
+    cwd: ROOT, timeout: 600_000, env: { TARGET_DATABASE_URL: url(target), SHADOW_DATABASE_URL: url(shadow) },
 });
 /** Columns, recorded migrations and row count: equal before/after means nothing was changed. */
 const fingerprint = (db) => [
@@ -81,7 +82,8 @@ const fingerprint = (db) => [
 const sqlObjects = (names) => {
     const pre = [], post = [];
     for (const n of names) {
-        const sql = readFileSync(join(MIGRATIONS, n, 'migration.sql'), 'utf8').replace(/--[^\n]*/g, '');
+        // Keep function bodies verbatim; stripping comments changes pg_get_functiondef.
+        const sql = readFileSync(join(MIGRATIONS, n, 'migration.sql'), 'utf8');
         for (const m of sql.matchAll(/CREATE SEQUENCE[^;]*;/g)) pre.push(m[0].replace(/CREATE SEQUENCE (IF NOT EXISTS )?/, 'CREATE SEQUENCE IF NOT EXISTS '));
         for (const m of sql.matchAll(/CREATE (?:OR REPLACE )?FUNCTION [\s\S]*?\$\$[\s\S]*?\$\$;/g)) {
             const s = m[0].replace(/^CREATE FUNCTION/, 'CREATE OR REPLACE FUNCTION');
@@ -109,12 +111,11 @@ const rows = (db) => psql(db, `SELECT (SELECT count(*) FROM "Organization")||'/'
 /** pg_dump → a new database: upgrades always run on the restored copy. */
 const restoreCopy = (source, suffix) => {
     const copy = createDb(suffix);
-    const dump = run('pg_dump', ['-w', '--no-owner', '--no-privileges', url(source)]);
+    // Custom archives preserve stored function bodies byte-for-byte on Windows.
+    const dumpFile = join(work, `${suffix}.dump`);
+    const dump = run('pg_dump', ['-w', '--no-owner', '--no-privileges', '-Fc', '-f', dumpFile, url(source)]);
     if (dump.code !== 0) throw new Error(dump.out);
-    // A file avoids Windows pipe backpressure while psql restores larger dumps.
-    const dumpFile = join(work, `${suffix}.sql`);
-    writeFileSync(dumpFile, dump.out, 'utf8');
-    const load = run('psql', ['-w', url(copy), '-v', 'ON_ERROR_STOP=1', '-q', '-f', dumpFile]);
+    const load = run('pg_restore', ['-w', '--no-owner', '--no-privileges', '--exit-on-error', '-d', url(copy), dumpFile]);
     if (load.code !== 0) throw new Error(load.out);
     return copy;
 };
