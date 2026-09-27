@@ -13,14 +13,28 @@ export function deviceRequestMessage(method: string, url: string, body: string, 
   const hash = (v: string) => createHash('sha256').update(v).digest('hex');
   return JSON.stringify(['faramace-device-request:v1', method.toUpperCase(), parsed.pathname + parsed.search, timestamp, nonce, hash(body), hash(token), hash(license), hash(idempotencyKey), keyId]);
 }
-export async function verifyDeviceRequest(request: Request, key: {publicKey: string; fingerprint: string; id?: string}, now = Date.now()) {
+/** Why a signed request was refused. Logged on the server only; the device sees one generic rejection. */
+export type DeviceRequestRejection = 'timestamp-format' | 'clock-skew' | 'nonce-format' | 'key-id-mismatch'
+  | 'fingerprint-mismatch' | 'signature-length' | 'signature-mismatch';
+export async function diagnoseDeviceRequest(request: Request, key: {publicKey: string; fingerprint: string; id?: string}, now = Date.now())
+  : Promise<{nonce: string} | {reason: DeviceRequestRejection; skewSeconds: number | null}> {
   const h = request.headers;
   const timestamp = h.get('x-device-time') || '';
   const nonce = h.get('x-device-nonce') || '';
   const signature = h.get('x-device-signature') || '';
-  if (!/^\d{13}$/.test(timestamp) || Math.abs(now - Number(timestamp)) > 120000 || !/^[a-f0-9-]{36}$/.test(nonce)
-    || (key.id !== undefined && h.get('x-device-key-id') !== key.id) || h.get('x-device-fingerprint') !== key.fingerprint || signature.length > 512) return null;
+  const skewSeconds = /^\d{13}$/.test(timestamp) ? Math.round((Number(timestamp) - now) / 1000) : null;
+  const reject = (reason: DeviceRequestRejection) => ({reason, skewSeconds});
+  if (skewSeconds === null) return reject('timestamp-format');
+  if (Math.abs(now - Number(timestamp)) > 120000) return reject('clock-skew');
+  if (!/^[a-f0-9-]{36}$/.test(nonce)) return reject('nonce-format');
+  if (key.id !== undefined && h.get('x-device-key-id') !== key.id) return reject('key-id-mismatch');
+  if (h.get('x-device-fingerprint') !== key.fingerprint) return reject('fingerprint-mismatch');
+  if (signature.length > 512) return reject('signature-length');
   const message = deviceRequestMessage(request.method, request.url, await request.clone().text(), timestamp, nonce,
     h.get('x-sync-token') || '', h.get('x-device-license-key') || '', h.get('x-idempotency-key') || '', h.get('x-device-key-id') || '');
-  return verify('sha256', Buffer.from(message), key.publicKey, Buffer.from(signature, 'base64')) ? nonce : null;
+  return verify('sha256', Buffer.from(message), key.publicKey, Buffer.from(signature, 'base64')) ? {nonce} : reject('signature-mismatch');
+}
+export async function verifyDeviceRequest(request: Request, key: {publicKey: string; fingerprint: string; id?: string}, now = Date.now()) {
+  const result = await diagnoseDeviceRequest(request, key, now);
+  return 'nonce' in result ? result.nonce : null;
 }

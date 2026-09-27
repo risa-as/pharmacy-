@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { validateDeviceEnrollmentUser } from '@/app/lib/sync-auth';
-import { deviceSigningEnabled, normalizeDevicePublicKey, verifyDeviceRequest } from '@/app/lib/device-signature';
+import { deviceSigningEnabled, diagnoseDeviceRequest, normalizeDevicePublicKey } from '@/app/lib/device-signature';
 import { requestDeviceId } from '@/app/lib/operator-proof';
 export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
@@ -15,7 +15,12 @@ export async function POST(request: Request) {
     const signatureRequest = request.clone();
     const input = await request.json();
     const key = normalizeDevicePublicKey(input.publicKey);
-    if (!await verifyDeviceRequest(signatureRequest,key)) return NextResponse.json({error:'لم يثبت الجهاز حيازته للمفتاح.'},{status:403});
+    const proof = await diagnoseDeviceRequest(signatureRequest,key);
+    if (!('nonce' in proof)) {
+      // Reason for the server log only; no key, fingerprint or credential.
+      console.warn('[device-auth] enrollment rejected', JSON.stringify({reason:proof.reason,skewSeconds:proof.skewSeconds}));
+      return NextResponse.json({error:'لم يثبت الجهاز حيازته للمفتاح.'},{status:403});
+    }
     const existing = await prisma.$transaction(async tx => {
       const registered = await tx.deviceSigningKey.upsert({where:{licenseId},create:{licenseId,...key},update:{}});
       if (registered.fingerprint === key.fingerprint) await tx.auditLog.create({data:{
@@ -24,7 +29,10 @@ export async function POST(request: Request) {
       }});
       return registered;
     });
-    if (existing.fingerprint !== key.fingerprint) return NextResponse.json({error:'يوجد مفتاح آخر لهذا الترخيص؛ اطلب إعادة تسجيل الجهاز من مدير المنصة.'},{status:409});
+    if (existing.fingerprint !== key.fingerprint) {
+      console.warn('[device-auth] enrollment rejected', JSON.stringify({reason:'different-key-registered',keyId:existing.id,status:existing.status}));
+      return NextResponse.json({error:'يوجد مفتاح آخر لهذا الترخيص؛ اطلب إعادة تسجيل الجهاز من مدير المنصة.'},{status:409});
+    }
     return NextResponse.json({keyId:existing.id,status:existing.status,fingerprint:existing.fingerprint});
   } catch { return NextResponse.json({error:'تعذر تسجيل المفتاح. أعد المحاولة دون تغيير الترخيص.'},{status:400}); }
 }
