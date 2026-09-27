@@ -2,7 +2,7 @@
 
 import { getSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { readStorage, removeStorage, storageKeys, tryReadStorage, writeStorage } from '../../../../packages/shared/src/safe-storage';
+import { removeStorage, storageKeys, tryReadStorage, writeStorage } from '../../../../packages/shared/src/safe-storage';
 
 // One operation = one key, kept until its complete success answer arrives, so a
 // lost answer followed by a retry (after a reload, in another tab, or much later)
@@ -96,7 +96,10 @@ async function resolveOnServer(url: string, key: string): Promise<'recorded' | '
 /** Resolves an ownerless previous-version key on the server; throws while it cannot be resolved. */
 async function resolveLegacyAttempt(url: string, fingerprint: string) {
     const legacySlot = LEGACY_PREFIX + fingerprint;
-    const legacyKey = readStorage('session', legacySlot);
+    // A failed read is not «no old attempt»: it may hold a key whose request was applied.
+    const legacyKey = tryReadStorage('session', legacySlot);
+    if (legacyKey === undefined)
+        throw new WarehouseMutationNotSentError('تعذّرت قراءة محاولة سابقة محتملة لهذه العملية من إصدار أقدم؛ لم تُرسل العملية كي لا تُسجّل مرتين. أعد تحميل الصفحة ثم أعد المحاولة.');
     if (legacyKey === null) return;
     const answer = await resolveOnServer(url, legacyKey);
     if (answer === null)
