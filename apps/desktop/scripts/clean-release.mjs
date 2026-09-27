@@ -28,17 +28,39 @@ const outputRel = pkg.build?.directories?.output || 'release';
 const releaseDir = path.resolve(desktopDir, outputRel);
 
 if (process.platform === 'win32') {
-    // Close anything that can hold a handle on win-unpacked\resources\app.asar:
-    //  - the built app itself (named after productName)
-    //  - a leftover electron-builder native helper
-    const targets = [`${productName}.exe`, 'app-builder.exe'];
-    for (const name of targets) {
-        try {
-            execSync(`taskkill /F /IM "${name}" /T`, { stdio: 'ignore' });
-            console.log(`[clean] Closed running process: ${name}`);
-        } catch {
-            // Process wasn't running — nothing to do.
+    // Close only what can hold a handle on the build output: copies of the app
+    // started from releaseDir, and a leftover electron-builder native helper.
+    // The installed app (e.g. under AppData\Local\Programs) is left running:
+    // closing it would interrupt work on this machine.
+    const exe = `${productName}.exe`;
+    const inRelease = (file) => !!file && path.resolve(file).toLowerCase().startsWith(releaseDir.toLowerCase() + path.sep);
+    let running = [];
+    try {
+        const script = `Get-CimInstance Win32_Process -Filter "Name='${exe}'" | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }`;
+        const encoded = Buffer.from(script, 'utf16le').toString('base64');
+        running = execSync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { stdio: ['ignore', 'pipe', 'ignore'] })
+            .toString().split(/\r?\n/).filter(Boolean).map((line) => {
+                const [pid, ...file] = line.split('|');
+                return { pid: Number(pid), file: file.join('|') };
+            });
+    } catch {
+        // Cannot list processes: close nothing. A real lock is reported below.
+    }
+    for (const { pid, file } of running) {
+        if (!inRelease(file)) {
+            console.log(`[clean] Leaving ${exe} running (not from the build output): ${file || 'path unknown'}`);
+            continue;
         }
+        try {
+            execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore' });
+            console.log(`[clean] Closed ${exe} started from the build output (pid ${pid}).`);
+        } catch { /* already exited */ }
+    }
+    try {
+        execSync('taskkill /F /IM "app-builder.exe" /T', { stdio: 'ignore' });
+        console.log('[clean] Closed running process: app-builder.exe');
+    } catch {
+        // Process wasn't running — nothing to do.
     }
 }
 
