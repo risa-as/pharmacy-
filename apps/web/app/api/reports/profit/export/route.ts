@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
@@ -89,7 +90,7 @@ export async function GET(req: Request) {
         orderBy: { createdAt: "asc" },
       }),
       prisma.expense.findMany({
-        where: { date: { gte: start, lte: end }, ...branchWhere },
+        where: { ...operatingExpenseWhere, date: { gte: start, lte: end }, ...branchWhere },
         select: {
           amount: true,
           category: true,

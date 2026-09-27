@@ -34,6 +34,8 @@ export async function receivePurchaseStock(
   input: unknown,
   isPaid = false,
   actor?: { id: string; name?: string; email?: string },
+  /** Receiving as paid: the drawer of the purchase's branch the cash leaves. */
+  payment: { safeId?: string | null } = {},
 ) {
   if (!Array.isArray(input) || input.length === 0 || input.length > 500) {
     throw new PurchaseReceiptError(
@@ -228,15 +230,37 @@ export async function receivePurchaseStock(
       }
       const paidAmount = isPaid ? total : purchase.paidAmount;
       const amountToPay = Math.max(paidAmount - purchase.paidAmount, 0);
-      if (amountToPay > 0)
-        await tx.expense.create({
+      // Paid at receipt: cash leaves a drawer of this branch, in this transaction, so
+      // stock, supplier debt and drawer succeed or fail together; the purchase lock
+      // above makes a resend or a lost answer fail as "already received" instead of
+      // paying twice. paidAmount alone represents the payment in the supplier ledger
+      // (no SupplierPayment row), and no expense is recorded: the goods' cost is
+      // counted as cost of goods sold when they are sold.
+      if (amountToPay > 0) {
+        const safeId = payment.safeId;
+        const safe = safeId
+          ? await tx.safe.findFirst({ where: { id: safeId, branchId: purchase.branchId }, select: { id: true } })
+          : null;
+        if (!safe)
+          throw new PurchaseReceiptError("اختر صندوق فرع الاستلام الذي يُدفع منه المبلغ.");
+        const deducted = await tx.safe.updateMany({
+          where: { id: safe.id, balance: { gte: amountToPay } },
+          data: { balance: { decrement: amountToPay } },
+        });
+        if (deducted.count !== 1)
+          throw new PurchaseReceiptError("رصيد الصندوق غير كافٍ للدفع؛ استلم الفاتورة غير مدفوعة أو اختر صندوقاً آخر.");
+        await tx.transaction.create({
           data: {
-            branchId: purchase.branchId,
+            safeId: safe.id,
+            type: "OUT",
             amount: amountToPay,
-            category: "مشتريات بضاعة",
-            description: `فاتورة شراء #${purchase.invoiceNumber || purchase.documentNumber} من: ${purchase.supplier.name}`,
+            referenceType: "PURCHASE_PAYMENT",
+            referenceId: purchase.id,
+            userId: actor?.id ?? null,
+            description: `دفع فاتورة شراء #${purchase.invoiceNumber || purchase.documentNumber} للمورد ${purchase.supplier.name}`,
           },
         });
+      }
       const debt = Math.max(total - paidAmount, 0);
       if (debt > 0)
         await tx.supplier.update({

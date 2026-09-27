@@ -1,3 +1,4 @@
+import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { prisma } from '@/app/lib/prisma';
 import type { TenantContext } from '@/app/lib/tenant-utils';
 
@@ -159,7 +160,7 @@ export async function getSuspiciousActivity(from: Date, to: Date, ctx: AIDataCon
 
 export async function getProfitSummary(from: Date, to: Date, ctx: AIDataContext): Promise<string> {
     const saleShere = { ...ctx.tenantBranchWhere, createdAt: { gte: from, lte: to } };
-    const expWhere  = { ...ctx.tenantBranchWhere, date:      { gte: from, lte: to } };
+    const expWhere  = { ...operatingExpenseWhere, ...ctx.tenantBranchWhere, date: { gte: from, lte: to } };
 
     const [salesAgg, saleItems, expensesAgg, returnsAgg] = await Promise.all([
         prisma.sale.aggregate({
@@ -204,7 +205,7 @@ export async function getProfitSummary(from: Date, to: Date, ctx: AIDataContext)
 export async function getExpensesSummary(from: Date, to: Date, ctx: AIDataContext): Promise<string> {
     const grouped = await prisma.expense.groupBy({
         by: ['category'],
-        where: { ...ctx.tenantBranchWhere, date: { gte: from, lte: to } },
+        where: { ...operatingExpenseWhere, ...ctx.tenantBranchWhere, date: { gte: from, lte: to } },
         _sum: { amount: true },
         orderBy: { _sum: { amount: 'desc' } },
     });

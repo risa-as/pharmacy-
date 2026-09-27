@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
@@ -43,14 +44,14 @@ export async function GET(req: Request) {
         const baseWhere: any = { createdAt: { gte: startDate }, ...tenantBranchWhere };
         if (branchId) baseWhere.AND = [tenantBranchWhere, { branchId }];
 
-        const expenseWhere: any = { date: { gte: startDate }, ...tenantBranchWhere };
+        const expenseWhere: any = { ...operatingExpenseWhere, date: { gte: startDate }, ...tenantBranchWhere };
         if (branchId) expenseWhere.AND = [tenantBranchWhere, { branchId }];
 
         const [totalSales, salesCount, totalExpenses, saleSeries] = await Promise.all([
             prisma.sale.aggregate({ _sum: { total: true }, where: baseWhere }),
             prisma.sale.count({ where: baseWhere }),
             prisma.expense.aggregate({ _sum: { amount: true }, where: expenseWhere }).catch(() => {
-                const fw: any = { createdAt: { gte: startDate }, ...tenantBranchWhere };
+                const fw: any = { ...operatingExpenseWhere, createdAt: { gte: startDate }, ...tenantBranchWhere };
                 if (branchId) fw.AND = [tenantBranchWhere, { branchId }];
                 return prisma.expense.aggregate({ _sum: { amount: true }, where: fw });
             }),

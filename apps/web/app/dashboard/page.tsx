@@ -1,3 +1,4 @@
+import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { returnedCost, saleMargin } from '@/app/lib/profit-math';
 import { HandCoins } from "@/app/ui/debts/debt-icon";
 export const dynamic = 'force-dynamic';
@@ -123,7 +124,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
         }),
         prisma.expense.aggregate({
             _sum: { amount: true },
-            where: { date: { gte: todayStart }, ...orgBranchWhere },
+            where: { ...operatingExpenseWhere, date: { gte: todayStart }, ...orgBranchWhere },
         }),
         prisma.saleReturn.aggregate({
             _sum: { total: true }, _count: true,
@@ -140,7 +141,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
         }),
         prisma.expense.aggregate({
             _sum: { amount: true },
-            where: { date: { gte: monthStart }, ...orgBranchWhere },
+            where: { ...operatingExpenseWhere, date: { gte: monthStart }, ...orgBranchWhere },
         }),
         prisma.saleReturn.aggregate({
             _sum: { total: true },
@@ -233,7 +234,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
             select: { total: true, createdAt: true, items: { select: { drugId: true, quantity: true } }, sale: { select: { items: { select: { drugId: true, quantity: true, cost: true } } } } },
         }),
         prisma.expense.findMany({
-            where: { date: { gte: sevenDaysAgo }, ...orgBranchWhere },
+            where: { ...operatingExpenseWhere, date: { gte: sevenDaysAgo }, ...orgBranchWhere },
             select: { amount: true, date: true },
         }),
     ]);

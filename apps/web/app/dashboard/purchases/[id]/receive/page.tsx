@@ -1,6 +1,6 @@
 'use client';
 
-import { canCurrentUserPaySuppliers, getPurchaseDetails, receivePurchase } from '@/app/lib/actions/purchase-actions';
+import { getPurchaseDetails, getReceiptPaymentOptions, receivePurchase } from '@/app/lib/actions/purchase-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,12 +15,22 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
     const [loading, setLoading] = useState(true);
     const [purchase, setPurchase] = useState<any>(null);
     const [receivedItems, setReceivedItems] = useState<any>({});
-    // Paid at receipt needs canPaySupplier: checked by default only for those who may pay.
+    // Paid at receipt needs canPaySupplier and a drawer of the purchase's branch: the
+    // cash leaves that drawer in the same transaction as the receipt.
     const [isPaid, setIsPaid] = useState(false);
     const [canPay, setCanPay] = useState(false);
+    const [safes, setSafes] = useState<{ id: string; name: string; balance: number }[]>([]);
+    const [safeId, setSafeId] = useState('');
     useEffect(() => {
-        canCurrentUserPaySuppliers().then((allowed) => { setCanPay(allowed); setIsPaid(allowed); }).catch(() => setCanPay(false));
-    }, []);
+        getReceiptPaymentOptions(params.id)
+            .then((options) => {
+                setCanPay(options.canPay);
+                setSafes(options.safes);
+                setSafeId(options.safes[0]?.id ?? '');
+                setIsPaid(options.canPay && options.safes.length > 0);
+            })
+            .catch(() => setCanPay(false));
+    }, [params.id]);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -98,6 +108,10 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
             toast.error(`أكمل رقم الدفعة وتاريخ الانتهاء لـ${incompleteCount} بنداً قبل الاستلام.`);
             return;
         }
+        if (isPaid && !safeId) {
+            toast.error('اختر الصندوق الذي يُدفع منه ثمن الفاتورة، أو استلمها غير مدفوعة.');
+            return;
+        }
         setSubmitting(true);
         try {
             const itemsToSubmit = Object.entries(receivedItems).map(([itemId, data]: [string, any]) => ({
@@ -107,7 +121,7 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
                 batchNumber: String(data.batchNumber).trim(),
             }));
 
-            await receivePurchase(params.id, itemsToSubmit, isPaid);
+            await receivePurchase(params.id, itemsToSubmit, isPaid, isPaid ? safeId : null);
             toast.success('تم استلام الطلب وإضافة الأدوية إلى الدفعات والمخزون');
             // القادم من «طلبات المذاخر» يعود إليها ليرى حالة «استُلمت» — قيمة ثابتة لا مسار حر.
             const fromWarehouseOrders = new URLSearchParams(window.location.search).get('return') === 'warehouse-orders';
@@ -282,8 +296,24 @@ export default function ReceivePurchasePage(props: { params: Promise<{ id: strin
                         onChange={(e) => setIsPaid(e.target.checked)}
                     />
                     <label htmlFor="paid" className="font-bold cursor-pointer select-none">
-                        تم الدفع نقداً (تسجيل مصروف بقيمة {purchase.total.toLocaleString()} د.ع)
+                        تم الدفع نقداً: يُخصم {purchase.total.toLocaleString()} د.ع من الصندوق
                     </label>
+                    {isPaid && (
+                        safes.length ? (
+                            <select
+                                value={safeId}
+                                onChange={(e) => setSafeId(e.target.value)}
+                                className="ms-auto rounded-lg border border-border px-3 py-2 text-foreground"
+                                aria-label="الصندوق الذي يُدفع منه"
+                            >
+                                {safes.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name} — الرصيد {s.balance.toLocaleString('ar-IQ')} د.ع</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <span className="ms-auto text-sm text-destructive">لا يوجد صندوق في فرع الاستلام؛ استلم الفاتورة غير مدفوعة.</span>
+                        )
+                    )}
                 </div>
             ) : (
                 <p className="bg-card p-4 rounded-lg shadow mb-4 text-sm text-muted-foreground">

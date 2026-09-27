@@ -1,3 +1,4 @@
+import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { returnedCost } from '@/app/lib/profit-math';
 export const dynamic = 'force-dynamic';
 
@@ -64,7 +65,7 @@ export async function GET(req: Request) {
         // 3. Total Expenses
         const expensesAgg = await prisma.expense.aggregate({
             _sum: { amount: true },
-            where: {
+            where: { ...operatingExpenseWhere,
                 ...branchFilter,
                 date: { gte: startDate, lte: endDate }
             }
@@ -132,7 +133,7 @@ export async function GET(req: Request) {
 
         // Add expenses to daily breakdown
         const expenses = await prisma.expense.findMany({
-            where: {
+            where: { ...operatingExpenseWhere,
                 ...branchFilter,
                 date: { gte: startDate, lte: endDate }
             },
@@ -183,7 +184,7 @@ export async function GET(req: Request) {
         const expensesByCategory = await prisma.expense.groupBy({
             by: ['category'],
             _sum: { amount: true },
-            where: {
+            where: { ...operatingExpenseWhere,
                 ...branchFilter,
                 date: { gte: startDate, lte: endDate }
             }

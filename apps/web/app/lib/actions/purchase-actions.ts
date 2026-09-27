@@ -311,20 +311,27 @@ export async function cancelPurchase(purchaseId: string) {
     return { success: true };
 }
 
-/** Whether the signed-in user may pay suppliers (receive a purchase as paid). */
-export async function canCurrentUserPaySuppliers(): Promise<boolean> {
+/**
+ * For the receive screen: whether the signed-in user may receive this purchase as
+ * paid, and the drawers of the purchase's branch the cash can leave from.
+ */
+export async function getReceiptPaymentOptions(purchaseId: string): Promise<{ canPay: boolean; safes: { id: string; name: string; balance: number }[] }> {
     const tenantCtx = await getTenantContext('read');
-    return !(tenantCtx instanceof NextResponse) && tenantCtx.userPermissions.canPaySupplier;
+    if (tenantCtx instanceof NextResponse || !tenantCtx.userPermissions.canPaySupplier) return { canPay: false, safes: [] };
+    const purchase = await prisma.purchase.findFirst({ where: { AND: [{ id: purchaseId }, tenantCtx.tenantBranchWhere] }, select: { branchId: true } });
+    if (!purchase) return { canPay: false, safes: [] };
+    const safes = await prisma.safe.findMany({ where: { branchId: purchase.branchId }, select: { id: true, name: true, balance: true }, orderBy: { createdAt: 'asc' } });
+    return { canPay: true, safes };
 }
 
-export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false) {
+export async function receivePurchase(purchaseId: string, items: { itemId: string, quantity: number, expiryDate: Date, batchNumber: string }[], isPaid: boolean = false, safeId: string | null = null) {
     const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) throw new Error('غير مصرح');
     if (!tenantCtx.userPermissions.canReceivePurchase) throw new Error('ليس لديك صلاحية استلام المشتريات.');
     if (typeof isPaid !== 'boolean') throw new Error('حالة الدفع غير صالحة.');
     // Receiving as paid is a supplier payment: same permission as paying from the ledger.
     if (isPaid && !tenantCtx.userPermissions.canPaySupplier) throw new Error('ليس لديك صلاحية تسديد الموردين؛ استلم الفاتورة غير مدفوعة.');
-    const result = await receivePurchaseStock(prisma, purchaseId, tenantCtx.tenantBranchWhere, items, isPaid, tenantCtx.user);
+    const result = await receivePurchaseStock(prisma, purchaseId, tenantCtx.tenantBranchWhere, items, isPaid, tenantCtx.user, { safeId });
     revalidatePath('/dashboard/purchases');
     revalidatePath(`/dashboard/purchases/${purchaseId}`);
     return result;

@@ -1,3 +1,4 @@
+import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { returnedCost } from '@/app/lib/profit-math';
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,7 @@ export async function GET(req: Request) {
                 }),
                 prisma.expense.aggregate({
                     _sum: { amount: true },
-                    where: { ...branchFilter, date: dateFilter }
+                    where: { ...operatingExpenseWhere, ...branchFilter, date: dateFilter }
                 }),
                 prisma.saleReturn.aggregate({
                     _sum: { total: true },

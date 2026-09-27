@@ -19,7 +19,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         // Receiving as paid is a supplier payment: same permission as paying from the ledger.
         if (body.isPaid === true && !ctx.userPermissions.canPaySupplier)
             return NextResponse.json({ message: 'ليس لديك صلاحية تسديد الموردين؛ استلم الفاتورة غير مدفوعة.' }, { status: 403 });
-        const receipt = await receivePurchaseStock(prisma, params.id, ctx.tenantBranchWhere, body.items, body.isPaid ?? false, ctx.user);
+        const receipt = await receivePurchaseStock(prisma, params.id, ctx.tenantBranchWhere, body.items, body.isPaid ?? false, ctx.user,
+            { safeId: typeof body.safeId === 'string' ? body.safeId : null });
         const soon = body.items.filter((item: { expiryDate: string }) => new Date(item.expiryDate).getTime() <= Date.now() + 30 * 86400000);
         if (soon.length) await sendAndPersistNotification({
             type: 'EXPIRY', branchId: receipt.branchId, title: 'تحذير: أدوية قاربت انتهاء الصلاحية',

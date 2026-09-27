@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { prisma } from "@/app/lib/prisma";
 import {
   TrendingUp,
@@ -101,7 +102,7 @@ export default async function ProfitsReportPage(
     }),
     // Period expenses — only needed fields
     prisma.expense.findMany({
-      where: { date: { gte: start, lte: end }, ...branchWhere },
+      where: { ...operatingExpenseWhere, date: { gte: start, lte: end }, ...branchWhere },
       select: { amount: true, category: true },
     }),
     // Current inventory valuation (cost basis) — for the balance quick-look only
@@ -128,7 +129,7 @@ export default async function ProfitsReportPage(
     }),
     // Last 6 months expenses
     prisma.expense.findMany({
-      where: { date: { gte: sixMonthsAgo }, ...branchWhere },
+      where: { ...operatingExpenseWhere, date: { gte: sixMonthsAgo }, ...branchWhere },
       select: { amount: true, date: true },
     }),
     // Period sale returns — refund total + returned items, plus the original

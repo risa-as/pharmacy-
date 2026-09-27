@@ -275,7 +275,7 @@ describe('supplier payments and ledger', () => {
         expect(await state(p1.id)).toEqual(['COMPLETED', 0]);
         await as(f.pharmacist, { canPaySupplier: true });
         const p2 = await pendingPurchase();
-        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p2), isPaid: true }), params(p2.id))).status).toBe(200);
+        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines(p2), isPaid: true, safeId: f.safeA1.id }), params(p2.id))).status).toBe(200);
         expect(await state(p2.id)).toEqual(['COMPLETED', 100]);
     });
 
@@ -312,7 +312,7 @@ describe('supplier payments and ledger', () => {
             items: { create: [{ drugId: f.drug.id, quantity: 2, cost: 50 }] } }, include: { items: true } });
         await as(f.admin);
         const lines = p.items.map((i: any) => ({ itemId: i.id, quantity: i.quantity, expiryDate: '2031-06-01', batchNumber: 'PM-PAID' }));
-        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines, isPaid: true }), params(p.id))).status).toBe(200);
+        expect((await receivePurchaseRoute(send('/x', 'POST', { items: lines, isPaid: true, safeId: f.safeA1.id }), params(p.id))).status).toBe(200);
         expect((await db.supplier.findUnique({ where: { id: supplier.id } }))!.balance).toBe(0);
         const ledger: any[] = await getSupplierLedger(supplier.id);
         expect(ledger[0].runningBalance).toBe(0);
@@ -434,5 +434,63 @@ describe.each([
         expect(await allowed.text()).not.toBe('');
         await as(f.admin, { ...base, [flag]: false });
         expect((await call()).status).toBe(403);
+    });
+});
+
+describe('purchases received as paid: drawer, supplier and profit', () => {
+    const receipt = (p: any) => p.items.map((i: any) => ({ itemId: i.id, quantity: i.quantity, expiryDate: '2031-06-01', batchNumber: 'PM-P' }));
+    const newPurchase = async (branchId: string, supplierId = f.supplierA.id) => db.purchase.create({ data: { branchId, supplierId, total: 100,
+        items: { create: [{ drugId: f.drug.id, quantity: 2, cost: 50 }] } }, include: { items: true } });
+    const receive = (p: any, extra: Record<string, unknown>) => receivePurchaseRoute(send('/x', 'POST', { items: receipt(p), ...extra }), params(p.id));
+    const safeBalance = async (id: string) => (await db.safe.findUnique({ where: { id } }))!.balance;
+    const stockExpenses = (branchId: string) => db.expense.count({ where: { branchId, category: 'مشتريات بضاعة' } });
+
+    it('takes the payment from the chosen drawer in the receipt transaction, records no expense, and never pays twice', async () => {
+        const p = await newPurchase(f.a1.id);
+        const drawer = await safeBalance(f.safeA1.id), expenses = await stockExpenses(f.a1.id);
+        expect((await receive(p, { isPaid: true, safeId: f.safeA1.id })).status).toBe(200);
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer - 100);
+        expect((await db.transaction.findMany({ where: { referenceType: 'PURCHASE_PAYMENT', referenceId: p.id } })).map(t => [t.type, t.amount, t.safeId]))
+            .toEqual([['OUT', 100, f.safeA1.id]]);
+        expect(await stockExpenses(f.a1.id)).toBe(expenses);
+        expect(await db.purchase.findUnique({ where: { id: p.id } })).toMatchObject({ status: 'COMPLETED', paidAmount: 100 });
+        // A resend, or a retry after a lost answer: refused as already received, nothing taken again.
+        const batches = await db.batch.count({ where: { purchaseItemId: p.items[0].id } });
+        expect((await receive(p, { isPaid: true, safeId: f.safeA1.id })).status).toBe(409);
+        expect(await safeBalance(f.safeA1.id)).toBe(drawer - 100);
+        expect(await db.batch.count({ where: { purchaseItemId: p.items[0].id } })).toBe(batches);
+    });
+
+    it('rolls the whole receipt back when the drawer cannot pay, or no drawer of the branch is given', async () => {
+        const low = await db.safe.create({ data: { branchId: f.a1.id, name: 'Low drawer', type: 'CASH_DRAWER', balance: 10 } });
+        for (const extra of [{ safeId: low.id }, { safeId: f.safeA2.id }, { safeId: f.safeB1.id }, {}]) {
+            const p = await newPurchase(f.a1.id);
+            expect((await receive(p, { isPaid: true, ...extra })).status).toBe(400);
+            expect((await db.purchase.findUnique({ where: { id: p.id } }))?.status).toBe('PENDING');
+            expect(await db.batch.count({ where: { purchaseItemId: p.items[0].id } })).toBe(0);
+            expect(await db.transaction.count({ where: { referenceType: 'PURCHASE_PAYMENT', referenceId: p.id } })).toBe(0);
+        }
+        expect(await safeBalance(low.id)).toBe(10);
+    });
+
+    it('buying for 100 and selling it all for 150 is a profit of 50, paid or unpaid, with old stock-purchase expenses excluded', async () => {
+        for (const isPaid of [true, false]) {
+            const label = (isPaid ? 'Paid ' : 'Unpaid ') + key;
+            const branch = await db.branch.create({ data: { name: 'Profit ' + label, organizationId: f.orgA.id } });
+            const drawer = await db.safe.create({ data: { branchId: branch.id, name: 'Drawer', type: 'CASH_DRAWER', balance: 1000 } });
+            const supplier = await db.supplier.create({ data: { name: 'Profit supplier ' + label, organizationId: f.orgA.id } });
+            const p = await newPurchase(branch.id, supplier.id);
+            await as(f.admin);
+            expect((await receive(p, isPaid ? { isPaid: true, safeId: drawer.id } : { isPaid: false })).status).toBe(200);
+            await db.sale.create({ data: { branchId: branch.id, total: 150, items: { create: { drugId: f.drug.id, quantity: 2, price: 75, cost: 50 } } } });
+            const summary = async () => (await (await profitReport(get('/api/reports/profit?branchId=' + branch.id))).json()).summary;
+            expect(await summary()).toMatchObject({ totalRevenue: 150, totalCOGS: 100, totalExpenses: 0, netProfit: 50 });
+            expect((await db.supplier.findUnique({ where: { id: supplier.id } }))!.balance).toBe(isPaid ? 0 : 100);
+            // A legacy "stock purchase" expense stays listed but is not subtracted again.
+            const legacy = await db.expense.create({ data: { branchId: branch.id, amount: 100, category: 'مشتريات بضاعة' } });
+            await db.expense.create({ data: { branchId: branch.id, amount: 20, category: 'إيجار' } });
+            expect(await summary()).toMatchObject({ totalExpenses: 20, netProfit: 30 });
+            expect(await db.expense.findUnique({ where: { id: legacy.id } })).not.toBeNull(); // kept, never deleted
+        }
     });
 });
