@@ -76,9 +76,11 @@ beforeAll(async () => {
     const batchA1 = await mkBatch(a1.id, 'A1'), batchA2 = await mkBatch(a2.id, 'A2'), batchB1 = await mkBatch(b1.id, MARK);
     const patientB = await db.patient.create({ data: { name: 'Patient ' + MARK, phone: 'PHONE-' + MARK, branchId: b1.id, allergies: ['pmol'] } });
     await db.loyaltyAccount.create({ data: { patientId: patientB.id, totalPoints: 7 } });
+    // A foreign patient without an account: proves a refused POST creates nothing.
+    const patientB2 = await db.patient.create({ data: { name: 'No account ' + MARK, phone: randomUUID(), branchId: b1.id } });
     const patientA2 = await db.patient.create({ data: { name: 'Sister patient ' + key, phone: randomUUID(), branchId: a2.id, allergies: ['pmol'] } });
     const patientA1 = await db.patient.create({ data: { name: 'Own debtor ' + key, phone: randomUUID(), branchId: a1.id, balance: 50 } });
-    f = { orgA, a1, a2, b1, admin, pharmacist, cashier, supplierA, supplierB, batchA1, batchA2, batchB1, patientB, patientA1, patientA2 };
+    f = { orgA, a1, a2, b1, admin, pharmacist, cashier, supplierA, supplierB, batchA1, batchA2, batchB1, patientB, patientB2, patientA1, patientA2 };
 });
 afterAll(() => db.$disconnect());
 beforeEach(() => as(f.admin));
@@ -86,13 +88,16 @@ beforeEach(() => as(f.admin));
 describe('supplier payments and ledger', () => {
     it('never returns another organisation\'s supplier payments', async () => {
         const response = await supplierPayments(get(`/api/suppliers/${f.supplierB.id}/payments`), params(f.supplierB.id));
+        expect(response.status).toBe(404);
         expect(await leaks(response)).toBe(false);
     });
 
     it('requires canViewSuppliers to read payments and the ledger', async () => {
         await as(f.pharmacist, { canViewSuppliers: true });
-        expect((await supplierPayments(get('/x'), params(f.supplierA.id))).status).toBe(200);
-        expect((await supplierLedger(get('/x'), params(f.supplierA.id))).status).toBe(200);
+        for (const response of [await supplierPayments(get('/x'), params(f.supplierA.id)), await supplierLedger(get('/x'), params(f.supplierA.id))]) {
+            expect(response.status).toBe(200);
+            expect(Array.isArray(await response.json())).toBe(true);
+        }
         await as(f.pharmacist, { canViewSuppliers: false });
         expect((await supplierPayments(get('/x'), params(f.supplierA.id))).status).toBe(403);
         expect((await supplierLedger(get('/x'), params(f.supplierA.id))).status).toBe(403);
@@ -105,8 +110,20 @@ describe('supplier payments and ledger', () => {
         expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5 }), params(f.supplierA.id))).status).toBe(403);
         expect(await count()).toBe(before);
         await as(f.pharmacist, { canCreatePurchase: true });
-        expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5 }), params(f.supplierA.id))).status).toBe(200);
+        const paid = await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5 }), params(f.supplierA.id));
+        expect(paid.status).toBe(200);
+        expect((await paid.json()).message).toBe('تم تسجيل الدفعة بنجاح');
         expect(await count()).toBe(before + 1);
+    });
+
+    it('lets an employee with canViewSuppliers but not canCreatePurchase view, but not change balances (deliberate change)', async () => {
+        await as(f.pharmacist, { canViewSuppliers: true, canCreatePurchase: false });
+        expect((await supplierLedger(get('/x'), params(f.supplierA.id))).status).toBe(200);
+        expect(await getSupplierSummary(f.supplierA.id)).not.toBeNull();
+        const balance = (await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance;
+        expect((await setSupplierOpeningBalance({ supplierId: f.supplierA.id, branchId: f.a1.id, amount: 5 })).success).toBe(false);
+        expect((await paySupplier(send('/x', 'POST', { branchId: f.a1.id, amount: 5 }), params(f.supplierA.id))).status).toBe(403);
+        expect((await db.supplier.findUnique({ where: { id: f.supplierA.id } }))!.balance).toBe(balance);
     });
 
     it('records a payment only against a branch in the caller\'s scope', async () => {
@@ -158,12 +175,17 @@ describe('batch edits', () => {
 describe('patients, loyalty, allergies and debts', () => {
     it('never returns or opens a loyalty account for another organisation\'s patient', async () => {
         const response = await loyaltyAccount(get(`/api/loyalty/account?patientId=${f.patientB.id}`));
+        expect(response.status).toBe(404);
         expect(await leaks(response)).toBe(false);
-        const before = await db.loyaltyAccount.count();
-        await openLoyaltyAccount(send('/x', 'POST', { patientId: f.patientB.id }));
-        await openLoyaltyAccount(send('/x', 'POST', { patientId: f.patientA1.id }));
-        expect(await db.loyaltyAccount.count({ where: { patientId: f.patientA1.id } })).toBe(1);
-        expect(await db.loyaltyAccount.count()).toBe(before + 1);
+        const refused = await openLoyaltyAccount(send('/x', 'POST', { patientId: f.patientB2.id }));
+        expect(refused.status).toBe(404);
+        expect(await db.loyaltyAccount.count({ where: { patientId: f.patientB2.id } })).toBe(0);
+        const opened = await openLoyaltyAccount(send('/x', 'POST', { patientId: f.patientA1.id }));
+        expect(opened.status).toBe(200);
+        expect((await opened.json()).account.patientId).toBe(f.patientA1.id);
+        const own = await loyaltyAccount(get(`/api/loyalty/account?patientId=${f.patientA1.id}`));
+        expect(own.status).toBe(200);
+        expect((await own.json()).account.patientId).toBe(f.patientA1.id);
     });
 
     it('requires canViewPatients for loyalty accounts', async () => {
@@ -172,7 +194,11 @@ describe('patients, loyalty, allergies and debts', () => {
     });
 
     it('checks allergies of the organisation\'s patients only, including a sister branch', async () => {
-        const warnings = async (patientId: string) => (await (await posAlerts(send('/x', 'POST', { scientificNames: ['Pmol'], patientId }))).json()).allergyWarnings;
+        const warnings = async (patientId: string) => {
+            const response = await posAlerts(send('/x', 'POST', { scientificNames: ['Pmol'], patientId }));
+            expect(response.status).toBe(200);
+            return (await response.json()).allergyWarnings;
+        };
         expect(await warnings(f.patientB.id)).toEqual([]);
         await as(f.pharmacist);
         expect(await warnings(f.patientA2.id)).toEqual(['Pmol']);
@@ -180,7 +206,9 @@ describe('patients, loyalty, allergies and debts', () => {
 
     it('requires canViewDebts for a debtor\'s statement', async () => {
         await as(f.pharmacist, { canViewDebts: true });
-        expect((await debtDetail(get('/x'), params(f.patientA1.id))).status).toBe(200);
+        const allowed = await debtDetail(get('/x'), params(f.patientA1.id));
+        expect(allowed.status).toBe(200);
+        expect(await allowed.text()).toContain('Own debtor ' + key);
         await as(f.pharmacist, { canViewDebts: false });
         expect((await debtDetail(get('/x'), params(f.patientA1.id))).status).toBe(403);
     });
@@ -188,7 +216,9 @@ describe('patients, loyalty, allergies and debts', () => {
 
 it('requires canViewProfitReport for the profit export', async () => {
     await as(f.admin, { canViewProfitReport: true });
-    expect((await profitExport(get('/api/reports/profit/export'))).status).not.toBe(403);
+    const allowed = await profitExport(get('/api/reports/profit/export'));
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers.get('content-type')).toContain('spreadsheetml');
     await as(f.admin, { canViewProfitReport: false });
     expect((await profitExport(get('/api/reports/profit/export'))).status).toBe(403);
 });
@@ -213,7 +243,9 @@ describe.each([
         // canViewSuppliers gates warehouse flags too; keep it on for that route.
         const base = flag === 'canViewWarehouseOrders' ? { canViewSuppliers: true } : {};
         await as(f.admin, { ...base, [flag]: true });
-        expect((await call()).status).not.toBe(403);
+        const allowed = await call();
+        expect(allowed.status).toBe(200);
+        expect(await allowed.text()).not.toBe('');
         await as(f.admin, { ...base, [flag]: false });
         expect((await call()).status).toBe(403);
     });
