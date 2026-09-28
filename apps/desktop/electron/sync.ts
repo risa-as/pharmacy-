@@ -2456,6 +2456,7 @@ export async function pushDeleteInventoryFromCloud(inventoryId: string, options?
  * Pushes a new batch from desktop to cloud immediately.
  */
 export async function pushAddBatchToCloud(data: {
+    batchId?: string;
     inventoryId: string;
     batchNumber: string;
     quantity: number;
@@ -2483,6 +2484,7 @@ export async function pushAddBatchToCloud(data: {
             },
             body: JSON.stringify({
                 clientActionId: idempotencyKey,
+                batchId: data.batchId,
                 inventoryId: data.inventoryId,
                 batchNumber: data.batchNumber,
                 quantity: data.quantity,
@@ -2503,6 +2505,12 @@ export async function pushAddBatchToCloud(data: {
             errorMessage = body?.message || errorMessage;
             console.error("[CloudSync] Failed to push batch:", errorMessage);
             throw new Error(errorMessage);
+        }
+
+        // Keep the outbox entry (and stock-pull protection) until the server
+        // confirms the identity used by local sales, not merely the quantity.
+        if (data.batchId && (body as any)?.batchId !== data.batchId) {
+            throw new Error('لم يؤكد الخادم معرّف الدفعة؛ يلزم تحديث الخادم أو مراجعة ربط الدفعة.');
         }
 
         if (isAckSuccess(ack)) {

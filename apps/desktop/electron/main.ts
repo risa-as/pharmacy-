@@ -2700,7 +2700,7 @@ ipcMain.handle(
       const qty = parseInt(quantity, 10);
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       const batchNumber = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-      const [, inventoryRow] = await prisma.$transaction([
+      const [createdBatch, inventoryRow] = await prisma.$transaction([
         prisma.batch.create({
           data: {
             inventoryId,
@@ -2721,6 +2721,7 @@ ipcMain.handle(
       // Push batch to cloud
       if (inventoryRow) {
         enqueuePendingSyncAction("add-batch", {
+          batchId: createdBatch.id,
           inventoryId: inventoryRow.id,
           batchNumber,
           quantity: qty,

@@ -11,6 +11,7 @@ import { logAudit, resolveUserName } from "@/app/lib/audit";
 type AckStatus = "processed" | "duplicate" | "noop";
 
 class ForbiddenError extends Error {}
+class BatchIdentityConflict extends Error {}
 
 function readIdempotencyKey(req: Request, body: any): string {
     const fromHeader = String(req.headers.get("x-idempotency-key") || "").trim();
@@ -44,21 +45,11 @@ export async function POST(req: Request) {
         const body = await req.json();
         const idempotencyKey = readIdempotencyKey(req, body);
 
-        if (idempotencyKey) {
-            const existingLog = await prisma.syncActionLog.findUnique({
-                where: { idempotencyKey }
-            });
-            if (existingLog) {
-                console.log(`[Add-Batch API] Duplicate request detected. Key: ${idempotencyKey}`);
-                return NextResponse.json({
-                    success: true,
-                    message: 'Duplicate batch ignored safely',
-                    ack: makeAck("duplicate", idempotencyKey)
-                });
-            }
-        }
+        const { batchId, inventoryId, batchNumber, quantity, expiryDate, branchId, drugId, costPrice, supplierId, unitsPerPack } = body;
 
-        const { inventoryId, batchNumber, quantity, expiryDate, branchId, drugId, costPrice, supplierId, unitsPerPack } = body;
+        if (batchId !== undefined && (typeof batchId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId) || !idempotencyKey)) {
+            return NextResponse.json({ message: 'Invalid batch identity or missing operation key' }, { status: 400 });
+        }
 
         // ميزة وحدة التسعير: عدد الأشرطة في الباكيت، يصل من سطح المكتب
         // والهاتف. قيمة غير صالحة تُهمَل: الرقم مشترك بين كل الصيدليات،
@@ -94,6 +85,7 @@ export async function POST(req: Request) {
         }
 
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            if (idempotencyKey) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`add-batch:${idempotencyKey}`}, 0))`;
             // Find the inventory record
             let inventory;
             if (inventoryId) {
@@ -137,6 +129,26 @@ export async function POST(req: Request) {
                 }
             }
 
+            // Serialize retries of the same operation; recheck inside the write
+            // transaction so a lost response cannot create another batch.
+            if (idempotencyKey) {
+                const previous = await tx.syncActionLog.findUnique({ where: { idempotencyKey } });
+                if (previous) {
+                    if (previous.branchId !== inventory.branchId || previous.actionType !== 'ADD_BATCH') throw new ForbiddenError();
+                    if (batchId) {
+                        const batch = await tx.batch.findUnique({ where: { id: batchId } });
+                        if (!batch || batch.inventoryId !== inventory.id || batch.batchNumber !== batchNumber ||
+                            batch.initialQuantity !== parsedQuantity || batch.costPrice !== validatedCost ||
+                            batch.expiryDate.getTime() !== new Date(expiryDate).getTime() ||
+                            batch.supplierId !== (supplierId ?? null)) throw new BatchIdentityConflict();
+                    }
+                    return { inventory, batchId: batchId ?? null, ackStatus: 'duplicate' as AckStatus };
+                }
+            }
+            // Never overwrite/reassign an existing batch, including one in
+            // another branch. Its id is also referenced by immutable sales.
+            if (batchId && await tx.batch.findUnique({ where: { id: batchId }, select: { id: true } })) throw new BatchIdentityConflict();
+
             // Auto-generate an 8-char alphanumeric batch number
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             const effectiveBatchNumber = batchNumber
@@ -145,8 +157,9 @@ export async function POST(req: Request) {
             // Remove idempotency checks on batch number as SyncActionLog handles it
 
             // Create the batch
-            await tx.batch.create({
+            const createdBatch = await tx.batch.create({
                 data: {
+                    ...(batchId ? { id: batchId } : {}),
                     inventoryId: inventory.id,
                     quantity: parsedQuantity,
                     initialQuantity: parsedQuantity,
@@ -180,11 +193,11 @@ export async function POST(req: Request) {
                 });
             }
 
-            return { inventory, ackStatus: "processed" as AckStatus };
+            return { inventory, batchId: createdBatch.id, ackStatus: "processed" as AckStatus };
         });
 
         // Audit the stock-in, attributed to the acting (logged-in) user.
-        await logAudit({
+        if (result.ackStatus === "processed") await logAudit({
             userId: syncUser.id,
             userName: syncUser.name ?? await resolveUserName(syncUser.id),
             action: "ADD_BATCH",
@@ -222,9 +235,11 @@ export async function POST(req: Request) {
         return NextResponse.json({
             success: true,
             data: result.inventory,
+            batchId: result.batchId,
             ack: makeAck(result.ackStatus, idempotencyKey),
         });
     } catch (error: any) {
+        if (error instanceof BatchIdentityConflict) return NextResponse.json({ success: false, message: "تعارض معرّف الدفعة؛ يلزم ربط موثق قبل إعادة المزامنة." }, { status: 409 });
         if (error instanceof ForbiddenError) {
             return NextResponse.json(
                 { success: false, message: "Forbidden", ack: makeAck("noop", "") },
