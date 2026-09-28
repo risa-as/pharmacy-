@@ -1,44 +1,45 @@
 type SectionHeadingProps = {
   title: string;
   subtitle?: string;
-  align?: 'left' | 'center' | 'right';
+  align?: 'center' | 'right';
   className?: string;
   titleClassName?: string;
   badge?: string;
+  tone?: 'light' | 'dark';
 };
 
+/** Section eyebrow, title and lead. `tone="dark"` for dark bands. */
 export default function SectionHeading({
   title,
   subtitle,
   align = 'center',
   className = '',
-  titleClassName = 'text-white',
-  badge
+  titleClassName = '',
+  badge,
+  tone = 'light',
 }: SectionHeadingProps) {
-  const alignmentClasses = {
-    left: 'text-left items-start',
-    center: 'text-center items-center',
-    right: 'text-right items-start',
-  };
-
+  const dark = tone === 'dark';
   return (
-    <div className={`flex flex-col mb-16 ${alignmentClasses[align]} ${className}`}>
+    <div className={`flex flex-col mb-14 ${align === 'center' ? 'items-center text-center mx-auto' : 'items-start text-right'} max-w-3xl ${className}`}>
       {badge && (
-        <span className="inline-block py-1 px-3 rounded-full bg-primary-100 text-primary-700 text-sm font-bold mb-4">
+        <span
+          className={`inline-flex items-center gap-2 py-1.5 ps-2 pe-3.5 rounded-full text-sm font-bold mb-5 ${
+            dark ? 'bg-white/10 text-primary-200 ring-1 ring-white/15' : 'bg-primary-50 text-primary-700 ring-1 ring-primary-100'
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${dark ? 'bg-accent' : 'bg-primary-500'}`} />
           {badge}
         </span>
       )}
-      <h2 className={`text-3xl md:text-4xl lg:text-5xl font-bold mb-6 leading-tight ${titleClassName}`}>
+      <h2
+        className={`text-3xl md:text-4xl lg:text-[2.75rem] font-black leading-[1.4] tracking-tight ${
+          dark ? 'text-white' : 'text-slate-900'
+        } ${titleClassName}`}
+      >
         {title}
       </h2>
-
-      {/* Decorative Line */}
-      <div className={`w-24 h-1.5 bg-gradient-brand rounded-full mb-6 ${align === 'center' ? 'mx-auto' : ''}`}></div>
-
       {subtitle && (
-        <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">
-          {subtitle}
-        </p>
+        <p className={`mt-5 text-lg leading-relaxed ${dark ? 'text-primary-100/80' : 'text-slate-600'}`}>{subtitle}</p>
       )}
     </div>
   );

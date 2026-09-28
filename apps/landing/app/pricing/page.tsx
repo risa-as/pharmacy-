@@ -69,7 +69,8 @@ function buildEnterpriseExtras(plan: Plan): string[] {
   const f = plan.features as Record<string, boolean> | null;
   if (f?.advancedReports) list.push("لوحة التحليل المتقدم");
   if (f?.branchComparison) list.push("مقارنة أداء الفروع");
-  if (f?.warehouseManagement) list.push("إدارة المخزن المركزي");
+  // The flag gates ordering from warehouses on the platform (web: warehouse-orders).
+  if (f?.warehouseManagement) list.push("الطلب من المذاخر على المنصة");
   if (f?.interBranchTransfers) list.push("التحويل بين الفروع");
   if (f?.marketplace) list.push("الوصول للمتجر الإلكتروني");
   list.push("دعم فني متقدم على مدار الساعة");

@@ -5,23 +5,27 @@ type FeatureCardProps = {
   description: string;
   icon: ReactNode;
   delay?: number;
+  points?: string[];
 };
 
-export default function FeatureCard({ title, description, icon, delay = 0 }: FeatureCardProps) {
+export default function FeatureCard({ title, description, icon, points }: FeatureCardProps) {
   return (
-    <div 
-      className="bg-white dark:bg-slate-900 rounded-2xl p-8 shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-xl hover:border-primary-100 dark:hover:border-primary-800 transition-all duration-300 transform hover:-translate-y-1 group"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <div className="w-14 h-14 rounded-xl mb-6 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 flex items-center justify-center group-hover:bg-primary-600 group-hover:text-white transition-colors duration-300">
-        <div className="transform group-hover:scale-110 transition-transform duration-300">
-          {icon}
-        </div>
+    <div className="group relative h-full rounded-2xl bg-white p-7 ring-1 ring-slate-200/80 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:shadow-lift hover:ring-primary-200">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-700 ring-1 ring-primary-100 transition-colors duration-300 group-hover:bg-primary-700 group-hover:text-white">
+        {icon}
       </div>
-      <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">{title}</h3>
-      <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-        {description}
-      </p>
+      <h3 className="mb-2.5 text-lg font-extrabold text-slate-900">{title}</h3>
+      <p className="leading-relaxed text-slate-600">{description}</p>
+      {points && (
+        <ul className="mt-4 space-y-1.5 text-sm text-slate-600">
+          {points.map((p) => (
+            <li key={p} className="flex items-start gap-2">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+              {p}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

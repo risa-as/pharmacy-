@@ -5,90 +5,87 @@ import { ChevronDown } from 'lucide-react';
 
 const faqs = [
   {
-    question: 'هل يمكنني استخدام نظام فاراماس بدون اتصال بالإنترنت؟',
-    answer: 'نعم، برنامج الكاشير (Desktop POS) مصمم للعمل حتى عند انقطاع الإنترنت. يتم حفظ الفواتير والمبيعات محلياً وتتم مزامنتها تلقائياً مع السحابة فور عودة الاتصال، مما يضمن عدم توقف عملك أبداً.'
+    question: 'هل يعمل الكاشير عند انقطاع الإنترنت؟',
+    answer:
+      'نعم. برنامج الكاشير لسطح المكتب يحفظ الفواتير على الجهاز عند انقطاع الاتصال، ويزامنها مع السحابة عند عودته. المزامنة مصممة بحيث لا تتكرر الفاتورة ولا تضيع إن انقطع الرد في منتصفها.',
   },
   {
-    question: 'ما مدى أمان بيانات صيدليتي على السحابة؟',
-    answer: 'نحن نستخدم أحدث تقنيات التشفير المتوافقة مع معايير الأمان العالمية. جميع بياناتك يتم تشفيرها وتخزينها في خوادم سحابية محمية مع نسخ احتياطي يومي (Daily Backups) تلقائي لضمان عدم ضياع أي معلومة.'
+    question: 'كيف تُحمى بيانات صيدليتي؟',
+    answer:
+      'بيانات كل مؤسسة معزولة عن غيرها، والاتصال مشفر، وكل موظف يرى ويعدّل فقط ما تسمح به صلاحياته. أجهزة الكاشير تُعتمد لحسابك، والعمليات الحساسة تُسجل في سجل تدقيق يبين من فعل ماذا ومتى.',
   },
   {
-    question: 'هل يمكنني إدارة أكثر من صيدلية (فروع) بنفس الحساب؟',
-    answer: 'بالتأكيد. باقة الشركات لدينا تدعم إدارة عدد غير محدود من الفروع، مع إمكانية ربط المخازن المركزية بالفروع الخاصة بك وتتبع حركة الأدوية والأرباح لكل فرع على حدة من خلال لوحة تحكم واحدة.'
+    question: 'ما هي شبكة المذاخر؟',
+    answer:
+      'هي ربط الصيدليات بالمذاخر داخل النظام: الصيدلية ترى كتالوج المذخر وأسعاره وترسل طلبها، والمذخر يراجعه ويسعّر كل صنف (متوفر أو جزئي أو نافد) من بوابته، ثم تعتمد الصيدلية العرض فتُنشأ فاتورة الشراء تلقائياً.',
   },
   {
-    question: 'هل يدعم النظام قراءة الباركود وطباعة الفواتير؟',
-    answer: 'نعم، النظام متوافق تماماً مع جميع أنواع أجهزة قراءة الباركود (Barcode Scanners) وطابعات الفواتير الحرارية وطابعات الباركود المنتشرة في السوق العراقي بدون الحاجة لأي إعدادات معقدة.'
+    question: 'أنا صاحب مذخر، كيف أنضم؟',
+    answer:
+      'تواصل معنا وننشئ لك حساب المذخر ونجهز معك كتالوجك (ويمكن استيراده من Excel بالباركود). تدخل من صفحة الدخول نفسها، ويوجهك النظام إلى بوابة المذخر، وتضيف موظفيك بأدوار وصلاحيات مناسبة.',
   },
   {
-    question: 'كيف يمكنني جرد المخزون الخاص بي عبر النظام؟',
-    answer: 'يمكنك جرد المخزون بطريقتين: إما يدوياً عبر لوحة التحكم وأجهزة الكاشير، أو بشكل أسرع وأكثر مرونة من خلال تطبيق الموبايل (Mobile App) الخاص بك عبر استخدام كاميرا الهاتف لمسح باركود الأدوية وتحديث الكميات فوراً.'
+    question: 'هل أحتاج إلى إدخال أدويتي من الصفر؟',
+    answer:
+      'لا. يمكن استيراد الأدوية والمخزون من ملف Excel، ويساعدك فريقنا في تجهيز الملف والتحقق من النتيجة قبل بدء البيع.',
   },
   {
-    question: 'هل يمكنني تحديد صلاحيات معينة لكل موظف/صيدلاني؟',
-    answer: 'نعم، يوفر النظام نظام صلاحيات دقيق جداً (Role-based access). يمكنك إخفاء أسعار الشراء، أو منع الموظف من حذف الفواتير، أو تحديد من يحق له الدخول لتقارير الأرباح والخسائر.'
+    question: 'هل يدعم النظام أكثر من فرع؟',
+    answer:
+      'نعم حسب الباقة: لوحة واحدة لكل الفروع، وتحويل الأصناف بينها، ومقارنة أدائها، مع صلاحيات تقيد كل موظف بفرعه.',
   },
   {
-    question: 'هل يتوفر دعم فني في حال واجهتني مشكلة؟',
-    answer: 'نحن نضع الدعم الفني كأولوية قصوى. يتوفر فريقنا للدعم الفني من الساعة 9 صباحاً حتى 10 مساءً يومياً، مع وجود رقم طوارئ مخصص للمشتركين متاح 24/7 لحل أي مشاكل تقنية فوراً.'
+    question: 'هل يدعم قارئ الباركود والطابعات الحرارية؟',
+    answer:
+      'نعم. يعمل الكاشير مع قارئات الباركود وطابعات الفواتير الحرارية، ويطبع ملصقات الباركود للأصناف. وفي تطبيق الجوال يمكن المسح بالكاميرا للجرد والبحث.',
   },
   {
-    question: 'هل يمكنني استيراد بيانات أدويتي الحالية (Excel)؟',
-    answer: 'نعم! لا داعي لإدخال أدويتك من الصفر. يمكنك استيراد قائمة أدويتك بالكامل دفعة واحدة باستخدام ملف Excel، وسيقوم فريق الدعم الفني بمساعدتك في هذه الخطوة مجاناً عند الاشتراك.'
+    question: 'كيف أعرف الأصناف القريبة من الانتهاء أو الناقصة؟',
+    answer:
+      'المخزون مسجل بالدفعات وتواريخ انتهائها، فينبهك النظام في لوحة التحكم وتطبيق الجوال بالأصناف القريبة من الانتهاء والأصناف التي نزلت تحت حد الطلب، ويقترح عليك «الطلب الذكي» الكميات المناسبة.',
   },
   {
-    question: 'كيف تتم عملية إشعار انتهاء الصلاحية للمواد ونواقص الأدوية؟',
-    answer: 'يحتوي النظام على نظام ذكي للتنبيهات. سيتم إشعارك عبر تطبيق الموبايل ولوحة التحكم عند اقتراب أي مادة من تاريخ انتهاء صلاحيتها (مثلاً قبلها بـ 3 أشهر أو حسب تحديدك)، بالإضافة لتنبيهك عند وصول كمية مادة معينة للحد الأدنى لطلبها من المورد.'
-  }
+    question: 'كيف أحصل على الدعم الفني؟',
+    answer:
+      'عبر واتساب والهاتف باللغة العربية خلال أوقات العمل، ونرافقك في الأيام الأولى بعد التشغيل.',
+  },
 ];
 
 export default function FAQAccordion() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
-  const toggleAccordion = (index: number) => {
-    setOpenIndex(openIndex === index ? null : index);
-  };
-
   return (
-    <div className="space-y-4 max-w-4xl mx-auto">
+    <div className="space-y-3">
       {faqs.map((faq, index) => {
         const isOpen = openIndex === index;
+        const panelId = `faq-panel-${index}`;
         return (
-          <div 
-            key={index}
-            className={`bg-white dark:bg-slate-800 border transition-all duration-300 rounded-2xl overflow-hidden ${
-              isOpen 
-                ? 'border-primary-500 shadow-md shadow-primary-500/10' 
-                : 'border-slate-200 dark:border-slate-700 hover:border-primary-200 dark:hover:border-primary-800'
+          <div
+            key={faq.question}
+            className={`overflow-hidden rounded-2xl bg-white ring-1 transition-all duration-300 ${
+              isOpen ? 'ring-primary-300 shadow-soft' : 'ring-slate-200 hover:ring-primary-200'
             }`}
           >
-            <button
-              onClick={() => toggleAccordion(index)}
-              className="w-full text-right px-6 py-5 flex items-center justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            >
-              <h3 className={`font-bold pr-2 text-lg sm:text-lg transition-colors duration-300 ${
-                isOpen ? 'text-primary-600 dark:text-primary-400' : 'text-slate-800 dark:text-slate-200'
-              }`}>
-                {faq.question}
-              </h3>
-              <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
-                isOpen 
-                  ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-400 rotate-180' 
-                  : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-              }`}>
-                <ChevronDown size={18} />
-              </div>
-            </button>
-            <div 
-              className={`transition-all duration-300 ease-in-out ${
-                isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-              }`}
-            >
-              <div className="px-6 pb-6 pt-0 border-t border-slate-100 dark:border-slate-700/50 mt-4 mr-2">
-                <p className="text-slate-600 dark:text-slate-400 leading-relaxed pt-4">
-                  {faq.answer}
-                </p>
-              </div>
+            <h3>
+              <button
+                type="button"
+                onClick={() => setOpenIndex(isOpen ? null : index)}
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                className="flex w-full items-center justify-between gap-4 px-6 py-5 text-right"
+              >
+                <span className={`text-lg font-bold transition-colors ${isOpen ? 'text-primary-700' : 'text-slate-800'}`}>{faq.question}</span>
+                <span
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
+                    isOpen ? 'rotate-180 bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  <ChevronDown size={18} />
+                </span>
+              </button>
+            </h3>
+            <div id={panelId} role="region" hidden={!isOpen} className="px-6 pb-6">
+              <p className="border-t border-slate-100 pt-4 leading-relaxed text-slate-600">{faq.answer}</p>
             </div>
           </div>
         );

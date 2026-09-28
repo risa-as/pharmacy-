@@ -4,26 +4,82 @@
 
 @layer base {
   :root {
-    --primary: 15 117 117; /* #0F7575 in RGB */
+    --primary: 15 117 117; /* #0F7575 */
     --primary-light: 20 184 166; /* #14b8a6 */
     --accent: 245 158 11; /* #F59E0B */
   }
 
   html {
     scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-white text-slate-700;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    @apply bg-primary-200 text-primary-950;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2;
   }
 }
 
 @layer utilities {
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-l from-primary-700 to-primary-400 dark:from-primary-300 dark:to-primary-100;
+    @apply bg-clip-text text-transparent bg-gradient-to-l from-primary-700 to-primary-500;
   }
-  
+
+  .text-gradient-warm {
+    @apply bg-clip-text text-transparent bg-gradient-to-l from-accent to-amber-300;
+  }
+
   .bg-gradient-primary {
-    @apply bg-gradient-to-br from-primary-800 to-primary-600;
+    @apply bg-gradient-to-br from-primary-700 to-primary-600;
   }
-  
+
+  .bg-gradient-brand {
+    @apply bg-gradient-to-l from-primary-600 to-accent;
+  }
+
+  /* Fine grid used on dark bands. */
+  .bg-grid-dark {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .bg-grid-light {
+    background-image:
+      linear-gradient(to right, rgba(15, 117, 117, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15, 117, 117, 0.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .mask-fade-b {
+    mask-image: linear-gradient(to bottom, black 55%, transparent);
+  }
+
   .glass-effect {
-    @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-white/20 dark:border-slate-800;
+    @apply bg-white/80 backdrop-blur-md border border-white/20;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

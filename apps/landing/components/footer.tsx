@@ -1,190 +1,75 @@
-import Link from "next/link";
-import {
-  Facebook,
-  Twitter,
-  Instagram,
-  Linkedin,
-  MapPin,
-  Phone,
-  Mail,
-} from "lucide-react";
+import Link from 'next/link';
+import { MapPin, Phone, Mail } from 'lucide-react';
+import Logo from './logo';
+
+const columns = [
+  {
+    title: 'المنصة',
+    links: [
+      { name: 'لوحة التحكم (الويب)', href: '/features#web' },
+      { name: 'برنامج الكاشير (سطح المكتب)', href: '/features#desktop' },
+      { name: 'تطبيق الجوال', href: '/features#mobile' },
+      { name: 'العمل دون إنترنت', href: '/features#offline' },
+      { name: 'شبكة المذاخر', href: '/warehouses' },
+    ],
+  },
+  {
+    title: 'الشركة',
+    links: [
+      { name: 'الباقات والأسعار', href: '/pricing' },
+      { name: 'تحميل التطبيقات', href: '/download' },
+      { name: 'تواصل معنا', href: '/contact' },
+      { name: 'تسجيل الدخول', href: 'https://app.faramace.com/login' },
+    ],
+  },
+];
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear();
+  const year = new Date().getFullYear();
 
   return (
-    <footer className="bg-slate-900 text-slate-300 pt-16 pb-8 border-t border-slate-800">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
-          {/* Brand Info */}
+    <footer className="bg-ink-950 text-slate-400">
+      <div className="container pt-16 pb-8">
+        <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <div>
-            <Link href="/" className="flex items-center gap-2 mb-6">
-              <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-                F
-              </div>
-              <span className="text-2xl font-bold text-white">فاراماس</span>
-            </Link>
-            <p className="text-slate-400 mb-6 leading-relaxed">
-              نظام فاراماس هو الحل السحابي الأول لإدارة الصيدليات. نعمل على
-              تبسيط عملياتك، تقليل الهدر المالي، وزيادة الأرباح عبر أحدث
-              التقنيات.
+            <Logo tone="light" />
+            <p className="mt-5 max-w-sm leading-relaxed">
+              نظام متكامل لإدارة الصيدليات وربطها بالمذاخر: بيع سريع يعمل دون إنترنت، مخزون بالدفعات وتواريخ الانتهاء، وحسابات
+              وتقارير في لوحة واحدة.
             </p>
-            <div className="flex items-center gap-4">
-              <a
-                href="#"
-                className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-primary-600 hover:text-white transition-colors"
-              >
-                <Facebook size={20} />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-primary-600 hover:text-white transition-colors"
-              >
-                <Twitter size={20} />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-primary-600 hover:text-white transition-colors"
-              >
-                <Instagram size={20} />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-primary-600 hover:text-white transition-colors"
-              >
-                <Linkedin size={20} />
-              </a>
+          </div>
+
+          {columns.map((col) => (
+            <div key={col.title}>
+              <h3 className="mb-5 font-extrabold text-white">{col.title}</h3>
+              <ul className="space-y-3">
+                {col.links.map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href} className="transition-colors hover:text-white">
+                      {l.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
+          ))}
 
-          {/* Quick Links */}
           <div>
-            <h3 className="text-white font-bold text-lg mb-6 relative inline-block">
-              روابط سريعة
-              <span className="absolute bottom-0 right-0 w-1/2 h-1 bg-primary-600 rounded-full -mb-2"></span>
-            </h3>
-            <ul className="space-y-4">
-              <li>
-                <Link
-                  href="/"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
-                  الرئيسية
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/features"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
-                  مميزات النظام
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/pricing"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
-                  باقات الاشتراك
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/download"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
-                  تحميل التطبيقات
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contact"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
-                  تواصل معنا
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Platform Links */}
-          <div>
-            <h3 className="text-white font-bold text-lg mb-6 relative inline-block">
-              الأنظمة المدعومة
-              <span className="absolute bottom-0 right-0 w-1/2 h-1 bg-primary-600 rounded-full -mb-2"></span>
-            </h3>
-            <ul className="space-y-4">
-              <li>
-                <Link
-                  href="/features#web"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                  لوحة تحكم الويب (للإدارة)
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/features#mobile"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                  تطبيق الهاتف (للإدارة والمتابعة)
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/features#desktop"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                  برنامج سطح المكتب (POS)
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/features#offline"
-                  className="hover:text-primary-400 transition-colors flex items-center gap-2"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                  مزامنة Offline
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Contact Info */}
-          <div>
-            <h3 className="text-white font-bold text-lg mb-6 relative inline-block">
-              معلومات الاتصال
-              <span className="absolute bottom-0 right-0 w-1/2 h-1 bg-primary-600 rounded-full -mb-2"></span>
-            </h3>
+            <h3 className="mb-5 font-extrabold text-white">تواصل معنا</h3>
             <ul className="space-y-4">
               <li className="flex items-start gap-3">
-                <MapPin className="text-primary-500 mt-1 shrink-0" size={20} />
-                <span>
-                  بغداد، العراق
-                  <br />
-                  الدورة , شارع ابو طيارة
-                </span>
+                <MapPin className="mt-0.5 shrink-0 text-primary-400" size={18} />
+                <span>بغداد، العراق — الدورة، شارع أبو طيارة</span>
               </li>
               <li className="flex items-center gap-3">
-                <Phone className="text-primary-500 shrink-0" size={20} />
-                <span dir="ltr" className="text-right">
-                  07857581997
-                </span>
+                <Phone className="shrink-0 text-primary-400" size={18} />
+                <a href="tel:+9647857581997" dir="ltr" className="transition-colors hover:text-white">
+                  0785 758 1997
+                </a>
               </li>
               <li className="flex items-center gap-3">
-                <Mail className="text-primary-500 shrink-0" size={20} />
-                <a
-                  href="mailto:info@faramace.com"
-                  className="hover:text-white transition-colors"
-                >
+                <Mail className="shrink-0 text-primary-400" size={18} />
+                <a href="mailto:info@faramace.com" className="transition-colors hover:text-white">
                   info@faramace.com
                 </a>
               </li>
@@ -192,21 +77,11 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500">
-          <p>
-            © {currentYear} شركة فاراماس للحلول البرمجية. جميع الحقوق محفوظة.
-          </p>
+        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-8 text-sm md:flex-row">
+          <p>© {year} فاراماس للحلول البرمجية. جميع الحقوق محفوظة.</p>
           <div className="flex items-center gap-6">
-            <Link
-              href="/privacy"
-              className="hover:text-white transition-colors"
-            >
-              سياسة الخصوصية
-            </Link>
-            <Link href="/terms" className="hover:text-white transition-colors">
-              شروط الاستخدام
-            </Link>
+            <Link href="/privacy" className="transition-colors hover:text-white">سياسة الخصوصية</Link>
+            <Link href="/terms" className="transition-colors hover:text-white">شروط الاستخدام</Link>
           </div>
         </div>
       </div>

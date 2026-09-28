@@ -2,114 +2,116 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
+import Logo from './logo';
+
+const APP_LOGIN = 'https://app.faramace.com/login';
+
+const navLinks = [
+  { name: 'المميزات', href: '/features' },
+  { name: 'المذاخر', href: '/warehouses', badge: 'جديد' },
+  { name: 'الأسعار', href: '/pricing' },
+  { name: 'التحميل', href: '/download' },
+  { name: 'تواصل معنا', href: '/contact' },
+];
 
 export default function Navbar() {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const [scrolled, setScrolled] = useState(false);
+  const [open, setOpen] = useState(false);
+  // Pages that open on a dark band keep a light header until the user scrolls.
+  const overDark = !scrolled && (pathname === '/' || pathname === '/warehouses');
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const navLinks = [
-    { name: 'الرئيسية', href: '/' },
-    { name: 'المميزات', href: '/#features' },
-    { name: 'الأنظمة', href: '/#platforms' },
-    { name: 'الأسعار', href: '/pricing' },
-    { name: 'تحميل', href: '/download' },
-    { name: 'تواصل معنا', href: '/contact' },
-  ];
+  useEffect(() => setOpen(false), [pathname]);
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? 'bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-sm border-b border-slate-100 dark:border-slate-800 py-3' : 'bg-transparent py-5'
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
+        scrolled || open ? 'bg-white/90 backdrop-blur-lg shadow-[0_1px_0_rgba(15,23,42,0.06)] py-3' : 'bg-transparent py-5'
       }`}
     >
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg">
-              F
-            </div>
-            <span className={`text-2xl font-bold ${isScrolled ? 'text-primary-800 dark:text-primary-400' : 'text-slate-800 dark:text-slate-100'}`}>
-              فاراماس
-            </span>
-          </Link>
+      <div className="container">
+        <div className="flex items-center justify-between gap-6">
+          <Logo tone={overDark && !open ? 'light' : 'dark'} />
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                href={link.href}
-                className="text-slate-600 dark:text-slate-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition-colors"
-              >
-                {link.name}
-              </Link>
-            ))}
+          <nav className="hidden items-center gap-1 lg:flex" aria-label="التنقل الرئيسي">
+            {navLinks.map((link) => {
+              const active = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`relative flex items-center gap-1.5 rounded-lg px-3.5 py-2 font-semibold transition-colors ${
+                    overDark
+                      ? active ? 'text-white' : 'text-primary-100/80 hover:text-white'
+                      : active ? 'text-primary-700' : 'text-slate-600 hover:text-primary-700'
+                  }`}
+                >
+                  {link.name}
+                  {link.badge && (
+                    <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-black leading-none text-ink-950">{link.badge}</span>
+                  )}
+                </Link>
+              );
+            })}
           </nav>
 
-          {/* Desktop Auth Button */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden items-center gap-2 lg:flex">
             <Link
-              href="https://app.faramace.com/login" // Update this to actual dashboard URL later
-              className="text-primary-700 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition-colors"
+              href={APP_LOGIN}
+              className={`rounded-lg px-4 py-2 font-bold transition-colors ${overDark ? 'text-white hover:bg-white/10' : 'text-primary-700 hover:bg-primary-50'}`}
             >
               تسجيل الدخول
             </Link>
             <Link
-              href="/pricing"
-              className="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+              href="/contact"
+              className={`rounded-xl px-5 py-2.5 font-bold shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-lift ${
+                overDark ? 'bg-accent text-ink-950 hover:bg-amber-400' : 'bg-primary-700 text-white hover:bg-primary-800'
+              }`}
             >
-              ابدأ مجاناً
+              اطلب عرضاً تجريبياً
             </Link>
           </div>
 
-          {/* Mobile Menu Button */}
           <button
-            className="md:hidden text-slate-600 p-2"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            type="button"
+            className={`rounded-lg p-2 lg:hidden ${overDark && !open ? 'text-white' : 'text-slate-700'}`}
+            onClick={() => setOpen((v) => !v)}
+            aria-label={open ? 'إغلاق القائمة' : 'فتح القائمة'}
+            aria-expanded={open}
+            aria-controls="mobile-menu"
           >
-            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            {open ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shadow-xl py-4 px-4 flex flex-col gap-4">
-          {navLinks.map((link) => (
-            <Link
-              key={link.name}
-              href={link.href}
-              className="text-slate-700 dark:text-slate-200 font-medium py-2 px-4 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              {link.name}
+      {open && (
+        <div id="mobile-menu" className="absolute inset-x-0 top-full border-t border-slate-100 bg-white px-4 pb-6 pt-3 shadow-lift lg:hidden">
+          <nav className="flex flex-col gap-1" aria-label="التنقل على الجوال">
+            {navLinks.map((link) => (
+              <Link key={link.href} href={link.href} className="flex items-center justify-between rounded-xl px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50">
+                {link.name}
+                {link.badge && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-black text-ink-950">{link.badge}</span>}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Link href={APP_LOGIN} className="rounded-xl py-3 text-center font-bold text-primary-700 ring-1 ring-primary-200">
+              تسجيل الدخول
             </Link>
-          ))}
-          <div className="h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
-          <Link
-            href="https://app.faramace.com/login"
-            className="text-center font-semibold text-primary-700 dark:text-primary-400 py-2 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-slate-800"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            تسجيل الدخول
-          </Link>
-          <Link
-            href="/pricing"
-            className="text-center font-semibold text-white bg-primary-600 py-2 rounded-lg"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            ابدأ مجاناً
-          </Link>
+            <Link href="/contact" className="rounded-xl bg-primary-700 py-3 text-center font-bold text-white">
+              اطلب عرضاً
+            </Link>
+          </div>
         </div>
       )}
     </header>

@@ -4,54 +4,58 @@ import { ButtonHTMLAttributes } from 'react';
 
 interface CTAButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   href?: string;
-  variant?: 'primary' | 'secondary' | 'outline' | 'glass';
+  variant?: 'primary' | 'secondary' | 'outline' | 'glass' | 'accent';
   size?: 'sm' | 'md' | 'lg';
   icon?: boolean;
   fullWidth?: boolean;
 }
 
-export default function CTAButton({ 
-  children, 
-  href, 
-  variant = 'primary', 
+export default function CTAButton({
+  children,
+  href,
+  variant = 'primary',
   size = 'md',
   icon = false,
   fullWidth = false,
   className = '',
-  ...props 
+  ...props
 }: CTAButtonProps) {
-  
-  const baseClasses = "inline-flex items-center justify-center font-bold transition-all duration-300 rounded-xl transform active:scale-95";
-  
+  const base =
+    'group inline-flex items-center justify-center font-bold transition-all duration-200 rounded-xl active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500';
+
   const variants = {
-    primary: "bg-gradient-primary text-white shadow-lg hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5 border border-transparent",
-    secondary: "bg-white text-primary-700 shadow-md hover:shadow-lg hover:-translate-y-0.5 border border-slate-100 hover:border-primary-100",
-    outline: "bg-transparent text-primary-700 border-2 border-primary-600 hover:bg-primary-50",
-    glass: "bg-white/20 backdrop-blur-md text-white border border-white/40 hover:bg-white/30"
+    primary: 'bg-primary-700 text-white shadow-soft hover:bg-primary-800 hover:shadow-lift',
+    accent: 'bg-accent text-ink-950 shadow-soft hover:bg-amber-400 hover:shadow-lift',
+    secondary: 'bg-white text-primary-800 shadow-soft ring-1 ring-slate-200 hover:ring-primary-200 hover:shadow-lift',
+    outline: 'bg-transparent text-primary-700 ring-1 ring-inset ring-primary-300 hover:bg-primary-50',
+    glass: 'bg-white/10 text-white ring-1 ring-inset ring-white/25 backdrop-blur-md hover:bg-white/20',
   };
-  
+
   const sizes = {
-    sm: "text-sm px-4 py-2 gap-2",
-    md: "text-base px-6 py-3 gap-2",
-    lg: "text-lg px-8 py-4 gap-3"
+    sm: 'text-sm px-4 py-2 gap-2',
+    md: 'text-base px-6 py-3 gap-2',
+    lg: 'text-base md:text-lg px-7 py-3.5 md:py-4 gap-2.5',
   };
-  
-  const widthClass = fullWidth ? 'w-full' : '';
-  const mergedClasses = `${baseClasses} ${variants[variant]} ${sizes[size]} ${widthClass} ${className}`;
+
+  const classes = `${base} ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`;
+  const arrow = icon && (
+    <ArrowLeft size={size === 'lg' ? 20 : 18} className="transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
+  );
 
   if (href) {
+    const external = /^https?:\/\//.test(href);
     return (
-      <Link href={href} className={mergedClasses}>
+      <Link href={href} className={classes} {...(external ? { rel: 'noopener' } : {})}>
         {children}
-        {icon && <ArrowLeft size={size === 'lg' ? 24 : 20} className="mr-1" />}
+        {arrow}
       </Link>
     );
   }
 
   return (
-    <button className={mergedClasses} {...props}>
+    <button className={classes} {...props}>
       {children}
-      {icon && <ArrowLeft size={size === 'lg' ? 24 : 20} className="mr-1" />}
+      {arrow}
     </button>
   );
 }
