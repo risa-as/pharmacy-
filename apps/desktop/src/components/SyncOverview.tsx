@@ -70,6 +70,7 @@ export default function SyncOverview({
     }
   }
   const failed = Number(health?.failedCount || 0),
+    reviews = Number(health?.reviewCount ?? health?.failedCount ?? 0),
     pending = Number(health?.pendingCount || 0),
     working = busy || health?.inProgress;
   const title = readError
@@ -78,8 +79,10 @@ export default function SyncOverview({
       ? "جارٍ قراءة الحالة…"
       : working
         ? "جارٍ المزامنة"
-        : failed
-          ? `${failed} عملية تحتاج مراجعة`
+        : failed > reviews
+          ? "توجد عمليات مخزون متعثرة"
+          : reviews
+          ? `${reviews} عملية محفوظة للمراجعة`
           : pending
             ? `${pending} عملية بانتظار الإرسال`
             : "جميع العمليات مُرسلة";
@@ -110,10 +113,14 @@ export default function SyncOverview({
           {counters.map(([label, n]) => `${label}: ${n}`).join(" · ")}
         </p>
       )}
-      {failed > 0 && (
+      {reviews > 0 && failed === reviews && pending === 0 && !working && (
         <p className="text-sm text-muted-foreground">
-          راجع سبب التعثر أدناه أو اطلب من المسؤول مراجعته، ولا تُعد تسجيل
-          العملية.
+          لا توجد عمليات بانتظار الإرسال. المراجعات المحفوظة منفصلة عن حالة الاتصال.
+        </p>
+      )}
+      {reviews > 0 && (
+        <p className="text-sm text-muted-foreground">
+          هذه العمليات تحتاج مراجعة مستنداتها، ولا تُحل بمجرد إعادة المزامنة. لا تُعد تسجيلها.
         </p>
       )}
       {!onDetails && health?.retryableIssues?.length > 0 && (
