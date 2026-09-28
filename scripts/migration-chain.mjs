@@ -22,6 +22,22 @@ const sqlOf = (name) => readFileSync(join(MIGRATIONS, name, 'migration.sql'), 'u
 /** Prisma's checksum: SHA-256 of the migration.sql bytes. */
 export const checksum = (name) => createHash('sha256').update(readFileSync(join(MIGRATIONS, name, 'migration.sql'))).digest('hex');
 
+/**
+ * How a recorded checksum matches the local file: 'exact' (same bytes), 'lf' or 'crlf'
+ * (the same text with only its line endings converted), or null (the text differs).
+ * Prisma hashes raw bytes, so a migration applied from a Windows checkout (CRLF) and one
+ * applied from LF record different checksums for the same SQL; production holds both.
+ */
+export function checksumMatch(name, recorded) {
+    const bytes = readFileSync(join(MIGRATIONS, name, 'migration.sql'));
+    const sha = (b) => createHash('sha256').update(b).digest('hex');
+    if (sha(bytes) === recorded) return 'exact';
+    const lf = bytes.toString('utf8').replace(/\r\n/g, '\n');
+    if (sha(Buffer.from(lf, 'utf8')) === recorded) return 'lf';
+    if (sha(Buffer.from(lf.replace(/\n/g, '\r\n'), 'utf8')) === recorded) return 'crlf';
+    return null;
+}
+
 export function postgresUrl(value, label) {
     if (!value) throw new Error(`${label} is required.`);
     const url = new URL(value);
@@ -78,11 +94,22 @@ export async function sqlObjectDefinitions(db) {
         ORDER BY kind, identity`);
 }
 
-export async function changedSqlObjects(target, shadow) {
+/**
+ * Objects whose definition or state differs from the replayed chain. A difference that
+ * disappears when CRLF is read as LF (a function created from a Windows checkout) is not
+ * a change of text: it is collected in `lineEndingOnly` instead, so callers can report it.
+ */
+export async function changedSqlObjects(target, shadow, lineEndingOnly = []) {
     const [actual, expected] = await Promise.all([sqlObjectDefinitions(target), sqlObjectDefinitions(shadow)]);
     const byKey = new Map(actual.map(o => [o.kind + ':' + o.identity, o.definition]));
-    return expected.filter(o => byKey.get(o.kind + ':' + o.identity) !== o.definition)
-        .map(o => o.kind + ':' + o.identity);
+    const lf = (s) => (typeof s === 'string' ? s.replace(/\r\n/g, '\n') : s);
+    const changed = [];
+    for (const o of expected) {
+        const key = o.kind + ':' + o.identity, found = byKey.get(key);
+        if (found === o.definition) continue;
+        if (found !== undefined && lf(found) === lf(o.definition)) lineEndingOnly.push(key); else changed.push(key);
+    }
+    return changed;
 }
 
 /** A migrations directory holding only the first `count` migrations (state after `count`). */

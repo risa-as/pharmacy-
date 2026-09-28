@@ -32,3 +32,14 @@ test('repair migrations sort before the migration they unblock and never modify 
     assert.ok(repairs.length >= 1);
     for (const name of repairs) assert.ok(!(name in (baseline.historical ?? {})), `${name} must be a new migration`);
 });
+
+test('a recorded checksum matches the same text with LF or CRLF endings, and nothing else', async () => {
+    const { checksumMatch } = await import('./migration-chain.mjs');
+    const name = '20260927000000_invoice_scope_and_device_fk';
+    const text = readFileSync(`${dir}/${name}/migration.sql`, 'utf8').replace(/\r\n/g, '\n');
+    const sha = (s) => createHash('sha256').update(Buffer.from(s, 'utf8')).digest('hex');
+    assert.ok(['exact', 'lf'].includes(checksumMatch(name, sha(text))));
+    assert.ok(['exact', 'crlf'].includes(checksumMatch(name, sha(text.replace(/\n/g, '\r\n')))));
+    assert.equal(checksumMatch(name, sha(text + '\n-- edited')), null);
+    assert.equal(checksumMatch(name, sha(text.replace('ALTER', 'alter'))), null);
+});

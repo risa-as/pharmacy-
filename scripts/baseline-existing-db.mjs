@@ -29,7 +29,7 @@
 // separate, empty database whose name contains "shadow".
 import { writeFileSync } from 'node:fs';
 import {
-    SCHEMA, checksum, client, dataSteps, diffAgainstPrefix, diffAgainstSchema, isEmpty, migrationNames,
+    SCHEMA, checksumMatch, client, dataSteps, diffAgainstPrefix, diffAgainstSchema, isEmpty, migrationNames,
     missingObjects, postgresUrl, prisma, sameDatabase, sqlObjects, changedSqlObjects,
 } from './migration-chain.mjs';
 
@@ -40,11 +40,16 @@ const reportPath = args.includes('--report') ? args[args.indexOf('--report') + 1
 class Refused extends Error {}
 const fail = (message) => { throw new Refused(message); };
 let SHADOW = null, shadowVerified = false, targetMayHaveChanged = false;
+/** Objects whose definition differs from the replay only by line endings (reported). */
+const lineEndingObjects = new Set();
 async function verifyDefinitions(db) {
     const shadow = client(SHADOW);
     try {
-        const changed = await changedSqlObjects(db, shadow);
+        const eolOnly = [];
+        const changed = await changedSqlObjects(db, shadow, eolOnly);
+        eolOnly.forEach((o) => lineEndingObjects.add(o));
         if (changed.length) fail(`SQL object definitions or enabled state differ from the replayed migrations: ${changed.join(', ')}`);
+        if (eolOnly.length) console.log(`SQL objects created from CRLF files, same text: ${eolOnly.join(', ')}`);
     } finally { await shadow.$disconnect(); }
 }
 /** Prisma leaves the replayed chain in the shadow; empty it again (only a shadow verified empty at the start). */
@@ -85,8 +90,13 @@ try {
     if (broken.length) fail(`unfinished migrations in _prisma_migrations: ${broken.map((r) => r.migration_name).join(', ')}. Resolve them first.`);
     const unknown = activeRows.filter((r) => !names.includes(r.migration_name));
     if (unknown.length) fail(`the database records migrations that do not exist here: ${unknown.map((r) => r.migration_name).join(', ')}.`);
-    const edited = activeRows.filter((r) => r.checksum !== checksum(r.migration_name));
-    if (edited.length) fail(`recorded checksum differs from the local file for: ${edited.map((r) => `${r.migration_name} (checksum)`).join(', ')}. A migration was edited after it was applied.`);
+    // Same text is required; only the line endings may differ from this checkout
+    // (listed in the report, never silently).
+    const matches = activeRows.map((r) => ({ name: r.migration_name, match: checksumMatch(r.migration_name, r.checksum) }));
+    const edited = matches.filter((m) => !m.match);
+    if (edited.length) fail(`recorded checksum differs from the local file for: ${edited.map((m) => `${m.name} (checksum)`).join(', ')}. A migration was edited after it was applied.`);
+    report.lineEndingOnly = matches.filter((m) => m.match !== 'exact').map((m) => `${m.name} (${m.match})`);
+    if (report.lineEndingOnly.length) console.log(`Recorded with other line endings, same text: ${report.lineEndingOnly.join(', ')}`);
     const recorded = new Set(activeRows.map((r) => r.migration_name));
     const lastRecorded = Math.max(-1, ...[...recorded].map((n) => names.indexOf(n)));
     report.recorded = recorded.size;
@@ -162,6 +172,7 @@ try {
     }
 } finally {
     await db.$disconnect();
+    report.sqlLineEndingOnly = [...lineEndingObjects];
     if (reportPath) writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
 }
 }
