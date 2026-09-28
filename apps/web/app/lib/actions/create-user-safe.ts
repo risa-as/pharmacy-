@@ -9,6 +9,7 @@ import { checkPlanLimit } from "@/app/lib/saas-guards";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { logAudit } from "@/app/lib/audit";
+import { findScopedBranch, mayAssignRole } from "@/app/lib/user-scope";
 
 const UserSchema = z.object({
     id: z.string(),
@@ -23,6 +24,8 @@ const CreateUser = UserSchema.omit({ id: true });
 
 export async function createUser(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext('write');
+    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canManageUsers) return { message: "ليس لديك صلاحية لإدارة المستخدمين." };
 
     const validatedFields = CreateUser.safeParse({
         name: formData.get("name"),
@@ -41,23 +44,22 @@ export async function createUser(prevState: any, formData: FormData) {
 
     const { name, email, password, role, branchId } = validatedFields.data;
 
-    // Iron Wall: enforce per-plan user limit.
-    // Derive organizationId from the target branch, or fall back to the first org.
-    const orgRef = branchId
-        ? await prisma.branch.findUnique({ where: { id: branchId }, select: { organizationId: true } })
-        : await prisma.branch.findFirst({ select: { organizationId: true } });
+    // The new user's branch must be inside the caller's organisation, and granting
+    // ADMIN is for an ADMIN or the platform owner (user-scope.ts).
+    const orgRef = await findScopedBranch(tenantCtx, branchId);
+    if (!orgRef) return { message: "الفرع خارج نطاق مؤسستك." };
+    if (!mayAssignRole(tenantCtx, role)) return { message: "لا يمكنك منح دور المدير." };
 
-    if (orgRef?.organizationId) {
-        const limitCheck = await checkPlanLimit(orgRef.organizationId, "users");
-        if (!limitCheck.allowed) {
-            return {
-                limitReached: true,
-                current: limitCheck.current,
-                max: limitCheck.max,
-                upgradeRequired: true,
-                message: `لقد وصلت إلى الحد الأقصى من المستخدمين في خطتك (${limitCheck.current}/${limitCheck.max}). يرجى الترقية للاستمرار.`,
-            };
-        }
+    // Iron Wall: enforce per-plan user limit of the branch's (verified) organisation.
+    const limitCheck = await checkPlanLimit(orgRef.organizationId, "users");
+    if (!limitCheck.allowed) {
+        return {
+            limitReached: true,
+            current: limitCheck.current,
+            max: limitCheck.max,
+            upgradeRequired: true,
+            message: `لقد وصلت إلى الحد الأقصى من المستخدمين في خطتك (${limitCheck.current}/${limitCheck.max}). يرجى الترقية للاستمرار.`,
+        };
     }
 
     try {
@@ -79,21 +81,19 @@ export async function createUser(prevState: any, formData: FormData) {
                 email,
                 password: hashedPassword,
                 role,
-                branchId: branchId || null,
+                branchId: orgRef.id,
             },
         });
 
-        if (!(tenantCtx instanceof NextResponse)) {
-            await logAudit({
-                userId: tenantCtx.user.id,
-                userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
-                action: 'CREATE',
-                entity: 'USER',
-                entityId: newUser.id,
-                details: JSON.stringify({ name, email, role }),
-                branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
-            });
-        }
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'CREATE',
+            entity: 'USER',
+            entityId: newUser.id,
+            details: JSON.stringify({ name, email, role }),
+            branchId: orgRef.id,
+        });
     } catch (error) {
         console.error("Error creating user:", error);
         return { message: "خطأ في قاعدة البيانات: فشل في إنشاء المستخدم." };

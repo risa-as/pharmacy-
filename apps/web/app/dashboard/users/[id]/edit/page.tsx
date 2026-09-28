@@ -6,7 +6,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import EditUserForm from "@/app/ui/users/edit-form";
-import { getTenantContext } from '@/app/lib/tenant-utils';
+import { getTenantContext, type TenantContext } from '@/app/lib/tenant-utils';
+import { USER_SAFE_SELECT, managedUserWhere } from '@/app/lib/user-scope';
 import { NextResponse } from 'next/server';
 
 
@@ -17,10 +18,12 @@ async function getBranches(tenantWhere: any) {
     });
 }
 
-async function getUser(id: string, tenantBranchWhere: any) {
-    return await prisma.user.findUnique({
-        where: { id, ...tenantBranchWhere },
-        include: { branch: true },
+// Only a user the caller manages, and never the stored password: the result is passed
+// to a client component, so every selected field reaches the browser.
+async function getUser(id: string, tenantCtx: TenantContext) {
+    return await prisma.user.findFirst({
+        where: { AND: [{ id }, managedUserWhere(tenantCtx)] },
+        select: USER_SAFE_SELECT,
     });
 }
 
@@ -28,10 +31,10 @@ export default async function EditUserPage(props: { params: Promise<{ id: string
     const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantWhere, tenantBranchWhere } = tenantCtx;
+    const { tenantWhere } = tenantCtx;
 
     const [user, branches] = await Promise.all([
-        getUser(params.id, tenantBranchWhere),
+        getUser(params.id, tenantCtx),
         getBranches(tenantWhere),
     ]);
 

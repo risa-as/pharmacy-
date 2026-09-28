@@ -45,6 +45,11 @@ export async function createInventory(prevState: any, formData: FormData) {
 
     const { branchId, drugId, price, cost, minStock, maxStock } = validatedFields.data;
 
+    // Same scope as updateInventory: a branch of the caller, a drug the pharmacy may see.
+    const branch = await prisma.branch.findFirst({ where: { AND: [tenantCtx.branchModelWhere, { id: branchId }] }, select: { id: true } });
+    const drug = await prisma.globalDrug.findFirst({ where: { AND: [pharmacyDrugScope(tenantCtx.organizationId), { id: drugId }] }, select: { id: true } });
+    if (!branch || !drug) return { message: "الفرع أو الدواء خارج نطاقك." };
+
     try {
         // التحقق من عدم وجود المخزون مسبقاً
         const existingInventory = await prisma.inventory.findFirst({
@@ -164,14 +169,17 @@ export async function deleteInventory(id: string) {
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
     if (!tenantCtx.userPermissions.canDeleteDrug) return { message: "ليس لديك صلاحية لحذف الأدوية من المخزون." };
 
+    const inventory = await prisma.inventory.findFirst({ where: { AND: [tenantCtx.tenantBranchWhere, { id }] }, select: { id: true, branchId: true } });
+    if (!inventory) return { message: "المخزون خارج نطاقك." };
+
     try {
         // حذف الدفعات أولاً
         await prisma.batch.deleteMany({
-            where: { inventoryId: id },
+            where: { inventoryId: inventory.id },
         });
 
         await prisma.inventory.delete({
-            where: { id },
+            where: { id: inventory.id },
         });
 
         await logAudit({
@@ -180,7 +188,7 @@ export async function deleteInventory(id: string) {
             action: 'DELETE',
             entity: 'INVENTORY',
             entityId: id,
-            branchId: tenantCtx.user.branchId ?? undefined,
+            branchId: inventory.branchId,
         });
 
         revalidatePath("/dashboard/inventory");
@@ -210,6 +218,9 @@ export async function addBatch(prevState: any, formData: FormData) {
     if (!scopedInventory) return {message:"المخزون خارج نطاقك."};
     const expiryDate = new Date(formData.get("expiryDate") as string);
     const supplierId = (formData.get("supplierId") as string) || null;
+    if (supplierId && !(await prisma.supplier.findFirst({ where: { id: supplierId, organizationId: tenantCtx.organizationId ?? undefined }, select: { id: true } }))) {
+        return { message: "المورد غير موجود في مؤسستك." };
+    }
 
     if (!inventoryId || !quantity || !expiryDate) {
         return { message: "جميع الحقول مطلوبة." };
@@ -278,10 +289,13 @@ export async function addBatch(prevState: any, formData: FormData) {
 export async function updateBatchQuantity(batchId: string, newQuantity: number) {
     const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لتعديل الدفعات." };
+    if (!Number.isSafeInteger(newQuantity) || newQuantity < 0) return { message: "الكمية يجب أن تكون عدداً صحيحاً غير سالب." };
 
     try {
-        const batch = await prisma.batch.findUnique({
-            where: { id: batchId },
+        // Only a batch of the caller's branches (inventory row in scope).
+        const batch = await prisma.batch.findFirst({
+            where: { id: batchId, inventory: tenantCtx.tenantBranchWhere },
             select: { quantity: true, initialQuantity: true },
         });
         if (!batch) return { message: "الدفعة غير موجودة." };
@@ -318,7 +332,10 @@ export async function deleteBatch(id: string) {
     if (!tenantCtx.userPermissions.canEditDrug) return { message: "ليس لديك صلاحية لحذف الدفعات." };
 
     try {
-        await prisma.batch.delete({ where: { id } });
+        // Only a batch of the caller's branches (inventory row in scope).
+        const batch = await prisma.batch.findFirst({ where: { id, inventory: tenantCtx.tenantBranchWhere }, select: { id: true } });
+        if (!batch) return { message: "الدفعة غير موجودة." };
+        await prisma.batch.delete({ where: { id: batch.id } });
         await logAudit({
             userId: tenantCtx.user.id,
             userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { logAudit } from "@/app/lib/audit";
+import { USER_SAFE_SELECT } from "@/app/lib/user-scope";
 
 
 // --- Company Settings ---
@@ -104,20 +105,35 @@ export async function updateCompanySettings(formData: FormData) {
 
 // --- Backup ---
 
+/**
+ * The caller's own organisation only (its branches for a branch-bound user), behind
+ * canBackup, and never a stored password: the file is handed to the browser.
+ */
 export async function createBackup() {
     const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { success: false, message: "غير مصرح" };
+    if (!tenantCtx.userPermissions.canBackup) return { success: false, message: "ليس لديك صلاحية النسخ الاحتياطي." };
+    const organizationId = tenantCtx.organizationId;
+    if (!organizationId) return { success: false, message: "النسخ الاحتياطي متاح لحسابات المؤسسات فقط." };
+    const { tenantBranchWhere } = tenantCtx;
 
     try {
-        // Fetch all critical data
         const [users, drugs, inventories, sales, patients, suppliers] = await Promise.all([
-            prisma.user.findMany(),
-            prisma.globalDrug.findMany(),
-            prisma.inventory.findMany({ include: { batches: true } }),
-            prisma.sale.findMany({ include: { items: true } }),
-            prisma.patient.findMany(),
-            prisma.supplier.findMany(),
+            prisma.user.findMany({ where: tenantBranchWhere, select: USER_SAFE_SELECT }),
+            prisma.globalDrug.findMany({ where: { OR: [{ organizationId }, { inventories: { some: tenantBranchWhere } }] } }),
+            prisma.inventory.findMany({ where: tenantBranchWhere, include: { batches: true } }),
+            prisma.sale.findMany({ where: tenantBranchWhere, include: { items: true } }),
+            prisma.patient.findMany({ where: tenantBranchWhere }),
+            prisma.supplier.findMany({ where: { organizationId } }),
         ]);
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'Unknown',
+            action: 'EXPORT',
+            entity: 'BACKUP',
+            details: JSON.stringify({ users: users.length, sales: sales.length, patients: patients.length }),
+            branchId: tenantCtx.user.branchId ?? undefined,
+        });
 
         const backupData = {
             timestamp: new Date().toISOString(),

@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
+import { pharmacyDrugScope } from "@/app/lib/drug-scope";
+import { deletePurchase as deleteScopedPurchase } from "@/app/lib/actions/purchase-actions";
 
 
 // Dawatech-style: Full control over Batch and Pricing at entry
@@ -29,6 +31,10 @@ const PurchaseSchema = z.object({
 export async function createPurchase(prevState: any, formData: FormData) {
     const tenantCtx = await getTenantContext('write');
     if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
+    // Enters stock directly as received, so it needs both purchase permissions.
+    if (!tenantCtx.userPermissions.canCreatePurchase || !tenantCtx.userPermissions.canReceivePurchase) {
+        return { message: "ليس لديك صلاحية إدخال فواتير الشراء." };
+    }
 
     const rawItems = formData.get("itemsData");
     const supplierId = formData.get("supplierId");
@@ -57,6 +63,15 @@ export async function createPurchase(prevState: any, formData: FormData) {
 
     const validItems = itemsValidation.data;
     const total = validItems.reduce((acc: any, item: any) => acc + (item.quantity * item.cost), 0);
+
+    // Branch, supplier and every drug must belong to the caller's organisation.
+    const branch = await prisma.branch.findFirst({ where: { AND: [tenantCtx.branchModelWhere, { id: String(branchId) }] }, select: { id: true, organizationId: true } });
+    if (!branch) return { message: "الفرع خارج نطاق مؤسستك." };
+    const supplier = await prisma.supplier.findFirst({ where: { id: String(supplierId), organizationId: branch.organizationId }, select: { id: true } });
+    if (!supplier) return { message: "المورد غير موجود في مؤسستك." };
+    const drugIds = Array.from(new Set(validItems.map((item) => item.drugId)));
+    const visibleDrugs = await prisma.globalDrug.count({ where: { AND: [{ id: { in: drugIds } }, pharmacyDrugScope(branch.organizationId)] } });
+    if (visibleDrugs !== drugIds.length) return { message: "بعض الأصناف غير متاحة لمؤسستك." };
 
     try {
         await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -135,24 +150,18 @@ export async function createPurchase(prevState: any, formData: FormData) {
     redirect("/dashboard/invoices");
 }
 
+/**
+ * Same rules as the purchases screen (purchase-actions.ts): permission, the caller's
+ * organisation, and only a pending or cancelled purchase; a received one keeps its
+ * stock, drawer and supplier records, so it is never deleted here.
+ */
 export async function deletePurchase(id: string) {
-    const tenantCtx = await getTenantContext('write');
-    if (tenantCtx instanceof NextResponse) return { message: "غير مصرح" };
-
     try {
-        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            // حذف عناصر الفاتورة أولاً
-            await tx.purchaseItem.deleteMany({
-                where: { purchaseId: id }
-            });
-            // ثم حذف الفاتورة
-            await tx.purchase.delete({
-                where: { id }
-            });
-        });
+        const result = await deleteScopedPurchase(id);
+        if (!result.success) return { message: result.error };
     } catch (error) {
         console.error("Delete Purchase Error:", error);
-        return { message: "فشل في حذف الفاتورة" };
+        return { message: error instanceof Error ? error.message : "فشل في حذف الفاتورة" };
     }
 
     revalidatePath("/dashboard/invoices");

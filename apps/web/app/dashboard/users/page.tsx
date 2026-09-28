@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/app/lib/prisma";
 import { UpdateUser, DeleteUser } from "@/app/ui/users/buttons";
 import { getTenantContext } from "@/app/lib/tenant-utils";
+import { USER_SAFE_SELECT } from "@/app/lib/user-scope";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
@@ -45,7 +46,7 @@ export default async function Page(
     .findMany({
       where: { AND: [tenantBranchWhere, ...(selectedBranchId ? [{ branchId: selectedBranchId }] : [])] },
       orderBy: { createdAt: "desc" },
-      include: { branch: true },
+      select: USER_SAFE_SELECT,
     })
     .catch(() => [] as any[]);
 

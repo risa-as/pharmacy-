@@ -9,6 +9,7 @@ import { getTenantContext } from "@/app/lib/tenant-utils";
 import { checkPlanLimit } from "@/app/lib/saas-guards";
 import { NextResponse } from "next/server";
 import { logAudit } from "@/app/lib/audit";
+import { USER_SAFE_SELECT, findManagedUser, findScopedBranch, mayAssignRole } from "@/app/lib/user-scope";
 
 
 const UserSchema = z.object({
@@ -47,12 +48,14 @@ export async function createUser(prevState: any, formData: FormData) {
 
     const { name, email, password, role, branchId } = validatedFields.data;
 
-    // Enforce per-plan user limit (skip for SUPER_ADMIN who has no org)
-    if (tenantCtx.user.organizationId) {
-        const limit = await checkPlanLimit(tenantCtx.user.organizationId, "users");
-        if (!limit.allowed) {
-            return { message: `لقد وصلت إلى الحد الأقصى للمستخدمين (${limit.max}) في خطتك الحالية.` };
-        }
+    const branch = await findScopedBranch(tenantCtx, branchId);
+    if (!branch) return { message: "الفرع خارج نطاق مؤسستك." };
+    if (!mayAssignRole(tenantCtx, role)) return { message: "لا يمكنك منح دور المدير." };
+
+    // Enforce the per-plan user limit of the branch's (verified) organisation.
+    const limit = await checkPlanLimit(branch.organizationId, "users");
+    if (!limit.allowed) {
+        return { message: `لقد وصلت إلى الحد الأقصى للمستخدمين (${limit.max}) في خطتك الحالية.` };
     }
 
     try {
@@ -74,7 +77,7 @@ export async function createUser(prevState: any, formData: FormData) {
                 email,
                 password: hashedPassword,
                 role,
-                branchId: branchId || null,
+                branchId: branch.id,
             },
         });
 
@@ -85,7 +88,7 @@ export async function createUser(prevState: any, formData: FormData) {
             entity: 'USER',
             entityId: newUser.id,
             details: JSON.stringify({ name, email, role }),
-            branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
+            branchId: branch.id,
         });
     } catch (error) {
         console.error("Error creating user:", error);
@@ -124,24 +127,21 @@ export async function updateUser(
 
     const { name, email, password, role, branchId } = validatedFields.data;
 
-    try {
-        // Verify target user belongs to caller's org (prevents cross-tenant update)
-        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
-            const targetUser = await prisma.user.findUnique({
-                where: { id },
-                select: { branch: { select: { organizationId: true } } },
-            });
-            const targetOrgId = targetUser?.branch?.organizationId;
-            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
-                return { message: "غير مصرح: لا يمكنك تعديل مستخدم من منظمة أخرى." };
-            }
-        }
+    // The target must be a user the caller manages (a branch in the caller's scope: not
+    // the platform owner, not a warehouse user, not another organisation), and it may only
+    // be moved to a branch in the same scope (user-scope.ts).
+    const target = await findManagedUser(tenantCtx, id);
+    if (!target) return { message: "غير مصرح: المستخدم خارج نطاق مؤسستك." };
+    const branch = await findScopedBranch(tenantCtx, branchId);
+    if (!branch) return { message: "الفرع خارج نطاق مؤسستك." };
+    if (role !== target.role && !mayAssignRole(tenantCtx, role)) return { message: "لا يمكنك منح دور المدير." };
 
+    try {
         const updateData: any = {
             name,
             email,
             role,
-            branchId: branchId || null,
+            branchId: branch.id,
         };
 
         // تحديث كلمة المرور فقط إذا تم توفيرها
@@ -160,7 +160,7 @@ export async function updateUser(
             entity: 'USER',
             entityId: id,
             details: JSON.stringify({ name, email, role }),
-            branchId: branchId ?? tenantCtx.user.branchId ?? undefined,
+            branchId: branch.id,
         });
     } catch (error) {
         console.error("Error updating user:", error);
@@ -178,18 +178,9 @@ export async function deleteUser(id: string) {
         return { message: "ليس لديك صلاحية لحذف المستخدمين." };
     }
     try {
-        const user = await prisma.user.findUnique({
-            where: { id },
-            select: { name: true, email: true, branch: { select: { organizationId: true } } },
-        });
-
-        // Verify target user belongs to caller's org
-        if (tenantCtx.user.role !== 'SUPER_ADMIN') {
-            const targetOrgId = user?.branch?.organizationId;
-            if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) {
-                return { message: "غير مصرح: لا يمكنك حذف مستخدم من منظمة أخرى." };
-            }
-        }
+        // Same rule as editing: only a user the caller manages (user-scope.ts).
+        const user = await findManagedUser(tenantCtx, id);
+        if (!user) return { message: "غير مصرح: المستخدم خارج نطاق مؤسستك." };
         await prisma.user.delete({
             where: { id },
         });
@@ -216,7 +207,7 @@ export async function getUsers() {
 
     return await prisma.user.findMany({
         where: tenantBranchWhere,
-        include: { branch: true },
+        select: USER_SAFE_SELECT,
         orderBy: { createdAt: "desc" },
     });
 }
@@ -224,17 +215,5 @@ export async function getUsers() {
 export async function getUserById(id: string) {
     const tenantCtx = await getTenantContext('read');
     if (tenantCtx instanceof NextResponse) return null;
-
-    const user = await prisma.user.findUnique({
-        where: { id },
-        include: { branch: true },
-    });
-
-    // Verify the user belongs to the caller's org (skip for SUPER_ADMIN)
-    if (user && tenantCtx.user.role !== 'SUPER_ADMIN') {
-        const targetOrgId = user.branch?.organizationId;
-        if (targetOrgId && targetOrgId !== tenantCtx.user.organizationId) return null;
-    }
-
-    return user;
+    return findManagedUser(tenantCtx, id);
 }
