@@ -14,7 +14,10 @@ vi.mock('@/auth', () => ({ auth: async () => state.session }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 // A successful form action ends with redirect(); here it is a recognisable throw.
-vi.mock('next/navigation', () => ({ redirect: (to: string) => { throw Object.assign(new Error('REDIRECT ' + to), { redirected: to }); } }));
+vi.mock('next/navigation', () => ({
+    redirect: (to: string) => { throw Object.assign(new Error('REDIRECT ' + to), { redirected: to }); },
+    notFound: () => { throw Object.assign(new Error('NOT_FOUND'), { notFound: true }); },
+}));
 vi.mock('@/app/lib/saas-guards', () => ({ checkFeatureAccess: async () => ({ allowed: true }), checkPlanLimit: async () => ({ allowed: true, current: 0, max: 99 }) }));
 
 import { createBackup } from '../app/lib/actions/settings';
@@ -22,6 +25,21 @@ import { createUser as createUserForm } from '../app/lib/actions/create-user-saf
 import { createUser, updateUser, deleteUser, getUserById, getUsers } from '../app/lib/actions/user';
 import { createPurchase as createInvoice, deletePurchase as deleteInvoice } from '../app/lib/actions/invoice';
 import { updateBatchQuantity, deleteInventory, deleteBatch, createInventory } from '../app/lib/actions/inventory';
+import CreateUserPage from '../app/dashboard/users/create/page';
+import EditUserPage from '../app/dashboard/users/[id]/edit/page';
+import { Role } from '@prisma/client';
+
+/** The `branches` prop handed to the form inside a rendered server page. */
+function branchesProp(node: any): any[] | undefined {
+    if (!node || typeof node !== 'object') return undefined;
+    if (node.props?.branches) return node.props.branches;
+    const children = node.props?.children;
+    for (const child of Array.isArray(children) ? children : [children]) {
+        const found = branchesProp(child);
+        if (found) return found;
+    }
+    return undefined;
+}
 
 const db = new PrismaClient({ datasources: { db: { url: process.env.TEST_DATABASE_URL } } });
 state.db = db;
@@ -156,6 +174,33 @@ describe('editing, deleting and reading users (F3 and neighbours)', () => {
         const temp = await db.user.create({ data: { email: newEmail(), password: 'x', role: 'CASHIER', branchId: f.a1.id } });
         expect(await submit(() => deleteUser(temp.id))).toBeUndefined();
         expect(await db.user.count({ where: { id: temp.id } })).toBe(0);
+    });
+});
+
+describe('user pages', () => {
+    it('open for a delegated manager with only its own branch, and for an ADMIN with its organisation branches', async () => {
+        await as(f.pharmacistA, { canManageUsers: true });
+        expect(branchesProp(await CreateUserPage())!.map((b: any) => b.id)).toEqual([f.a1.id]);
+        const edit = await EditUserPage({ params: Promise.resolve({ id: f.cashierA.id }) });
+        expect(branchesProp(edit)!.map((b: any) => b.id)).toEqual([f.a1.id]);
+        expect((edit as any)).toBeTruthy();
+        await as(f.adminA);
+        const ids = branchesProp(await CreateUserPage())!.map((b: any) => b.id);
+        expect(ids).toContain(f.a1.id);
+        expect(ids).not.toContain(f.b1.id);
+    });
+    it('the edit page hands no password to the browser form, and hides users outside the scope', async () => {
+        await as(f.adminA);
+        const page: any = await EditUserPage({ params: Promise.resolve({ id: f.cashierA.id }) });
+        const form = (function find(n: any): any { if (!n || typeof n !== 'object') return; if (n.props?.user) return n; for (const c of [].concat(n.props?.children ?? [])) { const r = find(c); if (r) return r; } })(page);
+        expect(form.props.user.id).toBe(f.cashierA.id);
+        expect(form.props.user).not.toHaveProperty('password');
+        await expect(EditUserPage({ params: Promise.resolve({ id: f.owner.id }) })).rejects.toMatchObject({ notFound: true });
+        await expect(EditUserPage({ params: Promise.resolve({ id: f.cashierB.id }) })).rejects.toMatchObject({ notFound: true });
+    });
+    it('user roles are ADMIN, SUPER_ADMIN, PHARMACIST, CASHIER, WAREHOUSE: there is no MANAGER user role to exclude', () => {
+        // MANAGER exists only as a warehouse user type (WarehouseUserType), on WAREHOUSE users with no branch.
+        expect(Object.keys(Role).sort()).toEqual(['ADMIN', 'CASHIER', 'PHARMACIST', 'SUPER_ADMIN', 'WAREHOUSE']);
     });
 });
 

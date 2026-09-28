@@ -11,9 +11,11 @@ import { USER_SAFE_SELECT, managedUserWhere } from '@/app/lib/user-scope';
 import { NextResponse } from 'next/server';
 
 
-async function getBranches(tenantWhere: any) {
+// Branch rows are filtered with branchModelWhere: tenantWhere is shaped for tables
+// that carry a branchId, which Branch does not (it broke the page for branch-bound users).
+async function getBranches(branchModelWhere: any) {
     return await prisma.branch.findMany({
-        where: tenantWhere,
+        where: branchModelWhere,
         orderBy: { name: 'asc' },
     });
 }
@@ -31,11 +33,11 @@ export default async function EditUserPage(props: { params: Promise<{ id: string
     const params = await props.params;
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantWhere } = tenantCtx;
+    const { branchModelWhere } = tenantCtx;
 
     const [user, branches] = await Promise.all([
         getUser(params.id, tenantCtx),
-        getBranches(tenantWhere),
+        getBranches(branchModelWhere),
     ]);
 
     if (!user) {

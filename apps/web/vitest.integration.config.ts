@@ -10,5 +10,7 @@ if (!['localhost', '127.0.0.1'].includes(target.hostname) || target.pathname !==
 process.env.DATABASE_URL = raw;
 export default defineConfig({
     resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)) } },
+    // Server pages are imported by some tests; tsconfig keeps jsx as 'preserve' for Next.
+    oxc: { jsx: { runtime: 'automatic' } },
     test: { environment: 'node', include: ['tests/**/*.integration.test.ts'], fileParallelism: false, testTimeout: 30_000, hookTimeout: 30_000 },
 });

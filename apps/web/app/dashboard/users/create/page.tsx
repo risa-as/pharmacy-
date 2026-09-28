@@ -9,9 +9,11 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 
 
-async function getBranches(tenantWhere: any) {
+// Branch rows are filtered with branchModelWhere: tenantWhere is shaped for tables
+// that carry a branchId, which Branch does not (it broke the page for branch-bound users).
+async function getBranches(branchModelWhere: any) {
     return await prisma.branch.findMany({
-        where: tenantWhere,
+        where: branchModelWhere,
         orderBy: { name: 'asc' },
     });
 }
@@ -19,9 +21,9 @@ async function getBranches(tenantWhere: any) {
 export default async function CreateUserPage() {
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
-    const { tenantWhere } = tenantCtx;
+    const { branchModelWhere } = tenantCtx;
 
-    const branches = await getBranches(tenantWhere);
+    const branches = await getBranches(branchModelWhere);
 
     return (
         <div className="w-full max-w-2xl mx-auto" suppressHydrationWarning>
