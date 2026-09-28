@@ -1,118 +1,225 @@
-import { getSafes, getSafesForOrg } from '@/app/lib/actions/finance-actions';
-import { AddSafeModal, TransferModal, VoucherModal } from '@/app/ui/finance/safe-modals';
-import { Wallet, Landmark, Smartphone, Briefcase, PlusCircle, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
-import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
-import { prisma } from '@/app/lib/prisma';
-import { getTenantContext } from '@/app/lib/tenant-utils';
-import { NextResponse } from 'next/server';
-import { redirect } from 'next/navigation';
+import Link from "next/link";
+import {
+  Wallet,
+  ArrowDownLeft,
+  ArrowUpRight,
+  AlertTriangle,
+} from "lucide-react";
+import { getCashDrawerLedger } from "@/app/lib/cash-drawer";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+const money = (value: number) =>
+  `${value.toLocaleString("ar-IQ-u-nu-latn")} د.ع`;
+const kinds: Record<string, string> = {
+  SALE: "بيع",
+  SALE_RETURN: "مرتجع",
+  EXPENSE: "مصروف",
+  CUSTOMER_RECEIPT: "تحصيل دين",
+  SUPPLIER_PAYMENT: "دفعة مورد",
+  SHIFT_CASH_DROP: "حركة وردية",
+  VOUCHER: "سند",
+  TRANSFER: "تحويل",
+};
 
-export default async function SafesPage() {
-    const tenantCtx = await getTenantContext();
-    if (tenantCtx instanceof NextResponse) redirect('/login');
-
-    // Resolve the branch used for creating new safes.
-    // Branch-scoped users use their own branch; org-level admins fall back to
-    // the organization's first branch.
-    let branchId = tenantCtx.user.branchId;
-    if (!branchId && tenantCtx.organizationId) {
-        const firstBranch = await prisma.branch.findFirst({
-            where: { organizationId: tenantCtx.organizationId },
-            orderBy: { createdAt: 'asc' },
-            select: { id: true },
-        });
-        branchId = firstBranch?.id;
-    }
-
-    // Branch-scoped users see their branch's safes; org admins see all org safes.
-    const safes = tenantCtx.user.branchId
-        ? await getSafes(tenantCtx.user.branchId)
-        : tenantCtx.organizationId
-            ? await getSafesForOrg(tenantCtx.organizationId)
-            : [];
-
-    const getIcon = (type: string) => {
-        switch (type) {
-            case 'BANK': return <Landmark className="w-8 h-8 text-primary" />;
-            case 'MOBILE_WALLET': return <Smartphone className="w-8 h-8 text-info" />;
-            case 'VAULT': return <Briefcase className="w-8 h-8 text-slate-800" />;
-            default: return <Wallet className="w-8 h-8 text-success" />;
-        }
-    };
-
-    const getTypeLabel = (type: string) => {
-        switch (type) {
-            case 'BANK': return 'حساب بنكي';
-            case 'MOBILE_WALLET': return 'محفظة إلكترونية';
-            case 'VAULT': return 'خزنة رئيسية';
-            default: return 'درج نقدي';
-        }
-    };
-
-    const totalBalance = safes.reduce((sum: number, safe: any) => sum + safe.balance, 0);
-
-    return (
-        <div className="glass-card p-6 space-y-6" dir="rtl">
-            <div className="flex justify-between items-center bg-card p-6 rounded-2xl shadow-sm border border-border">
-                <div>
-                    <h1 className="text-2xl font-bold font-cairo flex items-center gap-3 text-foreground">
-                        <Wallet className="w-8 h-8 text-info" />
-                        صناديق الأموال والمحافظ
-                    </h1>
-                    <p className="text-muted-foreground mt-1">إدارة الأرصدة النقدية وحركة الأموال بين الحسابات</p>
-                </div>
-                <div className="text-left bg-info/10 p-4 rounded-xl border border-info/20">
-                    <p className="text-sm text-info font-bold mb-1">إجمالي السيولة النقدية</p>
-                    <p className="text-3xl font-bold text-info">{totalBalance.toLocaleString()} <span className="text-lg">د.ع</span></p>
-                </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-                {branchId && <AddSafeModal branchId={branchId} />}
-                <TransferModal safes={safes} />
-                <VoucherModal type="IN" safes={safes} />
-                <VoucherModal type="OUT" safes={safes} />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {safes.map((safe: any) => (
-                    <div key={safe.id} className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden hover:shadow-md transition-shadow">
-                        <div className="p-6 flex items-start gap-4">
-                            <div className="p-3 bg-muted rounded-xl">
-                                {getIcon(safe.type)}
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="font-bold text-lg text-foreground">{safe.name}</h3>
-                                <p className="text-sm text-muted-foreground mb-4">{getTypeLabel(safe.type)}</p>
-
-                                <div className="bg-muted p-3 rounded-lg flex justify-between items-center mb-4">
-                                    <span className="text-muted-foreground text-sm">الرصيد الحالي:</span>
-                                    <span className="font-bold text-xl text-foreground" dir="ltr">
-                                        {safe.balance.toLocaleString()} <span className="text-sm text-muted-foreground">IQD</span>
-                                    </span>
-                                </div>
-
-                                <div className="text-xs text-muted-foreground mt-2 flex justify-between">
-                                    <span>تاريخ الإنشاء:</span>
-                                    <span>{format(new Date(safe.createdAt), 'PPP', { locale: ar })}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {safes.length === 0 && (
-                <div className="text-center py-20 bg-card rounded-2xl border border-dashed border-border">
-                    <Wallet className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
-                    <h3 className="text-lg font-bold text-muted-foreground mb-2">لا توجد صناديق مضافة</h3>
-                    <p className="text-muted-foreground mb-6">ابدأ بإضافة درج الكاشير أو الحساب البنكي لمتابعة الأموال.</p>
-                    {branchId && <AddSafeModal branchId={branchId} />}
-                </div>
-            )}
+export default async function CashDrawerPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const branch = typeof params.branch === "string" ? params.branch : undefined;
+  const data = await getCashDrawerLedger(branch, Number(params.page ?? 1));
+  const pageUrl = (page: number) =>
+    `/dashboard/finance/safes?${new URLSearchParams({ branch: data.selected?.id ?? "", page: String(page) })}`;
+  return (
+    <main dir="rtl" className="space-y-6 p-4 md:p-6">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <Wallet className="text-primary" />
+            الصندوق
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            رصيد الصندوق وحركاته المسجلة في الموقع. هذا الرصيد ليس صافي الربح أو
+            جرد النقد الفعلي.
+          </p>
         </div>
-    );
+        {data.branches.length > 1 && (
+          <form className="flex gap-2">
+            <label htmlFor="cash-branch" className="sr-only">
+              الفرع
+            </label>
+            <select
+              id="cash-branch"
+              name="branch"
+              defaultValue={data.selected?.id}
+              className="rounded-lg border bg-background p-2"
+            >
+              {data.branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <button className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">
+              عرض
+            </button>
+          </form>
+        )}
+      </header>
+      {data.state !== "ready" ? (
+        <section className="rounded-xl border bg-card p-6">
+          <h2 className="font-bold">
+            {data.state === "ambiguous"
+              ? "يلزم مراجعة ربط الصندوق"
+              : "لا يوجد صندوق مسجّل لهذا الفرع"}
+          </h2>
+          <p className="mt-2 text-muted-foreground">
+            {data.state === "ambiguous"
+              ? "يوجد أكثر من صندوق نقدي لهذا الفرع. تواصل مع المسؤول لتحديد صندوق العمل قبل عرض الحركات."
+              : "يظهر الصندوق بعد إعداده ومزامنة العمليات. لم يتم إنشاء صندوق جديد تلقائياً."}
+          </p>
+        </section>
+      ) : (
+        <>
+          <section className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border bg-card p-5">
+              <p className="text-muted-foreground">
+                الرصيد المسجّل — {data.selected.name}
+              </p>
+              <p className="mt-3 text-3xl font-bold text-primary">
+                {money(data.safe.balance)}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {data.safe.name}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-card p-5">
+              <p className="flex items-center gap-2 text-muted-foreground">
+                <ArrowDownLeft size={18} />
+                مجموع المقبوضات المسجّلة
+              </p>
+              <p className="mt-3 text-2xl font-bold">{money(data.incoming)}</p>
+            </div>
+            <div className="rounded-xl border bg-card p-5">
+              <p className="flex items-center gap-2 text-muted-foreground">
+                <ArrowUpRight size={18} />
+                مجموع المدفوعات المسجّلة
+              </p>
+              <p className="mt-3 text-2xl font-bold">{money(data.outgoing)}</p>
+            </div>
+          </section>
+          <aside className="rounded-xl border bg-muted/30 p-4 text-sm space-y-2">
+            <p>
+              الأرصدة والمجاميع تخص كامل السجل السحابي. العمليات الموجودة على
+              الجهاز ولم تصل بعد لا تدخل في هذه المجاميع؛ راجع حالة المزامنة في
+              تطبيق سطح المكتب.
+            </p>
+            {data.unlinked > 0 && (
+              <p className="flex gap-2 text-amber-700 dark:text-amber-400">
+                <AlertTriangle size={18} />
+                {data.unlinked} حركة بيع أو مرتجع مسجّلة دون مرجع مستند، وتحتاج
+                مطابقة قبل إعادة تسجيل أي مبلغ.
+              </p>
+            )}
+            {Math.abs(data.safe.balance - (data.incoming - data.outgoing)) >
+              0.01 && (
+              <p className="text-destructive">
+                الرصيد المسجّل يختلف عن صافي الحركات؛ يلزم مراجعة السجل مع
+                المسؤول.
+              </p>
+            )}
+          </aside>
+          <section className="overflow-hidden rounded-xl border bg-card">
+            <div className="border-b p-4">
+              <h2 className="font-bold">حركات الصندوق</h2>
+              <p className="text-sm text-muted-foreground">
+                {data.count.toLocaleString()} حركة · الأحدث أولاً
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-right">
+                <thead className="bg-muted/40">
+                  <tr>
+                    {[
+                      "التاريخ",
+                      "العملية",
+                      "داخل",
+                      "خارج",
+                      "مرجع المستند",
+                      "البيان",
+                    ].map((x) => (
+                      <th key={x} className="p-3 whitespace-nowrap">
+                        {x}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((row) => (
+                    <tr key={row.id} className="border-t">
+                      <td className="p-3 whitespace-nowrap">
+                        {row.createdAt.toLocaleString("ar-IQ", {
+                          timeZone: "Asia/Baghdad",
+                        })}
+                      </td>
+                      <td className="p-3">
+                        {kinds[row.referenceType] ?? row.referenceType}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">
+                        {row.type === "IN" ? money(row.amount) : "—"}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">
+                        {row.type === "OUT" ? money(row.amount) : "—"}
+                      </td>
+                      <td className="p-3">
+                        <span dir="ltr" title={row.referenceId ?? undefined}>
+                          {row.referenceId
+                            ? row.referenceId.slice(0, 12)
+                            : "غير مربوط"}
+                        </span>
+                      </td>
+                      <td className="p-3 min-w-48">{row.description || "—"}</td>
+                    </tr>
+                  ))}
+                  {!data.rows.length && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="p-8 text-center text-muted-foreground"
+                      >
+                        لا توجد حركات مسجّلة بعد.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <nav
+              aria-label="صفحات حركات الصندوق"
+              className="flex items-center justify-between border-t p-4"
+            >
+              {data.page > 1 ? (
+                <Link href={pageUrl(data.page - 1)} className="text-primary">
+                  السابق
+                </Link>
+              ) : (
+                <span />
+              )}
+              <span className="text-sm text-muted-foreground">
+                صفحة {data.page} من {data.pages}
+              </span>
+              {data.page < data.pages ? (
+                <Link href={pageUrl(data.page + 1)} className="text-primary">
+                  التالي
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
+          </section>
+        </>
+      )}
+    </main>
+  );
 }

@@ -241,6 +241,7 @@ const sections: NavSection[] = [
             href: "/dashboard/reports/branch-comparison",
             plan: "enterprise",
           },
+          { name: "الصندوق", href: "/dashboard/finance/safes", icon: Wallet },
           { name: "المصاريف", href: "/dashboard/expenses" },
           {
             name: "الفريق",
@@ -704,7 +705,6 @@ export default function SideNav({
               "flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-[13px] font-bold transition-all duration-150",
               (pathname.startsWith("/dashboard/settings") &&
                 !pathname.startsWith("/dashboard/settings/billing")) ||
-                pathname.startsWith("/dashboard/finance") ||
                 pathname.startsWith("/dashboard/expenses") ||
                 pathname.startsWith("/dashboard/organizations") ||
                 pathname.startsWith("/dashboard/notifications")
