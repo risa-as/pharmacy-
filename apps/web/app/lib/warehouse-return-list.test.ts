@@ -31,7 +31,7 @@ it('paginates return records, not original orders, and supplies status totals', 
     expect(result.returns).toHaveLength(25);
     expect(result.hasMore).toBe(true);
     expect(result.counts).toEqual({ PENDING: 30 });
-    expect(query.mock.calls[0][0].sql).toContain('FROM "WarehouseReturn" r JOIN "WarehouseOrder"');
+    expect(query.mock.calls[0][0].sql).toContain('FROM "public"."WarehouseReturn" r JOIN "public"."WarehouseOrder"');
 });
 it('rejects invalid status before querying', async () => {
     await expect(listPharmacyReturns({ role: 'SUPER_ADMIN' }, new URLSearchParams({ returnStatus: 'SHIPPED' }))).rejects.toThrow('INVALID_STATUS');

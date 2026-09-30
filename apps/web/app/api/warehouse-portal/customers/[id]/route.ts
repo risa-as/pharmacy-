@@ -95,7 +95,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         }
 
         const updated = await prisma.$transaction(async tx => {
-            await tx.$queryRaw`SELECT id FROM "WarehouseCustomer" WHERE id = ${existing.id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseCustomer" WHERE id = ${existing.id} FOR UPDATE`;
             const before = await tx.warehouseCustomer.findUniqueOrThrow({ where: { id: existing.id } });
             if (data.openingBalance !== undefined && data.openingBalance !== before.openingBalance) {
                 const payment = await tx.warehouseSettlement.findFirst({ where: { warehouseId: ctx.warehouseId, sourceId: before.id, kind: 'OPENING_PAYMENT' } });

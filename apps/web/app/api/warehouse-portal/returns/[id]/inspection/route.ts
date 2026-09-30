@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             throw new WarehouseOperationError('حدد أصنافًا غير مكررة للفحص.', 400);
         }
         const items = await prisma.$transaction(async tx => {
-            await tx.$queryRaw`SELECT id FROM "WarehouseOrder" WHERE id = ${record.orderId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseOrder" WHERE id = ${record.orderId} FOR UPDATE`;
             const results = [];
             for (const entry of requests) {
             const item = await tx.warehouseReturnItem.findFirst({ where: { id: entry.itemId, returnId: id } });

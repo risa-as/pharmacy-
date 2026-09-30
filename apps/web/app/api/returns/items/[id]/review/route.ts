@@ -14,7 +14,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
     const { id } = await props.params;
     try {
         const result = await prisma.$transaction(async tx => {
-            await tx.$queryRaw`SELECT id FROM "SaleReturnItem" WHERE id = ${id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."SaleReturnItem" WHERE id = ${id} FOR UPDATE`;
             const item = await tx.saleReturnItem.findFirst({ where: { id, saleReturn: ctx.tenantBranchWhere }, include: { saleReturn: { include: { sale: { include: { items: true } } } } } });
             if (!item) throw new Error('المرتجع غير موجود ضمن نطاقك.');
             if (item.stockStatus !== 'QUARANTINED') throw new Error('تم اتخاذ القرار مسبقاً؛ حدّث الصفحة.');

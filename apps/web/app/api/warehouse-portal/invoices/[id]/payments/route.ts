@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             // Voided by /api/warehouse-operations/resolve (same lock): never apply it.
             const voided = await tx.warehouseOperation.findUnique({ where: { warehouseId_key: { warehouseId: ctx.warehouseId, key: idempotencyKey } }, select: { scope: true } });
             if (voided?.scope === VOIDED_SCOPE) return NextResponse.json({ error: VOIDED_MESSAGE }, { status: 409 });
-            await tx.$queryRaw`SELECT id FROM "WarehouseInvoice" WHERE id = ${id} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseInvoice" WHERE id = ${id} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
             const invoice = await tx.warehouseInvoice.findFirst({ where: { id, warehouseId: ctx.warehouseId } });
             if (!invoice) return NextResponse.json({ error: 'الفاتورة غير موجودة ضمن هذا المذخر' }, { status: 404 });
             const prior = await tx.warehousePayment.findUnique({ where: { idempotencyKey } });

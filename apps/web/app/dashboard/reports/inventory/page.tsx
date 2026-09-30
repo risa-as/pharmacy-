@@ -351,28 +351,28 @@ export default async function InventoryReportPage(
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-right">
               <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                 <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     الصنف
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     الفرع
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     الكمية
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     الأدنى / الأقصى
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     سعر البيع
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     سعر الشراء
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     الحالة
                   </th>
                 </tr>
@@ -392,13 +392,13 @@ export default async function InventoryReportPage(
                           <div className="w-9 h-9 bg-success/10 rounded-lg flex items-center justify-center shrink-0">
                             <Package className="w-4 h-4 text-success" />
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 max-w-[260px]">
                             <p className="font-semibold text-foreground truncate">
                               {item.drug.tradeName}
                             </p>
                             {item.drug.barcode && (
                               <p
-                                className="text-xs text-muted-foreground"
+                                className="text-xs text-muted-foreground truncate"
                                 dir="ltr"
                               >
                                 {item.drug.barcode}
@@ -407,7 +407,7 @@ export default async function InventoryReportPage(
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-muted-foreground">
+                      <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
                         {item.branch.name}
                       </td>
                       <td className="px-6 py-4">

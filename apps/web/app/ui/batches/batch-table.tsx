@@ -83,7 +83,7 @@ export default function BatchTable({ batches, currentPage, pageSize }: BatchTabl
     return (
         <>
             <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm text-right">
                     <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                         <tr>
                             <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الدواء</th>
@@ -141,8 +141,8 @@ export default function BatchTable({ batches, currentPage, pageSize }: BatchTabl
                                             <span className="text-muted-foreground/50">—</span>
                                         )}
                                     </td>
-                                    <td className="px-3 py-3 font-mono text-xs text-muted-foreground" dir="ltr">
-                                        <span className="block max-w-[80px] truncate" title={batch.batchNumber}>
+                                    <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
+                                        <span className="block max-w-[80px] truncate text-right" dir="ltr" title={batch.batchNumber}>
                                             {batch.batchNumber}
                                         </span>
                                     </td>

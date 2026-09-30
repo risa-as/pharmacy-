@@ -5,6 +5,10 @@ import {
     AlertTriangle, TrendingDown, Settings, Building2, Search,
     Package, Percent, CheckCircle2, Loader2, Save
 } from 'lucide-react';
+import {
+    TableCard, TableToolbar, SearchField, ResultCount, DataTable, THead, Th, TBody, rowClass, cellClass,
+    PrimaryCell, StatusPill, EmptyState,
+} from '@/app/ui/data-table';
 
 interface Branch { id: string; name: string; }
 
@@ -182,73 +186,48 @@ export default function MarginWarningsPage() {
                         })}
                     </div>
 
-                    {/* الجدول */}
+                    {/* الجدول — بنفس تصميم جدول الدفعات */}
                     {data.warnings?.length > 0 ? (
-                        <div className="glass-card overflow-hidden">
-                            {/* البحث */}
-                            <div className="p-4 border-b border-border">
-                                <div className="relative max-w-sm">
-                                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <input
-                                        type="text"
-                                        value={query}
-                                        onChange={(e) => setQuery(e.target.value)}
-                                        placeholder="بحث بالاسم أو الباركود..."
-                                        className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-                                    />
-                                </div>
-                            </div>
+                        <TableCard>
+                            <TableToolbar>
+                                <SearchField value={query} onChange={setQuery} placeholder="بحث بالاسم أو الباركود..." />
+                                <ResultCount total={filteredWarnings.length} query={query.trim()} unit="دواء" />
+                            </TableToolbar>
 
                             {filteredWarnings.length === 0 ? (
-                                <div className="py-10 text-center text-muted-foreground">
-                                    <p className="text-sm">لا توجد نتائج مطابقة</p>
-                                </div>
+                                <EmptyState icon={<Search />} title="لا توجد نتائج للبحث" hint="جرّب اسماً أو باركوداً آخر" />
                             ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
-                                            <tr>
-                                                <th className="px-6 py-3.5 text-right font-medium font-cairo">الدواء</th>
-                                                <th className="px-6 py-3.5 text-right font-medium font-cairo">التكلفة</th>
-                                                <th className="px-6 py-3.5 text-right font-medium font-cairo">السعر</th>
-                                                <th className="px-6 py-3.5 text-right font-medium font-cairo">الربح</th>
-                                                <th className="px-6 py-3.5 text-right font-medium font-cairo">الهامش</th>
+                                <DataTable>
+                                    <THead>
+                                        <Th>الدواء</Th>
+                                        <Th>التكلفة</Th>
+                                        <Th>السعر</Th>
+                                        <Th>الربح</Th>
+                                        <Th>الهامش</Th>
+                                    </THead>
+                                    <TBody>
+                                        {filteredWarnings.map((w: any) => (
+                                            <tr key={w.drugId} className={rowClass}>
+                                                <td className={cellClass}>
+                                                    <PrimaryCell title={w.drugName} subtitle={w.barcode} subtitleLtr />
+                                                </td>
+                                                <td className={`${cellClass} text-muted-foreground whitespace-nowrap`} dir="ltr">{fmt(w.cost)}</td>
+                                                <td className={`${cellClass} font-bold text-foreground whitespace-nowrap`} dir="ltr">{fmt(w.price)}</td>
+                                                <td className={`${cellClass} font-bold whitespace-nowrap ${w.profit >= 0 ? 'text-success' : 'text-destructive'}`} dir="ltr">
+                                                    {fmt(w.profit)}
+                                                </td>
+                                                <td className={cellClass}>
+                                                    <StatusPill tone="destructive">
+                                                        <TrendingDown className="w-3 h-3" />
+                                                        {w.margin}%
+                                                    </StatusPill>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border bg-card">
-                                            {filteredWarnings.map((w: any) => (
-                                                <tr key={w.drugId} className="hover:bg-muted/40 transition-colors">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-9 h-9 bg-destructive/10 rounded-lg flex items-center justify-center shrink-0">
-                                                                <Package className="w-4 h-4 text-destructive" />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className="font-semibold text-foreground truncate">{w.drugName}</p>
-                                                                {w.barcode && (
-                                                                    <p className="text-xs text-muted-foreground" dir="ltr">{w.barcode}</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-muted-foreground" dir="ltr">{fmt(w.cost)}</td>
-                                                    <td className="px-6 py-4 text-foreground" dir="ltr">{fmt(w.price)}</td>
-                                                    <td className={`px-6 py-4 font-bold ${w.profit >= 0 ? 'text-success' : 'text-destructive'}`} dir="ltr">
-                                                        {fmt(w.profit)}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="inline-flex items-center gap-1 bg-destructive/10 text-destructive border border-destructive/20 rounded-md px-2.5 py-1 text-xs font-bold">
-                                                            <TrendingDown className="w-3 h-3" />
-                                                            {w.margin}%
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        ))}
+                                    </TBody>
+                                </DataTable>
                             )}
-                        </div>
+                        </TableCard>
                     ) : (
                         <div className="glass-card py-16 text-center">
                             <div className="w-16 h-16 bg-success/10 rounded-2xl flex items-center justify-center mx-auto mb-4">

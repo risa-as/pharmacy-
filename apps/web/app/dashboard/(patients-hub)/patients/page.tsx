@@ -1,20 +1,21 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/app/lib/prisma";
-import {
-  Users,
-  Plus,
-  AlertCircle,
-  HeartPulse,
-  Search,
-  User,
-} from "lucide-react";
+import { Users, Plus, AlertCircle, HeartPulse } from "lucide-react";
 import Link from "next/link";
 import { UpdatePatient, DeletePatient } from "@/app/ui/patients/buttons";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import TableSearch from "@/app/ui/table-search";
+import TablePagination from "@/app/ui/table-pagination";
+import {
+  TableCard, TableToolbar, ResultCount, DataTable, THead, Th, TBody, rowClass, cellClass,
+  PrimaryCell, StatusPill, Actions, EmptyState, DateTimeCell,
+} from "@/app/ui/data-table";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
+
+const PAGE_SIZE = 50;
 
 export default async function PatientsPage(
   props: {
@@ -26,6 +27,8 @@ export default async function PatientsPage(
     typeof searchParams.branch === "string" ? searchParams.branch : undefined;
   const search =
     typeof searchParams.search === "string" ? searchParams.search.trim() : "";
+  const page =
+    typeof searchParams.page === "string" ? Math.max(1, parseInt(searchParams.page) || 1) : 1;
 
   const tenantCtx = await getTenantContext();
   if (tenantCtx instanceof NextResponse) redirect("/login");
@@ -41,26 +44,27 @@ export default async function PatientsPage(
     ];
   }
 
-  const patients = await prisma.patient.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: {
-      prescriptions: { take: 1, orderBy: { createdAt: "desc" } },
-    },
-    take: 200,
-  });
-
-  const allergyCount = patients.filter(
-    (p: any) => p.allergies.length > 0,
-  ).length;
-  const chronicCount = patients.filter(
-    (p: any) => p.chronicDiseases.length > 0,
-  ).length;
+  // The cards count every matching patient, not only the page on screen.
+  const [patients, totalCount, allergyCount, chronicCount] = await Promise.all([
+    prisma.patient.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        prescriptions: { take: 1, orderBy: { createdAt: "desc" } },
+      },
+      take: PAGE_SIZE,
+      skip: (page - 1) * PAGE_SIZE,
+    }),
+    prisma.patient.count({ where }),
+    prisma.patient.count({ where: { AND: [where, { allergies: { isEmpty: false } }] } }),
+    prisma.patient.count({ where: { AND: [where, { chronicDiseases: { isEmpty: false } }] } }),
+  ]);
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const statCards = [
     {
       label: "إجمالي المرضى",
-      value: patients.length,
+      value: totalCount,
       icon: Users,
       tone: "text-primary",
       bg: "bg-primary/10",
@@ -84,6 +88,13 @@ export default async function PatientsPage(
   const branchExtraParams = search
     ? `search=${encodeURIComponent(search)}`
     : undefined;
+  const buildPageUrl = (p: number) => {
+    const params = new URLSearchParams();
+    if (branchId) params.set("branch", branchId);
+    if (search) params.set("search", search);
+    params.set("page", String(p));
+    return `/dashboard/patients?${params.toString()}`;
+  };
 
   return (
     <div className="space-y-6" dir="rtl" suppressHydrationWarning>
@@ -107,25 +118,11 @@ export default async function PatientsPage(
         </Link>
       </div>
 
-      {/* الفلاتر */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <BranchFilter
-          currentBranch={branchId}
-          baseUrl="/dashboard/patients"
-          extraParams={branchExtraParams}
-        />
-        <form method="GET" className="relative w-full sm:max-w-xs">
-          {branchId && <input type="hidden" name="branch" value={branchId} />}
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            name="search"
-            defaultValue={search}
-            placeholder="بحث بالاسم أو رقم الهاتف..."
-            className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-          />
-        </form>
-      </div>
+      <BranchFilter
+        currentBranch={branchId}
+        baseUrl="/dashboard/patients"
+        extraParams={branchExtraParams}
+      />
 
       {/* بطاقات الإحصائيات */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -146,7 +143,7 @@ export default async function PatientsPage(
                 <p
                   className={`text-2xl font-bold ${card.value > 0 ? card.tone : "text-foreground"}`}
                 >
-                  {card.value}
+                  {card.value.toLocaleString("en-US")}
                 </p>
               </div>
             </div>
@@ -154,136 +151,99 @@ export default async function PatientsPage(
         })}
       </div>
 
-      {/* الجدول */}
-      <div className="glass-card overflow-hidden">
+      {/* الجدول — بنفس تصميم جدول الدفعات وسلوكه */}
+      <TableCard>
+        <TableToolbar>
+          <TableSearch currentQuery={search} param="search" placeholder="بحث بالاسم أو رقم الهاتف..." />
+          <ResultCount total={totalCount} query={search} unit="مريض" />
+        </TableToolbar>
+
         {patients.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-muted-foreground opacity-50" />
-            </div>
-            <p className="text-foreground font-medium">
-              {search ? "لا توجد نتائج مطابقة" : "لا يوجد مرضى مسجلين"}
-            </p>
-            {!search && (
-              <Link
-                href="/dashboard/patients/create"
-                className="inline-flex items-center gap-2 mt-4 rounded-lg bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                إضافة أول مريض
-              </Link>
-            )}
-          </div>
+          <EmptyState
+            icon={<Users />}
+            title={search ? "لا توجد نتائج للبحث" : "لا يوجد مرضى مسجلين"}
+            hint={
+              search ? (
+                "جرّب اسماً أو رقماً آخر"
+              ) : (
+                <Link href="/dashboard/patients/create" className="text-primary hover:underline">
+                  إضافة أول مريض
+                </Link>
+              )
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
-                <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    المريض
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الهاتف
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الجنس
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الحساسية
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الأمراض المزمنة
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    آخر زيارة
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-medium font-cairo">
-                    الإجراءات
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {patients.map((patient: any) => (
-                  <tr
-                    key={patient.id}
-                    className="hover:bg-muted/40 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <Link
-                        href={`/dashboard/patients/${patient.id}`}
-                        className="flex items-center gap-3 group"
-                      >
-                        <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
-                          <User className="w-4 h-4 text-primary" />
-                        </div>
-                        <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {patient.name}
-                        </span>
-                      </Link>
-                    </td>
-                    <td
-                      className="px-6 py-4 font-mono text-sm text-muted-foreground  text-right"
-                      dir="ltr"
-                    >
-                      {patient.phone || "—"}
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {patient.gender === "male"
-                        ? "ذكر"
-                        : patient.gender === "female"
-                          ? "أنثى"
-                          : "—"}
-                    </td>
-                    <td className="px-6 py-4">
-                      {patient.allergies.length > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 text-destructive px-2.5 py-1 text-xs font-bold">
+          <DataTable>
+            <THead>
+              <Th>المريض</Th>
+              <Th>الجنس</Th>
+              <Th>الحساسية</Th>
+              <Th>الأمراض المزمنة</Th>
+              <Th>آخر وصفة</Th>
+              <Th center>الإجراءات</Th>
+            </THead>
+            <TBody>
+              {patients.map((patient: any) => (
+                <tr key={patient.id} className={rowClass}>
+                  <td className={cellClass}>
+                    <Link href={`/dashboard/patients/${patient.id}`} className="block hover:[&_p:first-child]:text-primary">
+                      <PrimaryCell title={patient.name} subtitle={patient.phone || "—"} subtitleLtr />
+                    </Link>
+                  </td>
+                  <td className={`${cellClass} text-muted-foreground whitespace-nowrap`}>
+                    {patient.gender === "male" ? "ذكر" : patient.gender === "female" ? "أنثى" : "—"}
+                  </td>
+                  <td className={cellClass}>
+                    {patient.allergies.length > 0 ? (
+                      <span title={patient.allergies.join("، ")}>
+                        <StatusPill tone="destructive">
                           <AlertCircle className="w-3 h-3" />
-                          {patient.allergies.length}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/50 text-sm">
-                          —
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {patient.chronicDiseases.length > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-warning/20 bg-warning/10 text-warning px-2.5 py-1 text-xs font-bold">
+                          {patient.allergies.length === 1 ? patient.allergies[0] : `${patient.allergies.length} أنواع`}
+                        </StatusPill>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
+                  </td>
+                  <td className={cellClass}>
+                    {patient.chronicDiseases.length > 0 ? (
+                      <span title={patient.chronicDiseases.join("، ")}>
+                        <StatusPill tone="warning">
                           <HeartPulse className="w-3 h-3" />
-                          {patient.chronicDiseases.length}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/50 text-sm">
-                          —
-                        </span>
-                      )}
-                    </td>
-                    <td
-                      className="px-6 py-4 text-muted-foreground text-sm whitespace-nowrap text-right"
-                      dir="ltr"
-                      suppressHydrationWarning
-                    >
-                      {patient.prescriptions[0]
-                        ? new Date(
-                            patient.prescriptions[0].createdAt,
-                          ).toLocaleDateString("ar-IQ", {
-                            timeZone: "Asia/Baghdad",
-                          })
-                        : "—"}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <UpdatePatient id={patient.id} />
-                        <DeletePatient id={patient.id} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                          {patient.chronicDiseases.length === 1 ? patient.chronicDiseases[0] : `${patient.chronicDiseases.length} أمراض`}
+                        </StatusPill>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
+                  </td>
+                  <td className={cellClass}>
+                    {patient.prescriptions[0] ? (
+                      <DateTimeCell date={patient.prescriptions[0].createdAt} showTime={false} />
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
+                  </td>
+                  <td className={cellClass}>
+                    <Actions>
+                      <UpdatePatient id={patient.id} />
+                      <DeletePatient id={patient.id} />
+                    </Actions>
+                  </td>
+                </tr>
+              ))}
+            </TBody>
+          </DataTable>
         )}
-      </div>
+
+        <TablePagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          unit="مريض"
+          hrefFor={buildPageUrl}
+        />
+      </TableCard>
     </div>
   );
 }

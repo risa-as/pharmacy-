@@ -7,31 +7,25 @@ import { USER_SAFE_SELECT } from "@/app/lib/user-scope";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
-import { Users, Shield, Pill, Search, User } from "lucide-react";
+import { Users, Shield, Pill, User } from "lucide-react";
+import TableSearch from "@/app/ui/table-search";
+import TablePagination from "@/app/ui/table-pagination";
+import {
+  TableCard, TableToolbar, ResultCount, DataTable, THead, Th, TBody, rowClass, cellClass,
+  PrimaryCell, MutedText, StatusPill, Actions, EmptyState, type PillTone,
+} from "@/app/ui/data-table";
 
-const ROLE_META: Record<string, { label: string; cls: string }> = {
-  SUPER_ADMIN: {
-    label: "مدير المنصة",
-    cls: "bg-info/10 text-info border-info/20",
-  },
-  ADMIN: { label: "مدير", cls: "bg-primary/10 text-primary border-primary/20" },
-  MANAGER: {
-    label: "مدير فرع",
-    cls: "bg-primary/10 text-primary border-primary/20",
-  },
-  PHARMACIST: {
-    label: "صيدلي",
-    cls: "bg-success/10 text-success border-success/20",
-  },
-  CASHIER: {
-    label: "كاشير",
-    cls: "bg-warning/10 text-warning border-warning/20",
-  },
+const ROLE_META: Record<string, { label: string; tone: PillTone }> = {
+  SUPER_ADMIN: { label: "مدير المنصة", tone: "info" },
+  ADMIN: { label: "مدير", tone: "primary" },
+  MANAGER: { label: "مدير فرع", tone: "primary" },
+  PHARMACIST: { label: "صيدلي", tone: "success" },
+  CASHIER: { label: "كاشير", tone: "warning" },
 };
 
 export default async function Page(
   props: {
-    searchParams: Promise<{ branch?: string; search?: string }>;
+    searchParams: Promise<{ branch?: string; search?: string; page?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -103,6 +97,19 @@ export default async function Page(
     ? `search=${encodeURIComponent(search)}`
     : undefined;
 
+  // Pagination over the filtered list, like the other tables.
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, parseInt(searchParams.page ?? "1") || 1);
+  const totalPages = Math.ceil(list.length / PAGE_SIZE);
+  const pageRows = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const buildPageUrl = (p: number) => {
+    const params = new URLSearchParams();
+    if (selectedBranchId) params.set("branch", selectedBranchId);
+    if (search) params.set("search", search);
+    params.set("page", String(p));
+    return `/dashboard/users?${params.toString()}`;
+  };
+
   return (
     <div className="space-y-6" dir="rtl" suppressHydrationWarning>
       {/* بطاقات الإحصائيات */}
@@ -132,114 +139,76 @@ export default async function Page(
         })}
       </div>
 
-      {/* الفلاتر */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <BranchFilter
-          currentBranch={selectedBranchId || undefined}
-          baseUrl="/dashboard/users"
-          extraParams={branchExtra}
-        />
-        <form method="GET" className="relative w-full sm:max-w-xs">
-          {selectedBranchId && (
-            <input type="hidden" name="branch" value={selectedBranchId} />
-          )}
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            name="search"
-            defaultValue={search}
-            placeholder="بحث بالاسم أو البريد..."
-            className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-          />
-        </form>
-      </div>
+      <BranchFilter
+        currentBranch={selectedBranchId || undefined}
+        baseUrl="/dashboard/users"
+        extraParams={branchExtra}
+      />
 
-      {/* الجدول */}
-      <div className="glass-card overflow-hidden">
+      {/* الجدول — بنفس تصميم جدول الدفعات وسلوكه */}
+      <TableCard>
+        <TableToolbar>
+          <TableSearch currentQuery={search} param="search" placeholder="بحث بالاسم أو البريد..." />
+          <ResultCount total={list.length} query={search} unit="مستخدم" />
+        </TableToolbar>
+
         {list.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-muted-foreground opacity-50" />
-            </div>
-            <p className="text-foreground font-medium">
-              {search ? "لا توجد نتائج مطابقة" : "لا يوجد مستخدمين حتى الآن"}
-            </p>
-          </div>
+          <EmptyState
+            icon={<Users />}
+            title={search ? "لا توجد نتائج للبحث" : "لا يوجد مستخدمين حتى الآن"}
+            hint={search ? "جرّب اسماً أو بريداً آخر" : undefined}
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
-                <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    المستخدم
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    البريد الإلكتروني
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الدور
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الفرع
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-medium font-cairo">
-                    الإجراءات
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {list.map((user: any) => {
-                  const role = ROLE_META[user.role] ?? {
-                    label: user.role,
-                    cls: "bg-muted text-muted-foreground border-border",
-                  };
-                  return (
-                    <tr
-                      key={user.id}
-                      className="hover:bg-muted/40 transition-colors"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                            <span className="text-sm font-bold text-primary">
-                              {(user.name || "U").charAt(0)}
-                            </span>
-                          </div>
-                          <span className="font-semibold text-foreground">
-                            {user.name || "بدون اسم"}
-                          </span>
-                        </div>
-                      </td>
-                      <td
-                        className="px-6 py-4 text-right text-muted-foreground font-mono text-sm"
-                        dir="ltr"
-                      >
-                        {user.email}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-bold ${role.cls}`}
-                        >
-                          {role.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground">
-                        {user.branch?.name || "—"}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <UpdateUser id={user.id} />
-                          <DeleteUser id={user.id} />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <THead>
+              <Th>المستخدم</Th>
+              <Th>الدور</Th>
+              <Th>الفرع</Th>
+              <Th>الحالة</Th>
+              <Th center>الإجراءات</Th>
+            </THead>
+            <TBody>
+              {pageRows.map((user: any) => {
+                const role = ROLE_META[user.role] ?? { label: user.role, tone: "muted" as const };
+                return (
+                  <tr key={user.id} className={rowClass}>
+                    <td className={cellClass}>
+                      <PrimaryCell title={user.name || "بدون اسم"} subtitle={user.email} subtitleLtr maxWidth="max-w-[260px]" />
+                    </td>
+                    <td className={cellClass}>
+                      <StatusPill tone={role.tone}>{role.label}</StatusPill>
+                    </td>
+                    <td className={`${cellClass} text-muted-foreground`}>
+                      <MutedText>{user.branch?.name}</MutedText>
+                    </td>
+                    <td className={cellClass}>
+                      {user.isActive === false ? (
+                        <StatusPill tone="destructive">معطّل</StatusPill>
+                      ) : (
+                        <StatusPill tone="success">نشط</StatusPill>
+                      )}
+                    </td>
+                    <td className={cellClass}>
+                      <Actions>
+                        <UpdateUser id={user.id} />
+                        <DeleteUser id={user.id} />
+                      </Actions>
+                    </td>
+                  </tr>
+                );
+              })}
+            </TBody>
+          </DataTable>
         )}
-      </div>
+
+        <TablePagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={list.length}
+          unit="مستخدم"
+          hrefFor={buildPageUrl}
+        />
+      </TableCard>
     </div>
   );
 }

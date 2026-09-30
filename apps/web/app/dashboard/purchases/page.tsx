@@ -11,32 +11,24 @@ import {
   Receipt,
   Clock,
   Banknote,
-  Search,
-  Building2,
+  Eye,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import { auth } from "@/auth";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import DeletePurchaseButton from "./[id]/components/delete-button";
+import TableSearch from "@/app/ui/table-search";
+import TablePagination from "@/app/ui/table-pagination";
+import { formatCurrency } from "@/app/lib/utils/currency";
+import {
+  TableCard, TableToolbar, ResultCount, DataTable, THead, Th, TBody, rowClass, cellClass,
+  PrimaryCell, MutedText, StatusPill, Actions, actionClass, EmptyState, DateTimeCell, type PillTone,
+} from "@/app/ui/data-table";
 
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  PENDING: {
-    label: "قيد الانتظار",
-    cls: "bg-warning/10 text-warning border-warning/20",
-  },
-  COMPLETED: {
-    label: "مكتمل",
-    cls: "bg-success/10 text-success border-success/20",
-  },
-  RECEIVED: {
-    label: "تم الاستلام",
-    cls: "bg-info/10 text-info border-info/20",
-  },
-  CANCELLED: {
-    label: "ملغى",
-    cls: "bg-destructive/10 text-destructive border-destructive/20",
-  },
+const STATUS_META: Record<string, { label: string; tone: PillTone }> = {
+  PENDING: { label: "قيد الانتظار", tone: "warning" },
+  COMPLETED: { label: "مكتمل", tone: "success" },
+  RECEIVED: { label: "تم الاستلام", tone: "info" },
+  CANCELLED: { label: "ملغى", tone: "destructive" },
 };
 
 export default async function PurchasesPage(
@@ -123,6 +115,20 @@ export default async function PurchasesPage(
     ? `search=${encodeURIComponent(search)}`
     : undefined;
 
+  // Pagination over the (already loaded) list, like the other tables.
+  const PAGE_SIZE = 50;
+  const page =
+    typeof searchParams.page === "string" ? Math.max(1, parseInt(searchParams.page) || 1) : 1;
+  const totalPages = Math.ceil(list.length / PAGE_SIZE);
+  const pageRows = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const buildPageUrl = (p: number) => {
+    const params = new URLSearchParams();
+    if (filterBranchId) params.set("branch", filterBranchId);
+    if (search) params.set("search", search);
+    params.set("page", String(p));
+    return `/dashboard/purchases?${params.toString()}`;
+  };
+
   return (
     <div className="space-y-6" dir="rtl">
       {/* الرأس */}
@@ -145,27 +151,11 @@ export default async function PurchasesPage(
         </Link>
       </div>
 
-      {/* الفلاتر */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <BranchFilter
-          currentBranch={filterBranchId}
-          baseUrl="/dashboard/purchases"
-          extraParams={branchExtraParams}
-        />
-        <form method="GET" className="relative w-full sm:max-w-xs">
-          {filterBranchId && (
-            <input type="hidden" name="branch" value={filterBranchId} />
-          )}
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            name="search"
-            defaultValue={search}
-            placeholder="بحث باسم المورد أو رقم الطلب..."
-            className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-          />
-        </form>
-      </div>
+      <BranchFilter
+        currentBranch={filterBranchId}
+        baseUrl="/dashboard/purchases"
+        extraParams={branchExtraParams}
+      />
 
       {/* بطاقات الإحصائيات */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -194,128 +184,94 @@ export default async function PurchasesPage(
         })}
       </div>
 
-      {/* الجدول */}
-      <div className="glass-card overflow-hidden">
+      {/* الجدول — بنفس تصميم جدول الدفعات وسلوكه */}
+      <TableCard>
+        <TableToolbar>
+          <TableSearch currentQuery={search} param="search" placeholder="بحث باسم المورد أو رقم الطلب..." />
+          <ResultCount total={list.length} query={search} unit="طلب" />
+        </TableToolbar>
+
         {list.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Truck className="w-8 h-8 text-muted-foreground opacity-50" />
-            </div>
-            <p className="text-foreground font-medium">
-              {search ? "لا توجد نتائج مطابقة" : "لا يوجد سجل مشتريات"}
-            </p>
-            {!search && (
-              <p className="text-sm text-muted-foreground mt-1">
-                ابدأ بإنشاء طلب ذكي جديد
-              </p>
-            )}
-          </div>
+          <EmptyState
+            icon={<Truck />}
+            title={search ? "لا توجد نتائج للبحث" : "لا يوجد سجل مشتريات"}
+            hint={search ? "جرّب كلمة بحث أخرى" : "ابدأ بإنشاء طلب ذكي جديد"}
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
-                <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    المورد
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    رقم الطلب
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الفرع
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    التاريخ
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    المواد
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الإجمالي
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الحالة
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-medium font-cairo">
-                    الإجراءات
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {list.map((purchase: any) => {
-                  const meta = STATUS_META[purchase.status] ?? {
-                    label: purchase.status,
-                    cls: "bg-muted text-muted-foreground border-border",
-                  };
-                  return (
-                    <tr
-                      key={purchase.id}
-                      className="hover:bg-muted/40 transition-colors"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
-                            <Building2 className="w-4 h-4 text-primary" />
-                          </div>
-                          <span className="font-semibold text-foreground">
-                            {purchase.supplier?.name || "غير معروف"}
-                          </span>
-                        </div>
-                      </td>
-                      <td
-                        className="px-6 py-4 font-mono text-right text-xs text-muted-foreground"
-                        dir="ltr"
-                      >
-                        {purchase.documentNumber}
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground">
-                        {purchase.branch?.name || "غير معروف"}
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
-                        {format(new Date(purchase.createdAt), "PPP", {
-                          locale: ar,
-                        })}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center text-sm text-muted-foreground bg-muted rounded-md px-2.5 py-1">
-                          {purchase._count.items}
-                        </span>
-                      </td>
-                      <td
-                        className="px-6 py-4 text-right font-bold text-foreground whitespace-nowrap"
-                        dir="ltr"
-                      >
-                        {fmt(purchase.total)} د.ع
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-bold ${meta.cls}`}
+          <DataTable>
+            <THead>
+              <Th>المورد</Th>
+              <Th>الفرع</Th>
+              <Th>المواد</Th>
+              <Th>الإجمالي</Th>
+              <Th>التاريخ</Th>
+              <Th>الحالة</Th>
+              <Th center>الإجراءات</Th>
+            </THead>
+            <TBody>
+              {pageRows.map((purchase: any) => {
+                const meta = STATUS_META[purchase.status] ?? {
+                  label: purchase.status,
+                  tone: "muted" as const,
+                };
+                const due = purchase.status === "CANCELLED" ? 0 : Math.max(0, purchase.total - (purchase.paidAmount || 0));
+                return (
+                  <tr key={purchase.id} className={rowClass}>
+                    <td className={cellClass}>
+                      <PrimaryCell
+                        title={purchase.supplier?.name || "غير معروف"}
+                        subtitle={purchase.documentNumber}
+                        subtitleLtr
+                      />
+                    </td>
+                    <td className={`${cellClass} text-muted-foreground`}>
+                      <MutedText>{purchase.branch?.name || "غير معروف"}</MutedText>
+                    </td>
+                    <td className={`${cellClass} text-muted-foreground whitespace-nowrap`}>
+                      <span className="font-bold text-foreground">{purchase._count.items}</span> صنف
+                    </td>
+                    <td className={`${cellClass} whitespace-nowrap`}>
+                      <div className="font-bold text-foreground" dir="ltr">{formatCurrency(purchase.total)}</div>
+                      {due > 0 && (
+                        <div className="text-[10px] text-muted-foreground" dir="ltr">مستحق {formatCurrency(due)}</div>
+                      )}
+                    </td>
+                    <td className={cellClass}>
+                      <DateTimeCell date={purchase.createdAt} />
+                    </td>
+                    <td className={cellClass}>
+                      <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
+                    </td>
+                    <td className={cellClass}>
+                      <Actions>
+                        <Link
+                          href={`/dashboard/purchases/${purchase.id}`}
+                          title="تفاصيل الفاتورة"
+                          className={actionClass()}
                         >
-                          {meta.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <Link
-                            href={`/dashboard/purchases/${purchase.id}`}
-                            className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                          >
-                            تفاصيل الفاتورة
-                          </Link>
-                          {(purchase.status === "PENDING" ||
-                            purchase.status === "CANCELLED") && ctx.userPermissions.canCreatePurchase && (
-                            <MoreActions label="إجراءات فاتورة الشراء"><DeletePurchaseButton purchaseId={purchase.id} /></MoreActions>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                        {(purchase.status === "PENDING" ||
+                          purchase.status === "CANCELLED") && ctx.userPermissions.canCreatePurchase && (
+                          <MoreActions label="إجراءات فاتورة الشراء"><DeletePurchaseButton purchaseId={purchase.id} /></MoreActions>
+                        )}
+                      </Actions>
+                    </td>
+                  </tr>
+                );
+              })}
+            </TBody>
+          </DataTable>
         )}
-      </div>
+
+        <TablePagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={list.length}
+          unit="طلب"
+          hrefFor={buildPageUrl}
+        />
+      </TableCard>
     </div>
   );
 }

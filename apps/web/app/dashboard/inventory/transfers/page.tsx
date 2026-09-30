@@ -8,7 +8,7 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { requireFeature } from '@/app/lib/page-guards';
 import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 import { NextResponse } from 'next/server';
-import { ArrowLeftRight, Search, Clock, ArrowUpRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeftRight, Clock, ArrowUpRight, CheckCircle2, Loader2 } from 'lucide-react';
 
 export const metadata: Metadata = {
     title: 'تحويلات الأدوية بين الأفرع | Faramace',
@@ -123,21 +123,6 @@ export default async function Page(
                             </a>
                         );
                     })}
-                </div>
-
-                {/* البحث */}
-                <div className="p-4 border-b border-border">
-                    <form method="GET" className="relative max-w-sm">
-                        <input type="hidden" name="tab" value={tab} />
-                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <input
-                            type="text"
-                            name="query"
-                            defaultValue={query}
-                            placeholder="بحث في التحويلات..."
-                            className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-                        />
-                    </form>
                 </div>
 
                 <Suspense

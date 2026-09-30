@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (!['LINK_RECEIPT', 'CONFIRM_PAYMENT'].includes(body.action) || typeof body.reference !== 'string' || body.reference.trim().length < 3 || typeof body.note !== 'string' || body.note.trim().length < 5 || body.confirmed !== true) throw new WarehouseOperationError('أدخل المرجع ومصدر المطابقة وأكد صحة المستندات.', 400);
         const command = warehouseCommand(initial.warehouseId, `pharmacy-reconciliation:${id}`, body);
         const result = await prisma.$transaction(tx => runWarehouseOperation(tx, command, async () => {
-            await tx.$queryRaw`SELECT id FROM "WarehouseOrder" WHERE id = ${id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseOrder" WHERE id = ${id} FOR UPDATE`;
             const order = await tx.warehouseOrder.findFirst({ where: { AND: [{ id }, scope] }, include: { items: true, branch: true } });
             if (!order || !['SHIPPED', 'DELIVERED'].includes(order.status)) throw new WarehouseOperationError('الطلب غير قابل للمطابقة.', 409);
             if (body.action === 'CONFIRM_PAYMENT') {
@@ -60,8 +60,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 const prior = await tx.warehouseSettlement.findFirst({ where: { warehouseId: order.warehouseId, kind: 'PAYMENT_MATCH', sourceId: proposal.id } });
                 if (prior) return { entry: prior, replayed: true };
                 if (body.reference.trim() !== data.reference) throw new WarehouseOperationError('مرجع المستند لا يطابق طلب المذخر.');
-                await tx.$queryRaw`SELECT id FROM "WarehouseInvoice" WHERE id = ${data.invoiceId} FOR UPDATE`;
-                await tx.$queryRaw`SELECT id FROM "Purchase" WHERE id = ${data.purchaseId} FOR UPDATE`;
+                await tx.$queryRaw`SELECT id FROM "public"."WarehouseInvoice" WHERE id = ${data.invoiceId} FOR UPDATE`;
+                await tx.$queryRaw`SELECT id FROM "public"."Purchase" WHERE id = ${data.purchaseId} FOR UPDATE`;
                 const invoice = await tx.warehouseInvoice.findFirst({ where: { id: data.invoiceId, orderId: id, warehouseId: order.warehouseId, status: { not: 'CANCELLED' } } });
                 const purchase = await tx.purchase.findFirst({ where: { id: data.purchaseId, warehouseOrderId: id, branchId: order.branchId, status: 'COMPLETED', supplier: { warehouseId: order.warehouseId, organizationId: order.branch.organizationId } } });
                 if (!invoice || !purchase || invoice.paidAmount !== data.invoicePaid || purchase.paidAmount !== data.purchasePaid || invoice.total !== data.total || purchase.total !== data.total) throw new WarehouseOperationError('تغيرت الأرصدة منذ طلب المطابقة؛ اطلب مطابقة حديثة.');
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 if (pharmacyIncrease > 0) {
                     // A supplier payment may already have reduced Supplier.balance
                     // without being allocated to Purchase.paidAmount. Never debit it twice.
-                    await tx.$queryRaw`SELECT id FROM "Supplier" WHERE id = ${purchase.supplierId} FOR UPDATE`;
+                    await tx.$queryRaw`SELECT id FROM "public"."Supplier" WHERE id = ${purchase.supplierId} FOR UPDATE`;
                     if (body.pharmacyPaymentSource === 'EXISTING' && typeof body.supplierPaymentId === 'string') {
                         const payment = await tx.supplierPayment.findFirst({ where: { id: body.supplierPaymentId, supplierId: purchase.supplierId, branchId: purchase.branchId } });
                         if (!payment) throw new WarehouseOperationError('سند سداد المورد غير موجود في الفرع.', 404);
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 return { entry };
             }
             if (typeof body.purchaseId !== 'string' || !Array.isArray(body.lines) || !body.lines.length) throw new WarehouseOperationError('حدد فاتورة الاستلام وربط البنود والدفعات.', 400);
-            await tx.$queryRaw`SELECT id FROM "Purchase" WHERE id = ${body.purchaseId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."Purchase" WHERE id = ${body.purchaseId} FOR UPDATE`;
             const purchase = await tx.purchase.findFirst({ where: { id: body.purchaseId, branchId: order.branchId, status: 'COMPLETED', supplier: { warehouseId: order.warehouseId, organizationId: order.branch.organizationId } }, include: { items: true } });
             if (!purchase || (purchase.warehouseOrderId && purchase.warehouseOrderId !== id)) throw new WarehouseOperationError('فاتورة الاستلام غير متطابقة أو مرتبطة بطلب آخر.');
             if (await tx.warehouseReturn.count({ where: { orderId: id } })) throw new WarehouseOperationError('لا يمكن تغيير ربط الاستلام بعد إنشاء مرتجعات.');

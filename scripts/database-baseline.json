@@ -125,6 +125,7 @@
     "20260927000000_invoice_scope_and_device_fk": "e13e79287a880786ad90ffe3034d4868c5d30a1b1e201885a14d59c144c6dab8",
     "20260928000000_reconcile_untracked_schema": "950638c152ae07aefe3a8a0973228db2c87e2ac9726b8ff07cec717b85e22a4d",
     "20260930100000_ai_usage_metrics": "b77930e6112bbe22a80ae0c86dd4ecfa256ae995c960b2236dfb585cf022cd97",
+    "20260930120000_pin_function_search_path": "a4c63ba90cd5ce4bf970f048a12fdefb48c2ee785ad945a93d58f3f148b29a31",
     "20260930140000_purchase_settings_and_drafts": "351a138d3fef7c4bb462383282b2c5c8c502b7d4041e51729b4b39788dbb442b",
     "20260930150000_purchase_transfer_days_draft_completion": "c84350a84f32ca4915534da3a7ff1ae8df96919b1c76dd9cc16405fdeca0f9d2"
   }

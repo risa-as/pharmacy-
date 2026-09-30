@@ -27,12 +27,15 @@ const MIGRATIONS = join(WEB, 'prisma/migrations');
 const SCHEMA = join(WEB, 'prisma/schema.prisma');
 // pnpm may link the CLI in the app or hoist it to the workspace root.
 const PRISMA = createRequire(join(WEB, 'package.json')).resolve('prisma/build/index.js');
-const PREFIX = 'faramace_migration_test_';
+const PREFIX = `faramace_migration_test_${process.pid}_`;
 const created = new Set();
 const all = readdirSync(MIGRATIONS, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
 // The migrations that existed before the chain repair (pinned in database-baseline.json).
 const pinned = JSON.parse(readFileSync('scripts/database-baseline.json', 'utf8')).historical;
 const historical = pinned ? Object.keys(pinned).sort() : all;
+// The old db-push fixture has the table schema but predates function settings.
+const functionSettingsMigration = '20260930120000_pin_function_search_path';
+const beforeFunctionSettings = all.indexOf(functionSettingsMigration);
 const work = mkdtempSync(join(tmpdir(), 'faramace-migrations-'));
 
 const url = (name) => { const u = new URL(ADMIN); u.pathname = `/${name}`; return u.toString(); };
@@ -158,7 +161,8 @@ describe('existing database: upgrade of a restored copy', () => {
 
         const check = baseline(copy, shadow);
         assert.equal(check.code, 0, check.out);
-        assert.match(check.out, new RegExp(`matches the chain after ${all.length} of ${all.length} migrations`));
+        assert.match(check.out, new RegExp(`matches the chain after ${beforeFunctionSettings} of ${all.length} migrations`));
+        assert.match(check.out, /applying 1 migration\(s\) with migrate deploy/);
         assert.equal(hasMigrationsTable(copy), false, 'check mode never writes');
 
         const refused = baseline(copy, shadow, '--apply');
@@ -183,7 +187,7 @@ describe('existing database: upgrade of a restored copy', () => {
         const shadow = createDb('shadow_b');
         const applied = baseline(copy, shadow, '--apply');
         assert.equal(applied.code, 0, applied.out);
-        const repairs = all.filter((n) => !historical.includes(n));
+        const repairs = all.slice(0, beforeFunctionSettings).filter((n) => !historical.includes(n));
         assert.match(applied.out, new RegExp(`recording ${repairs.length} migration`));
         assert.deepEqual(recorded(copy), all);
         assert.equal(schemaDiff(copy), 0);

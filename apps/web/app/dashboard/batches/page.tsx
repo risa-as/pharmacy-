@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import BatchSearch from "@/app/ui/batches/batch-search";
-import Link from "next/link";
+import TablePagination from "@/app/ui/table-pagination";
 
 const PAGE_SIZE = 250;
 
@@ -53,7 +53,7 @@ export default async function BatchesPage(
       SELECT COUNT(*) AS total,
         COUNT(*) FILTER (WHERE b.quantity > 0 AND b."expiryDate" < ${now}) AS expired,
         COUNT(*) FILTER (WHERE b.quantity > 0 AND b."expiryDate" >= ${now} AND b."expiryDate" <= ${thirtyDaysFromNow}) AS expiring
-      FROM "Batch" b JOIN "Inventory" s ON s.id = b."inventoryId" JOIN "Branch" br ON br.id = s."branchId"
+      FROM "public"."Batch" b JOIN "public"."Inventory" s ON s.id = b."inventoryId" JOIN "public"."Branch" br ON br.id = s."branchId"
       WHERE ${scope}`,
     prisma.batch.findMany({
       where: searchFilter,
@@ -176,55 +176,13 @@ export default async function BatchesPage(
         )}
 
         {/* الترقيم */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-border gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground">
-              صفحة {currentPage} من {totalPages} — {filteredTotal} دفعة
-            </span>
-            <div className="flex items-center gap-1">
-              {currentPage > 1 && (
-                <PaginationLink
-                  href={buildPageUrl(searchParams, currentPage - 1)}
-                  label="السابق"
-                />
-              )}
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(
-                  (p) =>
-                    Math.abs(p - currentPage) <= 2 || p === 1 || p === totalPages,
-                )
-                .reduce<(number | "...")[]>((acc, p, idx, arr) => {
-                  if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1)
-                    acc.push("...");
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, i) =>
-                  p === "..." ? (
-                    <span
-                      key={`ellipsis-${i}`}
-                      className="px-2 py-1.5 text-sm text-muted-foreground"
-                    >
-                      …
-                    </span>
-                  ) : (
-                    <PaginationLink
-                      key={p}
-                      href={buildPageUrl(searchParams, p as number)}
-                      label={String(p)}
-                      active={p === currentPage}
-                    />
-                  ),
-                )}
-              {currentPage < totalPages && (
-                <PaginationLink
-                  href={buildPageUrl(searchParams, currentPage + 1)}
-                  label="التالي"
-                />
-              )}
-            </div>
-          </div>
-        )}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={filteredTotal}
+          unit="دفعة"
+          hrefFor={(p) => buildPageUrl(searchParams, p)}
+        />
       </div>
     </div>
   );
@@ -239,27 +197,4 @@ function buildPageUrl(
   if (searchParams?.query) params.set("query", searchParams.query);
   params.set("page", String(page));
   return `/dashboard/batches?${params.toString()}`;
-}
-
-function PaginationLink({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${
-        active
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:bg-muted border border-border"
-      }`}
-    >
-      {label}
-    </Link>
-  );
 }

@@ -1,6 +1,11 @@
 import { prisma } from '@/app/lib/prisma';
 import { ReceiveTransferButton, TransferStatus } from './buttons';
-import { ArrowUpRight, ArrowDownLeft, PackageOpen, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, PackageOpen } from 'lucide-react';
+import TableSearch from '@/app/ui/table-search';
+import TablePagination from '@/app/ui/table-pagination';
+import {
+    TableToolbar, ResultCount, DataTable, THead, Th, TBody, rowClass, cellClass, EmptyState, DateTimeCell,
+} from '@/app/ui/data-table';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -44,53 +49,50 @@ export default async function TransfersTable({
         prisma.transfer.count({ where: whereClause }),
     ]);
 
-    if (transfers.length === 0) {
-        return (
-            <div className="py-16 text-center">
-                <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <PackageOpen className="w-8 h-8 text-muted-foreground opacity-50" />
-                </div>
-                <p className="text-foreground font-medium">
-                    {query ? 'لا توجد نتائج مطابقة' : 'لا توجد تحويلات مسجلة'}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                    {query ? 'جرّب كلمة بحث أخرى' : tab === 'incoming' ? 'لم يصلك أي تحويل بعد' : 'لم ترسل أي تحويل بعد'}
-                </p>
-            </div>
-        );
-    }
-
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
     const pageUrl = (p: number) =>
         `/dashboard/inventory/transfers?tab=${tab}&query=${encodeURIComponent(query)}&page=${p}`;
 
+    // Same layout and styling as the batches table: search bar, table, pagination.
     return (
         <div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-right text-sm text-foreground">
-                    <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
-                        <tr>
-                            <th scope="col" className="px-6 py-3.5 font-medium font-cairo">رقم التحويل</th>
-                            <th scope="col" className="px-6 py-3.5 font-medium font-cairo">الاتجاه</th>
-                            <th scope="col" className="px-6 py-3.5 font-medium font-cairo w-1/3">تفاصيل الأدوية</th>
-                            <th scope="col" className="px-6 py-3.5 font-medium font-cairo">الأصناف</th>
-                            <th scope="col" className="px-6 py-3.5 font-medium font-cairo">الحالة</th>
-                            <th scope="col" className="px-6 py-3.5 font-medium font-cairo">التاريخ</th>
-                            <th scope="col" className="px-6 py-3.5 font-medium font-cairo text-center">الإجراء</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border bg-card">
+            <TableToolbar>
+                <TableSearch currentQuery={query} placeholder="بحث باسم دواء أو فرع..." />
+                <ResultCount total={totalCount} query={query} unit="تحويل" />
+            </TableToolbar>
+
+            {transfers.length === 0 ? (
+                <EmptyState
+                    icon={<PackageOpen />}
+                    title={query ? 'لا توجد نتائج للبحث' : 'لا توجد تحويلات مسجلة'}
+                    hint={query ? 'جرّب كلمة بحث أخرى' : tab === 'incoming' ? 'لم يصلك أي تحويل بعد' : 'لم ترسل أي تحويل بعد'}
+                />
+            ) : (
+                <DataTable>
+                    <THead>
+                        <Th>رقم التحويل</Th>
+                        <Th>الاتجاه</Th>
+                        <Th>الأدوية</Th>
+                        <Th>الكمية</Th>
+                        <Th>الحالة</Th>
+                        <Th>التاريخ</Th>
+                        <Th center>الإجراء</Th>
+                    </THead>
+                    <TBody>
                         {transfers.map((transfer: any) => {
                             const isIncoming = transfer.toBranchId === branchId;
                             const isPendingReceive = isIncoming && transfer.status === 'IN_TRANSIT';
                             const totalUnits = transfer.items.reduce((acc: number, item: any) => acc + item.quantity, 0);
+                            const lines: string[] = transfer.items.map((item: any) => `${item.quantity}× ${item.drug.tradeName} (دفعة: ${item.batchNumber})`);
+                            const first = transfer.items[0];
+                            const others = transfer.items.length - 1;
 
                             return (
-                                <tr key={transfer.id} className="hover:bg-muted/40 transition-colors">
-                                    <td className="whitespace-nowrap px-6 py-4 font-mono text-muted-foreground text-xs" dir="ltr">
+                                <tr key={transfer.id} className={rowClass}>
+                                    <td className={`${cellClass} font-mono font-bold text-primary whitespace-nowrap`} dir="ltr">
                                         {transfer.documentNumber}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 font-bold">
+                                    <td className={`${cellClass} whitespace-nowrap font-semibold`}>
                                         {isIncoming ? (
                                             <span className="inline-flex items-center gap-1.5 text-primary">
                                                 <ArrowDownLeft className="h-4 w-4 shrink-0" />
@@ -103,29 +105,27 @@ export default async function TransfersTable({
                                             </span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-xs text-muted-foreground">
-                                        <ul className="space-y-0.5 max-h-20 overflow-y-auto">
-                                            {transfer.items.map((item: any, idx: number) => (
-                                                <li key={idx} className="truncate" title={`${item.quantity}x ${item.drug.tradeName}`}>
-                                                    <span className="font-bold text-foreground">{item.quantity}×</span>{' '}
-                                                    {item.drug.tradeName}{' '}
-                                                    <span className="text-muted-foreground/60 font-mono">(دفعة: {item.batchNumber})</span>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                    <td className={cellClass}>
+                                        <div className="max-w-[240px]" title={lines.join('\n')}>
+                                            <p className="font-semibold text-foreground truncate">
+                                                {first ? `${first.quantity}× ${first.drug.tradeName}` : '—'}
+                                            </p>
+                                            <p className="text-[10px] text-muted-foreground truncate">
+                                                {first ? `دفعة ${first.batchNumber}` : ''}
+                                                {others > 0 ? ` · و ${others} ${others === 1 ? 'صنف آخر' : 'أصناف أخرى'}` : ''}
+                                            </p>
+                                        </div>
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4">
-                                        <span className="inline-flex items-center text-sm text-muted-foreground bg-muted rounded-md px-2.5 py-1">
-                                            {totalUnits} عبوة
-                                        </span>
+                                    <td className={`${cellClass} text-muted-foreground whitespace-nowrap`}>
+                                        <span className="font-bold text-foreground">{totalUnits}</span> عبوة
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4">
+                                    <td className={cellClass}>
                                         <TransferStatus status={transfer.status} />
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-muted-foreground text-xs" dir="ltr">
-                                        {new Date(transfer.createdAt).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
+                                    <td className={cellClass}>
+                                        <DateTimeCell date={transfer.createdAt} />
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-center">
+                                    <td className={`${cellClass} text-center`}>
                                         {isPendingReceive ? (
                                             <ReceiveTransferButton id={transfer.id} isReceiving={true} />
                                         ) : (
@@ -135,48 +135,17 @@ export default async function TransfersTable({
                                 </tr>
                             );
                         })}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* الترقيم */}
-            {totalPages > 1 && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-border">
-                    <span className="text-xs text-muted-foreground">
-                        صفحة {currentPage} من {totalPages} — {totalCount} تحويل
-                    </span>
-                    <div className="flex items-center gap-2">
-                        {currentPage > 1 ? (
-                            <a
-                                href={pageUrl(currentPage - 1)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                                السابق
-                            </a>
-                        ) : (
-                            <span className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground/40 cursor-not-allowed">
-                                <ChevronRight className="w-4 h-4" />
-                                السابق
-                            </span>
-                        )}
-                        {currentPage < totalPages ? (
-                            <a
-                                href={pageUrl(currentPage + 1)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-                            >
-                                التالي
-                                <ChevronLeft className="w-4 h-4" />
-                            </a>
-                        ) : (
-                            <span className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground/40 cursor-not-allowed">
-                                التالي
-                                <ChevronLeft className="w-4 h-4" />
-                            </span>
-                        )}
-                    </div>
-                </div>
+                    </TBody>
+                </DataTable>
             )}
+
+            <TablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalCount={totalCount}
+                unit="تحويل"
+                hrefFor={pageUrl}
+            />
         </div>
     );
 }

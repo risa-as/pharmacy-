@@ -21,7 +21,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   // Pages that open on a dark band keep a light header until the user scrolls.
-  const overDark = !scrolled && (pathname === '/' || pathname === '/warehouses');
+  const overDark = !scrolled && pathname === '/warehouses';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -74,10 +74,10 @@ export default function Navbar() {
             <Link
               href="/contact"
               className={`rounded-xl px-5 py-2.5 font-bold shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-lift ${
-                overDark ? 'bg-accent text-ink-950 hover:bg-amber-400' : 'bg-primary-700 text-white hover:bg-primary-800'
+                overDark ? 'bg-primary-400 text-ink-950 hover:bg-primary-300' : 'bg-primary-700 text-white hover:bg-primary-800'
               }`}
             >
-              اطلب عرضاً تجريبياً
+              احجز عرضاً توضيحياً
             </Link>
           </div>
 

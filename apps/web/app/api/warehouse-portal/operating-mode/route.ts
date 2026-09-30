@@ -9,7 +9,7 @@ export async function PATCH(req:NextRequest) {
  const body=await req.json().catch(()=>null);
  if(!body || !['FULL','ORDER_PORTAL'].includes(body.mode) || body.confirmed!==true)return NextResponse.json({error:'اختر الوضع وأكد فهم طريقة عمله.'},{status:400});
  const result=await prisma.$transaction(async tx=>{
-  await tx.$queryRaw`SELECT id FROM "Warehouse" WHERE id = ${ctx.warehouseId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM "public"."Warehouse" WHERE id = ${ctx.warehouseId} FOR UPDATE`;
   const current=await tx.warehouse.findUniqueOrThrow({where:{id:ctx.warehouseId}});
   if(current.operatingMode===body.mode)return {ok:true};
   if(body.mode==='ORDER_PORTAL' && (await tx.warehouseBatch.count({where:{catalogItem:{warehouseId:ctx.warehouseId}}})>0 || await tx.warehousePurchase.count({where:{warehouseId:ctx.warehouseId}})>0))return {ok:false,error:'لديك دفعات أو مشتريات مسجلة. لا يمكن تحويلها إلى بوابة طلبات؛ أبقِ الإدارة الكاملة حفاظًا على السجل.'};

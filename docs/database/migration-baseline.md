@@ -69,6 +69,17 @@ TARGET_DATABASE_URL=…/faramace_restore SHADOW_DATABASE_URL=…/faramace_baseli
 
 ## الاختبارات
 
+عندما يغيّر ترحيل إعدادات الدوال فقط (مثل تثبيت `search_path`)، قد تظل بنية الجداول مطابقة قبل الترحيل وبعده. تقارن الأداة تعريفات الدوال والمشغّلات أيضًا لتحديد آخر نقطة مطابقة؛ تسجّل التاريخ المثبت فقط، وتنفّذ الترحيل المتبقي بـ`migrate deploy`. لا تسجّل ترحيل تثبيت المسار يدويًا لمجرد أن `schema.prisma` مطابق.
+
+للتحقق من الاستعلامات المركّبة والدوال تحت مسار فارغ على القاعدة المحلية المعزولة:
+
+```bash
+TEST_DATABASE_URL=postgresql://…@127.0.0.1:5432/faramace_readiness \
+  pnpm --filter web exec vitest run --config vitest.integration.config.ts tests/search-path.integration.test.ts
+```
+
+يفترض الاختبار تطبيق سلسلة الترحيلات على القاعدة المعزولة. ينفّذ الاستعلامات الفعلية ويعيد بيانات الاختبار وتغييرات إعداد الدوال بالتراجع؛ تقدّم التسلسلات داخل قاعدة الاختبار لا يُعاد بالتراجع. لا تستخدم الإنتاج لهذا الاختبار. استخدم اتصالًا مباشرًا لأدوات النسخ والصيانة، لا اتصال pooler.
+
 - `node --test scripts/migrations.test.mjs`: كل ترحيل مثبت بالبصمة، والـ55 القديمة لم تتغير.
 - `MIGRATION_TEST_ADMIN_URL=postgresql://…@127.0.0.1:5432/postgres node --test --test-concurrency=1 scripts/migrations.integration.test.mjs` (PostgreSQL محلي فقط؛ قواعد `faramace_migration_test_*` مؤقتة):
   - قاعدة فارغة ← `migrate deploy` ← مطابقة تامة + الدوال والمشغّلات؛ والتهيئة بالترحيلات فقط.

@@ -154,10 +154,10 @@ function buildStockRowsCte({
         i."maxStock",
         gd."tradeName",
         COALESCE(SUM(bat."quantity"), 0)::double precision AS "stock"
-      FROM "Inventory" i
-      JOIN "GlobalDrug" gd ON gd."id" = i."drugId"
-      JOIN "Branch" br ON br."id" = i."branchId"
-      LEFT JOIN "Batch" bat ON bat."inventoryId" = i."id"
+      FROM "public"."Inventory" i
+      JOIN "public"."GlobalDrug" gd ON gd."id" = i."drugId"
+      JOIN "public"."Branch" br ON br."id" = i."branchId"
+      LEFT JOIN "public"."Batch" bat ON bat."inventoryId" = i."id"
       WHERE ${where}
       GROUP BY i."id", i."minStock", i."maxStock", gd."tradeName"
     )

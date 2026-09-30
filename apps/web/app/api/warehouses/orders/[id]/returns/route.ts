@@ -59,7 +59,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         const body = await req.json();
         if (!['DISPATCH', 'RESTORE'].includes(body.action) || typeof body.returnId !== 'string' || typeof body.note !== 'string' || body.note.trim().length < 5) throw new WarehouseOperationError('حدد المرتجع واكتب مرجع التسليم أو نتيجة الفحص.', 400);
         const result = await prisma.$transaction(async tx => {
-            await tx.$queryRaw`SELECT id FROM "WarehouseOrder" WHERE id = ${id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseOrder" WHERE id = ${id} FOR UPDATE`;
             const order = await tx.warehouseOrder.findFirst({ where: { AND: [{ id }, scope] } });
             if (!order) throw new WarehouseOperationError('الطلب غير موجود', 404);
             const record = await tx.warehouseReturn.findFirst({ where: { id: body.returnId, orderId: id, warehouseId: order.warehouseId }, include: { items: true } });

@@ -10,8 +10,7 @@ import {
   Receipt,
   Calculator,
 } from "lucide-react";
-import Link from "next/link";
-import { Suspense } from "react";
+import TablePagination from "@/app/ui/table-pagination";
 import SalesTable from "@/app/ui/dashboard/sales/sales-table";
 
 import { getCompanySettings } from "@/app/lib/actions/settings";
@@ -139,7 +138,7 @@ export default async function SalesPage(
       : Prisma.sql`(${clock} >= ${start} AND ${clock} <= ${end})`;
     const dates = fromParam && toParam ? buildDateRange(fromParam, toParam) : null;
     const matches = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-      SELECT s.id FROM "Sale" s JOIN "Branch" br ON br.id = s."branchId"
+      SELECT s.id FROM "public"."Sale" s JOIN "public"."Branch" br ON br.id = s."branchId"
       WHERE ${buildSaleTenantBranchCondition(tenantBranchWhere, branchId)} AND ${timeCondition}
       ${dates ? Prisma.sql`AND s."createdAt" >= ${dates.start} AND s."createdAt" <= ${dates.end}` : Prisma.empty}
     `);
@@ -298,70 +297,46 @@ export default async function SalesPage(
         })}
       </div>
 
-      {/* جدول المبيعات */}
+      {/* جدول المبيعات — بنفس تصميم جدول الدفعات وسلوكه */}
       <div className="glass-card overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {/* Title */}
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Receipt className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-bold text-foreground font-cairo leading-tight">
-                  سجل المبيعات
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {search
-                    ? `${totalCount.toLocaleString()} نتيجة بحث`
-                    : `${totalCount.toLocaleString()} فاتورة${totalPages > 1 ? ` — صفحة ${page} من ${totalPages}` : ""}`}
-                </p>
-              </div>
-            </div>
-            {/* Search */}
-            <Suspense
-              fallback={
-                <div className="h-10 w-full sm:w-80 rounded-lg bg-muted/80 animate-pulse" />
-              }
-            >
-              <SalesSearch />
-            </Suspense>
-          </div>
+        {/* البحث */}
+        <div className="p-4 border-b border-border flex items-center gap-3 flex-wrap">
+          <SalesSearch currentQuery={search ?? ""} />
+          <span className="text-sm text-muted-foreground">
+            {search ? (
+              <>
+                {totalCount.toLocaleString("en-US")} نتيجة لـ &quot;<span className="font-bold text-foreground">{search}</span>&quot;
+              </>
+            ) : (
+              <>{totalCount.toLocaleString("en-US")} فاتورة</>
+            )}
+          </span>
         </div>
 
         {sales.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">
-            <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-40" />
-            <p>لا توجد مبيعات مسجلة</p>
+          <div className="py-16 text-center">
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Receipt className="w-8 h-8 text-muted-foreground opacity-50" />
+            </div>
+            <p className="text-foreground font-medium">
+              {search ? "لا توجد نتائج للبحث" : "لا توجد مبيعات مسجلة"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {search ? "جرّب كلمة بحث أخرى" : hasDateFilter ? "لا توجد فواتير في الفترة المحددة" : "ستظهر فواتير البيع هنا عند تسجيلها"}
+            </p>
           </div>
         ) : (
           <SalesTable sales={sales} settings={settings} canEdit={canEditSale} />
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && !search && (
-          <div className="flex items-center justify-center gap-2 p-4 border-t border-border">
-            {page > 1 && (
-              <Link
-                href={buildPageUrl(page - 1)}
-                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
-              >
-                السابق
-              </Link>
-            )}
-            <span className="text-sm text-muted-foreground px-2">
-              {page} / {totalPages}
-            </span>
-            {page < totalPages && (
-              <Link
-                href={buildPageUrl(page + 1)}
-                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
-              >
-                التالي
-              </Link>
-            )}
-          </div>
-        )}
+        {/* الترقيم */}
+        <TablePagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          unit="فاتورة"
+          hrefFor={buildPageUrl}
+        />
       </div>
     </div>
   );

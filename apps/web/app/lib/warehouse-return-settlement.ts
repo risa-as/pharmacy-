@@ -16,7 +16,7 @@ export function stockAllocations(value: unknown): StockAllocation[] {
  * the request. A pending return can no longer be sold or returned again. */
 export async function requestWarehouseReturn(tx: Prisma.TransactionClient, orderId: string,
     scope: Prisma.WarehouseOrderWhereInput, body: any, actorName: string | null) {
-    await tx.$queryRaw`SELECT id FROM "WarehouseOrder" WHERE id = ${orderId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "public"."WarehouseOrder" WHERE id = ${orderId} FOR UPDATE`;
     const order = await tx.warehouseOrder.findFirst({ where: { AND: [{ id: orderId }, scope] },
         include: { items: { include: { drug: true } }, branch: true } });
     if (!order) throw new WarehouseOperationError('الطلب غير موجود في نطاقك.', 404);
@@ -26,7 +26,7 @@ export async function requestWarehouseReturn(tx: Prisma.TransactionClient, order
     if (!purchase || purchase.branchId !== order.branchId || purchase.status !== 'COMPLETED') {
         throw new WarehouseOperationError('يجب استلام فاتورة الشراء وربط دفعاتها بالطلب قبل الإرجاع. الطلبات القديمة تحتاج تسوية موثقة لدفعات الاستلام.', 409);
     }
-    await tx.$queryRaw`SELECT id FROM "Purchase" WHERE id = ${purchase.id} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "public"."Purchase" WHERE id = ${purchase.id} FOR UPDATE`;
     const previous = await tx.warehouseReturn.findMany({ where: { orderId, status: { in: ['PENDING', 'ACCEPTED'] } }, include: { items: true } });
     if (previous.some(record => record.status === 'PENDING')) throw new WarehouseOperationError('يوجد طلب إرجاع قيد المراجعة لهذا الطلب؛ تابع الطلب الحالي قبل إنشاء إرجاع آخر.');
     const receiptBatches = await tx.batch.findMany({ where: {
@@ -72,7 +72,7 @@ export async function requestWarehouseReturn(tx: Prisma.TransactionClient, order
     // the transaction back, including any rows changed before a competing sale.
     const allocations = items.flatMap(item => item.pharmacyAllocations);
     const changed = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        UPDATE "Batch" AS batch
+        UPDATE "public"."Batch" AS batch
         SET quantity = batch.quantity - allocation.quantity, "updatedAt" = NOW()
         FROM (VALUES ${Prisma.join(allocations.map(a => Prisma.sql`(${a.batchId}::text, ${a.quantity}::integer)`))}) AS allocation(id, quantity)
         WHERE batch.id = allocation.id AND batch.quantity >= allocation.quantity

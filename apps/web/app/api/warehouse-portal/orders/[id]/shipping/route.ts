@@ -211,7 +211,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         const isShippingTransition = order.status === 'APPROVED' && status === 'SHIPPED';
 
         const updated = await prisma.$transaction(async (tx) => {
-            await tx.$queryRaw`SELECT id FROM "Warehouse" WHERE id = ${ctx.warehouseId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."Warehouse" WHERE id = ${ctx.warehouseId} FOR UPDATE`;
             const warehouse = await tx.warehouse.findUniqueOrThrow({where:{id:ctx.warehouseId},select:{operatingMode:true}});
             await lockWarehouseOrder(tx, order.id, order.status);
             if (isShippingTransition) {

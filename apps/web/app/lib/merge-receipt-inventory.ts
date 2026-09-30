@@ -19,8 +19,8 @@ export async function mergeReceiptInventory(db: PrismaClient, input: {
         // Stock operations that have used the source identity require a fuller history migration.
         if (await tx.saleItem.count({where:{drugId:source.drugId,sale:{branchId:branch.id}}})
             || await tx.transferItem.count({where:{drugId:source.drugId}})) throw Error('للصنف العام مبيعات أو تحويلات؛ يلزم تدقيق تاريخ الحركات قبل التسوية.');
-        await tx.$queryRaw`SELECT id FROM "Inventory" WHERE id IN (${source.id},${target.id}) ORDER BY id FOR UPDATE`;
-        await tx.$queryRaw`SELECT id FROM "Batch" WHERE "inventoryId" IN (${source.id},${target.id}) ORDER BY id FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "public"."Inventory" WHERE id IN (${source.id},${target.id}) ORDER BY id FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "public"."Batch" WHERE "inventoryId" IN (${source.id},${target.id}) ORDER BY id FOR UPDATE`;
         const batches = await tx.batch.findMany({where:{inventoryId:{in:[source.id,target.id]}},orderBy:{id:'asc'}});
         const moved = batches.filter(b=>b.inventoryId===source.id);
         const receipts=await tx.purchaseItem.findMany({where:{drugId:source.drugId,purchase:{branchId:branch.id}}});

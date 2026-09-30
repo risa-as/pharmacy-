@@ -111,15 +111,20 @@ export default async function CashDrawerPage({
           </section>
           <aside className="rounded-xl border bg-muted/30 p-4 text-sm space-y-2">
             <p>
-              الأرصدة والمجاميع تخص كامل السجل السحابي. العمليات الموجودة على
-              الجهاز ولم تصل بعد لا تدخل في هذه المجاميع؛ راجع حالة المزامنة في
-              تطبيق سطح المكتب.
+              الأرصدة والمجاميع تشمل كامل الحركات المسجّلة في الموقع. حالة مزامنة
+              العمليات من الجهاز تُعرض في تطبيق سطح المكتب، ولا تُستنتج من تنبيه
+              ربط المستندات أدناه.
             </p>
             {data.unlinked > 0 && (
               <p className="flex gap-2 text-amber-700 dark:text-amber-400">
-                <AlertTriangle size={18} />
-                {data.unlinked} حركة بيع أو مرتجع مسجّلة دون مرجع مستند، وتحتاج
-                مطابقة قبل إعادة تسجيل أي مبلغ.
+                <AlertTriangle size={18} className="shrink-0" />
+                <span>
+                  {data.unlinked.toLocaleString("ar-IQ-u-nu-latn")} حركة بيع أو
+                  مرتجع مسجّلة ومحتسبة في المجاميع، لكن ربطها بالمستند الأصلي غير
+                  مكتمل. هذا عدد المراجع الناقصة، وليس عدد العمليات المعلّقة أو
+                  فاشلة المزامنة. يلزم مطابقة المراجع؛ لا تُعد تسجيل مبالغ هذه
+                  الحركات.
+                </span>
               </p>
             )}
             {Math.abs(data.safe.balance - (data.incoming - data.outgoing)) >

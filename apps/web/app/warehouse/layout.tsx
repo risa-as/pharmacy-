@@ -120,7 +120,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
         // @media print في app/globals.css (المرحلة 4: طباعة الباركود والملصقات) —
         // انظر التعليق هناك لسبب عدم كفاية إخفاء <aside> وحده لمنع تسرّب قصّ
         // الارتفاع (h-screen/overflow-hidden/overflow-y-auto) إلى ورقة الطباعة.
-        <div className="warehouse-shell flex min-h-screen flex-col bg-muted/60 text-foreground dark:bg-background md:h-screen md:flex-row md:overflow-hidden" dir="rtl">
+        <div className="warehouse-shell flex min-h-screen flex-col bg-[hsl(var(--canvas))] text-foreground dark:bg-background md:h-screen md:flex-row md:overflow-hidden" dir="rtl">
             <WarehouseSideNav
                 groups={groups}
                 warehouseName={warehouse?.name ?? "المذخر"}

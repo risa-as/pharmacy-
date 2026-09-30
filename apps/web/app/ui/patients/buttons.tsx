@@ -8,10 +8,10 @@ export function UpdatePatient({ id }: { id: string }) {
     return (
         <Link
             href={`/dashboard/patients/${id}/edit`}
-            className="rounded-lg border border-border p-2 hover:bg-muted transition-colors"
+            className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
             title="تعديل"
         >
-            <Pencil className="w-4 h-4 text-muted-foreground" />
+            <Pencil className="w-4 h-4" />
         </Link>
     );
 }
@@ -27,7 +27,7 @@ export function DeletePatient({ id }: { id: string }) {
         <DeleteButton
             action={deletePatientWithId}
             description="المريض"
-            className="rounded-lg border border-border hover:border-border"
+            className="rounded-lg border-border p-1.5 text-muted-foreground hover:border-destructive/50"
         />
     );
 }

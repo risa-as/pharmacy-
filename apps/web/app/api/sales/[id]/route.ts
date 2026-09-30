@@ -129,7 +129,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
         const totalDelta = newTotal - oldTotal; // >0 means customer owes/paid more
 
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${sale.id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."Sale" WHERE id = ${sale.id} FOR UPDATE`;
             const current = await tx.sale.findUnique({ where: { id: sale.id }, include: { returns: true } });
             if (!current || current.updatedAt.getTime() !== sale.updatedAt.getTime() || current.returns.length) throw new Error('تغيرت الفاتورة؛ حدّث البيانات قبل تعديلها.');
             let hasPriceOverride = false;

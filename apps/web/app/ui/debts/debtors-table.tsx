@@ -81,48 +81,49 @@ export default function DebtorsTable({
 
   return (
     <>
+      {/* Same layout and styling as the batches table; the list is small, so the search filters in place. */}
       <div>
         {/* البحث */}
-        <div className="p-4 border-b border-border">
-          <div className="relative max-w-sm">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="p-4 border-b border-border flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]" dir="rtl">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="بحث بالاسم أو رقم الهاتف..."
-              className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+              className="w-full rounded-lg border border-border bg-background py-2 pr-9 pl-3 text-sm placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-all"
             />
           </div>
+          <span className="text-sm text-muted-foreground">
+            {query.trim() ? (
+              <>
+                {filtered.length} نتيجة لـ &quot;<span className="font-bold text-foreground">{query.trim()}</span>&quot;
+              </>
+            ) : (
+              <>{debtors.length} مدين</>
+            )}
+          </span>
         </div>
 
         {filtered.length === 0 ? (
-          <div className="py-10 text-center text-muted-foreground">
-            <p className="text-sm">لا توجد نتائج مطابقة</p>
+          <div className="py-16 text-center">
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-muted-foreground opacity-50" />
+            </div>
+            <p className="text-foreground font-medium">لا توجد نتائج للبحث</p>
+            <p className="text-sm text-muted-foreground mt-1">جرّب اسماً أو رقماً آخر</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-right">
               <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                 <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    العميل
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الهاتف
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    المبلغ المستحق
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    فواتير غير مسددة
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    عمر الدين
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-medium font-cairo">
-                    الإجراءات
-                  </th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">العميل</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">المبلغ المستحق</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">فواتير غير مسددة</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">عمر الدين</th>
+                  <th className="px-3 py-3 text-center font-medium font-cairo whitespace-nowrap">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
@@ -134,57 +135,48 @@ export default function DebtorsTable({
                     : null;
 
                   return (
-                    <tr
-                      key={debtor.id}
-                      className="hover:bg-muted/40 transition-colors"
-                    >
-                      <td className="px-6 py-4">
-                        <Link
-                          href={`/dashboard/debts/${debtor.id}`}
-                          className="font-semibold text-foreground hover:text-primary transition-colors"
-                        >
-                          {debtor.name}
-                        </Link>
-                      </td>
-                      <td
-                        className="px-6 py-4 text-muted-foreground text-right"
-                        dir="ltr"
-                      >
-                        {phone || "—"}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="inline-flex items-center gap-1.5 bg-destructive/10 text-destructive border border-destructive/20 rounded-lg px-3 py-1">
-                          <span className="font-bold text-sm" dir="ltr">
-                            {formatIQD(debtor.balance)}
-                          </span>
+                    <tr key={debtor.id} className="hover:bg-muted/40 transition-colors">
+                      <td className="px-3 py-3">
+                        <div className="max-w-[220px]">
+                          <Link
+                            href={`/dashboard/debts/${debtor.id}`}
+                            className="block font-semibold text-foreground hover:text-primary transition-colors truncate"
+                            title={debtor.name}
+                          >
+                            {debtor.name}
+                          </Link>
+                          <p className="text-[10px] text-muted-foreground truncate text-right" dir="ltr">
+                            {phone || "—"}
+                          </p>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground bg-muted rounded-md px-2.5 py-1">
-                          {debtor.unpaidSalesCount} فاتورة
-                        </span>
+                      <td className="px-3 py-3 font-bold text-destructive whitespace-nowrap" dir="ltr">
+                        {formatIQD(debtor.balance)}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-3 text-muted-foreground whitespace-nowrap">
+                        <span className="font-bold text-foreground">{debtor.unpaidSalesCount}</span> فاتورة
+                      </td>
+                      <td className="px-3 py-3">
                         <DebtAgeBadge days={days} />
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-3">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* تسديد سريع */}
                           <button
                             onClick={() => setPayingDebtor(debtor)}
-                            className="rounded-lg border border-border p-2 hover:bg-success/10 hover:border-success/50 transition-colors"
+                            className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success hover:border-success/50 transition-colors"
                             title="تسديد سريع"
                           >
-                            <Banknote className="w-4 h-4 text-success" />
+                            <Banknote className="w-4 h-4" />
                           </button>
 
                           {/* كشف حساب */}
                           <Link
                             href={`/dashboard/debts/${debtor.id}`}
-                            className="rounded-lg border border-border p-2 hover:bg-primary/10 hover:border-primary/50 transition-colors"
+                            className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
                             title="كشف حساب"
                           >
-                            <FileText className="w-4 h-4 text-primary" />
+                            <FileText className="w-4 h-4" />
                           </Link>
 
                           {/* واتساب */}
@@ -193,10 +185,10 @@ export default function DebtorsTable({
                               href={whatsappUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="rounded-lg border border-border p-2 hover:bg-green-500/10 hover:border-green-500/50 transition-colors"
+                              className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-green-500/10 hover:text-green-600 hover:border-green-500/50 transition-colors"
                               title="إرسال تذكير واتساب"
                             >
-                              <MessageCircle className="w-4 h-4 text-green-500" />
+                              <MessageCircle className="w-4 h-4" />
                             </a>
                           )}
                         </div>

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             const notes = typeof body.notes === 'string' ? body.notes.trim() || null : null;
             let fieldSale = null;
             if (fieldSaleId) {
-                await tx.$queryRaw`SELECT id FROM "WarehouseFieldSale" WHERE id = ${fieldSaleId} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
+                await tx.$queryRaw`SELECT id FROM "public"."WarehouseFieldSale" WHERE id = ${fieldSaleId} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
                 const sale = await tx.warehouseFieldSale.findFirst({ where: { id: fieldSaleId, repId: id, warehouseId: ctx.warehouseId } });
                 if (!sale) throw new WarehouseOperationError('الفاتورة غير موجودة ضمن مبيعات هذا المندوب', 404);
                 if (sale.status === 'CANCELLED') throw new WarehouseOperationError('الفاتورة ملغاة.', 400);

@@ -29,14 +29,21 @@ const config: Config = {
           900: '#134e4a',
           950: '#042f2e',
         },
+        // Navy from the logo: headings and dark bands.
         ink: {
-          900: '#06201f',
-          950: '#031413',
+          50: '#eef1fb',
+          100: '#dce2f5',
+          600: '#1c2f86',
+          700: '#0b1f73',
+          800: '#0a1a5c',
+          900: '#0a1446',
+          950: '#060b2e',
         },
+        // Leaf green from the logo: small highlights only.
         accent: {
-          DEFAULT: '#F59E0B',
-          hover: '#D97706',
-          soft: '#FEF3C7',
+          DEFAULT: '#4cc157',
+          hover: '#3fae4a',
+          soft: '#e6f7e8',
         },
       },
       fontFamily: {

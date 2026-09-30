@@ -152,10 +152,10 @@ export async function POST(req: NextRequest) {
                     }
                     if (invoiceNumber === undefined && resolvedOrgId) {
                         const [counter] = await tx.$queryRaw<[{ nextNumber: bigint }]>`
-                            INSERT INTO "InvoiceCounter" ("organizationId", "nextNumber")
+                            INSERT INTO "public"."InvoiceCounter" ("organizationId", "nextNumber")
                             VALUES (${resolvedOrgId}::text, 2)
                             ON CONFLICT ("organizationId")
-                            DO UPDATE SET "nextNumber" = "InvoiceCounter"."nextNumber" + 1
+                            DO UPDATE SET "nextNumber" = "public"."InvoiceCounter"."nextNumber" + 1
                             RETURNING "nextNumber"
                         `;
                         invoiceNumber = Number(counter.nextNumber) - 1;

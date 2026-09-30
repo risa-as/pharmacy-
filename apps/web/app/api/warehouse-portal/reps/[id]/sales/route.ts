@@ -307,7 +307,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                     where: { warehouseId_organizationId: { warehouseId: ctx.warehouseId, organizationId } },
                     create: { warehouseId: ctx.warehouseId, organizationId }, update: {},
                 });
-                await tx.$queryRaw`SELECT id FROM "WarehouseCustomer" WHERE id = ${customer.id} FOR UPDATE`;
+                await tx.$queryRaw`SELECT id FROM "public"."WarehouseCustomer" WHERE id = ${customer.id} FOR UPDATE`;
                 const terms = await tx.warehouseCustomer.findUniqueOrThrow({ where: { id: customer.id } });
                 if (terms.isBlocked) throw new WarehouseOperationError('العميل موقوف عن التعامل.', 403);
                 const outstanding = await customerOutstanding(tx, ctx.warehouseId, organizationId, terms.openingBalance);

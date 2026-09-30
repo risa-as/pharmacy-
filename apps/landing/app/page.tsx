@@ -10,7 +10,9 @@ import SectionHeading from '../components/section-heading';
 import FeatureCard from '../components/feature-card';
 import CTAButton from '../components/cta-button';
 import WarehouseFlow from '../components/warehouse-flow';
-import { DashboardMockup, PhoneMockup, PosShot, WarehouseQuoteMockup } from '../components/mockups';
+import { PhoneMockup, WarehouseQuoteMockup } from '../components/mockups';
+import { BrowserShot, ScreenImage, shots } from '../components/screenshot';
+import Link from 'next/link';
 
 const FAQAccordion = dynamic(() => import('../components/faq-accordion'));
 
@@ -77,55 +79,52 @@ export default function Home() {
   return (
     <main className="flex-grow">
       {/* ─── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-ink-950 text-white">
-        <div className="absolute inset-0 bg-grid-dark mask-fade-b" aria-hidden="true" />
-        <div className="absolute -top-40 start-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-primary-600/30 blur-[120px]" aria-hidden="true" />
-        <div className="absolute bottom-0 end-0 h-72 w-72 rounded-full bg-accent/10 blur-[100px]" aria-hidden="true" />
+      <section className="relative overflow-hidden bg-white">
+        <div className="absolute inset-x-0 top-0 h-[640px] bg-grid-light mask-fade-b" aria-hidden="true" />
+        <div className="absolute -top-48 start-1/2 h-[560px] w-[900px] -translate-x-1/2 rounded-full bg-primary-100/70 blur-[120px]" aria-hidden="true" />
 
-        <div className="container relative pt-32 pb-20 lg:pt-40 lg:pb-28">
-          <div className="grid items-center gap-14 lg:grid-cols-[1.15fr_1fr]">
-            <div className="animate-fade-in-up">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 py-1.5 ps-2 pe-4 text-sm font-bold text-primary-100 ring-1 ring-white/15 backdrop-blur">
-                <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-black text-ink-950">جديد</span>
-                اطلب من المذاخر مباشرة من النظام
-              </span>
-              <h1 className="mt-6 text-4xl font-black leading-[1.3] tracking-tight sm:text-5xl lg:text-[3.35rem] xl:text-6xl">
-                صيدليتك كلها في نظام واحد،
-                <span className="mt-2 block text-gradient-warm">من البيع حتى طلب المذخر</span>
-              </h1>
-              <p className="mt-6 max-w-xl text-lg leading-relaxed text-primary-100/80 md:text-xl">
-                فاراماس يجمع الكاشير الذي يعمل دون إنترنت، ولوحة الإدارة السحابية، وتطبيق الجوال — ويربط صيدليتك بالمذاخر من الطلب
-                حتى فاتورة الشراء.
-              </p>
-              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <CTAButton href="/contact" variant="accent" size="lg" icon>
-                  اطلب عرضاً تجريبياً
-                </CTAButton>
-                <CTAButton href="/pricing" variant="glass" size="lg">
-                  استعرض الباقات
-                </CTAButton>
-              </div>
-              <ul className="mt-10 grid max-w-xl grid-cols-1 gap-x-6 gap-y-3 text-sm text-primary-100/80 sm:grid-cols-2">
-                {trustPoints.map((t) => (
-                  <li key={t} className="flex items-center gap-2">
-                    <CheckCircle2 size={17} className="shrink-0 text-primary-300" />
-                    {t}
-                  </li>
-                ))}
-              </ul>
+        <div className="container relative pt-32 lg:pt-40">
+          <div className="mx-auto max-w-5xl text-center animate-fade-in-up">
+            <Link
+              href="/warehouses"
+              className="inline-flex items-center gap-2 rounded-full bg-white py-1.5 ps-2 pe-4 text-sm font-bold text-ink-800 shadow-soft ring-1 ring-slate-200 transition-colors hover:ring-primary-300"
+            >
+              <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-black text-emerald-800">لأصحاب المذاخر</span>
+              <span className="hidden sm:inline">استقبل طلبات الصيدليات وسعّرها من بوابتك</span>
+              <span className="sm:hidden">بوابة الطلبات والتسعير</span>
+              <span aria-hidden="true">←</span>
+            </Link>
+            <h1 className="mt-7 text-4xl font-black leading-[1.3] tracking-tight text-ink-900 sm:text-5xl lg:text-[3.4rem]">
+              <span className="block xl:whitespace-nowrap">مبيعات صيدليتك ومخزونها وحساباتها</span>
+              <span className="block text-primary-700">في مكان واحد</span>
+            </h1>
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-600 md:text-xl">
+              كاشير يستمر في البيع عند انقطاع الإنترنت، ومخزون تعرف فيه كل دفعة وتاريخ انتهائها، وحسابات وتقارير دقيقة،
+              وطلبات للمذاخر من داخل النظام حتى فاتورة الشراء.
+            </p>
+            <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
+              <CTAButton href="/contact" variant="primary" size="lg" icon>
+                احجز عرضاً توضيحياً
+              </CTAButton>
+              <CTAButton href="/features" variant="secondary" size="lg">
+                شاهد المميزات
+              </CTAButton>
             </div>
+            <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-semibold text-slate-500">
+              {trustPoints.map((t) => (
+                <li key={t} className="flex items-center gap-1.5">
+                  <CheckCircle2 size={16} className="shrink-0 text-primary-600" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
 
-            {/* product composition */}
-            <div className="relative mx-auto w-full max-w-[640px] animate-fade-in-up [animation-delay:150ms]">
-              <div className="absolute inset-6 rounded-[2rem] bg-primary-500/20 blur-3xl" aria-hidden="true" />
-              <DashboardMockup className="relative" />
-              <div className="absolute -bottom-10 -start-4 hidden w-[58%] sm:block">
-                <PosShot priority />
-              </div>
-              <div className="absolute -bottom-16 -end-6 hidden animate-float md:block">
-                <PhoneMockup className="scale-[0.82] origin-bottom-left" />
-              </div>
-            </div>
+          <div className="relative mx-auto mt-16 max-w-6xl animate-fade-in-up [animation-delay:150ms]">
+            <div className="absolute -inset-x-10 top-10 bottom-0 rounded-[3rem] bg-gradient-to-b from-primary-200/50 to-ink-100/40 blur-3xl" aria-hidden="true" />
+            <BrowserShot shot={shots.dashboard} priority className="relative hidden rounded-b-none sm:block" />
+            {/* Phones: the full dashboard is unreadable at this width, so show the same system at phone width. */}
+            <BrowserShot shot={shots.phoneDashboard} sizes="100vw" className="relative mx-auto max-w-sm rounded-b-none sm:hidden" />
           </div>
         </div>
       </section>
@@ -155,6 +154,68 @@ export default function Home() {
                 </span>
               </a>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Spotlight: batches and expiry ─────────────────────────────────── */}
+      <section id="batches" className="overflow-hidden bg-slate-50 py-24 lg:py-32">
+        <div className="container">
+          <div className="grid items-center gap-14 lg:grid-cols-[1fr_1.45fr]">
+            <div className="min-w-0">
+              <SectionHeading
+                align="right"
+                badge="المخزون والصلاحية"
+                title="اعرف ما ينتهي قبل أن ينتهي"
+                subtitle="كل صنف مسجّل بدفعاته: المورد وسعر الشراء والكمية المتبقية وتاريخ الانتهاء. فتعرف ما يجب بيعه أولاً وما يجب إرجاعه، قبل أن يتحول إلى خسارة."
+                className="mb-8"
+              />
+              <ul className="space-y-4">
+                {[
+                  ['البيع من الأقرب انتهاءً', 'عند البيع تُخصم الكمية من الدفعة الأقرب انتهاءً، ويبقى أثرها محفوظاً في الفاتورة.'],
+                  ['تنبيه مبكر', 'الدفعات التي تنتهي قريباً والمنتهية تظهر في لوحة التحكم وفي تنبيهات الجوال.'],
+                  ['من المورد إلى الرف', 'الدفعة المستلمة من فاتورة شراء تحمل موردها وسعر شرائها، فتعرف مصدرها وتكلفتها الحقيقية.'],
+                ].map(([title, text]) => (
+                  <li key={title} className="flex gap-3">
+                    <CheckCircle2 size={22} className="mt-0.5 shrink-0 text-primary-600" />
+                    <div>
+                      <h3 className="font-extrabold text-ink-900">{title}</h3>
+                      <p className="mt-1 leading-relaxed text-slate-600">{text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="relative min-w-0">
+              <div className="relative hidden pb-24 sm:block">
+                <BrowserShot shot={shots.batches} sizes="(min-width: 1024px) 820px, 100vw" />
+                <figure className="absolute bottom-0 -inset-x-5 overflow-hidden rounded-2xl bg-white shadow-lift ring-1 ring-primary-900/10">
+                  <figcaption className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 text-xs font-bold text-slate-500">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+                    الحالة تُحسب من تاريخ الانتهاء تلقائياً
+                  </figcaption>
+                  <ScreenImage shot={shots.batchesDetail} sizes="(min-width: 1024px) 900px, 100vw" />
+                </figure>
+              </div>
+              {/* Phones: the expiry alerts at phone width read without zooming or scrolling sideways. */}
+              <figure className="mx-auto max-w-sm overflow-hidden rounded-2xl bg-white shadow-lift ring-1 ring-primary-900/10 sm:hidden">
+                <figcaption className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 text-xs font-bold text-slate-500">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+                  تنبيهات قرب الانتهاء على متصفح الهاتف
+                </figcaption>
+                <ScreenImage shot={shots.phoneExpiryAlerts} sizes="100vw" />
+              </figure>
+              <a
+                href={shots.batches.src}
+                target="_blank"
+                rel="noopener"
+                className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-primary-700 hover:text-primary-800 sm:hidden"
+              >
+                عرض شاشة الدفعات كاملة
+                <span aria-hidden="true">↗</span>
+              </a>
+            </div>
           </div>
         </div>
       </section>

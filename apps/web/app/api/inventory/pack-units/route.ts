@@ -12,6 +12,17 @@ import { getTenantContext } from '@/app/lib/tenant-utils';
 import { resolveHistoryScope } from '@/app/lib/supplier-price-history';
 import { toPacketPrice } from '@/app/lib/pack-units';
 import { classifyDosageForm } from '@/app/lib/dosage-form';
+import { logAudit } from '@/app/lib/audit';
+
+/**
+ * تصحيح عدد مؤكَّد لمدير الصيدلية وحده. الرقم مشترك بين كل الصيدليات، فالشرط
+ * على الدور نفسه لا على صلاحية قابلة للمنح (canAddDrug تُمنح لصيدلاني أيضاً).
+ * MANAGER قيمة قديمة يعاملها tenant-utils مديراً. مدير النظام (SUPER_ADMIN)
+ * مستبعد: لا نطاق صيدلية له هنا.
+ */
+function canCorrectPackUnits(role: string): boolean {
+    return role === 'ADMIN' || role === 'MANAGER';
+}
 
 /** نافذة قياس الحركة — ربع سنة يغطّي الأدوية الموسمية دون أن يغرق في القديم. */
 const MOVEMENT_DAYS = 90;
@@ -30,15 +41,37 @@ export async function GET(req: NextRequest) {
         // مرشّح الشكل الصيدلاني: SINGLE يعرض ما تعبئته 1 يقيناً (زجاجة،
         // أنبوب، قطرة) — مراجعتها تدقيق لا إدخال، فتُحسم دفعة واحدة.
         const formFilter = searchParams.get('form');
+        // إزاحة لا رقم صفحة: التأكيد يُخرج الدواء من قائمة غير المؤكَّدة، فتتقدّم
+        // الصفوف التالية. الصفحة تحسب الإزاحة على القائمة الحية فلا يُتخطّى دواء.
+        const offset = Math.max(0, Number.parseInt(searchParams.get('offset') || '0', 10) || 0);
+        // status=confirmed يعرض ما حُسم للاطلاع (الرقم وتاريخه)، لا للتعديل:
+        // الحفظ أدناه يرفض دهس تأكيد سابق.
+        const showConfirmed = searchParams.get('status') === 'confirmed';
+        const canCorrect = canCorrectPackUnits(tenantCtx.user.role);
 
-        // أدوية لها صف مخزون في فروع النطاق ولم يُؤكَّد عدد أشرطتها.
-        // الشرط على unitsPerPackConfirmedAt لا على unitsPerPack: الرقم المستنتَج
-        // موجود وغير مُتحقَّق منه، وهو بالضبط ما نريد عرضه للمراجعة.
-        const inventories = await prisma.inventory.findMany({
+        // عدد الأدوية (لا صفوف الفروع) في كل حالة، لعدّادات التبويبات. بلا بحث
+        // ولا مرشّح شكل، فيبقى العدد ثابتاً وأنت تبحث.
+        const countDrugs = async (confirmed: boolean) =>
+            (
+                await prisma.inventory.findMany({
+                    where: {
+                        branchId: { in: scope.branchIds },
+                        drug: { isActive: true, unitsPerPackConfirmedAt: confirmed ? { not: null } : null },
+                    },
+                    select: { drugId: true },
+                    distinct: ['drugId'],
+                })
+            ).length;
+
+        // أدوية لها صف مخزون في فروع النطاق ولم يُؤكَّد عدد أشرطتها (أو أُكِّد،
+        // مع status=confirmed). الشرط على unitsPerPackConfirmedAt لا على
+        // unitsPerPack: الرقم المستنتَج موجود وغير مُتحقَّق منه، وهو بالضبط ما
+        // نريد عرضه للمراجعة.
+        const [inventories, unconfirmedCount, confirmedCount] = await Promise.all([prisma.inventory.findMany({
             where: {
                 branchId: { in: scope.branchIds },
                 drug: {
-                    unitsPerPackConfirmedAt: null,
+                    unitsPerPackConfirmedAt: showConfirmed ? { not: null } : null,
                     isActive: true,
                     ...(query
                         ? {
@@ -52,17 +85,37 @@ export async function GET(req: NextRequest) {
             },
             select: {
                 price: true,
-                drug: { select: { id: true, barcode: true, tradeName: true, unitsPerPack: true } },
+                drug: {
+                    select: { id: true, barcode: true, tradeName: true, unitsPerPack: true, unitsPerPackConfirmedAt: true },
+                },
                 batches: { where: { quantity: { gt: 0 } }, select: { quantity: true } },
             },
-        });
-        if (inventories.length === 0) return NextResponse.json({ items: [], totalUnconfirmed: 0 });
+        }), countDrugs(false), countDrugs(true)]);
+        if (inventories.length === 0) {
+            return NextResponse.json({
+                items: [],
+                total: 0,
+                unconfirmedCount,
+                confirmedCount,
+                ...(showConfirmed ? {} : { singleUnitCount: 0 }),
+                movementDays: MOVEMENT_DAYS,
+                canCorrect,
+            });
+        }
 
         // دمج صفوف الفروع المتعددة لنفس الدواء: التعبئة خاصية بالدواء لا بالفرع،
         // فعرضه مرتين يضاعف العمل بلا فائدة.
         const byDrug = new Map<
             string,
-            { id: string; barcode: string; tradeName: string; unitsPerPack: number | null; stock: number; sellPrice: number }
+            {
+                id: string;
+                barcode: string;
+                tradeName: string;
+                unitsPerPack: number | null;
+                unitsPerPackConfirmedAt: Date | null;
+                stock: number;
+                sellPrice: number;
+            }
         >();
         for (const inv of inventories) {
             const stock = inv.batches.reduce((s, b) => s + b.quantity, 0);
@@ -120,22 +173,36 @@ export async function GET(req: NextRequest) {
                     sellPrice: d.sellPrice,
                     lastStripCost: cost,
                     derivedPacketPrice: cost !== null ? toPacketPrice(cost, d.unitsPerPack) : null,
+                    /** متى أُكِّد العدد؛ null في قائمة غير المؤكَّدة. */
+                    confirmedAt: d.unitsPerPackConfirmedAt,
                 };
             })
-            // الحركة أولاً، ثم الرصيد: دواء نافد لم يُبَع منذ مدة أقل إلحاحاً من
-            // دواء على الرف يُباع يومياً.
-            .sort((a, b) => b.movement - a.movement || b.stock - a.stock);
+            // غير المؤكَّدة: الحركة أولاً، ثم الرصيد — دواء نافد لم يُبَع منذ مدة
+            // أقل إلحاحاً من دواء على الرف يُباع يومياً. المؤكَّدة: الأحدث تأكيداً
+            // أولاً، فيراجع المستخدم ما حسمه للتو.
+            .sort((a, b) =>
+                showConfirmed
+                    ? (b.confirmedAt?.getTime() ?? 0) - (a.confirmedAt?.getTime() ?? 0) || b.movement - a.movement
+                    : b.movement - a.movement || b.stock - a.stock,
+            );
 
-        const filtered = formFilter === 'SINGLE'
+        const filtered = !showConfirmed && formFilter === 'SINGLE'
             ? items.filter((d) => d.form === 'SINGLE_UNIT')
             : items;
 
         return NextResponse.json({
-            items: filtered.slice(0, PAGE_SIZE),
-            totalUnconfirmed: filtered.length,
-            /** إجمالي الوحدوية مهما كان المرشّح — يُظهِر حجم المكسب المتاح. */
-            singleUnitCount: items.filter((d) => d.form === 'SINGLE_UNIT').length,
+            items: filtered.slice(offset, offset + PAGE_SIZE),
+            offset,
+            pageSize: PAGE_SIZE,
+            /** طول القائمة المعروضة بعد البحث والمرشّح (قد يتجاوز PAGE_SIZE). */
+            total: filtered.length,
+            unconfirmedCount,
+            confirmedCount,
+            /** إجمالي الوحدوية غير المؤكَّدة — يُظهِر حجم المكسب المتاح. */
+            ...(showConfirmed ? {} : { singleUnitCount: items.filter((d) => d.form === 'SINGLE_UNIT').length }),
             movementDays: MOVEMENT_DAYS,
+            /** يُظهر زر التصحيح في قائمة المؤكَّدة — القرار نفسه يُعاد في PATCH. */
+            canCorrect,
         });
     } catch (e) {
         console.error('inventory pack-units GET error:', e);
@@ -223,5 +290,76 @@ export async function POST(req: NextRequest) {
     } catch (e) {
         console.error('inventory pack-units POST error:', e);
         return NextResponse.json({ error: 'فشل في حفظ عدد الأشرطة' }, { status: 500 });
+    }
+}
+
+/**
+ * تصحيح عدد أشرطة مؤكَّد سابقاً — لمدير الصيدلية وحده (انظر canCorrectPackUnits).
+ *
+ * الجسم: { drugId, unitsPerPack, expected }. expected هو الرقم الذي رآه المدير
+ * على الشاشة؛ إن تغيّر في القاعدة منذ ذلك (صحّحه غيره) يُرفض التصحيح بـ409 بدل
+ * أن يدهس قراراً أحدث لم يره. غير المؤكَّد لا يُصحَّح هنا — يُؤكَّد عبر POST.
+ */
+export async function PATCH(req: NextRequest) {
+    const tenantCtx = await getTenantContext();
+    if (tenantCtx instanceof NextResponse) return tenantCtx;
+    if (!canCorrectPackUnits(tenantCtx.user.role)) {
+        return NextResponse.json({ error: 'تصحيح عدد الأشرطة المؤكَّد متاح لمدير الصيدلية فقط.' }, { status: 403 });
+    }
+
+    try {
+        const body = await req.json().catch(() => ({}));
+        const drugId = typeof body?.drugId === 'string' ? body.drugId : '';
+        const unitsPerPack = Number(body?.unitsPerPack);
+        const expected = Number(body?.expected);
+        if (!drugId) return NextResponse.json({ error: 'drugId مطلوب.' }, { status: 400 });
+        if (!Number.isInteger(unitsPerPack) || unitsPerPack <= 0 || !Number.isInteger(expected) || expected <= 0) {
+            return NextResponse.json({ error: 'عدد الأشرطة يجب أن يكون عدداً صحيحاً أكبر من صفر.' }, { status: 400 });
+        }
+        if (unitsPerPack === expected) {
+            return NextResponse.json({ error: 'العدد الجديد مطابق للحالي.' }, { status: 400 });
+        }
+
+        // الصف عالمي تراه كل المؤسسات، فيُشترط أن يكون الدواء في مخزون فروع المدير.
+        const scope = await resolveHistoryScope(tenantCtx);
+        if (!scope) return NextResponse.json({ error: 'لا يوجد نطاق مؤسسة صالح.' }, { status: 403 });
+        const owned = await prisma.inventory.findFirst({
+            where: { drugId, branchId: { in: scope.branchIds } },
+            select: { branchId: true, drug: { select: { tradeName: true, unitsPerPackConfirmedAt: true } } },
+        });
+        if (!owned) return NextResponse.json({ error: 'هذا الدواء ليس في مخزونك.' }, { status: 404 });
+
+        const now = new Date();
+        const { count } = await prisma.globalDrug.updateMany({
+            where: { id: drugId, unitsPerPackConfirmedAt: { not: null }, unitsPerPack: expected },
+            data: { unitsPerPack, unitsPerPackConfirmedAt: now },
+        });
+        if (count === 0) {
+            return NextResponse.json(
+                { error: 'تغيّر عدد الأشرطة لهذا الدواء منذ فتح الصفحة، أو لم يعد مؤكَّداً. حدّث الصفحة ثم أعد المحاولة.' },
+                { status: 409 },
+            );
+        }
+
+        // الفرع من صف المخزون، فيظهر القيد في سجل الصيدلية عند التصفية بالفرع.
+        await logAudit({
+            userId: tenantCtx.user.id,
+            userName: tenantCtx.user.name ?? tenantCtx.user.email ?? 'غير معروف',
+            action: 'PACK_UNITS_CORRECTION',
+            entity: 'DRUG',
+            entityId: drugId,
+            details: JSON.stringify({
+                tradeName: owned.drug.tradeName,
+                from: expected,
+                to: unitsPerPack,
+                previousConfirmedAt: owned.drug.unitsPerPackConfirmedAt?.toISOString() ?? null,
+            }),
+            branchId: owned.branchId,
+        });
+
+        return NextResponse.json({ ok: true, unitsPerPack, confirmedAt: now.toISOString() });
+    } catch (e) {
+        console.error('inventory pack-units PATCH error:', e);
+        return NextResponse.json({ error: 'فشل في تصحيح عدد الأشرطة' }, { status: 500 });
     }
 }

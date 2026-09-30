@@ -4,23 +4,27 @@ import { getExpenses, deleteExpense } from "@/app/lib/actions/expense-actions";
 import { expenseCategoryLabel } from "@/app/lib/expense-categories";
 import { DeleteButton } from "@/app/ui/delete-button";
 import { EditExpenseButton } from "@/app/ui/expenses/edit-expense-button";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import {
   Plus,
   Banknote,
   CalendarDays,
   Clock,
   Receipt,
-  Search,
   Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import TableSearch from "@/app/ui/table-search";
+import TablePagination from "@/app/ui/table-pagination";
+import { formatCurrency } from "@/app/lib/utils/currency";
+import {
+  TableCard, TableToolbar, ResultCount, DataTable, THead, Th, TBody, rowClass, cellClass,
+  MutedText, StatusPill, Actions, actionClass, EmptyState, DateTimeCell,
+} from "@/app/ui/data-table";
 
 export default async function ExpensesPage(
   props: {
-    searchParams?: Promise<{ branch?: string; category?: string; search?: string }>;
+    searchParams?: Promise<{ branch?: string; category?: string; search?: string; page?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -111,6 +115,20 @@ export default async function ExpensesPage(
       .filter(Boolean)
       .join("&") || undefined;
 
+  // Pagination over the filtered list, like the other tables.
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, parseInt(searchParams?.page ?? "1") || 1);
+  const totalPages = Math.ceil(list.length / PAGE_SIZE);
+  const pageRows = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const buildPageUrl = (p: number) => {
+    const params = new URLSearchParams();
+    if (branchId) params.set("branch", branchId);
+    if (category) params.set("category", category);
+    if (search) params.set("search", search);
+    params.set("page", String(p));
+    return `/dashboard/expenses?${params.toString()}`;
+  };
+
   return (
     <div className="space-y-6" dir="rtl">
       {/* الرأس */}
@@ -160,151 +178,117 @@ export default async function ExpensesPage(
         })}
       </div>
 
-      {/* الفلاتر */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <BranchFilter
-          currentBranch={branchId}
-          baseUrl="/dashboard/expenses"
-          extraParams={branchExtra}
-        />
-        <form method="GET" className="relative w-full sm:max-w-xs">
-          {branchId && <input type="hidden" name="branch" value={branchId} />}
-          {category && <input type="hidden" name="category" value={category} />}
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            name="search"
-            defaultValue={search}
-            placeholder="بحث في الوصف أو الفئة..."
-            className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-          />
-        </form>
-      </div>
+      <BranchFilter
+        currentBranch={branchId}
+        baseUrl="/dashboard/expenses"
+        extraParams={branchExtra}
+      />
 
-      {/* تبويبات الفئات */}
-      {categories.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="flex items-center gap-1 text-sm text-muted-foreground font-medium ml-1">
-            <Tag className="w-4 h-4" /> الفئة:
-          </span>
-          <Link
-            href={buildCatUrl("")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${!category ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
-          >
-            الكل
-          </Link>
-          {categories.map((cat) => (
-            <Link
-              key={cat}
-              href={buildCatUrl(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${category === cat ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
-            >
-              {expenseCategoryLabel(cat)}
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* الجدول */}
-      <div className="glass-card overflow-hidden">
-        {list.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Banknote className="w-8 h-8 text-muted-foreground opacity-50" />
-            </div>
-            <p className="text-foreground font-medium">
-              {search || category
-                ? "لا توجد نتائج مطابقة"
-                : "لا يوجد مصروفات مسجلة"}
-            </p>
-            {!search && !category && (
+      {/* الجدول — بنفس تصميم جدول الدفعات وسلوكه */}
+      <TableCard>
+        <TableToolbar>
+          <TableSearch currentQuery={search} param="search" placeholder="بحث في الوصف أو الفئة..." />
+          {/* تبويبات الفئات */}
+          {categories.length > 0 && (
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-1 overflow-x-auto max-w-full">
               <Link
-                href="/dashboard/expenses/create"
-                className="inline-flex items-center gap-2 mt-4 rounded-lg bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20 transition-colors"
+                href={buildCatUrl("")}
+                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-bold transition-colors ${!category ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-background"}`}
               >
-                <Plus className="h-4 w-4" />
-                تسجيل أول مصروف
+                الكل
               </Link>
-            )}
-          </div>
+              {categories.map((cat) => (
+                <Link
+                  key={cat}
+                  href={buildCatUrl(cat)}
+                  className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-bold transition-colors ${category === cat ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-background"}`}
+                >
+                  {expenseCategoryLabel(cat)}
+                </Link>
+              ))}
+            </div>
+          )}
+          <ResultCount total={list.length} query={search} unit="مصروف" />
+        </TableToolbar>
+
+        {list.length === 0 ? (
+          <EmptyState
+            icon={<Banknote />}
+            title={search || category ? "لا توجد نتائج" : "لا يوجد مصروفات مسجلة"}
+            hint={
+              search || category ? (
+                "جرّب كلمة بحث أو فئة أخرى"
+              ) : (
+                <Link href="/dashboard/expenses/create" className="text-primary hover:underline">
+                  تسجيل أول مصروف
+                </Link>
+              )
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
-                <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    التاريخ
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الفئة
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الفرع
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    المبلغ
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الوصف
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-medium font-cairo">
-                    الإجراءات
-                  </th>
+          <DataTable>
+            <THead>
+              <Th>الفئة</Th>
+              <Th>الفرع</Th>
+              <Th>المبلغ</Th>
+              <Th>التاريخ</Th>
+              <Th>الوصف</Th>
+              <Th center>الإجراءات</Th>
+            </THead>
+            <TBody>
+              {pageRows.map((expense: any) => (
+                <tr key={expense.id} className={rowClass}>
+                  <td className={cellClass}>
+                    <StatusPill tone="muted">
+                      <Tag className="w-3 h-3" />
+                      {expenseCategoryLabel(expense.category)}
+                    </StatusPill>
+                  </td>
+                  <td className={`${cellClass} text-muted-foreground`}>
+                    <MutedText>{expense.branch?.name}</MutedText>
+                  </td>
+                  <td className={`${cellClass} font-bold text-destructive whitespace-nowrap`} dir="ltr">
+                    −{formatCurrency(expense.amount)}
+                  </td>
+                  <td className={cellClass}>
+                    <DateTimeCell date={expense.date} showTime={false} />
+                  </td>
+                  <td className={`${cellClass} text-muted-foreground`}>
+                    <MutedText maxWidth="max-w-[260px]">{expense.description}</MutedText>
+                  </td>
+                  <td className={cellClass}>
+                    <Actions>
+                      <EditExpenseButton
+                        expense={{
+                          id: expense.id,
+                          amount: expense.amount,
+                          category: expense.category,
+                          description: expense.description,
+                          date: expense.date,
+                        }}
+                        className={actionClass()}
+                      />
+                      <DeleteButton
+                        action={deleteExpense.bind(null, expense.id)}
+                        description="المصروف"
+                        className="rounded-lg border-border p-1.5 text-muted-foreground hover:border-destructive/50"
+                      />
+                    </Actions>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {list.map((expense: any) => (
-                  <tr
-                    key={expense.id}
-                    className="hover:bg-muted/40 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
-                      {format(new Date(expense.date), "PPP", { locale: ar })}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-bold text-foreground">
-                        <Tag className="w-3 h-3 text-muted-foreground" />
-                        {expenseCategoryLabel(expense.category)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {expense.branch?.name || "—"}
-                    </td>
-                    <td
-                      className="px-6 py-4 font-bold text-destructive text-right whitespace-nowrap"
-                      dir="ltr"
-                    >
-                      −{fmt(expense.amount)} د.ع
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground max-w-[260px] truncate">
-                      {expense.description || "—"}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-center gap-2">
-                        <EditExpenseButton
-                          expense={{
-                            id: expense.id,
-                            amount: expense.amount,
-                            category: expense.category,
-                            description: expense.description,
-                            date: expense.date,
-                          }}
-                          className="text-primary"
-                        />
-                        <DeleteButton
-                          action={deleteExpense.bind(null, expense.id)}
-                          description="المصروف"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </TBody>
+          </DataTable>
         )}
-      </div>
+
+        <TablePagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={list.length}
+          unit="مصروف"
+          hrefFor={buildPageUrl}
+        />
+      </TableCard>
     </div>
   );
 }

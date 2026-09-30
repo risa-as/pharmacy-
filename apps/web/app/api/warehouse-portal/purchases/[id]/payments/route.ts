@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const body = await req.json().catch(() => null);
         const command = warehouseCommand(ctx.warehouseId, `supplier-payment:${id}`, body);
         const result = await prisma.$transaction(tx => runWarehouseOperation(tx, command, async () => {
-            await tx.$queryRaw`SELECT id FROM "WarehousePurchase" WHERE id = ${id} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehousePurchase" WHERE id = ${id} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
             const purchase = await tx.warehousePurchase.findFirst({ where: { id, warehouseId: ctx.warehouseId } });
             if (!purchase) throw new WarehouseOperationError('فاتورة الشراء غير موجودة ضمن هذا المذخر', 404);
             if (purchase.status === 'CANCELLED') throw new WarehouseOperationError('لا يمكن الدفع على فاتورة ملغاة.', 400);

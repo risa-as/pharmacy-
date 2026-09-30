@@ -44,14 +44,14 @@ async function queryDeadStock(
                 br."name"                                                                    AS "branch",
                 COALESCE(SUM(b.quantity), 0)::int                                            AS "currentStock",
                 COALESCE(SUM(b.quantity * COALESCE(NULLIF(b."costPrice", 0), i.cost, 0)), 0)  AS "estimatedValue"
-            FROM "Inventory" i
-            JOIN "GlobalDrug" d ON d.id = i."drugId"
-            JOIN "Branch" br ON br.id = i."branchId"
-            LEFT JOIN "Batch" b ON b."inventoryId" = i.id AND b.quantity > 0
+            FROM "public"."Inventory" i
+            JOIN "public"."GlobalDrug" d ON d.id = i."drugId"
+            JOIN "public"."Branch" br ON br.id = i."branchId"
+            LEFT JOIN "public"."Batch" b ON b."inventoryId" = i.id AND b.quantity > 0
             WHERE ${Prisma.join(conditions, ' AND ')}
               AND NOT EXISTS (
-                  SELECT 1 FROM "SaleItem" si
-                  JOIN "Sale" s ON s.id = si."saleId"
+                  SELECT 1 FROM "public"."SaleItem" si
+                  JOIN "public"."Sale" s ON s.id = si."saleId"
                   WHERE si."drugId" = i."drugId" AND s."branchId" = i."branchId" AND s."createdAt" >= ${since}
               )
             GROUP BY i.id, i."drugId", d."tradeName", d."barcode", br."name"

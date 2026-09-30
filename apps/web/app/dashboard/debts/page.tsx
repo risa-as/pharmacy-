@@ -12,7 +12,6 @@ import {
   Users,
   ArrowDownCircle,
   History,
-  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
@@ -112,22 +111,12 @@ export default async function DebtsPage(
         </div>
       </div>
 
-      {/* جدول المدينين */}
+      {/* جدول المدينين — بنفس تصميم جدول الدفعات */}
       <div className="glass-card overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex items-center gap-2">
-          <Users className="w-4 h-4 text-muted-foreground" />
-          <h2 className="font-bold text-foreground">قائمة المدينين</h2>
-          {debtors.length > 0 && (
-            <span className="mr-auto text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-full px-2.5 py-0.5 font-medium">
-              {debtors.length} مدين
-            </span>
-          )}
-        </div>
-
         {debtors.length === 0 ? (
           <div className="py-16 text-center">
             <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <HandCoins className="w-8 h-8 text-muted-foreground opacity-40" />
+              <HandCoins className="w-8 h-8 text-muted-foreground opacity-50" />
             </div>
             <p className="text-foreground font-medium">لا يوجد ديون حالياً</p>
             <p className="text-sm text-muted-foreground mt-1">
@@ -141,100 +130,79 @@ export default async function DebtsPage(
 
       {/* سجل التسديدات الأخيرة */}
       <div className="glass-card overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex items-center gap-2">
+        <div className="p-4 border-b border-border flex items-center gap-2">
           <History className="w-4 h-4 text-success" />
           <h2 className="font-bold text-foreground">سجل التسديدات الأخيرة</h2>
-          <span className="mr-auto text-xs text-muted-foreground">
+          <span className="mr-auto text-sm text-muted-foreground">
             آخر 20 عملية
           </span>
         </div>
 
         {recentPayments.length === 0 ? (
-          <div className="py-12 text-center">
-            <History className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
-            <p className="text-sm text-muted-foreground">
-              لا توجد تسديدات مسجلة حتى الآن
+          <div className="py-16 text-center">
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <History className="w-8 h-8 text-muted-foreground opacity-50" />
+            </div>
+            <p className="text-foreground font-medium">لا توجد تسديدات مسجلة</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              ستظهر هنا تسديدات العملاء لديونهم
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-right">
               <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                 <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    العميل
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    الهاتف
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    المبلغ المسدد
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    طريقة الدفع
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    ملاحظة
-                  </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
-                    التاريخ
-                  </th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">العميل</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">المبلغ المسدد</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">طريقة الدفع</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">ملاحظة</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">التاريخ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {recentPayments.map((payment: any) => (
-                  <tr
-                    key={payment.id}
-                    className="hover:bg-muted/40 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <Link
-                        href={`/dashboard/debts/${payment.patientId}`}
-                        className="font-semibold text-primary hover:underline"
-                      >
-                        {payment.patientName}
-                      </Link>
-                    </td>
-                    <td
-                      className="px-6 py-4 text-muted-foreground text-right"
-                      dir="ltr"
-                    >
-                      {payment.patientPhone || "—"}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="inline-flex items-center gap-1.5 bg-success/10 text-success border border-success/20 rounded-lg px-3 py-1">
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="font-bold text-sm" dir="ltr">
-                          {formatIQD(payment.amount)}
+                {recentPayments.map((payment: any) => {
+                  const createdAt = new Date(payment.createdAt);
+                  return (
+                    <tr key={payment.id} className="hover:bg-muted/40 transition-colors">
+                      <td className="px-3 py-3">
+                        <div className="max-w-[220px]">
+                          <Link
+                            href={`/dashboard/debts/${payment.patientId}`}
+                            className="block font-semibold text-foreground hover:text-primary transition-colors truncate"
+                            title={payment.patientName}
+                          >
+                            {payment.patientName}
+                          </Link>
+                          <p className="text-[10px] text-muted-foreground truncate text-right" dir="ltr">
+                            {payment.patientPhone || "—"}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 font-bold text-success whitespace-nowrap" dir="ltr">
+                        {formatIQD(payment.amount)}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-bold bg-muted text-muted-foreground border-border">
+                          {PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground text-sm">
-                      {PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground text-sm">
-                      {payment.note || "—"}
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground text-sm">
-                      <span>
-                        {new Date(payment.createdAt).toLocaleDateString(
-                          "ar-IQ",
-                          { timeZone: "Asia/Baghdad" },
-                        )}
-                      </span>
-                      <span className="text-xs block text-muted-foreground/70">
-                        {new Date(payment.createdAt).toLocaleTimeString(
-                          "ar-IQ",
-                          {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            timeZone: "Asia/Baghdad",
-                          },
-                        )}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-3 py-3 text-muted-foreground">
+                        <span className="block max-w-[200px] truncate" title={payment.note || undefined}>
+                          {payment.note || "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="text-xs text-muted-foreground leading-tight whitespace-nowrap" dir="ltr">
+                          <div>{createdAt.toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}</div>
+                          <div className="text-[10px] text-muted-foreground/60">
+                            {createdAt.toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Baghdad" })}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

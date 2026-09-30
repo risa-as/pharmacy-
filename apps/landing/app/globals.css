@@ -6,7 +6,7 @@
   :root {
     --primary: 15 117 117; /* #0F7575 */
     --primary-light: 20 184 166; /* #14b8a6 */
-    --accent: 245 158 11; /* #F59E0B */
+    --accent: 76 193 87; /* #4CC157 */
   }
 
   html {
@@ -38,7 +38,7 @@
   }
 
   .text-gradient-warm {
-    @apply bg-clip-text text-transparent bg-gradient-to-l from-accent to-amber-300;
+    @apply bg-clip-text text-transparent bg-gradient-to-l from-primary-300 to-accent;
   }
 
   .bg-gradient-primary {

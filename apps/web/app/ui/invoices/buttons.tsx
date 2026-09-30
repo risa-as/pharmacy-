@@ -9,10 +9,10 @@ export function ViewInvoice({ id }: { id: string }) {
     return (
         <Link
             href={`/dashboard/purchases/${id}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+            title="التفاصيل"
+            className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
         >
             <Eye className="h-4 w-4" />
-            تفاصيل
         </Link>
     );
 }
@@ -26,7 +26,7 @@ export function DeleteInvoice({ id }: { id: string }) {
         <DeleteButton
             action={deleteInvoiceWithId}
             description="الفاتورة"
-            className="rounded-lg border border-border hover:border-border"
+            className="rounded-lg border-border p-1.5 text-muted-foreground hover:border-destructive/50"
         />
     );
 }

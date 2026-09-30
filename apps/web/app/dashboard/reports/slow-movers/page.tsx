@@ -263,25 +263,25 @@ export default async function SlowMoversPage(
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-right">
               <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                 <tr>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     الدواء
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     الفروع
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     المخزون
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     القيمة المجمّدة
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     آخر بيع
                   </th>
-                  <th className="px-6 py-3.5 text-right font-medium font-cairo">
+                  <th className="px-6 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                     مدة الركود
                   </th>
                 </tr>
@@ -297,13 +297,13 @@ export default async function SlowMoversPage(
                         <div className="w-9 h-9 bg-destructive/10 rounded-lg flex items-center justify-center shrink-0">
                           <Snowflake className="w-4 h-4 text-destructive" />
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 max-w-[260px]">
                           <p className="font-semibold text-foreground truncate">
                             {item.name}
                           </p>
                           {item.barcode && (
                             <p
-                              className="text-xs text-muted-foreground"
+                              className="text-xs text-muted-foreground truncate"
                               dir="ltr"
                             >
                               {item.barcode}

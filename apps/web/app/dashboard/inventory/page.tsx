@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
-import { Package, Plus, ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
+import { Package, Plus, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import InventoryTable from "@/app/ui/inventory/inventory-table";
 import InventoryFilters from "@/app/ui/inventory/inventory-filters";
@@ -17,6 +17,7 @@ import {
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
+import TablePagination from "@/app/ui/table-pagination";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -114,7 +115,7 @@ export default async function Page(
 
     const { canAddDrug, canEditDrug, canDeleteDrug } = tenantCtx.userPermissions;
 
-    const [{ items, totalPages, counts }, branches] = await Promise.all([
+    const [{ items, total, totalPages, counts }, branches] = await Promise.all([
         getInventory(currentPage, query, status, tenantBranchWhere, branchId),
         getBranches(branchModelWhere),
     ]);
@@ -170,38 +171,43 @@ export default async function Page(
                 extraParams={query ? `query=${query}` : undefined}
             />
 
-            {/* البحث + تبويبات الحالة + العدّاد */}
-            <div className="glass-card p-4">
-                <InventoryFilters
-                    counts={counts}
-                    currentStatus={status}
-                    currentQuery={query}
-                />
-            </div>
-
             {/* الإدخال السريع بالباركود */}
             <QuickBarcodeEntry branches={branches} />
 
-            {/* الجدول */}
-            <InventoryTable items={items} canEditDrug={canEditDrug} canDeleteDrug={canDeleteDrug} canAddDrug={canAddDrug} />
+            {/* الجدول — بنفس تصميم جدول الدفعات وسلوكه: البحث والتبويبات والجدول والترقيم في بطاقة واحدة */}
+            <div className="glass-card overflow-hidden">
+                <div className="p-4 border-b border-border">
+                    <InventoryFilters
+                        counts={counts}
+                        currentStatus={status}
+                        currentQuery={query}
+                    />
+                </div>
 
-            {/* الترقيم */}
-            <div className="flex justify-center items-center gap-4">
-                <Link
-                    href={buildPageUrl(Math.max(1, currentPage - 1))}
-                    className={`p-2 rounded-lg border border-border ${currentPage <= 1 ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
-                >
-                    <ChevronRight className="w-5 h-5" />
-                </Link>
-                <span className="text-sm text-muted-foreground font-bold">
-                    صفحة {currentPage} من {totalPages}
-                </span>
-                <Link
-                    href={buildPageUrl(Math.min(totalPages, currentPage + 1))}
-                    className={`p-2 rounded-lg border border-border ${currentPage >= totalPages ? 'pointer-events-none opacity-50 bg-muted' : 'hover:bg-muted/50'}`}
-                >
-                    <ChevronLeft className="w-5 h-5" />
-                </Link>
+                {items.length === 0 ? (
+                    <div className="py-16 text-center">
+                        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Package className="w-8 h-8 text-muted-foreground opacity-50" />
+                        </div>
+                        <p className="text-foreground font-medium">
+                            {query || status ? "لا توجد نتائج" : "المخزون فارغ"}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            {query || status ? "جرّب كلمة بحث أو تبويباً آخر" : "ستظهر الأصناف هنا عند إضافتها للمخزون"}
+                        </p>
+                    </div>
+                ) : (
+                    <InventoryTable items={items} canEditDrug={canEditDrug} canDeleteDrug={canDeleteDrug} canAddDrug={canAddDrug} />
+                )}
+
+                {/* الترقيم */}
+                <TablePagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalCount={total}
+                    unit="صنف"
+                    hrefFor={buildPageUrl}
+                />
             </div>
         </div>
     );

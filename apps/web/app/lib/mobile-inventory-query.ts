@@ -30,10 +30,10 @@ export function buildMobileInventoryQuery(params: URLSearchParams, tenantWhere: 
                 COALESCE(SUM(bat.quantity), 0)::double precision AS quantity,
                 CEIL(EXTRACT(EPOCH FROM (MIN(bat."expiryDate") FILTER (WHERE bat.quantity > 0)
                     - ${now.toISOString()}::timestamp)) / 86400) AS days
-            FROM "Inventory" i
-            JOIN "GlobalDrug" gd ON gd.id = i."drugId"
-            JOIN "Branch" br ON br.id = i."branchId"
-            LEFT JOIN "Batch" bat ON bat."inventoryId" = i.id
+            FROM "public"."Inventory" i
+            JOIN "public"."GlobalDrug" gd ON gd.id = i."drugId"
+            JOIN "public"."Branch" br ON br.id = i."branchId"
+            LEFT JOIN "public"."Batch" bat ON bat."inventoryId" = i.id
             WHERE ${buildTenantBranchCondition(tenantWhere, params.get('branchId') || undefined)}
             GROUP BY i.id, i."minStock", i.price, gd."tradeName", gd.barcode
         ), filtered AS (

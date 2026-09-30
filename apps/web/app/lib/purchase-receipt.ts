@@ -48,7 +48,7 @@ export async function receivePurchaseStock(
   return db.$transaction(
     async (tx) => {
       // Lock before reading status/items: cancellation and another receipt wait here.
-      await tx.$queryRaw`SELECT "id" FROM "Purchase" WHERE "id" = ${purchaseId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "public"."Purchase" WHERE "id" = ${purchaseId} FOR UPDATE`;
       const purchase = await tx.purchase.findFirst({
         where: { AND: [{ id: purchaseId }, scope] },
         include: {

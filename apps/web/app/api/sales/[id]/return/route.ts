@@ -83,7 +83,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
             // 0. Serialize returns on this sale: lock the sale row, then re-check
             //    the key and re-read previous returns inside the lock so two
             //    concurrent requests can never both pass validation.
-            await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${saleId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."Sale" WHERE id = ${saleId} FOR UPDATE`;
             if (idempotencyKey) {
                 const log = await tx.syncActionLog.findUnique({ where: { idempotencyKey } });
                 if (log && (log.branchId !== returnBranchId || log.actionType !== 'SALE_RETURN')) throw new ReturnValidationError('مفتاح العملية مستخدم لعملية أخرى.');
