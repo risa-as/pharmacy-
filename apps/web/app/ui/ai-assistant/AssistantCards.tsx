@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -37,13 +38,15 @@ function ReorderView({ card }: { card: ReorderCard }) {
     const router = useRouter();
     const { data: session } = useSession();
     const draftable = card.lines.filter(l => l.suggestedQty > 0 && l.unitsPerPack);
+    const draftCountLabel = draftable.length === 1 ? 'صنف واحد' : draftable.length === 2 ? 'صنفان' : `${n(draftable.length)} ${draftable.length <= 10 ? 'أصناف' : 'صنفاً'}`;
     const [preparing, setPreparing] = useState(false);
+    const [created, setCreated] = useState(false);
 
     const draft = async () => {
         const userId = (session?.user as any)?.id as string | undefined;
         const organizationId = (session?.user as any)?.organizationId as string | undefined;
         if (!userId || !organizationId || !card.scope.branchId) { toast.error('تعذر تحديد الحساب أو الفرع'); return; }
-        if (preparing) return;
+        if (preparing || created) return;
         setPreparing(true);
         try {
             // OPEN-14: register the draft for measurement; never a reason not to open the form.
@@ -59,6 +62,10 @@ function ReorderView({ card }: { card: ReorderCard }) {
                 currentStock: l.currentStock, units: l.suggestedQty, unitsPerPack: l.unitsPerPack,
             })), measured ? id : null);
             if (!saveHandoff(userId, organizationId, handoff)) throw new Error('تعذر حفظ المسودة في المتصفح');
+            setCreated(true);
+            toast.success('تم إنشاء المسودة للمراجعة', {
+                description: `عدد الأصناف: ${n(draftable.length)}. راجع الكميات والأسعار في صفحة طلب المذخر قبل إرسال الطلب.`,
+            });
             // Opens the order form pre-filled; nothing is sent until the user reviews and approves it there.
             router.push('/dashboard/purchases/warehouse-orders/new');
         } catch (e: any) { toast.error(e?.message ?? 'تعذر إعداد المسودة'); }
@@ -95,15 +102,18 @@ function ReorderView({ card }: { card: ReorderCard }) {
             <div className="flex flex-wrap gap-2">
                 <button
                     onClick={draft}
-                    disabled={!card.canDraft || draftable.length === 0 || preparing}
+                    disabled={!card.canDraft || draftable.length === 0 || preparing || created}
+                    aria-busy={preparing}
                     title={card.draftBlockedReason ?? ''}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-primary text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center justify-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     data-testid="reorder-draft"
                 >
-                    إعداد مسودة طلب للمراجعة ({draftable.length})
+                    {preparing ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : created ? <CheckCircle2 size={14} aria-hidden="true" /> : null}
+                    {preparing ? 'جارٍ إنشاء المسودة…' : created ? `تم إنشاء المسودة (${draftCountLabel})` : `إعداد مسودة طلب للمراجعة (${draftCountLabel})`}
                 </button>
                 {card.links.map(l => <Link key={l.href} href={l.href} className="text-xs px-3 py-1.5 rounded-lg border border-border hover:border-primary/40">{l.label}</Link>)}
             </div>
+            {created && <p role="status" className="flex items-center gap-1.5 text-xs text-primary"><CheckCircle2 size={14} aria-hidden="true" />تم إنشاء المسودة للمراجعة؛ لم يُرسل طلب الشراء بعد.</p>}
             {!card.canDraft && card.draftBlockedReason && <p className="text-[11px] text-muted-foreground">المسودة غير متاحة: {card.draftBlockedReason}</p>}
             <p className="text-[11px] text-muted-foreground">المسودة لا تُرسل تلقائياً؛ تُفتح في صفحة طلب المذخر لتراجع الكميات والأسعار وتعتمدها.</p>
             <Scope scope={card.scope} />
