@@ -1,6 +1,25 @@
 import type { SendGroupPlan } from '@/app/lib/warehouse-order-grouping';
 import type { NeedLine } from './types';
 
+/**
+ * May a new smart-purchasing draft replace the list stored for this branch?
+ * Only when nothing can be lost: no stored list, or an empty one (what "بدء
+ * قائمة جديدة" leaves after everything was sent). Any group (sent, pending,
+ * failed or of unknown outcome), blocked line, draft line, or an unreadable
+ * record keeps the refusal.
+ */
+export function storedListIsEmpty(raw: string | null): boolean {
+    if (raw === null) return true;
+    try {
+        const saved = JSON.parse(raw);
+        if (!saved || saved.version !== 2) return false;
+        const empty = (v: unknown) => Array.isArray(v) && v.length === 0;
+        return empty(saved.groups) && empty(saved.blocked) && (saved.draft === undefined || empty(saved.draft));
+    } catch {
+        return false;
+    }
+}
+
 /** Only confirmed failures may become a new, editable request. */
 export function resumeUnsentLines(groups: SendGroupPlan[], blocked: NeedLine[], originals: NeedLine[]): NeedLine[] {
     if (groups.some(g => g.status === 'UNKNOWN' || g.status === 'SENDING' || g.hasUncertainOutcome)) {

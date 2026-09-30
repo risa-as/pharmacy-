@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { computeDraftMetrics, type DraftForMetrics } from '../purchase-draft-metrics';
-import { isDraftId, orderRequestBody, draftIdFromSaved, draftIdAfterStartNew, registerDraft, draftIsComplete } from '../purchase-draft-client';
+import { isDraftId, orderRequestBody, draftIdFromSaved, draftIdAfterStartNew, registerDraft, draftIsComplete, closeDraft } from '../purchase-draft-client';
 import { buildHandoff } from '../smart-purchasing-handoff';
 import { buildSendGroups, restoreSendGroups, buildOrderPayload } from '../warehouse-order-grouping';
 import { sameOptions, describeOptions, DEFAULT_PLANNING_OPTIONS } from '../purchase-planning-shared';
@@ -112,6 +112,18 @@ describe('the draft id travels beside the frozen order payload, never inside it'
     it('keeps the id only while items from the draft remain', () => {
         expect(draftIdAfterStartNew([{}], id)).toBe(id);
         expect(draftIdAfterStartNew([], id)).toBeNull();
+    });
+
+    it('closing is reported as done only when the server confirms it', async () => {
+        const ok = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+        expect(await closeDraft(id, ok as any)).toBe(true);
+        expect(ok).toHaveBeenCalledWith(`/api/purchases/drafts/${id}/complete`, { method: 'POST' });
+        expect(await closeDraft(id, vi.fn().mockResolvedValue({ ok: false, status: 500 }) as any)).toBe(false);
+        expect(await closeDraft(id, vi.fn().mockRejectedValue(new Error('offline')) as any)).toBe(false);
+        const never = vi.fn();
+        expect(await closeDraft('bad', never as any)).toBe(false);
+        expect(await closeDraft(null, never as any)).toBe(false);
+        expect(never).not.toHaveBeenCalled();
     });
 
     it('closes the draft only when every group is sent and nothing is left blocked', () => {

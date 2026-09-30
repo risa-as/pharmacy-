@@ -47,12 +47,20 @@ export function reportDraftImported(id: string, fetchImpl: typeof fetch = fetch)
 }
 
 /**
- * Closes the draft (all lines sent, or the user drops the rest). Fire-and-forget:
- * if it fails the draft stays open and its unsent lines stay "not sent yet".
+ * Closes the draft (all lines sent, or the user drops the rest) and reports
+ * whether the server confirmed it. The caller shows "closed" only on true; on
+ * false the draft stays open (its unsent lines stay "not sent yet") and the
+ * user can retry. Never involved in sending orders.
  */
-export function reportDraftCompleted(id: string | null | undefined, fetchImpl: typeof fetch = fetch) {
-    if (!isDraftId(id)) return;
-    fetchImpl(`/api/purchases/drafts/${id}/complete`, { method: 'POST' }).catch(() => {});
+export async function closeDraft(id: string | null | undefined, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+    if (!isDraftId(id)) return false;
+    try {
+        const res = await fetchImpl(`/api/purchases/drafts/${id}/complete`, { method: 'POST' });
+        // { completed: false } on a repeat means it was already closed: still closed.
+        return res.ok;
+    } catch {
+        return false;
+    }
 }
 
 /** Unambiguous completion: every frozen group sent, nothing blocked, no draft line left out. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildOrderPayload, buildSendGroups, type SendGroupPlan } from '@/app/lib/warehouse-order-grouping';
-import { resumeUnsentLines } from './resume-list';
+import { resumeUnsentLines, storedListIsEmpty } from './resume-list';
 import { selectedOption, type NeedLine } from './types';
 
 function group(status: SendGroupPlan['status'], drugId = 'd1'): SendGroupPlan {
@@ -42,5 +42,22 @@ describe('resume unsent needs', () => {
         expect(buildOrderPayload(rebuilt[0], 'branch', 'edited note')).toMatchObject({
             idempotencyKey: 'new-key', notes: 'edited note', items: [{ barcode: 'd1', quantity: 3, unitPrice: 500 }],
         });
+    });
+});
+
+describe('importing the next smart-purchasing draft (OPEN-14)', () => {
+    it('an empty stored list ("بدء قائمة جديدة" after a full send) may be replaced', () => {
+        expect(storedListIsEmpty(null)).toBe(true);
+        expect(storedListIsEmpty(JSON.stringify({ version: 2, groups: [], blocked: [], draft: [], notes: {}, originalLines: [] }))).toBe(true);
+        expect(storedListIsEmpty(JSON.stringify({ version: 2, purchaseDraftId: undefined, groups: [], blocked: [] }))).toBe(true);
+    });
+    it('anything that could be lost keeps the refusal: groups of any status, blocked or draft lines, unknown records', () => {
+        for (const status of ['SENT', 'PENDING', 'SENDING', 'FAILED', 'UNKNOWN'] as const)
+            expect(storedListIsEmpty(JSON.stringify({ version: 2, groups: [group(status)], blocked: [] }))).toBe(false);
+        expect(storedListIsEmpty(JSON.stringify({ version: 2, groups: [], blocked: [{ drugId: 'd' }] }))).toBe(false);
+        expect(storedListIsEmpty(JSON.stringify({ version: 2, groups: [], blocked: [], draft: [{ drugId: 'd' }] }))).toBe(false);
+        expect(storedListIsEmpty(JSON.stringify({ version: 1, groups: [], blocked: [] }))).toBe(false);
+        expect(storedListIsEmpty(JSON.stringify({ version: 2, blocked: [] }))).toBe(false);
+        expect(storedListIsEmpty('{not json')).toBe(false);
     });
 });

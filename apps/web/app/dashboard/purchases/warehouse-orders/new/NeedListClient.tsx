@@ -2,7 +2,8 @@
 import { readStorage } from '../../../../../../../packages/shared/src/safe-storage';
 import { prepareSmartOrderDraft } from '@/app/lib/actions/purchase-actions';
 import { handoffKey } from '@/app/lib/smart-purchasing-handoff';
-import { isDraftId, draftIdFromSaved, draftIdAfterStartNew, orderRequestBody, reportDraftImported, reportDraftCompleted, draftIsComplete } from '@/app/lib/purchase-draft-client';
+import { isDraftId, draftIdFromSaved, draftIdAfterStartNew, orderRequestBody, reportDraftImported, closeDraft, draftIsComplete } from '@/app/lib/purchase-draft-client';
+import { storedListIsEmpty } from './resume-list';
 
 // المرحلة 3 و4 من خطة «طلب الأدوية حسب الاحتياج»: قائمة الاحتياج ثم المراجعة والإرسال.
 //
@@ -72,6 +73,21 @@ export default function NeedListClient({
     const draftIdRef = useRef<string | null>(null);
     // Re-render trigger for the "close the draft" action (the id itself lives in the ref).
     const [draftOpen, setDraftOpen] = useState(false);
+    const [closingDraft, setClosingDraft] = useState(false);
+    // Closed only once the server confirms; on failure the draft stays open and the button offers a retry.
+    const closeMeasuredDraft = async (manual: boolean) => {
+        const id = draftIdRef.current;
+        if (!id) return;
+        setClosingDraft(true);
+        const ok = await closeDraft(id);
+        setClosingDraft(false);
+        if (ok) {
+            if (draftIdRef.current === id) setDraftOpen(false);
+            if (manual) toast.success('أُغلقت المسودة؛ الأصناف غير المرسلة تُحتسب محذوفة في القياس.');
+        } else {
+            toast.error('تعذر إغلاق المسودة الآن. الطلبات المرسلة سليمة؛ أعد محاولة الإغلاق.');
+        }
+    };
     const [importingSmart, setImportingSmart] = useState(false);
     const [smartImportedBranch, setSmartImportedBranch] = useState<string|null>(null);
     const smartKey = handoffKey(userId, organizationId);
@@ -217,7 +233,8 @@ export default function NeedListClient({
 
     async function importSmartDraft() {
         if (!smartDraft || importingSmart || sending) return;
-        if (lines.length || groups.length || recoveryError || readStorage('session', `wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`) || readStorage('session', `wh-need-send:${userId}:${organizationId}:${smartDraft.branchId}`)) {
+        // An empty stored list (after "بدء قائمة جديدة") is safe to replace; anything else is kept.
+        if (lines.length || groups.length || recoveryError || !storedListIsEmpty(readStorage('session', `wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`)) || readStorage('session', `wh-need-send:${userId}:${organizationId}:${smartDraft.branchId}`)) {
             toast.error('توجد مسودة أو عملية سابقة؛ راجعها أولاً حتى لا تُستبدل مختاراتك.'); return;
         }
         setImportingSmart(true);
@@ -401,7 +418,7 @@ export default function NeedListClient({
             }
             const allSent = current.every((g) => g.status === 'SENT');
             // OPEN-14: close the draft only on unambiguous completion; otherwise unsent lines stay "not sent yet".
-            if (draftIsComplete(current, classified.blocked.length)) { reportDraftCompleted(draftIdRef.current); setDraftOpen(false); }
+            if (draftIsComplete(current, classified.blocked.length)) void closeMeasuredDraft(false);
             if (allSent) {
                 toast.success('أُرسلت كل الطلبات.');
             } else {
@@ -427,6 +444,8 @@ export default function NeedListClient({
             // snapshot for reference without ever resubmitting successful groups.
             sessionStorage.setItem(`${storageKey}:previous`, JSON.stringify({ groups, notes }));
             const keptDraftId = draftIdAfterStartNew(draft, draftIdRef.current);
+            // Nothing left from the draft: make sure it is closed (e.g. an earlier close failed).
+            if (!keptDraftId && draftIdRef.current && draftOpen) void closeDraft(draftIdRef.current).then(ok => { if (!ok) toast.error('تعذر إغلاق المسودة السابقة؛ ستبقى مفتوحة في القياس.'); });
             sessionStorage.setItem(storageKey, JSON.stringify({ version: 2, purchaseDraftId: keptDraftId ?? undefined, groups: [], blocked: [], draft, notes: draftNotes, originalLines: draft }));
             draftIdRef.current = keptDraftId;
             setDraftOpen(!!keptDraftId);
@@ -1095,7 +1114,7 @@ export default function NeedListClient({
                     sending={sending}
                     onBack={() => { if (!sending && !groups.some(g => g.payload)) setStage('BUILD'); }}
                     onNew={startNew}
-                    onCloseDraft={draftOpen ? () => { reportDraftCompleted(draftIdRef.current); setDraftOpen(false); toast.success('أُغلقت المسودة؛ الأصناف غير المرسلة تُحتسب محذوفة في القياس.'); } : undefined}
+                    onCloseDraft={draftOpen && !closingDraft ? () => void closeMeasuredDraft(true) : undefined}
                     recoveryBlocked={!!recoveryError}
                     onSubmit={submitAll}
                     onPrint={printManual}
@@ -1299,7 +1318,7 @@ function ReviewStage({
                 </p>
                 <div className="flex items-center gap-3">
                     {groups.length > 0 && !groups.some(g => g.status === 'UNKNOWN' || g.status === 'SENDING' || g.hasUncertainOutcome) && <button disabled={sending || recoveryBlocked} onClick={onNew} className="text-sm text-primary">{groups.some(g => g.status !== 'SENT') || blocked.length ? 'تعديل الأصناف غير المرسلة' : 'بدء قائمة جديدة'}</button>}
-                    {onCloseDraft && anySent && (groups.some(g => g.status !== 'SENT') || blocked.length > 0) && !sending && <button onClick={onCloseDraft} className="text-sm text-muted-foreground underline" data-testid="close-draft">لن أرسل الباقي — إغلاق المسودة</button>}
+                    {onCloseDraft && anySent && !sending && <button onClick={onCloseDraft} className="text-sm text-muted-foreground underline" data-testid="close-draft">{groups.some(g => g.status !== 'SENT') || blocked.length > 0 ? 'لن أرسل الباقي — إغلاق المسودة' : 'إعادة محاولة إغلاق المسودة'}</button>}
                     {anySent && (
                         <Link
                             href="/dashboard/purchases/warehouse-orders"
