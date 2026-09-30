@@ -96,6 +96,22 @@ const sqlObjects = (names) => {
     }
     return { pre, post };
 };
+// Keep the legacy fixture at the actual point before function settings. Later
+// table migrations (purchase settings/drafts) must be applied by the upgrade,
+// not silently preinstalled by pushing today's schema into an old database.
+let legacySchemaText;
+const legacySchema = () => {
+    if (legacySchemaText) return legacySchemaText;
+    const db = createDb('legacy_schema');
+    const r = deploy(db, all.slice(0, beforeFunctionSettings));
+    assert.equal(r.code, 0, r.out);
+    const introspected = prisma(['db', 'pull', '--schema', SCHEMA, '--print'], db);
+    assert.equal(introspected.code, 0, introspected.out);
+    legacySchemaText = introspected.out.slice(introspected.out.indexOf('generator client'));
+    assert.match(legacySchemaText, /model Organization/);
+    return legacySchemaText;
+};
+
 /** Imitates a customer database: `db push` of a schema plus the hand-run SQL objects. */
 const pushBuilt = (db, schemaText, objectsFrom) => {
     const dir = mkdtempSync(join(work, 'push-'));
@@ -153,7 +169,7 @@ describe('new database: the chain alone builds the schema', () => {
 describe('existing database: upgrade of a restored copy', () => {
     it('customer database built with db push (no migration history): check is read-only; apply needs the data-step review, then records and matches', () => {
         const source = createDb('push_current');
-        pushBuilt(source, readFileSync(SCHEMA, 'utf8'), historical);
+        pushBuilt(source, legacySchema(), historical);
         seed(source);
         const before = fingerprint(source);
         const copy = restoreCopy(source, 'push_current_copy');
@@ -162,7 +178,7 @@ describe('existing database: upgrade of a restored copy', () => {
         const check = baseline(copy, shadow);
         assert.equal(check.code, 0, check.out);
         assert.match(check.out, new RegExp(`matches the chain after ${beforeFunctionSettings} of ${all.length} migrations`));
-        assert.match(check.out, /applying 1 migration\(s\) with migrate deploy/);
+        assert.ok(check.out.includes(`applying ${all.length - beforeFunctionSettings} migration(s) with migrate deploy`), check.out);
         assert.equal(hasMigrationsTable(copy), false, 'check mode never writes');
 
         const refused = baseline(copy, shadow, '--apply');
@@ -180,7 +196,7 @@ describe('existing database: upgrade of a restored copy', () => {
     });
     it('database made by the previous bootstrap (55 historical migrations recorded): only the repair migrations are recorded', () => {
         const source = createDb('old_bootstrap');
-        pushBuilt(source, readFileSync(SCHEMA, 'utf8'), historical);
+        pushBuilt(source, legacySchema(), historical);
         for (const n of historical) assert.equal(prisma(['migrate', 'resolve', '--applied', n, '--schema', chainDir(historical)], source).code, 0);
         seed(source);
         const copy = restoreCopy(source, 'old_bootstrap_copy');
