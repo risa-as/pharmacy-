@@ -88,6 +88,8 @@ export const SYSTEM_PROMPT = `أنت مساعد ذكي متخصص في إدار�
 - عند توفّر مقارنة بين فترتين، وضّح الفرق والنسبة المئوية للتغيّر
 - تُنسّق الأرقام المالية بالدينار العراقي (IQD) مع فواصل الآلاف
 - إذا لم تجد البيانات الكافية للإجابة، قل ذلك صراحةً ولا تختلق إجابة
+- عندما يطلب السياق توضيحاً، اسأل العميل عن الاسم المطلوب ولا تجب بإجمالي كل العملاء أو الموردين
+- مؤشرات الأسعار والخصومات والمرتجعات لا تثبت تلاعباً أو اختلاساً، وضّح أنها تستحق المراجعة فقط
 - لا تُعطي نصائح طبية أو صيدلانية
 - أنت لا تنفّذ أي إجراء في النظام، ولا تدّعي أبداً أن شيئاً أُرسل أو نُفّذ أو عُدّل
 - عند وجود «بطاقة معروضة» في السياق (اقتراحات الشراء، المخزون المعرض للهدر، ملخص اليوم): اشرح أرقامها كما هي دون تغيير أو تقريب مختلف، واذكر سبب الاقتراح وحدود البيانات المذكورة فيها. يمكنك أن تقول إن المستخدم يستطيع «إعداد مسودة طلب للمراجعة» من البطاقة، وإن المسودة لا تُرسل إلا بعد مراجعته واعتماده
@@ -279,23 +281,29 @@ export function classifyQuestion(message: string): QuestionCategory[] {
   if (/هامش|ربحيه|ربح/.test(msg) && /ادويه|اصناف|منتجات|اعلي|اكبر|اكثر|اقل|ادني|اصغر|اي دواء|اي صنف|ترتيب|الاكثر ربح/.test(msg))
     categories.push("margin_ranking");
 
-  if (/بطيئ|راكد|راكده|بطيئه الحركه|لا تباع|لم تباع|لم يباع|لم يتم بيع|عمر مخزون|لا يباع|لا تتحرك|لم تتحرك|دفن مخزون|دفن/.test(msg))
+  if (/بطيي|راكد|راكده|بطييه الحركه|لا تباع|لم تباع|لم يباع|لم يتم بيع|عمر مخزون|لا يباع|لا تتحرك|لم تتحرك|دفن مخزون|دفن/.test(msg))
     categories.push("slow_movers");
 
   if (/ذروه|اي ساعه|اي وقت|توزيع المبيعات|اوقات الذروه|ساعات الذروه|انشط ساعه|انشط الساعات|اكثر ساعه/.test(msg))
     categories.push("peak_hours");
 
+  // Price/cost of one medicine is not the pharmacy financial report.
+  if (categories.includes("drug_info") && !/ربح|ارباح|هامش|مصاريف|صافي|خسار/.test(msg)) {
+    const financial = categories.indexOf("financial");
+    if (financial >= 0) categories.splice(financial, 1);
+  }
   return categories.length > 0 ? categories : ["general"];
 }
 
 // ─── Drug Name Extractor ──────────────────────────────────────────────────────
 
-function extractSearchTerm(message: string): string {
+export function extractSearchTerm(message: string): string {
+  message = message.replace(/تكلفه/g, "تكلفة").replace(/كميه/g, "كمية");
   const patterns = [
     // "...الخاص بالدواء X" / "دواء X" / "منتج X" — captures the product name
     // (incl. Latin names like "DR. James Whitening soap").
     /(?:بالدواء|للدواء|الدواء|دواء|بمنتج|للمنتج|المنتج|منتج)\s+(.+?)(?:[؟?]|$)/,
-    /(?:سعر|كمية|مخزون|معلومات عن|تفاصيل|هل لدينا|هل يوجد|سعر دواء|تكلفة|كم تكلف|ثمن|كم ثمن)\s+(?:ال)?(.+?)(?:[؟?]|$)/,
+    /(?:سعر|كمية|مخزون|معلومات عن|تفاصيل|هل لدينا|هل يوجد|هل عندنا|سعر دواء|تكلفة|كم تكلف|ثمن|كم ثمن)\s+(?:ال)?(.+?)(?:[؟?]|$)/,
     /(?:كم سعر|كم كمية|كم ثمن)\s+(?:ال)?(.+?)(?:[؟?]|$)/,
   ];
   for (const p of patterns) {
@@ -314,7 +322,7 @@ function extractSearchTerm(message: string): string {
 
 // يتحقق أن الاسم كلمة مستقلة وليس جزءاً من كلمة أخرى (مثل "اب" داخل "رابحة")
 function isWholeWord(text: string, word: string): boolean {
-  const arabicChar = /[؀-ۿ]/;
+  const arabicChar = /[ء-ي]/;
   const idx = text.indexOf(word);
   if (idx === -1) return false;
   const before = idx > 0 ? text[idx - 1] : "";
@@ -368,6 +376,12 @@ function bDay(y: number, m: number, d: number): Date {
 function bParts(now: Date) {
   const [y, m, d] = baghdadDate(now).split("-").map(Number);
   return { y, m, d };
+}
+function weekStart(now: Date): Date {
+  const { y, m, d } = bParts(now);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  // Baghdad calendar week: Saturday through Friday.
+  return bDay(y, m, d - (weekday + 1) % 7);
 }
 const endOf = (dayStart: Date) => new Date(dayStart.getTime() + DAY - 1);
 
@@ -428,8 +442,11 @@ export function extractDateRange(message: string, now: Date = new Date()): { fro
   }
 
   // ── الأسبوع ───────────────────────────────────────────────────────────────
-  if (/الاسبوع الماضي/.test(msg)) return { from: daysAgo(13), to: endOf(daysAgo(7)) };
-  if (/هذا الاسبوع|الاسبوع الحالي|اخر 7 ايام/.test(msg)) return { from: daysAgo(6), to: eod };
+  if (/الاسبوع الماضي/.test(msg)) {
+    const start = weekStart(now);
+    return { from: new Date(start.getTime() - 7 * DAY), to: new Date(start.getTime() - 1) };
+  }
+  if (/هذا الاسبوع|الاسبوع الحالي/.test(msg)) return { from: weekStart(now), to: eod };
 
   // ── نطاق ساعات: "من الساعة 9 إلى 5" (بتوقيت بغداد) ────────────────────────
   const hourMatch = msg.match(
@@ -497,7 +514,9 @@ async function fetchForCategory(
       return [profit, expenses, supplierDebts].join("\n\n");
     }
     case "customer_debts":
-      return getDebtSummary(ctx);
+      return /دين المريض/.test(normalizeArabic(message))
+        ? "## توضيح مطلوب\nأي مريض تقصد؟ اذكر اسمه. لا تنسب إجمالي ديون العملاء إلى مريض واحد."
+        : getDebtSummary(ctx);
     case "inventory": {
       const [overview, low, expiring, expired] = await Promise.all([
         getInventoryOverview(ctx),
@@ -508,8 +527,9 @@ async function fetchForCategory(
       return [overview, low, expiring, expired].filter(Boolean).join("\n\n");
     }
     case "shifts":
-      return getShiftSummary(from, to, ctx);
+      return getShiftSummary(from, to, ctx, /الشيفت الحالي|الورديه الحاليه/.test(normalizeArabic(message)));
     case "purchases": {
+      if (/ديون المورد[؟?]?\s*$/.test(normalizeArabic(message))) return "## توضيح مطلوب\nأي مورد تقصد؟ اذكر اسمه، أو اسأل عن ديون الموردين جميعاً.";
       const tasks: Promise<string>[] = [
         getPurchasesSummary(from, to, ctx),
         getPendingOrders(ctx),
@@ -588,11 +608,11 @@ async function buildSalesComparison(
     curLabel = "الشهر الحالي";
     prevLabel = "الشهر الماضي";
   } else {
-    // default: week (last 7 days vs the 7 days before)
-    curFrom = daysAgo(6);
+    // Calendar week (Saturday–Friday), consistent with ordinary questions.
+    curFrom = weekStart(now);
     curTo = eod;
-    prevFrom = daysAgo(13);
-    prevTo = endOf(daysAgo(7));
+    prevFrom = new Date(curFrom.getTime() - 7 * DAY);
+    prevTo = new Date(curFrom.getTime() - 1);
     curLabel = "الأسبوع الحالي";
     prevLabel = "الأسبوع الماضي";
   }
@@ -675,7 +695,8 @@ export async function buildContext(
     categories.includes("cashier_performance") ||
     /اداء/.test(norm);
 
-  const note = followUp ? `(سؤال متابعة للسؤال السابق: «${dataMessage.slice(0, 200)}»)\n\n` : "";
+  const calendarNote = "التواريخ بتوقيت بغداد. الأسبوع من السبت إلى الجمعة. المبيعات هي قيمة فواتير البيع بعد الخصم وقبل طرح المرتجعات؛ الكميات بوحدات المخزون. لا تعتبر مؤشرات المراجعة دليلاً على اختلاس.\n\n";
+  const note = calendarNote + (followUp ? `(سؤال متابعة للسؤال السابق: «${dataMessage.slice(0, 200)}»)\n\n` : "");
 
   // When the question compares periods, replace the single-range sales/finance
   // fetch with an explicit two-period comparison.

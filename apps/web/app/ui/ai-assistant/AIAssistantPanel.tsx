@@ -1,8 +1,9 @@
 'use client';
 
+import { EXAMPLE_CATEGORIES, QUICK_QUESTIONS } from '@/app/lib/assistant-examples';
 import { monthlyStockoutRequest } from '@/app/lib/month-reorder';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, X, Trash2, Send, Loader2, Lightbulb } from 'lucide-react';
+import { Bot, X, Trash2, Send, Loader2, Lightbulb, Sparkles, ShoppingCart, ChevronLeft, ArrowRight, Maximize2, Minimize2, Plus, Package, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import type { ChatMessage } from '@/app/lib/ai-assistant';
@@ -18,126 +19,11 @@ interface Message {
     cards?: AssistantCard[];
 }
 
-/** Direct actions: cards straight from the system, no language model, no AI quota. */
-const INSIGHT_ACTIONS: { kind: 'reorder' | 'waste' | 'daily'; label: string }[] = [
-    { kind: 'reorder', label: '🛒 شنو أطلب اليوم؟' },
-    { kind: 'waste', label: '⏳ المخزون المعرض للهدر' },
-    { kind: 'daily', label: '📋 ملخص اليوم' },
-];
-
 interface UsageInfo {
     limit: number;
     used: number;
     remaining: number;
 }
-
-const QUICK_QUESTIONS = [
-    'كم مبيعات اليوم؟',
-    'ما هي الأدوية الناقصة؟',
-    'هل هناك حركات مشبوهة؟',
-    'كم ربحنا هذا الشهر؟',
-];
-
-const EXAMPLE_CATEGORIES = [
-    {
-        label: 'المبيعات',
-        icon: '📊',
-        questions: [
-            'كم مبيعات اليوم؟',
-            'ما هي مبيعات الأسبوع الماضي؟',
-            'كم فاتورة صدرت هذا الأسبوع؟',
-            'ما إجمالي المبيعات لشهر نيسان؟',
-            'ما مبيعات شهر 3؟',
-            'كم مبيعات الشهر الماضي؟',
-            'ما الكمية المباعة اليوم؟',
-            'ما إجمالي المبيعات في آخر 7 أيام؟',
-        ],
-    },
-    {
-        label: 'الأرباح والمالية',
-        icon: '💰',
-        questions: [
-            'ما هي أرباح الشهر الماضي؟',
-            'كم ربحنا هذا الشهر؟',
-            'ما هي أرباح شهر 4؟',
-            'هل الصيدلية رابحة؟',
-            'ما هي المصاريف؟',
-            'ما صافي الربح؟',
-            'ما أرباح هذا العام؟',
-            'كم خصم أعطينا اليوم؟',
-        ],
-    },
-    {
-        label: 'المخزون',
-        icon: '🏥',
-        questions: [
-            'ما هي الأدوية الناقصة؟',
-            'هل هناك أدوية منتهية الصلاحية؟',
-            'ما هي الأدوية التي ستنتهي قريباً؟',
-            'ما هي الأدوية البطيئة الحركة؟',
-            'ما هي الأدوية التي لا تتحرك؟',
-            'ما هي الأدوية التي دفن مخزونها؟',
-            'هل هناك أدوية ستقترب صلاحيتها؟',
-            'كم صنف لدينا في المخزون؟',
-        ],
-    },
-    {
-        label: 'المشتريات والموردين',
-        icon: '🚚',
-        questions: [
-            'ما هي الطلبيات المعلقة؟',
-            'ما ديون الموردين؟',
-            'من هم الموردون؟',
-            'ما اشترينا هذا الشهر؟',
-            'ما ديون المورد؟',
-            'هل هناك طلبيات لم تصل؟',
-            'ما فواتير المشتريات؟',
-        ],
-    },
-    {
-        label: 'الكاشيرات والموظفون',
-        icon: '👥',
-        questions: [
-            'من فتح الشيفت اليوم؟',
-            'ما أداء كل موظف؟',
-            'من هم الموظفون؟',
-            'كم باع كل كاشير اليوم؟',
-            'ما ملخص الشيفت الحالي؟',
-        ],
-    },
-    {
-        label: 'الحركات المشبوهة',
-        icon: '⚠️',
-        questions: [
-            'هل هناك حركات مشبوهة؟',
-            'هل هناك تلاعب في الأسعار؟',
-            'هل هناك تجاوزات في الخصومات؟',
-            'هل هناك مرتجعات كثيرة؟',
-            'هل هناك اختلاس؟',
-        ],
-    },
-    {
-        label: 'معلومات الدواء',
-        icon: '💊',
-        questions: [
-            'كم سعر الباراسيتامول؟',
-            'هل لدينا أموكسيسيلين؟',
-            'هل يوجد إيبوبروفين؟',
-            'كم كمية البندول؟',
-            'ما تكلفة الأسبرين؟',
-            'كم ثمن ميدازيل؟',
-        ],
-    },
-    {
-        label: 'الديون والمرضى',
-        icon: '💳',
-        questions: [
-            'ما ديون المرضى؟',
-            'ما ديون العملاء؟',
-            'كم دين المريض؟',
-        ],
-    },
-];
 
 const MAX_MESSAGES = 40;
 
@@ -147,10 +33,12 @@ export default function AIAssistantPanel() {
     const [isOpen,        setIsOpen]        = useState(false);
     const [messages,      setMessages]      = useState<Message[]>([]);
     const [input,         setInput]         = useState('');
-    const [purchaseDays, setPurchaseDays] = useState('15');
+    const [purchaseDays, setPurchaseDays] = useState('');
+    const [showPurchase, setShowPurchase] = useState(false);
+    const [showTools, setShowTools] = useState(false);
+    const [expanded, setExpanded] = useState(false);
     const validPurchaseDays = /^\d+$/.test(purchaseDays) && Number(purchaseDays) >= 1 && Number(purchaseDays) <= 365;
     const [loading,       setLoading]       = useState(false);
-    const [provider,      setProvider]      = useState<string | null>(null);
     const [configured,    setConfigured]    = useState(true);
     const [usage,         setUsage]         = useState<UsageInfo | null>(null);
     const [showExamples,  setShowExamples]  = useState(false);
@@ -181,7 +69,7 @@ export default function AIAssistantPanel() {
     useEffect(() => {
         fetch('/api/ai/status')
             .then(r => r.json())
-            .then(d => { setProvider(d.provider ?? null); setConfigured(d.configured ?? false); })
+            .then(d => { setConfigured(d.configured ?? false); })
             .catch(() => setConfigured(false));
     }, []);
 
@@ -197,7 +85,7 @@ export default function AIAssistantPanel() {
     // Auto-scroll to bottom on new messages
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, loading]);
+    }, [messages, loading, showPurchase]);
 
     // Focus textarea when panel opens
     useEffect(() => {
@@ -212,9 +100,11 @@ export default function AIAssistantPanel() {
         if (usage && usage.remaining <= 0 && !monthlyStockoutRequest(trimmed)) return;
 
         setShowExamples(false);
+        setShowTools(false);
         const userMsg: Message = { role: 'user', content: trimmed };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
+        setShowPurchase(false);
         setLoading(true);
 
         try {
@@ -253,7 +143,9 @@ export default function AIAssistantPanel() {
 
     const runInsight = useCallback(async (kind: 'reorder' | 'waste' | 'daily', label: string) => {
         if (loading || messages.length >= MAX_MESSAGES) return;
+        setShowPurchase(false);
         setShowExamples(false);
+        setShowTools(false);
         setMessages(prev => [...prev, { role: 'user', content: label }]);
         setLoading(true);
         try {
@@ -279,7 +171,7 @@ export default function AIAssistantPanel() {
             description: 'سيتم حذف جميع الرسائل بشكل نهائي.',
             action: {
                 label: 'مسح',
-                onClick: () => setMessages([]),
+                onClick: () => { setMessages([]); setShowPurchase(false); setShowTools(false); },
             },
             cancel: {
                 label: 'إلغاء',
@@ -289,295 +181,131 @@ export default function AIAssistantPanel() {
         });
     };
 
-    const providerLabel  = provider === 'openai' ? 'GPT' : provider === 'gemini' ? 'Gemini' : null;
-    const atMsgLimit     = messages.length >= MAX_MESSAGES;
-    const atDailyLimit   = usage !== null && usage.remaining <= 0;
+    const atMsgLimit = messages.length >= MAX_MESSAGES;
+    const atDailyLimit = usage !== null && usage.remaining <= 0;
     const purchaseCommand = !!monthlyStockoutRequest(input);
-    const isDisabled     = atMsgLimit || (atDailyLimit && !purchaseCommand);
-
-    const usagePct = usage ? Math.round((usage.used / usage.limit) * 100) : 0;
-    const usageColor = usagePct >= 90 ? 'text-destructive' : usagePct >= 70 ? 'text-warning' : 'text-white/70';
+    const isDisabled = atMsgLimit || (atDailyLimit && !purchaseCommand);
 
     return (
         <>
-            {/* Floating trigger button */}
-            <button
-                onClick={() => setIsOpen(v => !v)}
-                title="المساعد الذكي"
-                className={`fixed bottom-6 left-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all
-                    ${isOpen
-                        ? 'bg-primary/90 text-white rotate-12'
-                        : 'bg-primary hover:bg-primary/90 text-white'
-                    }`}
-            >
-                <Bot size={24} />
-                {configured && !isOpen && (
-                    <span className="absolute top-1 right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />
-                )}
+            <button onClick={() => setIsOpen(v => !v)} title="المساعد الذكي" aria-label="فتح المساعد الذكي" aria-expanded={isOpen}
+                className="fixed bottom-6 left-6 z-[60] flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20">
+                {isOpen ? <X size={24} /> : <Bot size={26} />}
             </button>
-
-            {/* Panel */}
             {isOpen && (
-                <div
-                    dir="rtl"
-                    className="fixed bottom-24 left-2 right-2 sm:left-6 sm:right-auto sm:w-[380px] z-50 flex flex-col h-[80vh] max-h-[750px] rounded-2xl shadow-2xl
-                        border border-border bg-background overflow-hidden"
-                >
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-primary text-white">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <Bot size={20} className="shrink-0" />
-                            <span className="font-semibold text-sm">المساعد الذكي</span>
-                            {providerLabel && (
-                                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full shrink-0">{providerLabel}</span>
-                            )}
-                            {usage && (
-                                <span className={`text-xs px-2 py-0.5 rounded-full bg-black/20 shrink-0 ${usageColor}`}>
-                                    {usage.remaining}/{usage.limit}
-                                </span>
-                            )}
+                <section dir="rtl" role="dialog" aria-label="المساعد الذكي" onKeyDown={e => { if (e.key === 'Escape') setIsOpen(false); }}
+                    className={`fixed bottom-24 left-2 right-2 z-[60] flex h-[min(760px,calc(100dvh-112px))] flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-2xl sm:left-6 sm:right-auto ${expanded ? 'sm:w-[min(720px,calc(100vw-48px))]' : 'sm:w-[440px] sm:max-w-[calc(100vw-48px)]'}`}>
+                    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-4 py-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Bot size={23} /></div>
+                            <div className="min-w-0">
+                                <h2 className="text-sm font-bold text-foreground">مساعد فاراماس</h2>
+                                <p className="mt-0.5 text-[11px] text-muted-foreground">{usage ? `${usage.remaining} من ${usage.limit} إجابة متبقية اليوم` : 'مبيعاتك ومخزونك في محادثة واحدة'}</p>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                            <button
-                                onClick={() => setShowExamples(v => !v)}
-                                title="أمثلة على الأسئلة"
-                                className={`p-1.5 rounded-lg transition-colors ${showExamples ? 'bg-white/30' : 'hover:bg-white/20'}`}
-                            >
-                                <Lightbulb size={15} />
-                            </button>
-                            {messages.length > 0 && (
-                                <button
-                                    onClick={clearChat}
-                                    title="مسح المحادثة"
-                                    className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
-                                >
-                                    <Trash2 size={15} />
-                                </button>
-                            )}
-                            <button
-                                onClick={() => setIsOpen(false)}
-                                title="إغلاق"
-                                className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
-                            >
-                                <X size={15} />
-                            </button>
+                        <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                            <button aria-label="أمثلة على الأسئلة" title="أمثلة على الأسئلة" onClick={() => { setShowExamples(v => !v); setShowTools(false); }} className={`rounded-xl p-2 hover:bg-muted ${showExamples ? 'bg-primary/10 text-primary' : ''}`}><Lightbulb size={17} /></button>
+                            <button aria-label={expanded ? 'تصغير المحادثة' : 'توسيع المحادثة'} title="تغيير حجم المحادثة" onClick={() => setExpanded(v => !v)} className="hidden rounded-xl p-2 hover:bg-muted sm:block">{expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+                            {messages.length > 0 && <button onClick={clearChat} aria-label="مسح المحادثة" title="مسح المحادثة" className="rounded-xl p-2 hover:bg-muted"><Trash2 size={16} /></button>}
+                            <button onClick={() => setIsOpen(false)} aria-label="إغلاق المساعد" className="rounded-xl p-2 hover:bg-muted"><X size={18} /></button>
                         </div>
-                    </div>
-
-                    {/* Inner wrapper — relative context for the examples overlay */}
-                    <div className="relative flex flex-col flex-1 min-h-0">
-
-                    {/* Examples overlay */}
-                    {showExamples && (
-                        <div className="absolute inset-0 z-10 flex flex-col bg-background border-t border-border overflow-hidden">
-
-                            {/* Overlay header */}
-                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/40 shrink-0">
-                                <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                                    <Lightbulb size={14} className="text-primary" />
-                                    أمثلة على الأسئلة
+                    </header>
+                    <div className="relative flex min-h-0 flex-1 flex-col">
+                        {showExamples ? (
+                            <div className="flex min-h-0 flex-1 flex-col bg-card">
+                                <div className="flex items-center gap-2 px-4 pt-4">
+                                    <button onClick={() => setShowExamples(false)} aria-label="العودة إلى المحادثة" className="rounded-lg p-1.5 text-primary hover:bg-primary/10"><ArrowRight size={18} /></button>
+                                    <div><h3 className="text-sm font-bold">أمثلة على الأسئلة</h3><p className="text-xs text-muted-foreground">اختر الموضوع، ثم السؤال لإرساله.</p></div>
                                 </div>
-                                <button
-                                    onClick={() => setShowExamples(false)}
-                                    className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-                                >
-                                    <X size={14} />
-                                </button>
+                                <div className="grid grid-cols-2 gap-2 border-b border-border p-4">
+                                    {EXAMPLE_CATEGORIES.map((cat, idx) => (
+                                        <button key={cat.label} onClick={() => setActiveTab(idx)} aria-pressed={activeTab === idx}
+                                            className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-right text-xs transition ${activeTab === idx ? 'border-primary bg-primary/10 font-bold text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
+                                            <span aria-hidden="true">{cat.icon}</span>{cat.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+                                    {EXAMPLE_CATEGORIES[activeTab].questions.map(q => (
+                                        <button key={q} onClick={() => sendMessage(q)} disabled={loading || atMsgLimit || atDailyLimit || !configured}
+                                            className="flex w-full items-center justify-between gap-3 rounded-xl border border-border px-3 py-3 text-right text-sm leading-relaxed transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-40">
+                                            <span>{q}</span><ChevronLeft size={15} className="shrink-0 text-primary" />
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-
-                            {/* Tab bar — horizontally scrollable */}
-                            <div className="flex overflow-x-auto gap-1 px-3 py-2 border-b border-border bg-muted/20 shrink-0 scrollbar-none">
-                                {EXAMPLE_CATEGORIES.map((cat, idx) => (
-                                    <button
-                                        key={cat.label}
-                                        onClick={() => setActiveTab(idx)}
-                                        className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0
-                                            ${activeTab === idx
-                                                ? 'bg-primary text-white shadow-sm'
-                                                : 'bg-background border border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
-                                            }`}
-                                    >
-                                        <span>{cat.icon}</span>
-                                        <span>{cat.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Questions for active tab */}
-                            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5">
-                                {EXAMPLE_CATEGORIES[activeTab].questions.map(q => (
-                                    <button
-                                        key={q}
-                                        onClick={() => { sendMessage(q); setShowExamples(false); }}
-                                        disabled={isDisabled || !configured}
-                                        className="text-right text-xs px-3 py-2.5 rounded-lg border border-border bg-background
-                                            hover:bg-primary/5 hover:border-primary/40 hover:text-primary
-                                            dark:hover:bg-primary/20 dark:hover:border-primary/40 dark:hover:text-primary
-                                            transition-colors disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed"
-                                    >
-                                        {q}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-                        {/* Welcome state */}
-                        {messages.length === 0 && (
-                            <div className="text-center space-y-3 pt-4">
-                                <p className="text-sm text-muted-foreground">
-                                    {!configured
-                                        ? '⚠️ الشرح النصي غير مفعّل — يرجى ضبط AI_PROVIDER ومفتاح المزوّد نفسه في ملف .env. أزرار البطاقات أدناه تعمل من بيانات النظام.'
-                                        : atDailyLimit
-                                        ? '⛔ تجاوزت الحد اليومي للمساعد الذكي. يتجدد الحد منتصف الليل بتوقيت بغداد.'
-                                        : 'اسألني أي شيء عن مبيعاتك أو مخزونك أو أرباحك'}
-                                </p>
-                                {configured && !atDailyLimit && (
-                                    <div className="flex flex-wrap gap-2 justify-center">
-                                        {QUICK_QUESTIONS.map(q => (
-                                            <button
-                                                key={q}
-                                                onClick={() => sendMessage(q)}
-                                                className="text-xs px-3 py-1.5 rounded-full border border-primary/40
-                                                    text-primary hover:bg-primary/5 dark:text-primary
-                                                    dark:border-primary/40 dark:hover:bg-primary/20 transition-colors"
-                                            >
-                                                {q}
-                                            </button>
-                                        ))}
+                        ) : (
+                            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-muted/20 p-4" role="log" aria-label="رسائل المحادثة" aria-live="polite">
+                                {messages.length === 0 && !showPurchase && (
+                                    <div className="py-5">
+                                        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Sparkles size={24} /></div>
+                                        <h3 className="text-xl font-bold">كيف أساعدك اليوم؟</h3>
+                                        <p className="mt-2 text-sm leading-7 text-muted-foreground">اسأل عن أداء الصيدلية، أو اختر أداة لتراجع المخزون وتجهّز طلب شراء.</p>
+                                        <div className="mt-5 grid grid-cols-2 gap-2">
+                                            {QUICK_QUESTIONS.map(q => <button key={q} onClick={() => sendMessage(q)} disabled={!configured || atDailyLimit || loading}
+                                                className="rounded-2xl border border-border bg-card px-3 py-3 text-right text-xs leading-6 text-foreground transition hover:border-primary/40 hover:bg-primary/5 disabled:opacity-40">{q}</button>)}
+                                        </div>
+                                        <button onClick={() => { setShowPurchase(true); setPurchaseDays(''); }} disabled={atMsgLimit || loading}
+                                            className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-3 text-right hover:bg-primary/10">
+                                            <ShoppingCart size={19} className="shrink-0 text-primary" /><span className="flex-1"><span className="block text-sm font-semibold">طلب شراء ذكي</span><span className="mt-1 block text-xs text-muted-foreground">اختر مدة التغطية وجهّز مسودة للمراجعة</span></span><ChevronLeft size={17} className="text-primary" />
+                                        </button>
+                                        <button onClick={() => setShowExamples(true)} className="mt-4 flex items-center gap-1 text-xs text-primary"><Lightbulb size={14} />استكشف أمثلة الأسئلة<ChevronLeft size={13} /></button>
                                     </div>
                                 )}
-                            </div>
-                        )}
-
-                        {/* Chat bubbles */}
-                        {messages.map((msg, i) => (
-                            <div
-                                key={i}
-                                className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}
-                            >
-                                <div
-                                    className={`${msg.cards?.length ? 'w-full' : 'max-w-[85%]'} rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed
-                                        ${msg.role === 'user'
-                                            ? 'bg-primary text-white rounded-br-sm'
-                                            : 'bg-muted text-foreground rounded-bl-sm'
-                                        }`}
-                                >
-                                    {msg.content}
-                                    {msg.cards?.map((card, j) => (
-                                        <div key={j} className={`whitespace-normal ${msg.content ? 'mt-2' : ''}`}>
-                                            <AssistantCardView card={card} />
+                                {messages.map((msg, i) => (
+                                    <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                                        {msg.role === 'assistant' && <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bot size={16} /></div>}
+                                        <div className={`${msg.cards?.length ? 'min-w-0 flex-1' : 'max-w-[88%]'} whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 ${msg.role === 'user' ? 'rounded-tr-sm bg-primary text-primary-foreground' : 'rounded-tr-sm border border-border bg-card text-foreground'}`}>
+                                            {msg.content}
+                                            {msg.cards?.map((card, j) => <div key={j} className={`whitespace-normal ${msg.content ? 'mt-3' : ''}`}><AssistantCardView card={card} /></div>)}
                                         </div>
-                                    ))}
+                                    </div>
+                                ))}
+                                {showPurchase && (
+                                    <div className="rounded-2xl border border-primary/25 bg-card p-4" data-testid="purchase-setup">
+                                        <div className="flex items-center justify-between"><h3 className="flex items-center gap-2 text-sm font-bold"><ShoppingCart size={18} className="text-primary" />طلب شراء ذكي</h3><button aria-label="إلغاء إعداد طلب الشراء" onClick={() => setShowPurchase(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X size={16} /></button></div>
+                                        <p className="mt-3 text-sm leading-7 text-muted-foreground">سأبحث عن الأدوية النافدة التي بيعت هذا الشهر. كم يوماً تريد أن تكفي الكمية المقترحة؟</p>
+                                        <div className="mt-3 flex gap-2">{[5, 10, 15, 20].map(d => <button key={d} onClick={() => setPurchaseDays(String(d))} aria-pressed={purchaseDays === String(d)} className={`flex-1 rounded-xl border py-2 text-xs ${purchaseDays === String(d) ? 'border-primary bg-primary/10 font-bold text-primary' : 'border-border hover:bg-muted'}`}>{d} أيام</button>)}</div>
+                                        <label className="mt-4 block text-xs font-medium" htmlFor="assistant-coverage">أو أدخل مدة أخرى (من 1 إلى 365 يوماً)</label>
+                                        <input id="assistant-coverage" type="text" inputMode="numeric" autoComplete="off" value={purchaseDays} onChange={e => setPurchaseDays(e.target.value.replace(/[٠-٩۰-۹]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d) >= 0 ? '٠١٢٣٤٥٦٧٨٩'.indexOf(d) : '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))))}
+                                            className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" placeholder="عدد أيام التغطية" disabled={loading} />
+                                        {purchaseDays && !validPurchaseDays && <p className="mt-1 text-xs text-destructive" role="alert">أدخل عدداً صحيحاً من 1 إلى 365.</p>}
+                                        <button onClick={() => sendMessage(`جهز طلب الأدوية النافدة التي بيعت هذا الشهر بكمية تكفي لمدة ${Number(purchaseDays)} يوم`)} disabled={!validPurchaseDays || loading || atMsgLimit}
+                                            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40"><ShoppingCart size={16} />تجهيز الاقتراح</button>
+                                        <p className="mt-2 text-[11px] leading-5 text-muted-foreground">ستراجع الأصناف والكميات قبل إرسال الطلب إلى المذخر.</p>
+                                    </div>
+                                )}
+                                {loading && <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status"><Loader2 size={16} className="animate-spin text-primary" />أراجع بيانات الصيدلية…</div>}
+                                {!configured && <p className="rounded-xl bg-muted px-3 py-2 text-xs leading-6 text-muted-foreground">الإجابات النصية غير متاحة حالياً. يمكنك استخدام أدوات المخزون وطلب الشراء.</p>}
+                                {atMsgLimit && <div className="text-center text-xs text-muted-foreground">وصلت إلى 40 رسالة. <button onClick={() => { setMessages([]); setShowPurchase(false); }} className="text-primary hover:underline">ابدأ محادثة جديدة</button></div>}
+                                {atDailyLimit && <p className="text-xs leading-6 text-muted-foreground">اكتملت حصة الإجابات النصية اليوم. أدوات المخزون وطلب الشراء متاحة؛ تتجدد الحصة منتصف الليل بتوقيت بغداد.</p>}
+                                <div ref={bottomRef} />
+                            </div>
+                        )}
+                        {showTools && !showExamples && (
+                            <div className="shrink-0 border-t border-border bg-card p-3" data-testid="assistant-tools">
+                                <p className="mb-2 px-1 text-xs font-semibold text-muted-foreground">أدوات من بيانات الصيدلية</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button onClick={() => { setShowPurchase(true); setPurchaseDays(''); setShowTools(false); }} disabled={loading || atMsgLimit} className="flex items-center gap-2 rounded-xl bg-primary/10 p-3 text-right text-xs font-semibold text-primary"><ShoppingCart size={16} />طلب شراء ذكي</button>
+                                    <button onClick={() => runInsight('reorder', 'احتياجات المخزون')} disabled={loading || atMsgLimit} className="flex items-center gap-2 rounded-xl border border-border p-3 text-right text-xs hover:bg-muted"><Package size={16} />احتياجات المخزون</button>
+                                    <button onClick={() => runInsight('waste', 'المخزون المعرض للهدر')} disabled={loading || atMsgLimit} className="flex items-center gap-2 rounded-xl border border-border p-3 text-right text-xs hover:bg-muted"><Package size={16} />المخزون المعرض للهدر</button>
+                                    <button onClick={() => runInsight('daily', 'ملخص اليوم')} disabled={loading || atMsgLimit} className="flex items-center gap-2 rounded-xl border border-border p-3 text-right text-xs hover:bg-muted"><ClipboardList size={16} />ملخص اليوم</button>
                                 </div>
                             </div>
-                        ))}
-
-                        {/* Typing indicator */}
-                        {loading && (
-                            <div className="flex justify-end">
-                                <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5">
-                                    {[0, 1, 2].map(i => (
-                                        <span
-                                            key={i}
-                                            className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce"
-                                            style={{ animationDelay: `${i * 150}ms` }}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
                         )}
-
-                        {/* Limit warnings */}
-                        {atMsgLimit && (
-                            <div className="text-center">
-                                <p className="text-xs text-muted-foreground mb-2">وصلت للحد الأقصى للمحادثة (40 رسالة)</p>
-                                <button
-                                    onClick={() => setMessages([])}
-                                    className="text-xs text-primary hover:underline"
-                                >
-                                    بدء محادثة جديدة
-                                </button>
+                        <footer className="shrink-0 border-t border-border bg-card p-3">
+                            <div className="flex items-end gap-2 rounded-2xl border border-input bg-background p-2 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10">
+                                <button onClick={() => { setShowTools(v => !v); setShowExamples(false); }} aria-label="أدوات المساعد" title="أدوات المساعد" aria-expanded={showTools} className={`shrink-0 rounded-xl p-2 transition hover:bg-muted ${showTools ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}><Plus size={19} /></button>
+                                <textarea ref={textareaRef} value={input} onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 112)}px`; }} onKeyDown={handleKeyDown}
+                                    aria-label="رسالتك للمساعد" placeholder={atMsgLimit ? 'ابدأ محادثة جديدة للمتابعة' : 'اكتب سؤالك أو اختر أداة…'} disabled={loading || atMsgLimit} rows={1}
+                                    className="max-h-28 min-h-[36px] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2 text-sm placeholder:text-muted-foreground focus:!shadow-none focus:outline-none disabled:opacity-50" />
+                                <button onClick={() => sendMessage(input)} aria-label="إرسال الرسالة" disabled={!input.trim() || loading || isDisabled || (!configured && !purchaseCommand)}
+                                    className="shrink-0 rounded-xl bg-primary p-2.5 text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">{loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}</button>
                             </div>
-                        )}
-                        {atDailyLimit && !atMsgLimit && (
-                            <div className="text-center">
-                                <p className="text-xs text-destructive">⛔ استنفدت الحد اليومي ({usage?.limit} رسالة). يتجدد منتصف الليل بتوقيت بغداد.</p>
-                            </div>
-                        )}
-
-                        <div ref={bottomRef} />
+                            <p className="mt-2 text-center text-[10px] text-muted-foreground">Enter للإرسال · Shift+Enter لسطر جديد</p>
+                        </footer>
                     </div>
-
-                    {/* Direct actions (system data, no AI quota) */}
-                    <div className="flex gap-1.5 overflow-x-auto border-t border-border px-3 pt-2 scrollbar-none" data-testid="insight-actions">
-                        {INSIGHT_ACTIONS.map(a => (
-                            <button
-                                key={a.kind}
-                                onClick={() => runInsight(a.kind, a.label)}
-                                disabled={loading || atMsgLimit}
-                                className="whitespace-nowrap text-xs px-2.5 py-1 rounded-full border border-primary/40 text-primary hover:bg-primary/5 disabled:opacity-40"
-                            >
-                                {a.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 text-xs">
-                        <label className="flex items-center gap-1">
-                            تغطية الطلب (يوم)
-                            <input type="number" min={1} max={365} step={1} value={purchaseDays}
-                                onChange={e => setPurchaseDays(e.target.value.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))}
-                                disabled={loading}
-                                className="w-16 rounded border border-input bg-background px-2 py-1"
-                            />
-                        </label>
-                        <button
-                            onClick={() => { if (validPurchaseDays) sendMessage(`جهز طلب الأدوية النافدة التي بيعت هذا الشهر بكمية تكفي لمدة ${Number(purchaseDays)} يوم`); }}
-                            disabled={loading || atMsgLimit || !validPurchaseDays}
-                            className="text-right text-primary hover:underline disabled:opacity-40"
-                        >
-                            تجهيز طلب النافد المباع هذا الشهر
-                        </button>
-                    </div>
-
-                    {/* Input */}
-                    <div className="p-3">
-                        <div className="flex gap-2 items-end">
-                            <textarea
-                                ref={textareaRef}
-                                value={input}
-                                onChange={e => setInput(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                placeholder={
-                                    atMsgLimit ? 'امسح المحادثة للمتابعة...'
-                                    : atDailyLimit ? 'يمكنك تجهيز طلب النافد دون شرح نصي...'
-                                    : 'اكتب سؤالك...'
-                                }
-                                disabled={loading || atMsgLimit}
-                                rows={1}
-                                className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2
-                                    text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2
-                                    focus:ring-primary disabled:opacity-50 max-h-28 overflow-y-auto"
-                                style={{ direction: 'rtl' }}
-                            />
-                            <button
-                                onClick={() => sendMessage(input)}
-                                disabled={!input.trim() || loading || isDisabled || (!configured && !purchaseCommand)}
-                                className="flex-shrink-0 p-2.5 rounded-xl bg-primary text-white
-                                    hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            >
-                                {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                            </button>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
-                            Enter للإرسال • Shift+Enter لسطر جديد
-                        </p>
-                    </div>
-                    </div>{/* end inner relative wrapper */}
-                </div>
+                </section>
             )}
         </>
     );

@@ -13,7 +13,7 @@ function fmt(n: number) {
 }
 
 function fmtDate(d: Date) {
-    return d.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Baghdad' });
 }
 
 /** Discount as a percent of the pre-discount total (sale.total is after discount). */
@@ -57,6 +57,8 @@ export async function getSalesSummary(from: Date, to: Date, ctx: AIDataContext):
     return `## ملخص المبيعات (${fmtDate(from)} — ${fmtDate(to)})
 - إجمالي المبيعات: ${fmt(agg._sum.total ?? 0)}
 - عدد الفواتير: ${agg._count.id}
+- إجمالي الكمية المباعة: ${saleItems.reduce((sum, item) => sum + item.quantity, 0).toLocaleString('ar-IQ')} وحدة
+- تعريف المبيعات: قيمة فواتير البيع بعد الخصم، قبل طرح المرتجعات
 - إجمالي التخفيضات: ${fmt(agg._sum.discount ?? 0)}
 - أكثر الأدوية مبيعاً: ${topDrugs.length ? topDrugs.map(d => `${d.name} (${d.qty} وحدة)`).join('، ') : 'لا يوجد بيانات'}`;
 }
@@ -222,20 +224,23 @@ export async function getExpensesSummary(from: Date, to: Date, ctx: AIDataContex
 // ─── Debt Summary ────────────────────────────────────────────────────────────
 
 export async function getDebtSummary(ctx: AIDataContext): Promise<string> {
-    const debtors = await prisma.patient.findMany({
-        where: { balance: { gt: 0 }, ...ctx.tenantBranchWhere },
+    const where = { balance: { gt: 0 }, ...ctx.tenantBranchWhere };
+    const [summary, debtors] = await Promise.all([
+      prisma.patient.aggregate({ where, _sum: { balance: true }, _count: true }),
+      prisma.patient.findMany({
+        where,
         // No phone numbers: the model does not need them to answer, and the
         // context is sent to an external AI provider.
         select: { name: true, balance: true },
         orderBy: { balance: 'desc' },
         take: 10,
-    });
-
+    }),
+    ]);
     if (!debtors.length) return '## الديون\nلا توجد ديون مستحقة حالياً.';
 
     const total = debtors.reduce((s, p) => s + p.balance, 0);
     const rows  = debtors.map(p => `- ${p.name}: ${fmt(p.balance)}`);
-    return `## أكبر المدينين (أعلى 10)\n${rows.join('\n')}\n- **إجمالي الديون المعروضة: ${fmt(total)}**`;
+    return `## ديون العملاء\nإجمالي ديون جميع العملاء: ${fmt(summary._sum.balance ?? 0)} (${summary._count} عميل)\n### أكبر المدينين (أعلى 10)\n${rows.join('\n')}\n- **إجمالي الديون المعروضة: ${fmt(total)}**`;
 }
 
 // ─── Low Stock ───────────────────────────────────────────────────────────────
@@ -307,9 +312,9 @@ export async function getExpiringBatches(days = 30, ctx: AIDataContext): Promise
 
 // ─── Shift Summary ───────────────────────────────────────────────────────────
 
-export async function getShiftSummary(from: Date, to: Date, ctx: AIDataContext): Promise<string> {
+export async function getShiftSummary(from: Date, to: Date, ctx: AIDataContext, currentOnly = false): Promise<string> {
     const shifts = await prisma.shift.findMany({
-        where: { ...ctx.tenantBranchWhere, startTime: { gte: from, lte: to } },
+        where: { ...ctx.tenantBranchWhere, ...(currentOnly ? { status: 'OPEN' } : { startTime: { gte: from, lte: to } }) },
         select: {
             startTime: true,
             endTime: true,
@@ -324,15 +329,15 @@ export async function getShiftSummary(from: Date, to: Date, ctx: AIDataContext):
         take: 20,
     });
 
-    if (!shifts.length) return '## الورديات\nلا توجد ورديات في هذه الفترة.';
+    if (!shifts.length) return currentOnly ? '## الورديات الحالية\nلا توجد ورديات مفتوحة حالياً.' : '## الورديات\nلا توجد ورديات في هذه الفترة.';
 
     const rows = shifts.map(s => {
         const diff   = s.actualCash != null ? s.actualCash - s.expectedCash : null;
         const diffTx = diff != null ? ` | فرق الكاش: ${diff >= 0 ? '+' : ''}${fmt(diff)}` : '';
         const status = s.status === 'OPEN' ? '🟢 مفتوحة' : '🔴 مغلقة';
-        return `- ${s.user?.name ?? '—'} (${s.branch?.name ?? '—'}) | ${fmtDate(s.startTime)} | ${status}${diffTx}`;
+        return `- ${s.user?.name ?? '—'} (${s.branch?.name ?? '—'}) | ${fmtDate(s.startTime)} | ${status} | رصيد البداية: ${fmt(s.startingCash)} | المتوقع: ${fmt(s.expectedCash)}${s.actualCash != null ? ` | الفعلي: ${fmt(s.actualCash)}` : ''}${diffTx}`;
     });
-    return `## الورديات (${fmtDate(from)} — ${fmtDate(to)})\n${rows.join('\n')}`;
+    return `## ${currentOnly ? 'الورديات الحالية المفتوحة' : `الورديات (${fmtDate(from)} — ${fmtDate(to)})`}\n${rows.join('\n')}`;
 }
 
 // ─── User List ───────────────────────────────────────────────────────────────
@@ -394,34 +399,16 @@ ${rows.join('\n')}`;
 // ─── Pending Orders ───────────────────────────────────────────────────────────
 
 export async function getPendingOrders(ctx: AIDataContext): Promise<string> {
-    const pending = await prisma.purchase.findMany({
-        where: { ...ctx.tenantBranchWhere, status: { not: 'PAID' } },
-        select: {
-            total: true,
-            paidAmount: true,
-            status: true,
-            invoiceNumber: true, documentNumber: true,
-            createdAt: true,
-            supplier: { select: { name: true } },
-            items: {
-                select: { quantity: true, drug: { select: { tradeName: true } } },
-                take: 5,
-            },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-    });
-
-    if (!pending.length) return '## الطلبيات المعلقة\n✅ لا توجد طلبيات معلقة حالياً.';
-
-    const totalDue = pending.reduce((s, p) => s + (p.total - p.paidAmount), 0);
-    const rows = pending.map(p => {
-        const remaining = p.total - p.paidAmount;
-        const drugs = p.items.map(i => i.drug.tradeName).join('، ') || '—';
-        return `- ${p.supplier.name} | ${fmt(p.total)} (متبقي: ${fmt(remaining)}) | ${p.status} | ${fmtDate(p.createdAt)}\n  الأصناف: ${drugs}`;
-    });
-
-    return `## الطلبيات المعلقة (${pending.length} فاتورة)\nإجمالي المستحق: ${fmt(totalDue)}\n${rows.join('\n')}`;
+    // Delivery is a warehouse-order state; unpaid invoices are supplier debts.
+    const where = { ...ctx.tenantBranchWhere, status: { in: ['SENT', 'UNDER_REVIEW', 'QUOTED', 'APPROVED', 'SHIPPED'] as ('SENT' | 'UNDER_REVIEW' | 'QUOTED' | 'APPROVED' | 'SHIPPED')[] } };
+    const [count, orders] = await Promise.all([
+        prisma.warehouseOrder.count({ where }),
+        prisma.warehouseOrder.findMany({ where, select: { orderNumber: true, status: true, createdAt: true, expectedDate: true, warehouse: { select: { name: true } }, branch: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 20 }),
+    ]);
+    if (!count) return '## طلبات المذاخر غير المستلمة\nلا توجد طلبات مرسلة تنتظر الاستلام حالياً. هذا لا يعني أن جميع فواتير الموردين مسدّدة.';
+    const labels: Record<string, string> = { SENT: 'مرسل', UNDER_REVIEW: 'قيد المراجعة', QUOTED: 'عُرض سعره', APPROVED: 'معتمد', SHIPPED: 'مشحون' };
+    const rows = orders.map(o => `- ${o.orderNumber ?? 'بدون رقم'} | ${o.warehouse.name} | ${o.branch.name} | ${labels[o.status]} | أُنشئ ${fmtDate(o.createdAt)}${o.expectedDate ? ` | الوصول المتوقع ${fmtDate(o.expectedDate)}` : ''}`);
+    return `## طلبات المذاخر غير المستلمة (${count} طلب)\nتُعرض أحدث ${orders.length} طلباً. الحالات تصف متابعة التسليم، وليست حالة سداد الفاتورة.\n${rows.join('\n')}`;
 }
 
 // ─── Slow Moving Drugs ────────────────────────────────────────────────────────
@@ -430,30 +417,28 @@ export async function getSlowMovingDrugs(ctx: AIDataContext): Promise<string> {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const [inventories, salesData] = await Promise.all([
-        prisma.inventory.findMany({
-            where: ctx.tenantBranchWhere,
-            select: {
-                drugId: true,
-                minStock: true,
-                drug: { select: { tradeName: true } },
-                branch: { select: { name: true } },
-                batches: { where: { quantity: { gt: 0 } }, select: { quantity: true } },
-            },
-        }),
-        prisma.saleItem.groupBy({
-            by: ['drugId'],
-            where: { sale: { ...ctx.tenantBranchWhere, createdAt: { gte: ninetyDaysAgo } } },
-            _sum: { quantity: true },
-        }),
-    ]);
-
-    const salesMap = new Map(salesData.map(s => [s.drugId, s._sum.quantity ?? 0]));
+    const inventories = await prisma.inventory.findMany({
+        where: ctx.tenantBranchWhere,
+        select: { drugId: true, branchId: true, minStock: true, drug: { select: { tradeName: true } }, branch: { select: { name: true } }, batches: { where: { quantity: { gt: 0 } }, select: { quantity: true } } },
+    });
+    // Keep each branch's rate separate and aggregate in PostgreSQL, rather than
+    // bringing all sale lines into the process. Only scoped inventory branches.
+    const salesMap = new Map<string, number>();
+    const branches = Array.from(new Set(inventories.map(i => i.branchId)));
+    for (let i = 0; i < branches.length; i += 2) {
+        await Promise.all(branches.slice(i, i + 2).map(async branchId => {
+            const sales = await prisma.saleItem.groupBy({ by: ['drugId'],
+                where: { sale: { AND: [ctx.tenantBranchWhere, { branchId, createdAt: { gte: ninetyDaysAgo } }] } },
+                _sum: { quantity: true },
+            });
+            for (const sale of sales) salesMap.set(`${branchId}:${sale.drugId}`, sale._sum.quantity ?? 0);
+        }));
+    }
 
     const slowMoving = inventories
         .map(inv => {
             const stock       = inv.batches.reduce((s, b) => s + b.quantity, 0);
-            const sold90      = salesMap.get(inv.drugId) ?? 0;
+            const sold90      = salesMap.get(`${inv.branchId}:${inv.drugId}`) ?? 0;
             const dailyRate   = sold90 / 90;
             const daysOfStock = dailyRate > 0 ? Math.round(stock / dailyRate) : null;
             return { name: inv.drug.tradeName, branch: inv.branch.name, stock, sold90, daysOfStock };
@@ -532,7 +517,7 @@ export async function getDrugInfo(searchTerm: string, ctx: AIDataContext): Promi
     const inventories = await prisma.inventory.findMany({
         where: {
             ...ctx.tenantBranchWhere,
-            drug: { tradeName: { contains: searchTerm, mode: 'insensitive' } },
+            drug: { OR: [{ tradeName: { contains: searchTerm, mode: 'insensitive' } }, { scientificName: { contains: searchTerm, mode: 'insensitive' } }, { barcode: { equals: searchTerm } }] },
         },
         select: {
             price: true,
@@ -683,18 +668,22 @@ export async function getSuppliersList(ctx: AIDataContext): Promise<string> {
 
 export async function getSupplierDebts(ctx: AIDataContext): Promise<string> {
     // balance > 0 means we owe the supplier (incremented on unpaid purchase)
-    const suppliers = await prisma.supplier.findMany({
-        where: { balance: { gt: 0 }, organizationId: ctx.organizationId },
+    const where = { balance: { gt: 0 }, organizationId: ctx.organizationId };
+    const [summary, suppliers] = await Promise.all([
+        prisma.supplier.aggregate({ where, _sum: { balance: true }, _count: true }),
+        prisma.supplier.findMany({
+        where,
         select: { name: true, balance: true }, // no phone numbers in AI context
         orderBy: { balance: 'desc' },
         take: 10,
-    });
+    }),
+    ]);
 
     if (!suppliers.length) return '## ديون الموردين\nلا توجد ديون مستحقة للموردين حالياً.';
 
-    const total = suppliers.reduce((s, sup) => s + sup.balance, 0);
+    const total = summary._sum.balance ?? 0;
     const rows  = suppliers.map(s => `- ${s.name}: ${fmt(s.balance)}`);
-    return `## ديون الموردين (أعلى 10)\n${rows.join('\n')}\n- **إجمالي المستحق للموردين: ${fmt(total)}**`;
+    return `## ديون الموردين (${summary._count} مورد)\n### أعلى 10 أرصدة\n${rows.join('\n')}\n- **إجمالي المستحق للموردين: ${fmt(total)}**`;
 }
 
 // ─── Inventory Overview (counts) ───────────────────────────────────────────────
