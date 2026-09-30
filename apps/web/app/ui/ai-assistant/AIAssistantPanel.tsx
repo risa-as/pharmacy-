@@ -1,5 +1,6 @@
 'use client';
 
+import { monthlyStockoutRequest } from '@/app/lib/month-reorder';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, X, Trash2, Send, Loader2, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
@@ -146,6 +147,8 @@ export default function AIAssistantPanel() {
     const [isOpen,        setIsOpen]        = useState(false);
     const [messages,      setMessages]      = useState<Message[]>([]);
     const [input,         setInput]         = useState('');
+    const [purchaseDays, setPurchaseDays] = useState('15');
+    const validPurchaseDays = /^\d+$/.test(purchaseDays) && Number(purchaseDays) >= 1 && Number(purchaseDays) <= 365;
     const [loading,       setLoading]       = useState(false);
     const [provider,      setProvider]      = useState<string | null>(null);
     const [configured,    setConfigured]    = useState(true);
@@ -206,7 +209,7 @@ export default function AIAssistantPanel() {
         if (!trimmed || loading) return;
 
         if (messages.length >= MAX_MESSAGES) return;
-        if (usage && usage.remaining <= 0) return;
+        if (usage && usage.remaining <= 0 && !monthlyStockoutRequest(trimmed)) return;
 
         setShowExamples(false);
         const userMsg: Message = { role: 'user', content: trimmed };
@@ -289,7 +292,8 @@ export default function AIAssistantPanel() {
     const providerLabel  = provider === 'openai' ? 'GPT' : provider === 'gemini' ? 'Gemini' : null;
     const atMsgLimit     = messages.length >= MAX_MESSAGES;
     const atDailyLimit   = usage !== null && usage.remaining <= 0;
-    const isDisabled     = atMsgLimit || atDailyLimit;
+    const purchaseCommand = !!monthlyStockoutRequest(input);
+    const isDisabled     = atMsgLimit || (atDailyLimit && !purchaseCommand);
 
     const usagePct = usage ? Math.round((usage.used / usage.limit) * 100) : 0;
     const usageColor = usagePct >= 90 ? 'text-destructive' : usagePct >= 70 ? 'text-warning' : 'text-white/70';
@@ -521,6 +525,24 @@ export default function AIAssistantPanel() {
                         ))}
                     </div>
 
+                    <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 text-xs">
+                        <label className="flex items-center gap-1">
+                            تغطية الطلب (يوم)
+                            <input type="number" min={1} max={365} step={1} value={purchaseDays}
+                                onChange={e => setPurchaseDays(e.target.value.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))}
+                                disabled={loading}
+                                className="w-16 rounded border border-input bg-background px-2 py-1"
+                            />
+                        </label>
+                        <button
+                            onClick={() => { if (validPurchaseDays) sendMessage(`جهز طلب الأدوية النافدة التي بيعت هذا الشهر بكمية تكفي لمدة ${Number(purchaseDays)} يوم`); }}
+                            disabled={loading || atMsgLimit || !validPurchaseDays}
+                            className="text-right text-primary hover:underline disabled:opacity-40"
+                        >
+                            تجهيز طلب النافد المباع هذا الشهر
+                        </button>
+                    </div>
+
                     {/* Input */}
                     <div className="p-3">
                         <div className="flex gap-2 items-end">
@@ -531,10 +553,10 @@ export default function AIAssistantPanel() {
                                 onKeyDown={handleKeyDown}
                                 placeholder={
                                     atMsgLimit ? 'امسح المحادثة للمتابعة...'
-                                    : atDailyLimit ? 'الحد اليومي مستنفَد...'
+                                    : atDailyLimit ? 'يمكنك تجهيز طلب النافد دون شرح نصي...'
                                     : 'اكتب سؤالك...'
                                 }
-                                disabled={loading || isDisabled || !configured}
+                                disabled={loading || atMsgLimit}
                                 rows={1}
                                 className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2
                                     text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2
@@ -543,7 +565,7 @@ export default function AIAssistantPanel() {
                             />
                             <button
                                 onClick={() => sendMessage(input)}
-                                disabled={!input.trim() || loading || isDisabled || !configured}
+                                disabled={!input.trim() || loading || isDisabled || (!configured && !purchaseCommand)}
                                 className="flex-shrink-0 p-2.5 rounded-xl bg-primary text-white
                                     hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >

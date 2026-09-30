@@ -41,7 +41,7 @@ export interface ReorderCard {
     title: string;
     scope: CardScope;
     /** The saved settings the card used, and where they came from (OPEN-14). */
-    options: { coverageDays: number; leadDays: number; safetyDays: number; fromArrival: boolean; source: 'BRANCH' | 'ORGANIZATION' | 'DEFAULT' };
+    options: { coverageDays: number; leadDays: number; safetyDays: number; fromArrival: boolean; source: 'BRANCH' | 'ORGANIZATION' | 'DEFAULT' | 'CUSTOM' };
     lines: ReorderLine[];
     totalCandidates: number;
     canDraft: boolean;

@@ -1,3 +1,4 @@
+import { monthlyStockoutRequest } from "./month-reorder";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import {
@@ -225,6 +226,7 @@ export function createProvider(): AIProvider {
 export function classifyQuestion(message: string): QuestionCategory[] {
   // Normalize so spelling variants (ا/أ, ة/ه, harakat) all match the patterns.
   const msg = normalizeArabic(message);
+  if (monthlyStockoutRequest(message)) return ["reorder"];
   const categories: QuestionCategory[] = [];
 
   if (/مبيعات|مبيعاتنا|بيع|فاتور|اجمالي|كم باع|كم بعنا|مباع|خصم/.test(msg))
@@ -547,7 +549,7 @@ async function fetchForCategory(
     case "daily_brief": {
       // Numbers come from the deterministic card; the model only explains it.
       try {
-        const card = cat === "reorder" ? await buildReorderCard(ctx, { now })
+        const card = cat === "reorder" ? await buildReorderCard(ctx, { now, monthlyStockouts: monthlyStockoutRequest(message ?? "") ?? undefined })
           : cat === "waste" ? await buildWasteCard(ctx, { windowDays: extractFutureDays(message, 60), now })
           : await buildDailyCard(ctx, { now });
         cards.push(card);

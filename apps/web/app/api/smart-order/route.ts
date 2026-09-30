@@ -1,3 +1,4 @@
+import { mapPlanningRows } from "@/app/lib/planning-batch";
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getTenantContext } from "@/app/lib/tenant-utils";
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
     if (useSaved)
       for (const branchId of Array.from(new Set(data.rows.map((r) => r.branchId))))
         saved.set(branchId, (await resolvePlanningSettings(ctx, branchId)).options);
-    const rows = data.rows.map((row) =>
+    const rows = await mapPlanningRows(data.rows, (row) =>
       planRow(row, useSaved ? saved.get(row.branchId)! : explicit, data.today),
     );
     if (p.get("format") === "planning")

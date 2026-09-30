@@ -1,3 +1,4 @@
+import { currentMonthPeriod } from "./month-reorder";
 import { prisma } from "@/app/lib/prisma";
 import type { TenantContext } from "@/app/lib/tenant-utils";
 import {
@@ -16,7 +17,7 @@ export async function getPlanningData(
   from?: string,
   to?: string,
   /** Batch cost per lot (same index as row.lots), for the waste card only. Never put in rows. */
-  opts: { lotCosts?: boolean } = {},
+  opts: { lotCosts?: boolean; currentMonth?: boolean; now?: Date } = {},
 ) {
   if (
     !ctx.userPermissions.canViewInventory ||
@@ -24,8 +25,8 @@ export async function getPlanningData(
       !ctx.userPermissions.canCreatePurchase && !ctx.userPermissions.canCreateWarehouseOrder)
   )
     throw new Error("ليس لديك صلاحية تحليل المخزون والمبيعات");
-  const now = new Date(),
-    period = analysisPeriod(from, to, now),
+  const now = opts.now ?? new Date(),
+    period = opts.currentMonth ? currentMonthPeriod(now) : analysisPeriod(from, to, now),
     today = baghdadDate(now);
   if (
     branchId &&
@@ -38,11 +39,13 @@ export async function getPlanningData(
   const scope = {
     AND: [ctx.tenantBranchWhere, ...(branchId ? [{ branchId }] : [])],
   };
-  const [inventories, sales, returns, orders] = await Promise.all([
+  const [inventories, orders] = await Promise.all([
     prisma.inventory.findMany({
       where: scope,
-      include: {
-        drug: true,
+      select: {
+        id: true, branchId: true, drugId: true, createdAt: true,
+        minStock: true, maxStock: true, cost: true,
+        drug: { select: { tradeName: true, scientificName: true, barcode: true, unitsPerPack: true, unitsPerPackConfirmedAt: true } },
         branch: { select: { name: true } },
         batches: {
           where: { quantity: { gt: 0 } },
@@ -50,36 +53,6 @@ export async function getPlanningData(
           orderBy: [{ expiryDate: "asc" }, { id: "asc" }],
           select: { quantity: true, expiryDate: true, costPrice: true },
         },
-      },
-    }),
-    prisma.saleItem.findMany({
-      where: {
-        sale: {
-          AND: [scope, { createdAt: { gte: period.start, lt: period.end } }],
-        },
-      },
-      select: {
-        drugId: true,
-        quantity: true,
-        sale: { select: { branchId: true } },
-      },
-    }),
-    prisma.saleReturnItem.findMany({
-      where: {
-        saleReturn: {
-          AND: [
-            scope,
-            {
-              createdAt: { lte: now },
-              sale: { createdAt: { gte: period.start, lt: period.end } },
-            },
-          ],
-        },
-      },
-      select: {
-        drugId: true,
-        quantity: true,
-        saleReturn: { select: { branchId: true } },
       },
     }),
     prisma.warehouseOrder.findMany({
@@ -100,10 +73,40 @@ export async function getPlanningData(
           },
         ],
       },
-      include: { items: { include: { drug: true } } },
+      select: {
+        id: true, branchId: true, orderNumber: true, expectedDate: true, status: true,
+        items: { select: {
+          drugId: true, status: true, unitsPerPack: true, quotedQuantity: true,
+          quantity: true, bonusQuantity: true, expiryDate: true,
+          drug: { select: { barcode: true, tradeName: true, scientificName: true } },
+        } },
+      },
     }),
   ]);
-  const purchases = await prisma.purchase.findMany({
+  // Aggregate in PostgreSQL instead of materializing every sale line and its
+  // parent in Node. Only inventory branches already authorized by scope are read;
+  // each query retains the tenant intersection as defense in depth.
+  const key = (branch: string, drug: string) => branch + ":" + drug;
+  const sold = new Map<string, number>(), returned = new Map<string, number>();
+  const branchIds = Array.from(new Set(inventories.map(i => i.branchId)));
+  const readSales = async () => {
+    // Two branches/four queries at a time, bounded regardless of tenant size.
+    for (let i = 0; i < branchIds.length; i += 2) {
+      await Promise.all(branchIds.slice(i, i + 2).map(async id => {
+        const [sales, returns] = await Promise.all([
+          prisma.saleItem.groupBy({ by: ['drugId'],
+            where: { sale: { AND: [scope, { branchId: id, createdAt: { gte: period.start, lt: period.end } }] } },
+            _sum: { quantity: true } }),
+          prisma.saleReturnItem.groupBy({ by: ['drugId'],
+            where: { saleReturn: { AND: [scope, { branchId: id, createdAt: { lte: now }, sale: { createdAt: { gte: period.start, lt: period.end } } }] } },
+            _sum: { quantity: true } }),
+        ]);
+        for (const s of sales) sold.set(key(id, s.drugId), s._sum.quantity ?? 0);
+        for (const r of returns) returned.set(key(id, r.drugId), r._sum.quantity ?? 0);
+      }));
+    }
+  };
+  const [purchases] = await Promise.all([prisma.purchase.findMany({
     where: {
       AND: [
         scope,
@@ -122,18 +125,7 @@ export async function getPlanningData(
       invoiceNumber: true,
       items: { select: { drugId: true, quantity: true } },
     },
-  });
-  const key = (branch: string, drug: string) => branch + ":" + drug;
-  const sold = new Map<string, number>(),
-    returned = new Map<string, number>();
-  for (const s of sales) {
-    const k = key(s.sale.branchId, s.drugId);
-    sold.set(k, (sold.get(k) || 0) + s.quantity);
-  }
-  for (const r of returns) {
-    const k = key(r.saleReturn.branchId, r.drugId);
-    returned.set(k, (returned.get(k) || 0) + r.quantity);
-  }
+  }), readSales()]);
   const purchaseByOrder = new Map(
     purchases
       .filter((p) => p.warehouseOrderId)
@@ -152,6 +144,15 @@ export async function getPlanningData(
           confirmed: false,
           reference: p.invoiceNumber || "شراء داخلي معلق",
         });
+  // Index once: matching each incoming line must not rescan every branch's inventory.
+  const byDrug = new Map(inventories.map(i => [key(i.branchId, i.drugId), i]));
+  const byBarcode = new Map<string, typeof inventories>();
+  for (const inv of inventories) {
+    const k = JSON.stringify([inv.branchId, inv.drug.barcode]);
+    const matches = byBarcode.get(k);
+    if (matches) matches.push(inv); else byBarcode.set(k, [inv]);
+  }
+  const norm = (v: string | null) => (v || "").trim().toLowerCase().replace(/\s+/g, " ");
   for (const order of orders) {
     const purchase = purchaseByOrder.get(order.id);
     if (purchase && ["COMPLETED", "RECEIVED"].includes(purchase.status))
@@ -160,26 +161,13 @@ export async function getPlanningData(
     for (const line of order.items) {
       if (line.status === "OUT_OF_STOCK") continue;
       // Orders may point at the shared catalogue while inventory retains a private id.
-      const norm = (v: string | null) =>
-        (v || "").trim().toLowerCase().replace(/\s+/g, " ");
-      const direct = inventories.find(
-        (i) => i.branchId === order.branchId && i.drugId === line.drugId,
-      );
-      const candidates = direct
-        ? [direct]
-        : inventories.filter(
-            (i) =>
-              i.branchId === order.branchId &&
-              i.drug.barcode === line.drug.barcode &&
-              norm(i.drug.tradeName) === norm(line.drug.tradeName) &&
-              norm(i.drug.scientificName) === norm(line.drug.scientificName),
-          );
+      const direct = byDrug.get(key(order.branchId, line.drugId));
+      const barcodeMatches = byBarcode.get(JSON.stringify([order.branchId, line.drug.barcode])) ?? [];
+      const candidates = direct ? [direct] : barcodeMatches.filter(i =>
+        norm(i.drug.tradeName) === norm(line.drug.tradeName) &&
+        norm(i.drug.scientificName) === norm(line.drug.scientificName));
       if (candidates.length !== 1) {
-        for (const inv of inventories.filter(
-          (i) =>
-            i.branchId === order.branchId &&
-            i.drug.barcode === line.drug.barcode,
-        )) {
+        for (const inv of barcodeMatches) {
           const unresolved = key(inv.branchId, inv.drugId);
           warnings.set(unresolved, [
             ...(warnings.get(unresolved) || []),
@@ -229,7 +217,9 @@ export async function getPlanningData(
   const rows: PlanningRow[] = inventories.map((inv) => {
     const k = key(inv.branchId, inv.drugId);
     const createdDay = dateStart(baghdadDate(inv.createdAt)).getTime();
-    const observedDays = Math.max(
+    const observedDays = opts.currentMonth
+      ? Math.max(1, Math.round((dateStart(today).getTime() - Math.max(period.start.getTime(), createdDay)) / DAY) + 1)
+      : Math.max(
       0,
       Math.round(
         (period.end.getTime() - Math.max(period.start.getTime(), createdDay)) /

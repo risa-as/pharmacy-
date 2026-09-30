@@ -69,7 +69,7 @@ function ReorderView({ card }: { card: ReorderCard }) {
         <div className="space-y-2" data-testid="reorder-card">
             <div className="font-semibold text-foreground">{card.title}</div>
             <p className="text-[11px] text-muted-foreground" data-testid="reorder-settings">
-                {SETTINGS_SOURCE_LABEL[card.options.source]}: {describeOptions(card.options)}. هي نفسها في صفحة الشراء الذكي، وتُحفظ من هناك.
+                {SETTINGS_SOURCE_LABEL[card.options.source]}: {describeOptions(card.options)}. {card.options.source === 'CUSTOM' ? 'خاصة بهذا الطلب؛ لم تتغير الإعدادات المحفوظة.' : 'هي نفسها في صفحة الشراء الذكي، وتُحفظ من هناك.'}
             </p>
             {card.lines.length === 0 ? (
                 <p className="text-xs">لا توجد أصناف تحتاج إعادة طلب بإعدادات البطاقة الحالية.</p>

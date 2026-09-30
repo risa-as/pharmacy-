@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   branch: { findFirst: vi.fn() },
   inventory: { findMany: vi.fn() },
-  saleItem: { findMany: vi.fn() },
-  saleReturnItem: { findMany: vi.fn() },
+  saleItem: { groupBy: vi.fn() },
+  saleReturnItem: { groupBy: vi.fn() },
   purchase: { findMany: vi.fn() },
   warehouseOrder: { findMany: vi.fn() },
 }));
@@ -42,8 +42,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.branch.findFirst.mockResolvedValue({ id: "b" });
   db.inventory.findMany.mockResolvedValue([inventory]);
-  db.saleItem.findMany.mockResolvedValue([]);
-  db.saleReturnItem.findMany.mockResolvedValue([]);
+  db.saleItem.groupBy.mockResolvedValue([]);
+  db.saleReturnItem.groupBy.mockResolvedValue([]);
   db.purchase.findMany.mockResolvedValue([]);
   db.warehouseOrder.findMany.mockResolvedValue([]);
 });
@@ -69,20 +69,19 @@ describe("scoped planning snapshot", () => {
     await getPlanningData(ctx, "b");
     const scope = { AND: [ctx.tenantBranchWhere, { branchId: "b" }] };
     expect(db.inventory.findMany.mock.calls[0][0].where).toEqual(scope);
-    expect(db.saleItem.findMany.mock.calls[0][0].where.sale.AND[0]).toEqual(
+    expect(db.saleItem.groupBy.mock.calls[0][0].where.sale.AND[0]).toEqual(
       scope,
     );
     expect(
-      db.saleReturnItem.findMany.mock.calls[0][0].where.saleReturn.AND[0],
+      db.saleReturnItem.groupBy.mock.calls[0][0].where.saleReturn.AND[0],
     ).toEqual(scope);
   });
   it("keeps branches separate and subtracts linked returns", async () => {
-    db.saleItem.findMany.mockResolvedValue([
-      { drugId: "d", quantity: 60, sale: { branchId: "b" } },
-      { drugId: "d", quantity: 900, sale: { branchId: "other" } },
+    db.saleItem.groupBy.mockResolvedValue([
+      { drugId: "d", _sum: { quantity: 60 } },
     ]);
-    db.saleReturnItem.findMany.mockResolvedValue([
-      { drugId: "d", quantity: 2, saleReturn: { branchId: "b" } },
+    db.saleReturnItem.groupBy.mockResolvedValue([
+      { drugId: "d", _sum: { quantity: 2 } },
     ]);
     const d = await getPlanningData(ctx, "b");
     expect(d.rows[0].sold).toBe(60);
@@ -118,6 +117,26 @@ describe("scoped planning snapshot", () => {
     const d = await getPlanningData(ctx, "b");
     expect(d.rows[0].incoming).toHaveLength(1);
     expect(d.rows[0].incoming[0].quantity).toBe(20);
+  });
+  it("aggregates each authorized inventory branch separately without loading sale lines", async () => {
+    db.inventory.findMany.mockResolvedValue([inventory, { ...inventory, id: 'i2', branchId: 'b2' }]);
+    db.saleItem.groupBy.mockImplementation(async q => [{ drugId: 'd', _sum: { quantity: q.where.sale.AND[1].branchId === 'b' ? 60 : 900 } }]);
+    db.saleReturnItem.groupBy.mockResolvedValue([{ drugId: 'd', _sum: { quantity: 2 } }]);
+    const data = await getPlanningData(ctx);
+    expect(data.rows.map(r => [r.branchId, r.sold, r.returned])).toEqual([['b', 60, 2], ['b2', 900, 2]]);
+    for (const [q] of db.saleItem.groupBy.mock.calls) {
+      expect(q.by).toEqual(['drugId']);
+      expect(q.where.sale.AND[0]).toEqual({ AND: [ctx.tenantBranchWhere] });
+    }
+  });
+  it("does not assign an ambiguous barcode to either item or to another branch", async () => {
+    db.inventory.findMany.mockResolvedValue([inventory, { ...inventory, id: 'i2', drugId: 'd2' }, { ...inventory, id: 'i3', branchId: 'b2' }]);
+    db.warehouseOrder.findMany.mockResolvedValue([{ id: 'w', branchId: 'b', status: 'APPROVED', expectedDate: new Date('2026-09-22'),
+      items: [{ drugId: 'shared', drug, quantity: 4, bonusQuantity: 0, unitsPerPack: 4, status: 'AVAILABLE' }] }]);
+    const data = await getPlanningData(ctx);
+    expect(data.rows.slice(0, 2).map(r => r.incoming[0].quantity)).toEqual([0, 0]);
+    expect(data.rows[2].incoming).toEqual([]);
+    expect(data.rows[0].qualityReasons.join(' ')).toContain('هوية غير محسومة');
   });
   it("removes incoming once received", async () => {
     db.purchase.findMany.mockResolvedValue([
