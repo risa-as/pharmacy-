@@ -106,4 +106,3 @@ export const EXAMPLE_CATEGORIES = [
         ],
     },
 ];
-
