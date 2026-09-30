@@ -56,11 +56,34 @@ export async function closeDraft(id: string | null | undefined, fetchImpl: typeo
     if (!isDraftId(id)) return false;
     try {
         const res = await fetchImpl(`/api/purchases/drafts/${id}/complete`, { method: 'POST' });
-        // { completed: false } on a repeat means it was already closed: still closed.
-        return res.ok;
+        if (!res.ok) return false;
+        // Only an explicit confirmation counts (a repeat on a closed draft also says CLOSED).
+        const body = await res.json().catch(() => null);
+        return body?.status === 'CLOSED';
     } catch {
         return false;
     }
+}
+
+/**
+ * Drafts whose close is not confirmed yet, kept per user in this tab so a
+ * failed close stays retryable even after "بدء قائمة جديدة" or a reload.
+ */
+export const pendingCloseKey = (userId: string, organizationId: string) => `purchase-draft-close-pending:${userId}:${organizationId}`;
+type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+export function readPendingCloses(store: Store, key: string): string[] {
+    try {
+        const v = JSON.parse(store.getItem(key) ?? '[]');
+        return Array.isArray(v) ? v.filter(isDraftId) : [];
+    } catch {
+        return [];
+    }
+}
+export function writePendingCloses(store: Store, key: string, ids: string[]) {
+    try {
+        const unique = Array.from(new Set(ids.filter(isDraftId)));
+        if (unique.length) store.setItem(key, JSON.stringify(unique)); else store.removeItem(key);
+    } catch { /* storage unavailable: the in-memory list still offers the retry */ }
 }
 
 /** Unambiguous completion: every frozen group sent, nothing blocked, no draft line left out. */

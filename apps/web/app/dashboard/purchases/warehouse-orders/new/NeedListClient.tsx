@@ -2,7 +2,7 @@
 import { readStorage } from '../../../../../../../packages/shared/src/safe-storage';
 import { prepareSmartOrderDraft } from '@/app/lib/actions/purchase-actions';
 import { handoffKey } from '@/app/lib/smart-purchasing-handoff';
-import { isDraftId, draftIdFromSaved, draftIdAfterStartNew, orderRequestBody, reportDraftImported, closeDraft, draftIsComplete } from '@/app/lib/purchase-draft-client';
+import { isDraftId, draftIdFromSaved, draftIdAfterStartNew, orderRequestBody, reportDraftImported, closeDraft, draftIsComplete, pendingCloseKey, readPendingCloses, writePendingCloses } from '@/app/lib/purchase-draft-client';
 import { storedListIsEmpty } from './resume-list';
 
 // المرحلة 3 و4 من خطة «طلب الأدوية حسب الاحتياج»: قائمة الاحتياج ثم المراجعة والإرسال.
@@ -74,12 +74,28 @@ export default function NeedListClient({
     // Re-render trigger for the "close the draft" action (the id itself lives in the ref).
     const [draftOpen, setDraftOpen] = useState(false);
     const [closingDraft, setClosingDraft] = useState(false);
-    // Closed only once the server confirms; on failure the draft stays open and the button offers a retry.
+    // Drafts whose close is not confirmed: kept (tab storage) until the server confirms,
+    // so the retry survives "بدء قائمة جديدة" and reloads without blocking a new list.
+    const closeKey = pendingCloseKey(userId, organizationId);
+    const [pendingCloses, setPendingCloses] = useState<string[]>([]);
+    useEffect(() => { setPendingCloses(readPendingCloses(sessionStorage, closeKey)); }, [closeKey]);
+    const trackPending = (id: string, pending: boolean) => {
+        const next = pending ? [...readPendingCloses(sessionStorage, closeKey), id] : readPendingCloses(sessionStorage, closeKey).filter(x => x !== id);
+        writePendingCloses(sessionStorage, closeKey, next);
+        setPendingCloses(prev => pending ? Array.from(new Set([...prev, id])) : prev.filter(x => x !== id));
+    };
+    /** Closed only once the server confirms; otherwise the id stays pending with a retry. */
+    const confirmClose = async (id: string) => {
+        trackPending(id, true);
+        const ok = await closeDraft(id);
+        if (ok) trackPending(id, false);
+        return ok;
+    };
     const closeMeasuredDraft = async (manual: boolean) => {
         const id = draftIdRef.current;
         if (!id) return;
         setClosingDraft(true);
-        const ok = await closeDraft(id);
+        const ok = await confirmClose(id);
         setClosingDraft(false);
         if (ok) {
             if (draftIdRef.current === id) setDraftOpen(false);
@@ -87,6 +103,14 @@ export default function NeedListClient({
         } else {
             toast.error('تعذر إغلاق المسودة الآن. الطلبات المرسلة سليمة؛ أعد محاولة الإغلاق.');
         }
+    };
+    const retryPendingCloses = async () => {
+        setClosingDraft(true);
+        let failed = 0;
+        for (const id of pendingCloses) if (!(await confirmClose(id))) failed++;
+        setClosingDraft(false);
+        if (failed) toast.error('ما زال إغلاق مسودة سابقة غير مؤكد؛ أعد المحاولة لاحقاً.');
+        else toast.success('أُغلقت المسودات السابقة.');
     };
     const [importingSmart, setImportingSmart] = useState(false);
     const [smartImportedBranch, setSmartImportedBranch] = useState<string|null>(null);
@@ -445,7 +469,8 @@ export default function NeedListClient({
             sessionStorage.setItem(`${storageKey}:previous`, JSON.stringify({ groups, notes }));
             const keptDraftId = draftIdAfterStartNew(draft, draftIdRef.current);
             // Nothing left from the draft: make sure it is closed (e.g. an earlier close failed).
-            if (!keptDraftId && draftIdRef.current && draftOpen) void closeDraft(draftIdRef.current).then(ok => { if (!ok) toast.error('تعذر إغلاق المسودة السابقة؛ ستبقى مفتوحة في القياس.'); });
+            // The id moves to the pending list BEFORE it leaves the current state, so a failure keeps a retry.
+            if (!keptDraftId && draftIdRef.current && draftOpen) void confirmClose(draftIdRef.current).then(ok => { if (!ok) toast.error('تعذر إغلاق المسودة السابقة؛ يبقى خيار إعادة المحاولة أعلى الصفحة.'); });
             sessionStorage.setItem(storageKey, JSON.stringify({ version: 2, purchaseDraftId: keptDraftId ?? undefined, groups: [], blocked: [], draft, notes: draftNotes, originalLines: draft }));
             draftIdRef.current = keptDraftId;
             setDraftOpen(!!keptDraftId);
@@ -550,6 +575,12 @@ export default function NeedListClient({
     // ── واجهة ────────────────────────────────────────────────────────────────
     return (
         <div className="space-y-6" dir="rtl">
+            {pendingCloses.length > 0 && !(draftOpen && pendingCloses.length === 1 && pendingCloses[0] === draftIdRef.current) && (
+                <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-testid="pending-close">
+                    لم يُؤكَّد إغلاق {pendingCloses.length === 1 ? 'مسودة شراء سابقة' : `${pendingCloses.length} مسودات شراء سابقة`}؛ طلباتها أُرسلت، والقياس يعدّها مفتوحة.
+                    <button disabled={closingDraft} onClick={() => void retryPendingCloses()} className="text-primary underline disabled:opacity-50">إعادة محاولة الإغلاق</button>
+                </div>
+            )}
             {recoveryError && <div role="alert" className="rounded border p-4 text-destructive">{recoveryError} <Link href="/dashboard/purchases/warehouse-orders" target="_blank" rel="noopener noreferrer">متابعة الطلبات</Link>
                 {legacyPending && <div className="mt-3 space-y-2">
                     <p>راجع الطلبات في الصفحة الأخرى، وتحقق من عدم وجود إرسال سابق معلّق قبل المتابعة. ستُحفظ نسخة من سجل الجلسة القديمة.</p>

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { computeDraftMetrics, type DraftForMetrics } from '../purchase-draft-metrics';
-import { isDraftId, orderRequestBody, draftIdFromSaved, draftIdAfterStartNew, registerDraft, draftIsComplete, closeDraft } from '../purchase-draft-client';
+import { isDraftId, orderRequestBody, draftIdFromSaved, draftIdAfterStartNew, registerDraft, draftIsComplete, closeDraft, readPendingCloses, writePendingCloses } from '../purchase-draft-client';
 import { buildHandoff } from '../smart-purchasing-handoff';
 import { buildSendGroups, restoreSendGroups, buildOrderPayload } from '../warehouse-order-grouping';
 import { sameOptions, describeOptions, DEFAULT_PLANNING_OPTIONS } from '../purchase-planning-shared';
@@ -115,8 +115,14 @@ describe('the draft id travels beside the frozen order payload, never inside it'
     });
 
     it('closing is reported as done only when the server confirms it', async () => {
-        const ok = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+        const reply = (status: number, body: unknown) => ({ ok: status < 300, status, json: async () => body });
+        const ok = vi.fn().mockResolvedValue(reply(200, { status: 'CLOSED', alreadyClosed: false }));
         expect(await closeDraft(id, ok as any)).toBe(true);
+        expect(await closeDraft(id, vi.fn().mockResolvedValue(reply(200, { status: 'CLOSED', alreadyClosed: true })) as any)).toBe(true);
+        // A success status without the explicit confirmation is not a close (e.g. the old { completed: false }).
+        expect(await closeDraft(id, vi.fn().mockResolvedValue(reply(200, { completed: false })) as any)).toBe(false);
+        expect(await closeDraft(id, vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => { throw new Error('not json'); } }) as any)).toBe(false);
+        expect(await closeDraft(id, vi.fn().mockResolvedValue(reply(404, { error: 'x' })) as any)).toBe(false);
         expect(ok).toHaveBeenCalledWith(`/api/purchases/drafts/${id}/complete`, { method: 'POST' });
         expect(await closeDraft(id, vi.fn().mockResolvedValue({ ok: false, status: 500 }) as any)).toBe(false);
         expect(await closeDraft(id, vi.fn().mockRejectedValue(new Error('offline')) as any)).toBe(false);
@@ -124,6 +130,23 @@ describe('the draft id travels beside the frozen order payload, never inside it'
         expect(await closeDraft('bad', never as any)).toBe(false);
         expect(await closeDraft(null, never as any)).toBe(false);
         expect(never).not.toHaveBeenCalled();
+    });
+
+    it('keeps unconfirmed closes in a list that survives a new list or a reload', () => {
+        const mem = new Map<string, string>();
+        const store = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) };
+        const other = '11111111-2222-4333-8444-555555555555';
+        writePendingCloses(store, 'k', [id, id, 'bad', other]);
+        expect(readPendingCloses(store, 'k')).toEqual([id, other]);
+        writePendingCloses(store, 'k', [other]);
+        expect(readPendingCloses(store, 'k')).toEqual([other]);
+        writePendingCloses(store, 'k', []);
+        expect(mem.has('k')).toBe(false);
+        mem.set('k', '{broken');
+        expect(readPendingCloses(store, 'k')).toEqual([]);
+        const failing = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); }, removeItem: () => {} };
+        expect(readPendingCloses(failing, 'k')).toEqual([]);
+        expect(() => writePendingCloses(failing, 'k', [id])).not.toThrow();
     });
 
     it('closes the draft only when every group is sent and nothing is left blocked', () => {

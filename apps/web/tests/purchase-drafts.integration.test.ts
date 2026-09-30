@@ -238,12 +238,20 @@ describe('purchase drafts and the orders sent from them', () => {
         expect((await order(f.w1.id, [{ barcode: f.globalA.barcode, quantity: 3, unitPrice: 100 }], id)).status).toBe(201);
         const metrics = async () => (await (await metricsRoute(new Request(`http://t/api/purchases/drafts/metrics?branchId=${f.b1.id}`))).json());
         expect((await metrics()).lines).toMatchObject({ ordered: 1, notSentYet: 1, removed: 0 });
-        // Another organization cannot close it.
+        const close = (draftId: string) => completeRoute(json('POST', `/api/purchases/drafts/${draftId}/complete`), { params: Promise.resolve({ id: draftId }) });
+        // Another organization: not found in its scope (never a success), and the draft stays open.
         state.ctx = ctxFor(f.admin.id, f.other.id, f.xb.id);
-        expect(await (await completeRoute(json('POST', `/api/purchases/drafts/${id}/complete`), { params: Promise.resolve({ id }) })).json()).toEqual({ completed: false });
+        const foreign = await close(id);
+        expect(foreign.status).toBe(404);
+        expect((await db.purchaseDraft.findUniqueOrThrow({ where: { id } })).completedAt).toBeNull();
         state.ctx = ctxFor(f.admin.id, f.org.id, f.b1.id);
-        expect(await (await completeRoute(json('POST', `/api/purchases/drafts/${id}/complete`), { params: Promise.resolve({ id }) })).json()).toEqual({ completed: true });
-        expect(await (await completeRoute(json('POST', `/api/purchases/drafts/${id}/complete`), { params: Promise.resolve({ id }) })).json()).toEqual({ completed: false });
+        // An unknown id is not a success either.
+        expect((await close(randomUUID())).status).toBe(404);
+        const first = await close(id);
+        expect(first.status).toBe(200);
+        expect(await first.json()).toEqual({ status: 'CLOSED', alreadyClosed: false });
+        // Closing again is still a confirmed close.
+        expect(await (await close(id)).json()).toEqual({ status: 'CLOSED', alreadyClosed: true });
         expect(await metrics()).toMatchObject({ completed: 1, lines: { ordered: 1, notSentYet: 0, removed: 1 } });
     });
 

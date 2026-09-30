@@ -93,13 +93,20 @@ export async function markDraftImported(ctx: TenantContext, id: string) {
  * the user confirms the rest will not be. Until then an unsent line counts as
  * "not sent yet" (another warehouse may be pending), never as removed.
  */
-export async function markDraftCompleted(ctx: TenantContext, id: string) {
+export async function markDraftCompleted(ctx: TenantContext, id: string): Promise<{ status: 'CLOSED'; alreadyClosed: boolean }> {
     if (!isDraftId(id)) throw new DraftError(400, 'معرّف المسودة غير صالح');
-    const { count } = await prisma.purchaseDraft.updateMany({
-        where: { id, completedAt: null, branch: ctx.branchModelWhere },
-        data: { completedAt: new Date() },
-    });
-    return { completed: count === 1 };
+    // First: the draft must exist within the caller's scope. "Nothing updated"
+    // alone cannot tell "already closed" from "missing" or "not yours".
+    const scoped = { id, branch: ctx.branchModelWhere };
+    const found = await prisma.purchaseDraft.findFirst({ where: scoped, select: { completedAt: true } });
+    if (!found) throw new DraftError(404, 'المسودة غير موجودة ضمن صلاحياتك');
+    if (found.completedAt) return { status: 'CLOSED', alreadyClosed: true };
+    const { count } = await prisma.purchaseDraft.updateMany({ where: { ...scoped, completedAt: null }, data: { completedAt: new Date() } });
+    if (count === 1) return { status: 'CLOSED', alreadyClosed: false };
+    // Lost a race with another close: confirm from the row, never assume.
+    const again = await prisma.purchaseDraft.findFirst({ where: scoped, select: { completedAt: true } });
+    if (again?.completedAt) return { status: 'CLOSED', alreadyClosed: true };
+    throw new DraftError(409, 'تعذر تأكيد إغلاق المسودة');
 }
 
 /**
