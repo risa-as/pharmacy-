@@ -179,9 +179,11 @@ describe('N15 / N15-R2: marketplace purchase attempts (idempotency with a durabl
             const listing = await fresh(stock);
             const body = { listingId: listing.id, quantity: 1, idempotencyKey: randomUUID() };
             const results = await Promise.all([1, 2].map(() => placeOrder(post('/api/marketplace/orders', body))));
-            const statuses = results.map(r => r.status).sort();
-            expect(statuses[0]).toBe(201);
-            expect([200, 202]).toContain(statuses[1]); // replayed, or still PROCESSING
+            // Exactly one execution (201); the other request either saw it still
+            // PROCESSING (202) or already SUCCEEDED (200 replay), depending on timing.
+            const statuses = results.map(r => r.status);
+            expect(statuses.filter(s => s === 201)).toHaveLength(1);
+            expect([200, 202]).toContain(statuses.find(s => s !== 201));
             expect(await db.marketplaceOrder.count({ where: { listingId: listing.id } })).toBe(1);
             // Whatever the loser saw, the durable record now says SUCCEEDED with that order.
             const status = await (await attemptStatus(body.idempotencyKey)).json();

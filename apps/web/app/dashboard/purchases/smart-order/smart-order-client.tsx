@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { buildHandoff, saveHandoff } from "@/app/lib/smart-purchasing-handoff";
 import {
   Sparkles,
   RefreshCw,
@@ -14,6 +15,13 @@ import {
   Calculator,
 } from "lucide-react";
 import SuggestionDetails from "./suggestion-details";
+import {
+  PlanningSettingsBar,
+  DraftMetricsBlock,
+  currentSource,
+  type SavedSettings,
+} from "./planning-settings-bar";
+import { newDraftId, registerDraft } from "@/app/lib/purchase-draft-client";
 import { getSmartPurchasingData } from "@/app/lib/actions/purchase-actions";
 import {
   baghdadDate,
@@ -90,6 +98,33 @@ export default function SmartOrderClient({
     safetyDays: 0,
     fromArrival: false,
   });
+  // OPEN-14: the branch's saved settings; the page starts from them and can save changes.
+  const [saved, setSaved] = useState<SavedSettings | null>(null);
+  const [transferDays, setTransferDays] = useState(1);
+  // A draft is never recorded before the branch's settings are known (or failed to load).
+  const [settingsReady, setSettingsReady] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  useEffect(() => {
+    setSaved(null);
+    setSettingsReady(false);
+    if (!branchId) return;
+    let live = true;
+    fetch(`/api/purchases/planning-settings?branchId=${encodeURIComponent(branchId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: SavedSettings | null) => {
+        if (!live) return;
+        if (d) {
+          setSaved(d);
+          setOptions(d.options);
+          setTransferDays(d.transferDays);
+        }
+        setSettingsReady(true);
+      })
+      .catch(() => live && setSettingsReady(true));
+    return () => {
+      live = false;
+    };
+  }, [branchId]);
   const [data, setData] = useState<Data | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
@@ -285,10 +320,12 @@ export default function SmartOrderClient({
     a.click();
     URL.revokeObjectURL(url);
   }
-  function review() {
+  async function review() {
     if (
       !data ||
       loading ||
+      preparing ||
+      !settingsReady ||
       blocked.length ||
       missing.length ||
       !selected.length ||
@@ -297,28 +334,49 @@ export default function SmartOrderClient({
       !canWarehouse
     )
       return;
-    const handoff = {
-      version: 1,
-      branchId,
-      generatedAt: data.generatedAt,
-      lines: selected.map((r) => ({
-        drugId: r.drugId,
-        tradeName: r.drugName,
-        barcode: r.barcode,
-        scientificName: r.scientificName,
-        currentStock: r.currentStock,
-        quantity: Math.ceil(quantity(r) / r.unitsPerPack!),
-        unitsPerPack: r.unitsPerPack,
-      })),
-    };
+    // Shared with the AI purchase assistant (smart-purchasing-handoff.ts).
+    setPreparing(true);
     try {
-      sessionStorage.setItem(
-        `smart-purchasing-handoff:${userId}:${organizationId}`,
-        JSON.stringify(handoff),
+      // OPEN-14: register the draft for measurement; a failure never blocks the order form.
+      const id = newDraftId();
+      const measured = await registerDraft({
+        id,
+        branchId,
+        source: "SMART_PAGE",
+        settingsSource: currentSource(saved, options),
+        options,
+        lines: selected.map((r) => ({
+          drugId: r.drugId,
+          barcode: r.barcode,
+          suggestedUnits: r.suggestedQty,
+          draftUnits: quantity(r),
+          unitsPerPack: r.unitsPerPack!,
+        })),
+      });
+      if (!measured)
+        toast.warning(
+          "تعذر تسجيل المسودة للقياس؛ ستُفتح للمراجعة بشكل عادي ولن تدخل إحصاءات المسودات.",
+        );
+      const handoff = buildHandoff(
+        branchId,
+        data.generatedAt,
+        selected.map((r) => ({
+          drugId: r.drugId,
+          tradeName: r.drugName,
+          barcode: r.barcode,
+          scientificName: r.scientificName,
+          currentStock: r.currentStock,
+          units: quantity(r),
+          unitsPerPack: r.unitsPerPack,
+        })),
+        measured ? id : null,
       );
+      if (!saveHandoff(userId, organizationId, handoff)) throw new Error("storage");
       router.push("/dashboard/purchases/warehouse-orders/new");
     } catch {
       toast.error("تعذر حفظ مسودة الطلب");
+    } finally {
+      setPreparing(false);
     }
   }
   return (
@@ -503,6 +561,18 @@ export default function SmartOrderClient({
           الطلب. أدخل مدة الوصول المتوقعة؛ القيمة 0 تعني وصولًا اليوم.
         </p>
       </section>
+      <PlanningSettingsBar
+        saved={saved}
+        options={options}
+        transferDays={transferDays}
+        onTransferDays={setTransferDays}
+        onSaved={(s) => {
+          setSaved(s);
+          setOptions(s.options);
+          setTransferDays(s.transferDays);
+        }}
+      />
+      <DraftMetricsBlock branchId={branchId} enabled={canWarehouse} />
       {data && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs leading-6 text-muted-foreground">
           {data.notice} آخر تحديث:{" "}
@@ -832,6 +902,8 @@ export default function SmartOrderClient({
               onClick={review}
               disabled={
                 loading ||
+                preparing ||
+                !settingsReady ||
                 !canCreate ||
                 !canWarehouse ||
                 !selected.length ||

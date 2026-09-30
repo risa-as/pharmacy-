@@ -70,6 +70,86 @@ export function validatePlanningOptions(o: PlanningOptions) {
   )
     throw new Error("أيام التغطية أو التوريد أو الأمان خارج النطاق");
 }
+/** Net sales per observed day (returns subtracted), the rate every simulation uses. */
+export function saleRate(row: Pick<PlanningRow, "sold" | "returned" | "observedDays">) {
+  const netSales = Math.max(0, row.sold - row.returned);
+  return row.observedDays > 0 ? netSales / row.observedDays : 0;
+}
+export type StockSimulation = {
+  remaining: number;
+  lost: number;
+  preArrivalLost: number;
+  expired: number;
+  /** Units of row.lots[i] expected to expire unsold (same index as row.lots). */
+  expiredByLot: number[];
+  /** Units of incoming lots expected to expire unsold (no batch cost yet). */
+  expiredIncoming: number;
+};
+/**
+ * Day-by-day first-expiry-first-out simulation over the horizon. Inventory
+ * cannot become negative. Lost demand before arrival is not a backorder.
+ * An optional order arrives on day leadDays and never expires.
+ */
+export function simulateStock(
+  row: Pick<PlanningRow, "lots" | "incoming">,
+  rate: number,
+  horizon: number,
+  leadDays: number,
+  order: number,
+  today: string,
+): StockSimulation {
+  const start = dateStart(today).getTime();
+  // src: index in row.lots; -1 incoming lot; -2 the simulated order.
+  const lots = row.lots
+    .map((l, i) => ({ quantity: l.quantity, expiryDate: l.expiryDate, src: i }))
+    .filter((l) => l.quantity > 0 && l.expiryDate >= today);
+  const expiredByLot = row.lots.map(() => 0);
+  let lost = 0,
+    preArrivalLost = 0,
+    expired = 0,
+    expiredIncoming = 0;
+  for (let day = 0; day < horizon; day++) {
+    const date = baghdadDate(new Date(start + day * DAY));
+    for (const lot of lots)
+      if (lot.expiryDate < date) {
+        expired += lot.quantity;
+        if (lot.src >= 0) expiredByLot[lot.src] += lot.quantity;
+        else if (lot.src === -1) expiredIncoming += lot.quantity;
+        lot.quantity = 0;
+      }
+    for (const lot of row.incoming)
+      if (
+        lot.confirmed &&
+        lot.date === date &&
+        (!lot.expiryDate || lot.expiryDate >= date)
+      )
+        lots.push({
+          quantity: lot.quantity,
+          expiryDate: lot.expiryDate || "9999-12-31",
+          src: -1,
+        });
+    if (day === leadDays && order > 0)
+      lots.push({ quantity: order, expiryDate: "9999-12-31", src: -2 });
+    lots.sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+    let demand = rate;
+    for (const lot of lots) {
+      const used = Math.min(lot.quantity, demand);
+      lot.quantity -= used;
+      demand -= used;
+      if (demand <= 1e-9) break;
+    }
+    lost += Math.max(0, demand);
+    if (day < leadDays) preArrivalLost += Math.max(0, demand);
+  }
+  return {
+    remaining: lots.reduce((s, l) => s + l.quantity, 0),
+    lost,
+    preArrivalLost,
+    expired,
+    expiredByLot,
+    expiredIncoming,
+  };
+}
 export function planRow(
   row: PlanningRow,
   options: PlanningOptions,
@@ -77,59 +157,15 @@ export function planRow(
 ) {
   validatePlanningOptions(options);
   const netSales = Math.max(0, row.sold - row.returned);
-  const rate = row.observedDays > 0 ? netSales / row.observedDays : 0;
-  const start = dateStart(today).getTime();
+  const rate = saleRate(row);
   const horizon =
     options.coverageDays + (options.fromArrival ? options.leadDays : 0);
   const current = row.lots
     .filter((l) => l.expiryDate >= today)
     .reduce((s, l) => s + Math.max(0, l.quantity), 0);
   const pending = row.incoming.reduce((s, l) => s + Math.max(0, l.quantity), 0);
-  // Inventory cannot become negative. Lost demand before arrival is not a backorder.
-  const simulate = (order: number) => {
-    const lots = row.lots
-      .filter((l) => l.quantity > 0 && l.expiryDate >= today)
-      .map((l) => ({ ...l }));
-    let lost = 0,
-      preArrivalLost = 0,
-      expired = 0;
-    for (let day = 0; day < horizon; day++) {
-      const date = baghdadDate(new Date(start + day * DAY));
-      for (const lot of lots)
-        if (lot.expiryDate < date) {
-          expired += lot.quantity;
-          lot.quantity = 0;
-        }
-      for (const lot of row.incoming)
-        if (
-          lot.confirmed &&
-          lot.date === date &&
-          (!lot.expiryDate || lot.expiryDate >= date)
-        )
-          lots.push({
-            quantity: lot.quantity,
-            expiryDate: lot.expiryDate || "9999-12-31",
-          });
-      if (day === options.leadDays && order > 0)
-        lots.push({ quantity: order, expiryDate: "9999-12-31" });
-      lots.sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
-      let demand = rate;
-      for (const lot of lots) {
-        const used = Math.min(lot.quantity, demand);
-        lot.quantity -= used;
-        demand -= used;
-        if (demand <= 1e-9) break;
-      }
-      lost += Math.max(0, demand);
-      if (day < options.leadDays) preArrivalLost += Math.max(0, demand);
-    }
-    return {
-      remaining: lots.reduce((s, l) => s + l.quantity, 0),
-      lost,
-      preArrivalLost,
-      expired,
-    };
-  };
+  const simulate = (order: number) =>
+    simulateStock(row, rate, horizon, options.leadDays, order, today);
   const baseline = simulate(0);
   const safety = rate * options.safetyDays;
   let suggestedQty = 0;

@@ -1,5 +1,7 @@
 import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { prisma } from '@/app/lib/prisma';
+import { computeProfitSummary } from '@/app/lib/profit-summary';
+import { baghdadDate, dateStart, DAY } from '@/app/lib/smart-purchasing';
 import type { TenantContext } from '@/app/lib/tenant-utils';
 
 export type AIDataContext = Pick<TenantContext, 'tenantBranchWhere' | 'organizationId'>;
@@ -12,6 +14,12 @@ function fmt(n: number) {
 
 function fmtDate(d: Date) {
     return d.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/** Discount as a percent of the pre-discount total (sale.total is after discount). */
+export function discountPercent(total: number, discount: number): number {
+    const gross = total + discount;
+    return gross > 0 && discount > 0 ? (discount / gross) * 100 : 0;
 }
 
 // ─── Sales Summary ───────────────────────────────────────────────────────────
@@ -94,9 +102,13 @@ export async function getSuspiciousActivity(from: Date, to: Date, ctx: AIDataCon
     });
     const maxDiscount = settings?.maxDiscountPercent ?? 10;
 
-    const [overrides, returns] = await Promise.all([
+    const [candidates, returns] = await Promise.all([
+        // sale.discount is an AMOUNT; the limit is a PERCENT of the pre-discount
+        // total. The percentage cannot be expressed in a Prisma where, so fetch
+        // every sale with a discount or a price override and filter below, before
+        // limiting the list (limiting first would drop real cases).
         prisma.sale.findMany({
-            where: { ...where, OR: [{ hasPriceOverride: true }, { discount: { gt: maxDiscount } }] },
+            where: { ...where, OR: [{ hasPriceOverride: true }, { discount: { gt: 0 } }] },
             select: {
                 id: true,
                 invoiceNumber: true, documentNumber: true,
@@ -116,7 +128,6 @@ export async function getSuspiciousActivity(from: Date, to: Date, ctx: AIDataCon
                 },
             },
             orderBy: { createdAt: 'desc' },
-            take: 20,
         }),
         prisma.saleReturn.groupBy({
             by: ['saleId'],
@@ -127,14 +138,18 @@ export async function getSuspiciousActivity(from: Date, to: Date, ctx: AIDataCon
     ]);
 
     const lines: string[] = [];
+    const flagged = candidates
+        .map(s => ({ ...s, discountPct: discountPercent(s.total, s.discount) }))
+        .filter(s => s.hasPriceOverride || s.discountPct > maxDiscount);
+    const overrides = flagged.slice(0, 20);
 
     if (overrides.length) {
-        lines.push(`### تجاوزات الأسعار والخصومات (الحد المسموح: ${maxDiscount}%)`);
+        lines.push(`### تجاوزات الأسعار والخصومات (الحد المسموح: ${maxDiscount}% من قيمة الفاتورة قبل الخصم)${flagged.length > overrides.length ? ` — تُعرض أحدث ${overrides.length} من ${flagged.length}` : ''}`);
         for (const s of overrides) {
             const userName = s.user?.name ?? 'غير معروف';
             const flags: string[] = [];
             if (s.hasPriceOverride) flags.push('تعديل سعر');
-            if (s.discount > maxDiscount) flags.push(`خصم ${s.discount}% > الحد ${maxDiscount}%`);
+            if (s.discountPct > maxDiscount) flags.push(`خصم ${fmt(s.discount)} = ${s.discountPct.toFixed(1)}% > الحد ${maxDiscount}%`);
             const invNo = s.invoiceNumber != null ? `#${String(s.invoiceNumber).padStart(4, '0')}` : `#${s.documentNumber}`;
             lines.push(`- فاتورة ${invNo} | ${userName} | إجمالي: ${fmt(s.total)} | ${flags.join(' + ')} | ${fmtDate(s.createdAt)}`);
             for (const item of s.items) {
@@ -159,45 +174,32 @@ export async function getSuspiciousActivity(from: Date, to: Date, ctx: AIDataCon
 // ─── Profit Summary ──────────────────────────────────────────────────────────
 
 export async function getProfitSummary(from: Date, to: Date, ctx: AIDataContext): Promise<string> {
-    const saleShere = { ...ctx.tenantBranchWhere, createdAt: { gte: from, lte: to } };
-    const expWhere  = { ...operatingExpenseWhere, ...ctx.tenantBranchWhere, date: { gte: from, lte: to } };
-
-    const [salesAgg, saleItems, expensesAgg, returnsAgg] = await Promise.all([
-        prisma.sale.aggregate({
-            _sum: { total: true, discount: true },
-            _count: { id: true },
-            where: saleShere,
-        }),
-        prisma.saleItem.findMany({
-            where: { sale: saleShere },
-            select: { cost: true, quantity: true },
-        }),
-        prisma.expense.aggregate({
-            _sum: { amount: true },
-            where: expWhere,
-        }),
-        prisma.saleReturn.aggregate({
-            _sum: { total: true },
-            where: { ...ctx.tenantBranchWhere, createdAt: { gte: from, lte: to } },
-        }),
-    ]);
-
-    const revenue  = salesAgg._sum.total ?? 0;
-    const cogs     = saleItems.reduce((s, i) => s + i.cost * i.quantity, 0);
-    const expenses = expensesAgg._sum.amount ?? 0;
-    const returns  = returnsAgg._sum.total ?? 0;
-    const gross    = revenue - cogs;
-    const net      = gross - expenses - returns;
-    const margin   = revenue > 0 ? ((net / revenue) * 100).toFixed(1) : '0';
-
+    // Same definition as the profit report (computeProfitSummary), so the two
+    // never disagree for the same scope and period.
+    const p = await computeProfitSummary(ctx.tenantBranchWhere, from, to);
     return `## تقرير الأرباح (${fmtDate(from)} — ${fmtDate(to)})
-- إجمالي المبيعات:   ${fmt(revenue)}
-- تكلفة البضائع:     ${fmt(cogs)}
-- إجمالي المرتجعات:  ${fmt(returns)}
-- المصاريف:          ${fmt(expenses)}
-- الربح الإجمالي:    ${fmt(gross)}
-- صافي الربح:        ${fmt(net)}
-- هامش الربح:        ${margin}%`;
+- النطاق: ${profitScopeLabel(ctx)} (تقرير الأرباح في النظام يعرض فرعك افتراضياً؛ قارن بالنطاق نفسه)${profitLines(p)}`;
+}
+
+function profitScopeLabel(ctx: AIDataContext): string {
+    const w = ctx.tenantBranchWhere as Record<string, any>;
+    if (w && typeof w.branchId === 'string') return 'فرعك فقط';
+    if (w?.branch?.organizationId) return 'كل فروع المؤسسة';
+    if (!w || Object.keys(w).length === 0) return 'كل البيانات المتاحة لحسابك';
+    return 'النطاق المحدد';
+}
+
+function profitLines(p: Awaited<ReturnType<typeof computeProfitSummary>>): string {
+    return `
+- إجمالي المبيعات:   ${fmt(p.revenue)}
+- تكلفة البضائع:     ${fmt(p.cogs)}
+- إجمالي المرتجعات (المبالغ المستردة):  ${fmt(p.returns)}
+- تكلفة البضاعة المرتجعة المستعادة:  ${fmt(p.costReversal)}
+- المصاريف التشغيلية:  ${fmt(p.expenses)}
+- الربح الإجمالي:    ${fmt(p.gross)}
+- صافي الربح:        ${fmt(p.net)}
+- هامش الربح:        ${p.margin.toFixed(1)}%
+(طريقة الحساب مطابقة لتقرير الأرباح: الربح الإجمالي − المصاريف − المرتجعات + تكلفة البضاعة المرتجعة)`;
 }
 
 // ─── Expenses Summary ────────────────────────────────────────────────────────
@@ -222,7 +224,9 @@ export async function getExpensesSummary(from: Date, to: Date, ctx: AIDataContex
 export async function getDebtSummary(ctx: AIDataContext): Promise<string> {
     const debtors = await prisma.patient.findMany({
         where: { balance: { gt: 0 }, ...ctx.tenantBranchWhere },
-        select: { name: true, phone: true, balance: true },
+        // No phone numbers: the model does not need them to answer, and the
+        // context is sent to an external AI provider.
+        select: { name: true, balance: true },
         orderBy: { balance: 'desc' },
         take: 10,
     });
@@ -230,7 +234,7 @@ export async function getDebtSummary(ctx: AIDataContext): Promise<string> {
     if (!debtors.length) return '## الديون\nلا توجد ديون مستحقة حالياً.';
 
     const total = debtors.reduce((s, p) => s + p.balance, 0);
-    const rows  = debtors.map(p => `- ${p.name} (${p.phone}): ${fmt(p.balance)}`);
+    const rows  = debtors.map(p => `- ${p.name}: ${fmt(p.balance)}`);
     return `## أكبر المدينين (أعلى 10)\n${rows.join('\n')}\n- **إجمالي الديون المعروضة: ${fmt(total)}**`;
 }
 
@@ -470,10 +474,10 @@ export async function getSlowMovingDrugs(ctx: AIDataContext): Promise<string> {
 
 // ─── Dashboard Summary ────────────────────────────────────────────────────────
 
-export async function getDashboardSummary(ctx: AIDataContext): Promise<string> {
-    const now        = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfDay   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+export async function getDashboardSummary(ctx: AIDataContext, now = new Date()): Promise<string> {
+    // "Today" is the Baghdad calendar day, whatever the server's time zone.
+    const startOfDay = dateStart(baghdadDate(now));
+    const endOfDay   = new Date(startOfDay.getTime() + DAY - 1);
 
     const [salesAgg, inventories, expiredCount, openShift, pendingCount, totalItems] = await Promise.all([
         prisma.sale.aggregate({
@@ -582,23 +586,29 @@ export async function getDrugInfo(searchTerm: string, ctx: AIDataContext): Promi
 export async function getPurchasesSummary(from: Date, to: Date, ctx: AIDataContext): Promise<string> {
     const where = { ...ctx.tenantBranchWhere, createdAt: { gte: from, lte: to } };
 
-    const purchases = await prisma.purchase.findMany({
-        where,
-        select: {
-            total: true,
-            paidAmount: true,
-            status: true,
-            invoiceNumber: true, documentNumber: true,
-            createdAt: true,
-            supplier: { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-    });
+    // The period total comes from an aggregate over ALL invoices in the period;
+    // only the recent-invoices list is limited (a limited list summed as the
+    // total previously understated periods with more than 20 invoices).
+    const [totals, purchases] = await Promise.all([
+        prisma.purchase.aggregate({ where, _sum: { total: true }, _count: true }),
+        prisma.purchase.findMany({
+            where,
+            select: {
+                total: true,
+                paidAmount: true,
+                status: true,
+                invoiceNumber: true, documentNumber: true,
+                createdAt: true,
+                supplier: { select: { name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+        }),
+    ]);
 
-    if (!purchases.length) return '## المشتريات\nلا توجد مشتريات مسجّلة في هذه الفترة.';
+    if (!totals._count) return '## المشتريات\nلا توجد مشتريات مسجّلة في هذه الفترة.';
 
-    const totalSpent  = purchases.reduce((s, p) => s + p.total, 0);
+    const totalSpent = totals._sum.total ?? 0;
 
     // Outstanding debt to suppliers is tracked on the supplier ledger (balance),
     // NOT on purchase.paidAmount (which is often left at 0 — payments post to the
@@ -628,7 +638,7 @@ export async function getPurchasesSummary(from: Date, to: Date, ctx: AIDataConte
     });
     const drugMap = new Map(drugs.map(d => [d.id, d.tradeName]));
 
-    const recentRows = purchases.slice(0, 10).map(p =>
+    const recentRows = purchases.map(p =>
         `- ${p.supplier.name} | ${fmt(p.total)} | مدفوع: ${fmt(p.paidAmount)} | ${p.status === 'PAID' ? '✅ مدفوعة' : '🔴 مستحقة'} | ${fmtDate(p.createdAt)}`
     );
     const topRows = topItems.map(i =>
@@ -638,7 +648,7 @@ export async function getPurchasesSummary(from: Date, to: Date, ctx: AIDataConte
     const owedRows = owedSuppliers.map(s => `- ${s.name}: ${fmt(s.balance)}`);
 
     return `## المشتريات (${fmtDate(from)} — ${fmtDate(to)})
-- إجمالي قيمة المشتريات خلال الفترة: ${fmt(totalSpent)} (${purchases.length} فاتورة)
+- إجمالي قيمة المشتريات خلال الفترة: ${fmt(totalSpent)} (${totals._count} فاتورة)
 
 ### الرصيد المستحق للموردين حالياً (من كشف الحساب)
 الإجمالي المستحق: ${fmt(totalOutstanding)}${owedRows.length ? '\n' + owedRows.join('\n') : '\n- لا توجد مستحقات حالياً (جميع الموردين مسدّدون).'}
@@ -656,7 +666,7 @@ ${topRows.length ? topRows.join('\n') : 'لا بيانات'}`;
 export async function getSuppliersList(ctx: AIDataContext): Promise<string> {
     const suppliers = await prisma.supplier.findMany({
         where: { organizationId: ctx.organizationId },
-        select: { name: true, phone: true, balance: true },
+        select: { name: true, balance: true }, // no phone numbers in AI context
         orderBy: { name: 'asc' },
     });
 
@@ -664,7 +674,7 @@ export async function getSuppliersList(ctx: AIDataContext): Promise<string> {
 
     const rows = suppliers.map(s => {
         const debt = s.balance > 0 ? ` | دين مستحق: ${fmt(s.balance)}` : ' | لا دين';
-        return `- ${s.name}${s.phone ? ` (${s.phone})` : ''}${debt}`;
+        return `- ${s.name}${debt}`;
     });
     return `## قائمة الموردين (${suppliers.length} مورد)\n${rows.join('\n')}`;
 }
@@ -675,7 +685,7 @@ export async function getSupplierDebts(ctx: AIDataContext): Promise<string> {
     // balance > 0 means we owe the supplier (incremented on unpaid purchase)
     const suppliers = await prisma.supplier.findMany({
         where: { balance: { gt: 0 }, organizationId: ctx.organizationId },
-        select: { name: true, phone: true, balance: true },
+        select: { name: true, balance: true }, // no phone numbers in AI context
         orderBy: { balance: 'desc' },
         take: 10,
     });
@@ -683,7 +693,7 @@ export async function getSupplierDebts(ctx: AIDataContext): Promise<string> {
     if (!suppliers.length) return '## ديون الموردين\nلا توجد ديون مستحقة للموردين حالياً.';
 
     const total = suppliers.reduce((s, sup) => s + sup.balance, 0);
-    const rows  = suppliers.map(s => `- ${s.name}${s.phone ? ` (${s.phone})` : ''}: ${fmt(s.balance)}`);
+    const rows  = suppliers.map(s => `- ${s.name}: ${fmt(s.balance)}`);
     return `## ديون الموردين (أعلى 10)\n${rows.join('\n')}\n- **إجمالي المستحق للموردين: ${fmt(total)}**`;
 }
 

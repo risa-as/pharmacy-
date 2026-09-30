@@ -1,5 +1,6 @@
 import { operatingExpenseWhere } from '@/app/lib/expense-categories';
 import { returnedCost } from '@/app/lib/profit-math';
+import { computeProfitSummary } from '@/app/lib/profit-summary';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
@@ -37,49 +38,9 @@ export async function GET(req: Request) {
 
         const branchFilter = branchId ? { AND: [tenantBranchWhere, { branchId }] } : tenantBranchWhere;
 
-        // 1. Total Sales Revenue
-        const salesAgg = await prisma.sale.aggregate({
-            _sum: { total: true, discount: true },
-            _count: true,
-            where: {
-                ...branchFilter,
-                createdAt: { gte: startDate, lte: endDate }
-            }
-        });
-
-        // 2. Cost of Goods Sold — Fix: SUM(cost × quantity) per SaleItem, NOT SUM(cost)
-        //    SaleItem.cost stores unit cost; multiply by quantity for true COGS.
-        const saleItemsForCOGS = await prisma.saleItem.findMany({
-            where: {
-                sale: {
-                    ...branchFilter,
-                    createdAt: { gte: startDate, lte: endDate }
-                }
-            },
-            select: { cost: true, quantity: true }
-        });
-        const totalCOGS = saleItemsForCOGS.reduce(
-            (sum, item) => sum + item.cost * item.quantity, 0
-        );
-
-        // 3. Total Expenses
-        const expensesAgg = await prisma.expense.aggregate({
-            _sum: { amount: true },
-            where: { ...operatingExpenseWhere,
-                ...branchFilter,
-                date: { gte: startDate, lte: endDate }
-            }
-        });
-
-        // 4. Total Returns (Refunds)
-        const returnsAgg = await prisma.saleReturn.aggregate({
-            _sum: { total: true },
-            _count: true,
-            where: {
-                ...branchFilter,
-                createdAt: { gte: startDate, lte: endDate }
-            }
-        });
+        // 1–4. Revenue, COGS, operating expenses, refunds and the returned goods'
+        // cost reversal: one shared definition (also used by the AI assistant).
+        const summary = await computeProfitSummary(branchFilter, startDate, endDate);
 
         // 5. Supplier Payments
         const supplierPaymentsAgg = await prisma.supplierPayment.aggregate({
@@ -90,18 +51,21 @@ export async function GET(req: Request) {
             }
         });
 
-        const totalRevenue = salesAgg._sum.total || 0;
-        const totalDiscount = salesAgg._sum.discount || 0;
-        const totalExpenses = expensesAgg._sum.amount || 0;
-        const totalReturns = returnsAgg._sum.total || 0;
+        const totalRevenue = summary.revenue;
+        const totalDiscount = summary.discount;
+        const totalCOGS = summary.cogs;
+        const totalExpenses = summary.expenses;
+        const totalReturns = summary.returns;
         const totalSupplierPayments = supplierPaymentsAgg._sum.amount || 0;
+        const salesAgg = { _count: summary.salesCount };
+        const returnsAgg = { _count: summary.returnsCount };
 
+        // Per-day cost reversal for the chart below.
         const returnedLines = await prisma.saleReturn.findMany({ where: { ...branchFilter, createdAt: { gte: startDate, lte: endDate } },
             select: { createdAt: true, items: { select: { drugId: true, quantity: true } }, sale: { select: { items: { select: { drugId: true, quantity: true, cost: true } } } } } });
-        const costReversal = returnedLines.reduce((sum, r) => sum + returnedCost(r.items, r.sale.items), 0);
-        const grossProfit = totalRevenue - totalCOGS;
-        const netProfit = grossProfit - totalExpenses - totalReturns + costReversal;
-        const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0;
+        const grossProfit = summary.gross;
+        const netProfit = summary.net;
+        const profitMargin = summary.margin;
 
 
         // 6. Daily breakdown for chart

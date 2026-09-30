@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { providerConfig } from '@/app/lib/ai-assistant';
 
 export async function GET() {
     const session = await auth();
@@ -9,10 +10,7 @@ export async function GET() {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const provider    = (process.env.AI_PROVIDER ?? 'gemini') as 'gemini' | 'openai';
-    const hasGemini   = !!process.env.GEMINI_API_KEY;
-    const hasOpenAI   = !!process.env.OPENAI_API_KEY;
-    const configured  = provider === 'openai' ? hasOpenAI : hasGemini;
-
-    return NextResponse.json({ provider, configured });
+    // Same check as the chat route: the key of the provider actually selected.
+    const config = providerConfig();
+    return NextResponse.json({ provider: config.ok ? config.provider : null, configured: config.ok });
 }

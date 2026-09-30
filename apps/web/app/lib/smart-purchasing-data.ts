@@ -15,6 +15,8 @@ export async function getPlanningData(
   branchId?: string,
   from?: string,
   to?: string,
+  /** Batch cost per lot (same index as row.lots), for the waste card only. Never put in rows. */
+  opts: { lotCosts?: boolean } = {},
 ) {
   if (
     !ctx.userPermissions.canViewInventory ||
@@ -44,7 +46,9 @@ export async function getPlanningData(
         branch: { select: { name: true } },
         batches: {
           where: { quantity: { gt: 0 } },
-          select: { quantity: true, expiryDate: true },
+          // Fixed order so a lot keeps its index (row.lots[i] ↔ lotCosts[id][i]).
+          orderBy: [{ expiryDate: "asc" }, { id: "asc" }],
+          select: { quantity: true, expiryDate: true, costPrice: true },
         },
       },
     }),
@@ -269,8 +273,15 @@ export async function getPlanningData(
       qualityReasons,
     };
   });
+  const lotCosts = opts.lotCosts
+    ? Object.fromEntries(
+        inventories.map((inv) => [inv.id, inv.batches.map((b) => b.costPrice)]),
+      )
+    : undefined;
   return {
     rows,
+    // undefined unless requested (omitted from JSON responses).
+    lotCosts,
     from: period.from,
     to: period.to,
     days: period.days,

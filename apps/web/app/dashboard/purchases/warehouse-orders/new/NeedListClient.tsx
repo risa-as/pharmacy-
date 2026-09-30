@@ -1,6 +1,8 @@
 'use client';
 import { readStorage } from '../../../../../../../packages/shared/src/safe-storage';
 import { prepareSmartOrderDraft } from '@/app/lib/actions/purchase-actions';
+import { handoffKey } from '@/app/lib/smart-purchasing-handoff';
+import { isDraftId, draftIdFromSaved, draftIdAfterStartNew, orderRequestBody, reportDraftImported, reportDraftCompleted, draftIsComplete } from '@/app/lib/purchase-draft-client';
 
 // المرحلة 3 و4 من خطة «طلب الأدوية حسب الاحتياج»: قائمة الاحتياج ثم المراجعة والإرسال.
 //
@@ -65,11 +67,15 @@ export default function NeedListClient({
     fixedBranchId: string | null;
     branches: Array<{ id: string; name: string }>;
 }) {
-    const [smartDraft, setSmartDraft] = useState<{branchId:string;lines:{drugId:string;quantity:number;unitsPerPack:number}[]}|null>(null);
+    const [smartDraft, setSmartDraft] = useState<{branchId:string;draftId?:string;lines:{drugId:string;quantity:number;unitsPerPack:number}[]}|null>(null);
+    // OPEN-14: purchase draft these lines came from (measurement only; kept beside the frozen payloads).
+    const draftIdRef = useRef<string | null>(null);
+    // Re-render trigger for the "close the draft" action (the id itself lives in the ref).
+    const [draftOpen, setDraftOpen] = useState(false);
     const [importingSmart, setImportingSmart] = useState(false);
     const [smartImportedBranch, setSmartImportedBranch] = useState<string|null>(null);
-    const smartKey = `smart-purchasing-handoff:${userId}:${organizationId}`;
-    useEffect(()=>{try {const raw=sessionStorage.getItem(smartKey);if(raw){const d=JSON.parse(raw);if(d.version===1&&Array.isArray(d.lines)&&branches.some(b=>b.id===d.branchId)&&(!fixedBranchId||fixedBranchId===d.branchId))setSmartDraft(d);}}catch{toast.error('تعذر قراءة مسودة الشراء الذكي');}},[smartKey,branches,fixedBranchId]);
+    const smartKey = handoffKey(userId, organizationId);
+    useEffect(()=>{try {const raw=sessionStorage.getItem(smartKey);if(raw){const d=JSON.parse(raw);if(d.version===1&&Array.isArray(d.lines)&&branches.some(b=>b.id===d.branchId)&&(!fixedBranchId||fixedBranchId===d.branchId))setSmartDraft({...d,draftId:isDraftId(d.draftId)?d.draftId:undefined});}}catch{toast.error('تعذر قراءة مسودة الشراء الذكي');}},[smartKey,branches,fixedBranchId]);
     const [branchId, setBranchId] = useState<string>(fixedBranchId ?? (branches.length === 1 ? branches[0].id : ''));
     const [lines, setLines] = useState<NeedLine[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(false);
@@ -124,8 +130,11 @@ export default function NeedListClient({
             setLegacyReviewed(false);
             if (legacy) throw new Error('توجد عملية من النسخة السابقة بلا حمولة محفوظة. راجع الطلبات المسجلة قبل حذف سجل الجلسة القديم.');
             const raw = sessionStorage.getItem(storageKey);
+            draftIdRef.current = null;
             if (!raw) { setRecoveryError(null); return; }
             const saved = JSON.parse(raw);
+            draftIdRef.current = draftIdFromSaved(saved);
+            setDraftOpen(!!draftIdRef.current);
             if (saved.version !== 2 || !Array.isArray(saved.blocked)) throw new Error('سجل الجلسة غير صالح');
             if ((saved.draft !== undefined && !Array.isArray(saved.draft)) ||
                 (saved.originalLines !== undefined && !Array.isArray(saved.originalLines))) throw new Error('قائمة الجلسة غير صالحة');
@@ -202,7 +211,7 @@ export default function NeedListClient({
         if(smartImportedBranch!==branchId || stage!=='BUILD' || groups.length || importingSmart || recoveryError) return;
         try {
             if(!lines.length) { sessionStorage.removeItem(storageKey);setSmartImportedBranch(null);return; }
-            sessionStorage.setItem(storageKey,JSON.stringify({version:2,source:'SMART',groups:[],blocked:[],draft:lines.map(l=>({...l,comparison:null})),notes,originalLines:lines.map(l=>({...l,comparison:null}))}));
+            sessionStorage.setItem(storageKey,JSON.stringify({version:2,source:'SMART',purchaseDraftId:draftIdRef.current??undefined,groups:[],blocked:[],draft:lines.map(l=>({...l,comparison:null})),notes,originalLines:lines.map(l=>({...l,comparison:null}))}));
         } catch {toast.error('تعذر حفظ تعديلات مسودة الشراء');}
     },[smartImportedBranch,branchId,stage,groups.length,importingSmart,recoveryError,lines,notes,storageKey]);
 
@@ -214,10 +223,14 @@ export default function NeedListClient({
         setImportingSmart(true);
         try {
             const prepared = await prepareSmartOrderDraft(smartDraft.branchId,smartDraft.lines);
-            sessionStorage.setItem(`wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`,JSON.stringify({version:2,source:'SMART',groups:[],blocked:[],draft:prepared,notes:{},originalLines:prepared}));
+            const draftId = smartDraft.draftId ?? null;
+            sessionStorage.setItem(`wh-need-send-v2:${userId}:${organizationId}:${smartDraft.branchId}`,JSON.stringify({version:2,source:'SMART',purchaseDraftId:draftId??undefined,groups:[],blocked:[],draft:prepared,notes:{},originalLines:prepared}));
+            draftIdRef.current = draftId;
+            setDraftOpen(!!draftId);
             setSmartImportedBranch(smartDraft.branchId);setBranchId(smartDraft.branchId);setLines(prepared);setStage('BUILD');
             sessionStorage.removeItem(smartKey);setSmartDraft(null);
             await fetchComparisons(prepared);
+            if (draftId) reportDraftImported(draftId);
             toast.success('نُقلت الكميات بالباكيت؛ راجع الموردين والأسعار قبل الإرسال');
         } catch(error) {toast.error(error instanceof Error?error.message:'تعذر استيراد المسودة');}
         finally {setImportingSmart(false);}
@@ -360,7 +373,7 @@ export default function NeedListClient({
     const persist = (gs: SendGroup[]) => {
         // Keep only the unresolved manual list, never every supplier's price history.
         const blocked = classified.blocked.map(({line}) => ({ ...line, comparison: null }));
-        sessionStorage.setItem(storageKey, JSON.stringify({ version: 2, groups: gs, blocked, notes, originalLines: (originalLines.current.length ? originalLines.current : lines).map(l => ({ ...l, comparison: null })) }));
+        sessionStorage.setItem(storageKey, JSON.stringify({ version: 2, purchaseDraftId: draftIdRef.current ?? undefined, groups: gs, blocked, notes, originalLines: (originalLines.current.length ? originalLines.current : lines).map(l => ({ ...l, comparison: null })) }));
     };
 
     const submitAll = async () => {
@@ -380,12 +393,15 @@ export default function NeedListClient({
                     },
                     async payload => {
                         const res = await fetch('/api/warehouses/orders', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+                            // The draft id travels beside the frozen payload, never inside it.
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: orderRequestBody(payload, draftIdRef.current),
                         });
                         return { status: res.status, data: await res.json().catch(() => null) };
                     });
             }
             const allSent = current.every((g) => g.status === 'SENT');
+            // OPEN-14: close the draft only on unambiguous completion; otherwise unsent lines stay "not sent yet".
+            if (draftIsComplete(current, classified.blocked.length)) { reportDraftCompleted(draftIdRef.current); setDraftOpen(false); }
             if (allSent) {
                 toast.success('أُرسلت كل الطلبات.');
             } else {
@@ -410,7 +426,10 @@ export default function NeedListClient({
             // Save the replacement before changing the UI; retain the previous
             // snapshot for reference without ever resubmitting successful groups.
             sessionStorage.setItem(`${storageKey}:previous`, JSON.stringify({ groups, notes }));
-            sessionStorage.setItem(storageKey, JSON.stringify({ version: 2, groups: [], blocked: [], draft, notes: draftNotes, originalLines: draft }));
+            const keptDraftId = draftIdAfterStartNew(draft, draftIdRef.current);
+            sessionStorage.setItem(storageKey, JSON.stringify({ version: 2, purchaseDraftId: keptDraftId ?? undefined, groups: [], blocked: [], draft, notes: draftNotes, originalLines: draft }));
+            draftIdRef.current = keptDraftId;
+            setDraftOpen(!!keptDraftId);
             originalLines.current = draft;
             setGroups([]); setLines(draft); setNotes(draftNotes); setStage('BUILD');
             if (draft.length) void fetchComparisons(draft);
@@ -1076,6 +1095,7 @@ export default function NeedListClient({
                     sending={sending}
                     onBack={() => { if (!sending && !groups.some(g => g.payload)) setStage('BUILD'); }}
                     onNew={startNew}
+                    onCloseDraft={draftOpen ? () => { reportDraftCompleted(draftIdRef.current); setDraftOpen(false); toast.success('أُغلقت المسودة؛ الأصناف غير المرسلة تُحتسب محذوفة في القياس.'); } : undefined}
                     recoveryBlocked={!!recoveryError}
                     onSubmit={submitAll}
                     onPrint={printManual}
@@ -1097,7 +1117,7 @@ export default function NeedListClient({
 // ── شاشة المراجعة والإرسال ───────────────────────────────────────────────────
 function ReviewStage({
     groups, blocked, notes, setNotes, oversize, remaining, submitBlockedReason, sending, onBack, onSubmit, onPrint, onNew, recoveryBlocked,
-    warehouses, duplicateConfirmed, onConfirmDuplicate, unconfirmedDuplicates,
+    warehouses, duplicateConfirmed, onConfirmDuplicate, unconfirmedDuplicates, onCloseDraft,
 }: {
     groups: SendGroup[];
     blocked: BlockedLine[];
@@ -1113,6 +1133,8 @@ function ReviewStage({
     sending: boolean;
     onBack: () => void;
     onNew: () => void;
+    /** OPEN-14: "the rest will not be sent" — only while a measured draft is open. */
+    onCloseDraft?: () => void;
     recoveryBlocked: boolean;
     onSubmit: () => void;
     onPrint: () => void;
@@ -1277,6 +1299,7 @@ function ReviewStage({
                 </p>
                 <div className="flex items-center gap-3">
                     {groups.length > 0 && !groups.some(g => g.status === 'UNKNOWN' || g.status === 'SENDING' || g.hasUncertainOutcome) && <button disabled={sending || recoveryBlocked} onClick={onNew} className="text-sm text-primary">{groups.some(g => g.status !== 'SENT') || blocked.length ? 'تعديل الأصناف غير المرسلة' : 'بدء قائمة جديدة'}</button>}
+                    {onCloseDraft && anySent && (groups.some(g => g.status !== 'SENT') || blocked.length > 0) && !sending && <button onClick={onCloseDraft} className="text-sm text-muted-foreground underline" data-testid="close-draft">لن أرسل الباقي — إغلاق المسودة</button>}
                     {anySent && (
                         <Link
                             href="/dashboard/purchases/warehouse-orders"

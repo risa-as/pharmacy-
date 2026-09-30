@@ -3,14 +3,26 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, X, Trash2, Send, Loader2, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
 import type { ChatMessage } from '@/app/lib/ai-assistant';
+import type { AssistantCard } from '@/app/lib/ai-cards';
+import { AssistantCardView } from './AssistantCards';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    /** Deterministic cards from the system data (never sent back as history). */
+    cards?: AssistantCard[];
 }
+
+/** Direct actions: cards straight from the system, no language model, no AI quota. */
+const INSIGHT_ACTIONS: { kind: 'reorder' | 'waste' | 'daily'; label: string }[] = [
+    { kind: 'reorder', label: '🛒 شنو أطلب اليوم؟' },
+    { kind: 'waste', label: '⏳ المخزون المعرض للهدر' },
+    { kind: 'daily', label: '📋 ملخص اليوم' },
+];
 
 interface UsageInfo {
     limit: number;
@@ -126,7 +138,7 @@ const EXAMPLE_CATEGORIES = [
     },
 ];
 
-const MAX_MESSAGES = 20;
+const MAX_MESSAGES = 40;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -142,6 +154,25 @@ export default function AIAssistantPanel() {
     const [activeTab,     setActiveTab]     = useState(0);
     const bottomRef   = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // The conversation survives navigation within this tab only (sessionStorage,
+    // per user): it contains financial data and pharmacy computers are shared.
+    const { data: session } = useSession();
+    const userId = (session?.user as any)?.id as string | undefined;
+    const storeKey = userId ? `ai-chat:v1:${userId}` : null;
+    const restored = useRef<string | null>(null);
+    useEffect(() => {
+        if (!storeKey || restored.current === storeKey) return;
+        restored.current = storeKey;
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(storeKey) || '[]');
+            setMessages(Array.isArray(saved) ? saved.slice(-MAX_MESSAGES) : []);
+        } catch { setMessages([]); }
+    }, [storeKey]);
+    useEffect(() => {
+        if (!storeKey || restored.current !== storeKey) return;
+        try { sessionStorage.setItem(storeKey, JSON.stringify(messages)); } catch { /* storage unavailable: memory only */ }
+    }, [messages, storeKey]);
 
     // Fetch provider status once on mount
     useEffect(() => {
@@ -196,11 +227,12 @@ export default function AIAssistantPanel() {
             });
 
             const data = await res.json();
-            const content = data.response ?? data.error ?? 'لم أتمكن من الإجابة.';
-            setMessages(prev => [...prev, { role: 'assistant', content }]);
+            const cards: AssistantCard[] = Array.isArray(data.cards) ? data.cards : [];
+            const content = data.response ?? data.notice ?? data.error ?? (cards.length ? '' : 'لم أتمكن من الإجابة.');
+            setMessages(prev => [...prev, { role: 'assistant', content, cards }]);
 
-            // Refresh usage after a successful call
-            if (res.ok) {
+            // Only a model answer uses the daily quota (cards alone do not).
+            if (res.ok && data.response) {
                 setUsage(prev => prev
                     ? { ...prev, used: prev.used + 1, remaining: Math.max(0, prev.remaining - 1) }
                     : prev
@@ -215,6 +247,22 @@ export default function AIAssistantPanel() {
             setLoading(false);
         }
     }, [loading, messages, usage]);
+
+    const runInsight = useCallback(async (kind: 'reorder' | 'waste' | 'daily', label: string) => {
+        if (loading || messages.length >= MAX_MESSAGES) return;
+        setShowExamples(false);
+        setMessages(prev => [...prev, { role: 'user', content: label }]);
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/ai/insights?kind=${kind}`, { cache: 'no-store' });
+            const data = await res.json();
+            setMessages(prev => [...prev, res.ok && data.card
+                ? { role: 'assistant', content: '', cards: [data.card] }
+                : { role: 'assistant', content: data.error ?? 'تعذر إعداد البطاقة.' }]);
+        } catch {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'حدث خطأ في الاتصال. يرجى المحاولة مجدداً.' }]);
+        } finally { setLoading(false); }
+    }, [loading, messages.length]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -377,7 +425,7 @@ export default function AIAssistantPanel() {
                             <div className="text-center space-y-3 pt-4">
                                 <p className="text-sm text-muted-foreground">
                                     {!configured
-                                        ? '⚠️ المساعد الذكي غير مفعّل — يرجى ضبط AI_PROVIDER في ملف .env'
+                                        ? '⚠️ الشرح النصي غير مفعّل — يرجى ضبط AI_PROVIDER ومفتاح المزوّد نفسه في ملف .env. أزرار البطاقات أدناه تعمل من بيانات النظام.'
                                         : atDailyLimit
                                         ? '⛔ تجاوزت الحد اليومي للمساعد الذكي. يتجدد الحد منتصف الليل بتوقيت بغداد.'
                                         : 'اسألني أي شيء عن مبيعاتك أو مخزونك أو أرباحك'}
@@ -407,13 +455,18 @@ export default function AIAssistantPanel() {
                                 className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}
                             >
                                 <div
-                                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed
+                                    className={`${msg.cards?.length ? 'w-full' : 'max-w-[85%]'} rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed
                                         ${msg.role === 'user'
                                             ? 'bg-primary text-white rounded-br-sm'
                                             : 'bg-muted text-foreground rounded-bl-sm'
                                         }`}
                                 >
                                     {msg.content}
+                                    {msg.cards?.map((card, j) => (
+                                        <div key={j} className={`whitespace-normal ${msg.content ? 'mt-2' : ''}`}>
+                                            <AssistantCardView card={card} />
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         ))}
@@ -436,7 +489,7 @@ export default function AIAssistantPanel() {
                         {/* Limit warnings */}
                         {atMsgLimit && (
                             <div className="text-center">
-                                <p className="text-xs text-muted-foreground mb-2">وصلت للحد الأقصى للمحادثة (20 رسالة)</p>
+                                <p className="text-xs text-muted-foreground mb-2">وصلت للحد الأقصى للمحادثة (40 رسالة)</p>
                                 <button
                                     onClick={() => setMessages([])}
                                     className="text-xs text-primary hover:underline"
@@ -454,8 +507,22 @@ export default function AIAssistantPanel() {
                         <div ref={bottomRef} />
                     </div>
 
+                    {/* Direct actions (system data, no AI quota) */}
+                    <div className="flex gap-1.5 overflow-x-auto border-t border-border px-3 pt-2 scrollbar-none" data-testid="insight-actions">
+                        {INSIGHT_ACTIONS.map(a => (
+                            <button
+                                key={a.kind}
+                                onClick={() => runInsight(a.kind, a.label)}
+                                disabled={loading || atMsgLimit}
+                                className="whitespace-nowrap text-xs px-2.5 py-1 rounded-full border border-primary/40 text-primary hover:bg-primary/5 disabled:opacity-40"
+                            >
+                                {a.label}
+                            </button>
+                        ))}
+                    </div>
+
                     {/* Input */}
-                    <div className="border-t border-border p-3">
+                    <div className="p-3">
                         <div className="flex gap-2 items-end">
                             <textarea
                                 ref={textareaRef}

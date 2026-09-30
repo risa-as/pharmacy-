@@ -16,6 +16,8 @@ import { notifyWarehouseUsers } from '@/app/lib/notifications/notificationTrigge
 import { createHash } from 'node:crypto';
 import { ORDER_TRANSITIONS, type OrderStatus } from '@/app/lib/warehouse-order-state';
 import { listPharmacyReturns } from '@/app/lib/warehouse-return-list';
+import { draftForOrder } from '@/app/lib/purchase-drafts';
+
 
 export async function GET(req: NextRequest) {
     const ctx = await getTenantContext();
@@ -349,11 +351,15 @@ export async function POST(req: NextRequest) {
             // مفتاح idempotency فلا يُنشَأ طلب مكرر.
 
 
+            // OPEN-14: link to the purchase draft (measurement only). Outside the
+            // requestHash and only on this create path, so a replay never re-links.
+            const purchaseDraftId = await draftForOrder(tx, body.purchaseDraftId, branchId);
             const created = await tx.warehouseOrder.create({
                 data: {
                     warehouseId,
                     branchId,
                     idempotencyKey,
+                    purchaseDraftId,
 
                     status: 'SENT',
                     totalAmount,
