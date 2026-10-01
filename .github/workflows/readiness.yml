@@ -35,6 +35,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @faramace/shared build
       - run: pnpm check:dependencies
       - run: node --test scripts/check-dependencies.test.mjs
       - run: node --test scripts/security-compatibility.test.mjs
