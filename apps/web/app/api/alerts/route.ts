@@ -21,32 +21,35 @@ export async function GET(req: Request) {
         const branchFilter = { AND: [tenantBranchWhere, ...(branchId ? [{ branchId }] : [])] };
 
         // ── 1. Expiry alerts: batches expiring within 90 days (including already expired) ──
-        const expiringBatches = await prisma.batch.findMany({
+        const [expiringBatches, inventories] = await Promise.all([prisma.batch.findMany({
             where: {
                 expiryDate: { lte: ninetyDaysFromNow },
                 quantity: { gt: 0 },
                 inventory: branchFilter,
             },
-            include: {
+            select: {
+                id: true, quantity: true, expiryDate: true,
                 inventory: {
-                    include: {
+                    select: {
+                        drugId: true,
                         drug: { select: { tradeName: true, scientificName: true } },
                         branch: { select: { name: true } },
                     },
                 },
             },
             orderBy: { expiryDate: 'asc' },
-        });
+        }),
 
         // ── 2. Stock alerts: all inventories to check quantity vs minStock ──
-        const inventories = await prisma.inventory.findMany({
+        prisma.inventory.findMany({
             where: branchFilter,
-            include: {
+            select: {
+                id: true, drugId: true, minStock: true,
                 batches: { select: { quantity: true }, where: { quantity: { gt: 0 } } },
                 drug: { select: { tradeName: true, scientificName: true } },
                 branch: { select: { name: true } },
             },
-        });
+        })]);
 
         const alerts: any[] = [];
 

@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Href } from 'expo-router';
-import { apiService } from '../../services/api';
+import { apiService, request, getSessionGeneration } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { loadDashboardSections } from '../../utils/dashboard-loader';
 import { Radius } from '../../constants/colors';
 import { Skeleton } from '../ui/Skeleton';
 import { BranchSelector } from '../BranchSelector';
@@ -28,26 +29,33 @@ export function AdminDashboard() {
     const [failed, setFailed]                 = useState(false);
     const [refreshing, setRefreshing]         = useState(false);
 
-    const fetchData = useCallback(async () => {
-        try {
-            const [statsData, salesData] = await Promise.all([
-                apiService.getStats(selectedBranch ?? undefined),
-                apiService.getSales().catch(() => []),
-            ]);
-            setStats(statsData);
-            setFailed(!statsData);
-            setRecentSales((Array.isArray(salesData) ? salesData as RecentSale[] : []).slice(0, 5));
-        } catch (err) {
-            console.error('AdminDashboard:', err);
-            setFailed(true);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, [selectedBranch]);
+    const activeRequest = useRef(0);
+    const [salesLoading, setSalesLoading] = useState(true);
+    const [salesFailed, setSalesFailed] = useState(false);
+    const fetchData = useCallback(async (forceRefresh = false) => {
+        const issued = ++activeRequest.current;
+        const session = getSessionGeneration();
+        const current = () => issued === activeRequest.current && session === getSessionGeneration();
+        setSalesLoading(true);
+        await loadDashboardSections(
+            () => apiService.getStats(selectedBranch ?? undefined, forceRefresh),
+            // This section displays five rows, so request only five from the server.
+            () => request<RecentSale[]>('/sales?limit=5', {}, false, { forceRefresh }),
+            value => { if (current()) { setStats(value); setFailed(!value); } },
+            value => { if (current()) { setRecentSales(Array.isArray(value) ? value.slice(0, 5) : []); setSalesFailed(false); } },
+            () => { if (current()) setFailed(true); },
+            () => { if (current()) setSalesFailed(true); },
+            () => { if (current()) setLoading(false); },
+        );
+        if (current()) { setRefreshing(false); setSalesLoading(false); }
+    }, [selectedBranch, user?.id]);
 
-    useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
-    const onRefresh = useCallback(() => { setRefreshing(true); fetchData(); }, [fetchData]);
+    useEffect(() => {
+        setLoading(true); setStats(null); setRecentSales([]); setFailed(false);
+        void fetchData();
+        return () => { activeRequest.current++; };
+    }, [fetchData]);
+    const onRefresh = useCallback(() => { setRefreshing(true); void fetchData(true); }, [fetchData]);
 
     const firstName = user?.name?.trim().split(' ')[0] ?? '';
     const today = formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' });
@@ -72,6 +80,12 @@ export function AdminDashboard() {
                     </View>
                 )}
             </View>
+
+            {user?.role === 'ADMIN' && <PressableCard accessibilityLabel="المساعد الذكي" onPress={() => go('/assistant')} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                <Ionicons name="sparkles-outline" size={28} color={C.primary} />
+                <View style={{ flex: 1 }}><Text style={{ color: C.foreground, fontWeight: '800', fontSize: 16, textAlign: 'right' }}>المساعد الذكي</Text><Text style={{ color: C.mutedForeground, fontSize: 12, textAlign: 'right', marginTop: 4 }}>اسأل عن أداء الصيدلية أو جهّز طلب شراء للمراجعة</Text></View>
+                <Ionicons name="chevron-back" size={20} color={C.primary} />
+            </PressableCard>}
 
             {loading && !refreshing ? (
                 <View style={{ gap: 14 }}>
@@ -144,6 +158,8 @@ export function AdminDashboard() {
                         <LinkTile label="التقارير" icon="document-text-outline" onPress={() => go('/reports')} />
                     </View>
 
+                    {salesLoading && <Text style={{ color: C.mutedForeground, textAlign: 'right' }}>جارٍ تحميل آخر المبيعات…</Text>}
+                    {salesFailed && <Text style={{ color: C.danger, textAlign: 'right' }}>تعذر تحديث آخر المبيعات. اسحب للتحديث.</Text>}
                     {recentSales.length > 0 && (
                         <View>
                             <SectionTitle title="آخر المبيعات" trailing="عرض الكل" onTrailingPress={() => go('/sales-history')} />

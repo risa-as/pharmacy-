@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {allowedOperation} from '../operations-policy';
+import {allowedOperation, operationNeedsSync} from '../operations-policy';
 import {allowedSupplyOperation} from '../operations-policy';
 
 it.each([['/inventory/stocktake','POST'],['/inventory/stocktake/abc-123','PUT'],['/inventory/stocktake/abc-123','DELETE'],['/inventory/stocktake/abc-123?type=sheet','GET'],['/purchases/a-1/receive','POST'],['/inventory/operation-batches?search=123&page=1','GET']])('allows supported operation %s %s',(path,method)=>expect(allowedOperation(path,method)).toBe(true));
@@ -14,4 +14,15 @@ it.each([
 ])('warehouse order and return routes are removed: %s %s', (path,method)=>{
  expect(allowedOperation(path,method)).toBe(false);
  expect(allowedSupplyOperation(path.split('?')[0],method,{canViewSuppliers:true,canReceivePurchase:true,canViewWarehouseOrders:true,canReturnWarehouseOrder:true})).toBe(false);
+});
+
+it('only writes, the batch search and a count sheet need the sync lock', () => {
+ expect(operationNeedsSync('/purchases', 'GET')).toBe(false);
+ expect(operationNeedsSync('/purchases/p', 'GET')).toBe(false);
+ expect(operationNeedsSync('/inventory/stocktake', 'GET')).toBe(false);
+ expect(operationNeedsSync('/inventory/stocktake/s1', 'GET')).toBe(false);
+ expect(operationNeedsSync('/inventory/stocktake/s1?type=sheet', 'GET')).toBe(true);
+ expect(operationNeedsSync('/inventory/operation-batches?page=2', 'GET')).toBe(true);
+ expect(operationNeedsSync('/purchases/p/receive', 'POST')).toBe(true);
+ expect(operationNeedsSync('/inventory/stocktake/s1', 'PUT')).toBe(true);
 });

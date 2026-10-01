@@ -40,7 +40,7 @@ async function isolated(run: (tx: Prisma.TransactionClient, f: any) => Promise<v
             const batch = await tx.batch.create({ data: { inventoryId: inventory.id, quantity: 6, initialQuantity: 6, batchNumber: 'PATH', costPrice: 4, expiryDate } });
             await tx.inventory.create({ data: { branchId: foreign.id, drugId: drug.id, price: 999, cost: 999 } });
             const warehouse = await tx.warehouse.create({ data: { name: 'Path warehouse' } });
-            state.tenant = { tenantBranchWhere: { branch: { organizationId: org.id } }, userPermissions: { canViewProfitReport: true } };
+            state.tenant = { tenantBranchWhere: { branch: { organizationId: org.id } }, userPermissions: { canViewProfitReport: true, canViewInventory: true } };
             await run(tx, { org, other, branch, foreign, drug, inventory, batch, warehouse, expiryDate });
             expect(['', '""']).toContain((await tx.$queryRaw<{ path: string }[]>`SELECT current_setting('search_path') AS path`)[0].path);
             throw rollback;
@@ -58,7 +58,38 @@ it('executes composed inventory CTEs and mobile filtering with an empty path and
         const mobile = await tx.$queryRaw<any[]>(buildMobileInventoryQuery(new URLSearchParams({ search: 'Path', status: 'low-stock', sort, direction: 'desc' }), opts.tenantBranchWhere));
         expect(mobile[0].ids).toEqual([f.inventory.id]);
         expect(mobile[0].totalValue).toBe(60);
+        expect(mobile[0].items).toEqual([{
+            id: f.inventory.id, drugId: f.drug.id, branchId: f.branch.id,
+            barcode: f.drug.barcode, drugName: 'Path medicine', tradeName: 'Path medicine',
+            scientificName: 'Test', quantity: 6, expiryDate: f.expiryDate.toISOString(),
+            price: 10, reorderLevel: 10, isQuickSale: false,
+        }]);
     }
+}));
+
+it('mobile inventory rows match Prisma batch quantities and expiry while zero and negative batches remain accounted for', () => isolated(async (tx, f) => {
+    await tx.batch.create({ data: { inventoryId: f.inventory.id, quantity: 0, initialQuantity: 0, batchNumber: 'EMPTY', costPrice: 4, expiryDate: new Date('2000-01-01') } });
+    await tx.batch.create({ data: { inventoryId: f.inventory.id, quantity: -2, initialQuantity: 0, batchNumber: 'NEGATIVE', costPrice: 4, expiryDate: new Date('2001-01-01') } });
+    const [result] = await tx.$queryRaw<any[]>(buildMobileInventoryQuery(new URLSearchParams(), state.tenant.tenantBranchWhere));
+    const old = await tx.inventory.findMany({ where: state.tenant.tenantBranchWhere, include: { drug: true, batches: true } });
+    expect(result.items).toHaveLength(old.length);
+    expect(result.items[0]).toMatchObject({ quantity: old[0].batches.reduce((sum, b) => sum + b.quantity, 0), expiryDate: f.expiryDate.toISOString(), price: old[0].price });
+    expect(result.totalValue).toBe(40);
+    const [foreign] = await tx.$queryRaw<any[]>(buildMobileInventoryQuery(new URLSearchParams({ branchId: f.foreign.id }), state.tenant.tenantBranchWhere));
+    expect(foreign.items).toEqual([]); expect(foreign.total).toBe(0); expect(foreign.counts.all).toBe(0);
+}));
+
+it('mobile inventory uses ordered pagination without omitting rows or changing the full scoped total', () => isolated(async (tx, f) => {
+    const drugs = Array.from({ length: 52 }, (_, i) => ({ id: randomUUID(), barcode: randomUUID(), tradeName: `Paged ${String(i).padStart(2, '0')}`, scientificName: 'Test', alternatives: [] }));
+    await tx.globalDrug.createMany({ data: drugs });
+    await tx.inventory.createMany({ data: drugs.map(d => ({ drugId: d.id, branchId: f.branch.id, price: 10, cost: 4 })) });
+    const scope = state.tenant.tenantBranchWhere;
+    const [first] = await tx.$queryRaw<any[]>(buildMobileInventoryQuery(new URLSearchParams({ search: 'Paged', page: '1' }), scope));
+    const [second] = await tx.$queryRaw<any[]>(buildMobileInventoryQuery(new URLSearchParams({ search: 'Paged', page: '2' }), scope));
+    expect(first.items.map((i: any) => i.drugName)).toEqual(drugs.slice(0, 50).map(d => d.tradeName));
+    expect(second.items.map((i: any) => i.drugName)).toEqual(drugs.slice(50).map(d => d.tradeName));
+    expect(first.total).toBe(52); expect(second.total).toBe(52);
+    expect(first.totalValue).toBe(60); expect(second.totalValue).toBe(60);
 }));
 
 it('executes the composed daily sales query and real document helper', () => isolated(async (tx, f) => {

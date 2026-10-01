@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { withNetworkDeadline } from './network-deadline';
 
 import { getBaseUrl, resetSessionExpired, setCachedToken, rotateCachedToken, getSessionGeneration } from './api';
 
@@ -99,28 +100,31 @@ async function startMobileSession(userId: string, jwtToken?: string): Promise<vo
  * - network error → resolves silently (offline mode allowed)
  */
 async function refreshMobileSession(userId: string): Promise<void> {
-    try {
-        const deviceToken = await getOrCreateDeviceToken();
-        const baseUrl = await getBaseUrl();
-        const token = await secureGet(TOKEN_KEY);
-        const res = await fetch(`${baseUrl}/mobile/session`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({ userId, deviceToken }),
-        });
-        if (res.status === 403) {
-            const data = await res.json().catch(() => ({}));
-            throw new MobileSessionLimitError(
-                data.error || 'تم تجاوز الحد الأقصى لجلسات الموبايل في باقتك.'
-            );
+    return withNetworkDeadline(async signal => {
+        try {
+            const deviceToken = await getOrCreateDeviceToken();
+            const baseUrl = await getBaseUrl();
+            const token = await secureGet(TOKEN_KEY);
+            const res = await fetch(`${baseUrl}/mobile/session`, {
+                method: 'POST',
+                signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ userId, deviceToken }),
+            });
+            if (res.status === 403) {
+                const data = await res.json().catch(() => ({}));
+                throw new MobileSessionLimitError(
+                    data.error || 'تم تجاوز الحد الأقصى لجلسات الموبايل في باقتك.'
+                );
+            }
+        } catch (err: any) {
+            if (err instanceof MobileSessionLimitError) throw err;
+            // Network/server error → allow offline access silently
         }
-    } catch (err: any) {
-        if (err instanceof MobileSessionLimitError) throw err;
-        // Network/server error → allow offline access silently
-    }
+    });
 }
 
 async function endMobileSession(): Promise<void> {
@@ -218,47 +222,50 @@ export const authService = {
      * - network/5xx error → resolves silently, keeping the current token (offline).
      */
     async refreshAccessToken(): Promise<void> {
-        const generation = getSessionGeneration();
-        const previousUser = await this.getCurrentUser();
-        const token = await secureGet(TOKEN_KEY);
-        if (!token) return; // not logged in
+        return withNetworkDeadline(async signal => {
+            const generation = getSessionGeneration();
+            const previousUser = await this.getCurrentUser();
+            const token = await secureGet(TOKEN_KEY);
+            if (!token) return; // not logged in
 
-        const baseUrl = await getBaseUrl();
-        let res: Response;
-        try {
-            res = await fetch(`${baseUrl}/auth/refresh`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
-        } catch {
-            return; // offline — keep using the stored token
-        }
-
-        if (generation !== getSessionGeneration() || await secureGet(TOKEN_KEY) !== token) return;
-        if (res.status === 200) {
-            const data = await res.json().catch(() => null);
-            if (data?.token) {
-                if (generation !== getSessionGeneration()) return;
-                const sameScope = previousUser && data.user && ['id','role','branchId','organizationId','permissions'].every(key => (previousUser as any)[key] === data.user[key]);
-                if (sameScope) {
-                    if (!rotateCachedToken(data.token, token, generation)) return;
-                } else setCachedToken(data.token);
-                await secureSet(TOKEN_KEY, data.token);
-                if (data.user) await secureSet(USER_KEY, JSON.stringify(data.user));
+            const baseUrl = await getBaseUrl();
+            let res: Response;
+            try {
+                res = await fetch(`${baseUrl}/auth/refresh`, {
+                    method: 'POST',
+                    signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+            } catch {
+                return; // offline — keep using the stored token
             }
-            return;
-        }
 
-        if (res.status === 401 || res.status === 403) {
-            const data = await res.json().catch(() => ({}));
-            throw new SessionInvalidError(
-                data?.message || 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.'
-            );
-        }
-        // 5xx or other — don't disturb the session; treat like offline.
+            if (generation !== getSessionGeneration() || await secureGet(TOKEN_KEY) !== token) return;
+            if (res.status === 200) {
+                const data = await res.json().catch(() => null);
+                if (data?.token) {
+                    if (generation !== getSessionGeneration()) return;
+                    const sameScope = previousUser && data.user && ['id','role','branchId','organizationId','permissions'].every(key => (previousUser as any)[key] === data.user[key]);
+                    if (sameScope) {
+                        if (!rotateCachedToken(data.token, token, generation)) return;
+                    } else setCachedToken(data.token);
+                    await secureSet(TOKEN_KEY, data.token);
+                    if (data.user) await secureSet(USER_KEY, JSON.stringify(data.user));
+                }
+                return;
+            }
+
+            if (res.status === 401 || res.status === 403) {
+                const data = await res.json().catch(() => ({}));
+                throw new SessionInvalidError(
+                    data?.message || 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.'
+                );
+            }
+            // 5xx or other — don't disturb the session; treat like offline.
+        });
     },
 
     async getCurrentUser(): Promise<User | null> {

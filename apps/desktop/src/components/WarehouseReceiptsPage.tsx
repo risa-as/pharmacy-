@@ -75,6 +75,14 @@ const STAGE: Record<Stage, { label: string; tone: string; icon: typeof Clock3 }>
 };
 const READY: Stage[] = ["SHIPPED", "DELIVERED"];
 type Filter = "ACTIVE" | "READY" | "AWAITING_SHIPMENT" | "COMPLETED" | "CANCELLED" | "";
+/** "لا توجد طلبات …" for an empty filter. */
+const FILTER_EMPTY: Partial<Record<Filter, string>> = {
+  ACTIVE: "بانتظار الاستلام حالياً",
+  READY: "جاهزة للاستلام حالياً",
+  AWAITING_SHIPMENT: "بانتظار الشحن حالياً",
+  COMPLETED: "مستلمة",
+  CANCELLED: "ملغاة",
+};
 const matches = (stage: Stage, filter: Filter) =>
   !filter ||
   (filter === "ACTIVE" ? !["COMPLETED", "CANCELLED"].includes(stage)
@@ -484,17 +492,39 @@ export default function WarehouseReceiptsPage({ userId = "" }: { userId?: string
                   <ChevronLeft size={16} className="text-muted-foreground" />
                 </button>
               ))}
-              {!loaded && busy && [0, 1, 2, 3].map((n) => (
-                <div key={n} className="grid grid-cols-[1.2fr_1.4fr_1fr_0.7fr_1fr_1fr_auto] items-center gap-3 border-b border-border px-4 py-4 last:border-b-0">
-                  {[24, 32, 20, 8, 20, 28].map((w, i) => <span key={i} className="h-3.5 rounded-md bg-muted motion-safe:animate-pulse" style={{ width: `${w * 4}px`, maxWidth: "100%" }} />)}
-                  <span className="w-4" />
+              {/* Placeholders whenever there is no row to show and a load is running:
+                  before the first list (not tied to "busy", which starts a render later)
+                  and on a refresh of an empty list kept from the last visit. */}
+              {!error && (!loaded || (busy && !visible.length)) && (
+                <div role="status" aria-label="جارٍ تحميل المشتريات">
+                  {[0, 1, 2, 3].map((n) => (
+                    <div key={n} className="grid grid-cols-[1.2fr_1.4fr_1fr_0.7fr_1fr_1fr_auto] items-center gap-3 border-b border-border px-4 py-4 last:border-b-0">
+                      {[24, 32, 20, 8, 20, 28].map((w, i) => <span key={i} className="h-3.5 rounded-md bg-muted-foreground/20 motion-safe:animate-pulse" style={{ width: `${w * 4}px`, maxWidth: "100%" }} />)}
+                      <span className="w-4" />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
               {loaded && !busy && !visible.length && (
                 <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
                   <Boxes size={36} className="opacity-40" />
-                  <p className="font-semibold">{rows.length ? "لا توجد نتائج مطابقة" : "لا توجد مشتريات مذاخر بعد"}</p>
-                  <p className="text-sm">تظهر هنا الطلبات التي اعتمدها المذخر عند وصولها.</p>
+                  {!rows.length ? (
+                    <>
+                      <p className="font-semibold">لا توجد مشتريات مذاخر بعد</p>
+                      <p className="text-sm">تظهر هنا الطلبات التي اعتمدها المذخر عند وصولها.</p>
+                    </>
+                  ) : query.trim() ? (
+                    <>
+                      <p className="font-semibold">لا توجد نتائج للبحث «{query.trim()}»</p>
+                      <button className="text-sm font-semibold text-primary hover:underline" onClick={() => setQuery("")}>مسح البحث</button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold">لا توجد طلبات {FILTER_EMPTY[filter] ?? "في هذا التصنيف"}</p>
+                      <p className="text-sm">توجد {num(rows.length)} من مشتريات المذاخر في الحالات الأخرى.</p>
+                      <button className="text-sm font-semibold text-primary hover:underline" onClick={() => setFilter("")}>عرض الكل</button>
+                    </>
+                  )}
                 </div>
               )}
             </div>

@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { dbService } from './db';
 import { apiService, request, getSessionGeneration, SessionChangedError } from './api';
 import { authService } from './auth';
+import { foregroundReads } from '../utils/foreground-work';
 
 interface SyncCallbacks {
     onStart?: (key: string) => void;
@@ -43,7 +44,7 @@ export const syncService = {
     isSyncing: false,
 
     // Sync Data (Upload Sales, Download Products)
-    async syncData() {
+    async syncData(options: { prioritizeForeground?: boolean } = {}) {
         if (this.isSyncing) {
             console.log('Sync already in progress, skipping.');
             return;
@@ -131,6 +132,10 @@ export const syncService = {
                 hadErrors = true;
                 console.error('Error syncing sales:', e);
             }
+
+            // Pending sales above remain immediate. Only startup bulk reads yield
+            // to screen loads, with a bound so offline snapshots still refresh.
+            if (options.prioritizeForeground) await foregroundReads.waitForIdle();
 
             // 2. Download Products (Inventory)
             try {

@@ -1,5 +1,4 @@
 "use client";
-import { HandCoins } from "@/app/ui/debts/debt-icon";
 
 
 import Link from "next/link";
@@ -26,7 +25,6 @@ import {
   BookOpen,
   FileSpreadsheet,
   Settings as SettingsIcon,
-  Wallet,
   ArrowRightLeft,
   Undo2,
   CheckSquare,
@@ -129,10 +127,6 @@ const sections: NavSection[] = [
   },
   {
     label: "",
-    links: [{ name: "نقطة البيع", href: "/dashboard/pos-temp", icon: ShoppingCart }],
-  },
-  {
-    label: "",
     links: [
       {
         name: "الصيدلة",
@@ -170,7 +164,7 @@ const sections: NavSection[] = [
             ],
           },
           // { name: "نقطة البيع (مؤقت)", href: "/dashboard/pos-temp" },
-          { name: "دفتر الديون", href: "/dashboard/debts", icon: HandCoins },
+          { name: "دفتر الديون", href: "/dashboard/debts" },
           {
             name: "حركة المنتجات",
             href: "/dashboard/inventory/product-movement",
@@ -241,7 +235,7 @@ const sections: NavSection[] = [
             href: "/dashboard/reports/branch-comparison",
             plan: "enterprise",
           },
-          { name: "الصندوق", href: "/dashboard/finance/safes", icon: Wallet },
+          { name: "الصندوق", href: "/dashboard/finance/safes" },
           { name: "المصاريف", href: "/dashboard/expenses" },
           {
             name: "الفريق",

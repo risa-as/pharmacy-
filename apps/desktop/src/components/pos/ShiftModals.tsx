@@ -1,6 +1,19 @@
 import { Clock, X, Banknote } from "lucide-react";
 import { formatIQD } from "./pos-utils";
 import type { ShiftSummary } from "./pos-types";
+import { rawAmount, groupAmount, caretAfterFormat } from "../../lib/number-input";
+
+/** Shows "1,596,050" while typing; hands the raw "1596050" to the state. */
+function onGroupedAmountChange(e: React.ChangeEvent<HTMLInputElement>, set: (raw: string) => void) {
+    const input = e.currentTarget;
+    const typed = input.value;
+    const caret = input.selectionStart ?? typed.length;
+    const raw = rawAmount(typed);
+    const next = caretAfterFormat(typed, caret, groupAmount(raw));
+    set(raw);
+    // After React re-renders the formatted value, put the caret back after the same digit.
+    requestAnimationFrame(() => { try { input.setSelectionRange(next, next); } catch { /* not focused */ } });
+}
 
 interface ShiftModalsProps {
     // Shift Open
@@ -151,11 +164,13 @@ export default function ShiftModals({
                                     <div>
                                         <label className="block text-sm font-bold text-foreground mb-1">الرصيد الفعلي المتوفر الآن (د.ع)</label>
                                         <input
-                                            type="number"
+                                            type="text"
+                                            inputMode="decimal"
+                                            dir="ltr"
                                             placeholder="أدخل المبلغ بعد عدّ الدرج"
-                                            className="w-full bg-background text-foreground border border-border rounded-lg px-3 py-3 text-lg shadow-sm focus:outline-none focus:border-destructive focus:ring-1 focus:ring-destructive"
-                                            value={actualCash}
-                                            onChange={(e) => onActualCashChange(e.target.value)}
+                                            className="w-full bg-background text-foreground border border-border rounded-lg px-3 py-3 text-lg text-right tabular-nums shadow-sm focus:outline-none focus:border-destructive focus:ring-1 focus:ring-destructive"
+                                            value={groupAmount(actualCash)}
+                                            onChange={(e) => onGroupedAmountChange(e, onActualCashChange)}
                                         />
                                         {actualCash && (
                                             <div className="mt-2 text-sm flex justify-between">

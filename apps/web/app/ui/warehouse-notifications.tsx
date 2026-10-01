@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Bell, BellOff, Check, X } from 'lucide-react';
+import { Bell, BellOff, Check, Warehouse, X } from 'lucide-react';
 
 // createdAt يعود فعلاً من /api/notifications/in-app (لا select في الاستعلام،
 // فالسجل كامل)، وكان النوع هنا يُسقطه فقط — فأُضيف لعرض «قبل ٥ دقائق».
@@ -97,6 +97,9 @@ export default function WarehouseNotifications({ portal = false }: { portal?: bo
     };
 
     const ordersHref = portal ? '/warehouse/orders' : '/dashboard/purchases/warehouse-orders';
+    // In the pharmacy dashboard a plain bell looked like the stock-alerts card; a warehouse
+    // icon says whose notices these are. The warehouse portal keeps the bell.
+    const Icon = portal ? Bell : Warehouse;
 
     return <div ref={rootRef} className="relative print:hidden" dir="rtl">
         <button
@@ -109,7 +112,7 @@ export default function WarehouseNotifications({ portal = false }: { portal?: bo
                 open ? 'border-border bg-muted text-foreground' : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
         >
-            <Bell className="h-[18px] w-[18px] shrink-0" />
+            <Icon className="h-[18px] w-[18px] shrink-0" />
             <span className="hidden sm:inline">تنبيهات المذاخر</span>
             {count > 0 && (
                 <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground">

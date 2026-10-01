@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "@/app/lib/tenant-utils";
-import { checkFeatureAccess } from "@/app/lib/saas-guards";
+import { getPlanFeatures } from "@/app/lib/saas-guards";
 export const dynamic = "force-dynamic";
 export async function GET() {
   const ctx = await getTenantContext();
   if (ctx instanceof NextResponse) return ctx;
   const features: Record<string, boolean> = {};
+  const planFeatures = ctx.organizationId ? await getPlanFeatures(ctx.organizationId) : null;
   for (const name of [
     "warehouseManagement",
     "interBranchTransfers",
     "supplierManagement",
   ] as const)
     features[name] = ctx.organizationId
-      ? (await checkFeatureAccess(ctx.organizationId, name)).allowed
+      ? planFeatures![name]
       : ctx.user.role === "SUPER_ADMIN";
   return NextResponse.json(
     {

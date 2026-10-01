@@ -36,6 +36,12 @@ const THEME = process.env.DEMO_THEME === 'dark' ? 'dark' : 'light'; // the app r
       await (what.startsWith('css:') ? page.locator(what.slice(4)) : page.getByText(what, { exact: true })).first().click();
       await page.waitForTimeout(1200);
     }
+    // Capture actual loaded data, never a skeleton or an in-progress calculation.
+    const ready = options.find((o) => o.startsWith('ready='));
+    if (ready) await page.locator(ready.slice(6)).first().waitFor({ state: 'visible', timeout: 90000 });
+    const gone = options.find((o) => o.startsWith('gone='));
+    if (gone) await page.getByText(gone.slice(5), { exact: true }).waitFor({ state: 'hidden', timeout: 90000 });
+    await page.evaluate(() => document.fonts.ready);
     // The dashboard scrolls inside its own container, so "full" cannot reach lower content: scroll it into view instead.
     const scroll = options.find((o) => o.startsWith('scroll='));
     if (scroll) {

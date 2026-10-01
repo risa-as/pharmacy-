@@ -26,6 +26,17 @@ if (hasWorkspaceModules) {
     ];
 }
 
+// Local isolated checkouts may link to a separately installed Expo runtime.
+// Metro must see the real dependency directory to resolve that junction.
+const localModules = path.join(projectRoot, 'node_modules');
+if (fs.existsSync(localModules)) {
+    const realModules = fs.realpathSync(localModules);
+    if (path.normalize(realModules) !== path.normalize(localModules)) {
+        config.watchFolders = [...(config.watchFolders || []), realModules];
+        config.resolver.nodeModulesPaths.unshift(realModules);
+    }
+}
+
 config.resolver.blockList = [
     /.*\/apps\/web\/.next\/.*/,
     /.*\/apps\/desktop\/dist\/.*/,

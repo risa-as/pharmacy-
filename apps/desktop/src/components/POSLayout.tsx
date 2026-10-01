@@ -17,6 +17,8 @@ import ZainCashModal from "./pos/ZainCashModal";
 import { HeldInvoicesListModal } from "./pos/HeldInvoicesModal";
 import { ipcInvoke, loadHeldInvoices, saveHeldInvoices, formatIQD, saleLabel } from "./pos/pos-utils";
 import type { Product, CartItem, Patient, ShiftSummary, DrugInteraction, SaleData, HeldInvoice } from "./pos/pos-types";
+import { addOne, knownByBarcode, sharedLookup, catalogueMayApply, searchAnswerMayApply } from "../lib/pos-scan";
+import { cacheKey, readCache, revalidate } from "../lib/page-cache";
 
 export default function POSLayout({ user }: { user: any }) {
     // ─── Product & Search ───────────────────────────────────────────────────
@@ -28,6 +30,13 @@ export default function POSLayout({ user }: { user: any }) {
 
     // ─── Cart ────────────────────────────────────────────────────────────────
     const [cart, setCart] = useState<CartItem[]>([]);
+    // Fast repeated scans arrive before React re-renders: decisions use this live
+    // mirror of the cart (kept in step by each add and synced after every render).
+    const cartRef = useRef<CartItem[]>([]);
+    useEffect(() => { cartRef.current = cart; }, [cart]);
+    // Products seen this session by barcode, and barcode lookups still in flight.
+    const barcodeCacheRef = useRef(new Map<string, Product>());
+    const pendingLookupsRef = useRef(new Map<string, Promise<Product | null>>());
 
     // ─── Patient & Pharmacovigilance ─────────────────────────────────────────
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -162,15 +171,26 @@ export default function POSLayout({ user }: { user: any }) {
         return () => clearInterval(connectionInterval);
     }, []);
 
-    // Initial product load — runs once on mount
+    // Initial product load: the list this user last saw in this branch appears at
+    // once (page cache), then a fresh one replaces it in the background.
+    const productsKeyRef = useRef("");
+    // What the grid shows now: a text search (its term) or the catalogue. Answers
+    // that arrive later are applied only if they still match it.
+    const searchTermRef = useRef("");
+    const showingSearchRef = useRef(false);
     useEffect(() => {
         if (!window.ipcRenderer) return;
-        setLoading(true);
-        ipcInvoke('get-products', { searchTerm: "", branchId: user?.branchId })
-            .then(setProducts)
-            .catch(console.error)
+        const key = cacheKey(user?.id, user?.branchId, 'pos-products');
+        productsKeyRef.current = key;
+        const cached = readCache<Product[]>(key);
+        if (cached) setProducts(cached.value);
+        else setLoading(true);
+        revalidate(key, () => ipcInvoke<Product[]>('get-products', { searchTerm: "", branchId: user?.branchId }),
+            // Never over a search the user is looking at (it is cached for when the search is cleared).
+            (k) => k === productsKeyRef.current && catalogueMayApply({ showingSearch: showingSearchRef.current, currentTerm: searchTermRef.current }), setProducts)
+            .then((r) => { if (r === 'failed') console.error('فشل في تحميل المنتجات'); })
             .finally(() => setLoading(false));
-    }, [user?.branchId]);
+    }, [user?.id, user?.branchId]);
 
     // Load persisted held invoices for this user
     useEffect(() => {
@@ -179,16 +199,27 @@ export default function POSLayout({ user }: { user: any }) {
 
     // Text search — only fires for manual typing (>= 2 chars), NOT for barcode scans
     useEffect(() => {
+        searchTermRef.current = searchTerm;
         if (debounceRef.current) clearTimeout(debounceRef.current);
         if (!searchTerm || searchTerm.length < 2) {
             setShowSearchResults(false);
+            // Leaving a text search: the grid goes back to the catalogue (not the last results).
+            if (showingSearchRef.current) {
+                showingSearchRef.current = false;
+                const catalogue = readCache<Product[]>(productsKeyRef.current);
+                if (catalogue) setProducts(catalogue.value);
+            }
             return;
         }
         debounceRef.current = setTimeout(async () => {
             if (!window.ipcRenderer) return;
+            const issued = searchTerm;
             setLoading(true);
             try {
-                const data = await ipcInvoke('get-products', { searchTerm, branchId: user?.branchId });
+                const data = await ipcInvoke('get-products', { searchTerm: issued, branchId: user?.branchId });
+                // The user typed on (or cleared the box) meanwhile: an older search is not shown.
+                if (!searchAnswerMayApply(issued, searchTermRef.current)) return;
+                showingSearchRef.current = true;
                 setProducts(data);
                 setShowSearchResults(true);
             } catch (error) {
@@ -273,21 +304,36 @@ export default function POSLayout({ user }: { user: any }) {
             }
             return;
         }
+        if (product.barcode) barcodeCacheRef.current.set(product.barcode, product);
         // Stock ceiling checked outside the setCart updater — updaters can run
         // during render, where triggering the dialog host would be a side effect.
-        const existingItem = cart.find((item) => item.id === product.id);
-        if (existingItem && existingItem.quantity >= product.stock) {
+        // It reads the live mirror, not the last render, so rapid scans count right.
+        const result = addOne(cartRef.current, product);
+        if (!result.ok) {
             void showAlert({ variant: "warning", title: "الكمية غير كافية", message: "لا يمكن إضافة المزيد، الكمية المطلوبة تتجاوز الرصيد المتوفر." });
             return;
         }
+        cartRef.current = result.cart;
         setCart((prev) => {
-            const existing = prev.find((item) => item.id === product.id);
-            if (existing) {
-                if (existing.quantity >= product.stock) return prev;
-                return prev.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
-            }
-            return [...prev, { ...product, quantity: 1 }];
+            const next = addOne(prev, product);
+            return next.ok ? next.cart : prev;
         });
+    };
+
+    const lookupBarcode = (barcode: string) =>
+        sharedLookup(pendingLookupsRef.current, barcode, (b) => ipcInvoke<Product | null>('get-product-by-barcode', { barcode: b, branchId: user?.branchId }));
+
+    /** Keeps the known product current (stock, price) without delaying the scan that used it. */
+    const refreshScanned = (barcode: string) => {
+        lookupBarcode(barcode)
+            .then((fresh) => {
+                if (!fresh) return;
+                barcodeCacheRef.current.set(barcode, fresh);
+                setProducts(prev => prev.some(p => p.id === fresh.id) ? prev.map(p => p.id === fresh.id ? fresh : p) : [...prev, fresh]);
+                // Only the stock: a manually overridden price in the cart is kept.
+                setCart(prev => prev.map(i => i.id === fresh.id ? { ...i, stock: fresh.stock } : i));
+            })
+            .catch(console.error);
     };
 
     const removeFromCart = (id: string) => setCart((prev) => prev.filter((item) => item.id !== id));
@@ -327,8 +373,15 @@ export default function POSLayout({ user }: { user: any }) {
             // Clear input immediately — before the async call so there's no grid flash
             setSearchTerm("");
             setShowSearchResults(false);
-            // Fast path: direct barcode lookup (single product, indexed query < 50ms)
-            const byBarcode = await ipcInvoke<any>('get-product-by-barcode', { barcode: term, branchId: user?.branchId });
+            // Already known (in the cart or scanned before): add now, refresh in the background.
+            const known = knownByBarcode(term, cartRef.current, barcodeCacheRef.current);
+            if (known) {
+                addToCart(known);
+                refreshScanned(term);
+                return;
+            }
+            // First scan of this barcode: one lookup, shared by repeated scans while it runs.
+            const byBarcode = await lookupBarcode(term);
             if (byBarcode) {
                 addToCart(byBarcode);
                 setProducts(prev => prev.some(p => p.id === byBarcode.id)
@@ -352,7 +405,9 @@ export default function POSLayout({ user }: { user: any }) {
                 const res = await ipcInvoke('get-shift-summary', { userId: user.id });
                 if (res.success) {
                     setShiftSummary(res.summary);
-                    setActualCashAmount("");
+                    // Start from the expected drawer balance; the cashier edits it only if the count differs.
+                    const expected = Number(res.summary?.expectedCash);
+                    setActualCashAmount(Number.isFinite(expected) ? String(expected) : "");
                     setShowShiftCloseModal(true);
                 } else {
                     void showAlert({ variant: "error", title: "فشل في جلب ملخص الوردية", message: res.message });

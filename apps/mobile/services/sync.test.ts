@@ -155,3 +155,25 @@ describe('syncService locking', () => {
 it('aborts once on account switch without saving old inventory or claiming success',async()=>{const pending=deferred<any[]>();const {syncService,session,db,api}=await loadSyncService({api:{getInventory:vi.fn().mockReturnValue(pending.promise)}});const done=vi.fn(),stop=vi.fn();syncService.setCallbacks({onDone:done,onStop:stop});const run=syncService.syncData();await vi.waitFor(()=>expect(api.getInventory).toHaveBeenCalled());session.generation++;pending.resolve([{id:'old'}]);await run;expect(db.saveProducts).not.toHaveBeenCalled();expect(api.getDebts).not.toHaveBeenCalled();expect(done).not.toHaveBeenCalled();expect(stop).toHaveBeenCalledOnce();expect(syncService.isSyncing).toBe(false);});
 it('same-account token rotation does not cancel sync',async()=>{const {syncService,auth,db}=await loadSyncService();auth.getToken.mockResolvedValueOnce('old.jwt.token').mockResolvedValue('new.jwt.token');const done=vi.fn();syncService.setCallbacks({onDone:done});await syncService.syncData();expect(db.saveProducts).toHaveBeenCalled();expect(done).toHaveBeenCalledOnce();});
 it('partial failure stops loading without marking success',async()=>{const {syncService}=await loadSyncService({api:{getInventory:vi.fn().mockRejectedValue(new Error('network'))}});const done=vi.fn(),stop=vi.fn();syncService.setCallbacks({onDone:done,onStop:stop});await syncService.syncData();expect(done).not.toHaveBeenCalled();expect(stop).toHaveBeenCalledOnce();});
+
+it('startup uploads pending sales before waiting for foreground reads, then refreshes inventory', async () => {
+    const gate=deferred();
+    const {syncService,api,db}=await loadSyncService({db:{getPendingSales:vi.fn().mockResolvedValue([{id:1,createdAt:'now',idempotencyKey:'saved',payload:{items:[],totalAmount:10}}])}});
+    const {foregroundReads}=await import('../utils/foreground-work');
+    vi.spyOn(foregroundReads,'waitForIdle').mockReturnValue(gate.promise);
+    const running=syncService.syncData({prioritizeForeground:true});
+    await vi.waitFor(()=>expect(foregroundReads.waitForIdle).toHaveBeenCalledOnce());
+    expect(api.createSale).toHaveBeenCalledWith({items:[],totalAmount:10},'saved');
+    expect(db.deleteOfflineSale).toHaveBeenCalledWith(1);
+    expect(api.getInventory).not.toHaveBeenCalled();
+    gate.resolve(); await running; expect(api.getInventory).toHaveBeenCalledOnce();
+});
+it('an account switch during the startup wait does not download the old account inventory', async () => {
+    const gate=deferred(); const {syncService,api,session}=await loadSyncService();
+    const {foregroundReads}=await import('../utils/foreground-work');
+    vi.spyOn(foregroundReads,'waitForIdle').mockReturnValue(gate.promise);
+    const running=syncService.syncData({prioritizeForeground:true});
+    await vi.waitFor(()=>expect(foregroundReads.waitForIdle).toHaveBeenCalledOnce());
+    session.generation++; gate.resolve(); await running;
+    expect(api.getInventory).not.toHaveBeenCalled(); expect(syncService.isSyncing).toBe(false);
+});

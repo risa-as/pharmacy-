@@ -15,6 +15,7 @@ import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
+import { getTopSellers } from "@/app/lib/top-sellers";
 
 export default async function TopSellersPage(
   props: {
@@ -22,9 +23,13 @@ export default async function TopSellersPage(
   }
 ) {
   const searchParams = await props.searchParams;
-  const period =
-    typeof searchParams.period === "string"
-      ? parseInt(searchParams.period)
+  // "month" = the current calendar month in Baghdad time (the dashboard links here with it);
+  // a number = the last N days.
+  const isMonth = searchParams.period === "month";
+  const period: number | "month" = isMonth
+    ? "month"
+    : typeof searchParams.period === "string"
+      ? parseInt(searchParams.period) || 30
       : 30;
   const branchId =
     typeof searchParams.branch === "string" ? searchParams.branch : undefined;
@@ -33,72 +38,39 @@ export default async function TopSellersPage(
   if (tenantCtx instanceof NextResponse) redirect("/login");
   const { tenantBranchWhere, tenantWhere } = tenantCtx;
 
-  const sinceDate = new Date();
-  sinceDate.setDate(sinceDate.getDate() - period);
+  const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
+  const nowIraq = new Date(Date.now() + IRAQ_OFFSET);
+  const sinceDate = period === "month"
+    ? new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), 1) - IRAQ_OFFSET)
+    : new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-  const saleWhere = branchId
-    ? { sale: { createdAt: { gte: sinceDate }, branchId, ...tenantWhere } }
-    : { sale: { createdAt: { gte: sinceDate }, ...tenantBranchWhere } };
-
-  // 1. Group SaleItems by drugId, ordered by quantity
-  const grouped = await prisma.saleItem.groupBy({
-    by: ["drugId"],
-    where: saleWhere,
-    _sum: { quantity: true },
-    orderBy: { _sum: { quantity: "desc" } },
-    take: 30,
+  // Quantities and revenue are net of returns from these sales; ties are ordered by name.
+  const sellers = await getTopSellers({
+    saleScope: branchId ? { branchId, ...tenantWhere } : tenantBranchWhere,
+    since: sinceDate,
+    limit: 30,
+    withRevenue: true,
   });
-
-  // 2. Get total quantities sold to calculate share %
-  const totalQuantitySold = grouped.reduce(
-    (s: any, g: any) => s + (g._sum.quantity || 0),
-    0,
-  );
-
-  // 3. Populate drug names and revenue
-  const items = await Promise.all(
-    grouped.map(async (g: any, idx: any) => {
-      const drug = await prisma.globalDrug.findUnique({
-        where: { id: g.drugId },
-        select: { tradeName: true, barcode: true },
-      });
-
-      const saleItems = await prisma.saleItem.findMany({
-        where: {
-          drugId: g.drugId,
-          ...saleWhere,
-        },
-        select: { quantity: true, price: true },
-      });
-
-      const totalRevenue = saleItems.reduce(
-        (acc: any, si: any) => acc + si.quantity * si.price,
-        0,
-      );
-
-      const qty = g._sum.quantity || 0;
-      const share = totalQuantitySold > 0 ? (qty / totalQuantitySold) * 100 : 0;
-
-      return {
-        rank: idx + 1,
-        name: drug?.tradeName || "غير معروف",
-        barcode: drug?.barcode || "",
-        quantity: qty,
-        revenue: totalRevenue,
-        share,
-      };
-    }),
-  );
+  const totalQuantitySold = sellers.reduce((s, g) => s + g.quantity, 0);
+  const items = sellers.map((g, idx) => ({
+    rank: idx + 1,
+    name: g.name,
+    barcode: g.barcode,
+    quantity: g.quantity,
+    revenue: g.revenue,
+    share: totalQuantitySold > 0 ? (g.quantity / totalQuantitySold) * 100 : 0,
+  }));
 
   const totalRevenue = items.reduce((s: any, i: any) => s + i.revenue, 0);
-  const periods = [
+  const periods: { label: string; value: number | "month" }[] = [
+    { label: "هذا الشهر", value: "month" },
     { label: "7 أيام", value: 7 },
     { label: "30 يوم", value: 30 },
     { label: "90 يوم", value: 90 },
     { label: "سنة", value: 365 },
   ];
 
-  const buildPeriodUrl = (p: number) => {
+  const buildPeriodUrl = (p: number | "month") => {
     const params = new URLSearchParams();
     params.set("period", String(p));
     if (branchId) params.set("branch", branchId);

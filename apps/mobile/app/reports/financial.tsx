@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -69,34 +70,50 @@ export default function FinancialReportScreen() {
     const [drugLimit, setDrugLimit]         = useState(DRUGS_PAGE);
     const [showComparison, setShowComparison] = useState(false);
 
-    const range = useMemo(() => periodRange(period), [period, refreshing]); // eslint-disable-line react-hooks/exhaustive-deps
+    const [refreshEpoch, setRefreshEpoch] = useState(0);
+    const pendingAnalysis = useRef<AbortController | null>(null);
+    const range = useMemo(() => periodRange(period), [period, refreshEpoch]);
 
     const fetchAnalysis = useCallback(async () => {
+        pendingAnalysis.current?.abort();
+        const controller = new AbortController();
+        pendingAnalysis.current = controller;
         try {
             let q = `?from=${range.from.toISOString()}&to=${range.to.toISOString()}`;
             if (selectedBranch) q += `&branchId=${selectedBranch}`;
-            setAnalysis(await request<AnalysisData>(`/reports/profit-analysis${q}`));
+            const result = await request<AnalysisData>(`/reports/profit-analysis${q}`, { signal: controller.signal }, false, { forceRefresh: true });
+            if (controller.signal.aborted) return;
+            setAnalysis(result);
             setFailed(false);
         } catch (err) {
+            if (controller.signal.aborted) return;
             console.error('FinancialReportScreen:', err);
             setFailed(true);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!controller.signal.aborted) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     }, [range, selectedBranch]);
 
-    useEffect(() => { setLoading(true); fetchAnalysis(); }, [fetchAnalysis]);
-    const onRefresh = useCallback(() => { setRefreshing(true); }, []);
+    useFocusEffect(useCallback(() => {
+        setLoading(true);
+        fetchAnalysis();
+        return () => pendingAnalysis.current?.abort();
+    }, [fetchAnalysis]));
+    const onRefresh = useCallback(() => { setRefreshing(true); setRefreshEpoch(epoch => epoch + 1); }, []);
 
     useEffect(() => {
-        if (!isAdmin) return;
+        if (!isAdmin || !showComparison) return;
+        const controller = new AbortController();
         setCompLoading(true);
-        request<{ comparison: BranchRow[] }>('/reports/branch-comparison')
-            .then(res => setBranchComp(Array.isArray(res.comparison) ? res.comparison : []))
-            .catch(() => setBranchComp([]))
-            .finally(() => setCompLoading(false));
-    }, [isAdmin]);
+        request<{ comparison: BranchRow[] }>('/reports/branch-comparison', { signal: controller.signal })
+            .then(res => { if (!controller.signal.aborted) setBranchComp(Array.isArray(res.comparison) ? res.comparison : []); })
+            .catch(() => { if (!controller.signal.aborted) setBranchComp([]); })
+            .finally(() => { if (!controller.signal.aborted) setCompLoading(false); });
+        return () => controller.abort();
+    }, [isAdmin, showComparison]);
 
     const summary = analysis?.summary;
     const netProfit = summary?.netProfit ?? 0;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Href, useFocusEffect } from 'expo-router';
@@ -34,20 +34,25 @@ export default function PurchasesScreen() {
     const [tab, setTab]                       = useState<TabKey>('ALL');
     const [search, setSearch]                 = useState('');
     const [cancellingId, setCancellingId]     = useState<string | null>(null);
+    const pendingRead = useRef<AbortController | null>(null);
 
     const fetchPurchases = useCallback(async () => {
+        pendingRead.current?.abort();
+        const controller = new AbortController();
+        pendingRead.current = controller;
         try {
-            const purchasesData = await apiService.getPurchases(selectedBranch ?? undefined);
+            const purchasesData = await apiService.getPurchases(selectedBranch ?? undefined, controller.signal);
+            if (controller.signal.aborted) return;
             setPurchases(Array.isArray(purchasesData) ? purchasesData : []);
         } catch (error) {
+            if (controller.signal.aborted) return;
             console.error('PurchasesScreen: fetch error', error);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
         }
     }, [selectedBranch]);
 
-    useFocusEffect(useCallback(() => { void fetchPurchases(); }, [fetchPurchases]));
+    useFocusEffect(useCallback(() => { void fetchPurchases(); return () => pendingRead.current?.abort(); }, [fetchPurchases]));
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);

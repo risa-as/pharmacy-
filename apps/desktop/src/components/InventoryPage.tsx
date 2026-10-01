@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, startTransition } from "react";
 import {
   Package,
   AlertTriangle,
@@ -592,6 +592,18 @@ export default function InventoryPage({ user }: { user: any }) {
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
+  // Rows cost about 1 ms each to render; drawing all 200 at once froze the app
+  // for ~0.2 s here and ~1 s on slower point-of-sale PCs. The first rows are
+  // drawn immediately and the rest of the page right after, as a transition.
+  const FIRST_ROWS = 40;
+  const [rowLimit, setRowLimit] = useState(FIRST_ROWS);
+  useEffect(() => {
+    setRowLimit(FIRST_ROWS);
+    const t = setTimeout(() => startTransition(() => setRowLimit(PAGE_SIZE)), 0);
+    return () => clearTimeout(t);
+    // Not on a background refresh of the same view (that would jump the scroll).
+  }, [currentPage, searchTerm, stockFilter, sortField, sortDir]);
+  const visibleRows = paginatedItems.slice(0, rowLimit);
 
   // Reset to page 1 when filters/search change
   useEffect(() => {
@@ -865,11 +877,7 @@ export default function InventoryPage({ user }: { user: any }) {
     return () => { inventoryMountedRef.current = false; inventoryRequestRef.current++; };
   }, []);
 
-  // Auto-focus barcode input on page load
-  useEffect(() => {
-    const t = setTimeout(() => barcodeInputRef.current?.focus(), 100);
-    return () => clearTimeout(t);
-  }, []);
+  // The barcode field is NOT focused on page load (owner's request); F2 focuses it.
 
   useEffect(() => {
     if (!uploadToast) return;
@@ -1702,7 +1710,6 @@ export default function InventoryPage({ user }: { user: any }) {
 
       {/* ======= TABLE ======= */}
       <div className="flex-1 overflow-auto px-6 pb-6">
-        {loading && <p role="status" className="mb-3 text-xs text-muted-foreground">{loaded ? 'جارٍ تحديث المخزون…' : 'جارٍ تحميل المخزون…'}</p>}
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             <table className="w-full text-right border-collapse">
               <thead>
@@ -1778,7 +1785,7 @@ export default function InventoryPage({ user }: { user: any }) {
               </thead>
               <tbody className="divide-y divide-border/30">
                 {loading && !loaded && Array.from({ length: 8 }, (_, row) => <tr key={'loading-'+row} aria-hidden="true">{Array.from({ length: isAdmin ? 8 : 6 }, (_, column) => <td key={column} className="px-4 py-5"><div className="h-4 rounded bg-muted motion-safe:animate-pulse" style={{ width: column === 0 ? '75%' : '60%' }} /></td>)}</tr>)}
-                {paginatedItems.map((item) => {
+                {visibleRows.map((item) => {
                   const stockPct = getStockPercent(item);
                   const isOut = item.quantity <= 0;
                   const isLow = !isOut && item.quantity < item.minStock;

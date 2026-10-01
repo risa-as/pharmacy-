@@ -115,7 +115,7 @@ async function main() {
   for (let i = 0; i < DRUGS.length; i++) {
     const [tradeName, scientificName, price, origin] = DRUGS[i];
     const d = await prisma.globalDrug.create({
-      data: { barcode: `62${String(9000000000 + i * 7919).padStart(11, '0')}`, tradeName, scientificName, origin, unitsPerPack: pick([10, 20, 30, 1]) },
+      data: { barcode: `62${String(9000000000 + i * 7919).padStart(11, '0')}`, tradeName, scientificName, origin, unitsPerPack: pick([10, 20, 30, 1]), unitsPerPackConfirmedAt: daysAgo(90) },
     });
     drugs.push({ ...d, price, cost: round250(price * (0.68 + rnd() * 0.1)) });
   }
@@ -131,7 +131,7 @@ async function main() {
       const d = drugs[i];
       if (bi === 1 && i % 3 === 2) continue;
       const inv = await prisma.inventory.create({
-        data: { branchId: branch.id, drugId: d.id, price: d.price, cost: d.cost, minStock: pick([10, 15, 20, 30]), maxStock: 300, isQuickSale: i < 6 },
+        data: { branchId: branch.id, drugId: d.id, price: d.price, cost: d.cost, minStock: pick([10, 15, 20, 30]), maxStock: 300, isQuickSale: i < 6, createdAt: daysAgo(90) },
       });
       // Stock profile: a few low, a few expiring soon, one expired
       let batches;

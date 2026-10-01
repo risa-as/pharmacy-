@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert } from 'react-native';
-import { router, Href } from 'expo-router';
+import { router, Href, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { request, apiService } from '../../services/api';
@@ -114,7 +114,12 @@ export default function AlertsScreen() {
     );
 
     // ── Fetch ─────────────────────────────────────────────────────────────────
-    const fetchNotifications = useCallback(async () => {
+    const pendingAlerts = useRef<AbortController | null>(null);
+    const [loadFailed, setLoadFailed] = useState(false);
+    const fetchNotifications = useCallback(async (forceRefresh = false) => {
+        pendingAlerts.current?.abort();
+        const controller = new AbortController();
+        pendingAlerts.current = controller;
         try {
             const effectiveBranch = isAdmin ? selectedBranch : authBranchId;
             const query = effectiveBranch ? `?branchId=${effectiveBranch}` : '';
@@ -122,10 +127,12 @@ export default function AlertsScreen() {
             const [res, inventoryAlerts, readInvIds] = await Promise.all([
                 request<{ notifications: Notification[]; unreadCount: number }>(
                     `/notifications/in-app${query}`,
-                ).catch(() => ({ notifications: [] as Notification[], unreadCount: 0 })),
-                apiService.getAlerts(effectiveBranch ?? undefined).catch(() => [] as any[]),
+                    { signal: controller.signal }, false, { forceRefresh },
+                ),
+                apiService.getAlerts(effectiveBranch ?? undefined, forceRefresh, controller.signal),
                 loadReadInvIds(),
             ]);
+            if (controller.signal.aborted) return;
 
             const inventoryAsNotifications: Notification[] = (inventoryAlerts as any[]).map((a: any) => {
                 const id = `inv-${a.id}`;
@@ -151,20 +158,22 @@ export default function AlertsScreen() {
             setNotifications(merged);
             const unreadInv = inventoryAsNotifications.filter(n => !n.isRead).length;
             setUnreadCount((res.unreadCount ?? 0) + unreadInv);
+            setLoadFailed(false);
         } catch (error) {
+            if (controller.signal.aborted) return;
+            setLoadFailed(true);
             console.error('AlertsScreen fetch error', error);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
         }
     }, [isAdmin, selectedBranch, authBranchId]);
 
-    useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+    useFocusEffect(useCallback(() => { setLoading(true); fetchNotifications(); return () => pendingAlerts.current?.abort(); }, [fetchNotifications]));
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         triggerSync('alerts');
-        fetchNotifications();
+        fetchNotifications(true);
     }, [fetchNotifications, triggerSync]);
 
     // ── Actions ───────────────────────────────────────────────────────────────
@@ -318,10 +327,13 @@ export default function AlertsScreen() {
                 )}
             </View>
 
+            {loadFailed && notifications.length > 0 && <InfoNote text="تعذر تحديث التنبيهات؛ المعروض آخر بيانات تم تحميلها بنجاح." />}
             {loading && !refreshing ? (
                 <View style={{ padding: 16, gap: 10 }}>
                     {[1, 2, 3, 4].map(i => <Skeleton key={i} height={120} radius={Radius.card} />)}
                 </View>
+            ) : loadFailed && notifications.length === 0 ? (
+                <StateBlock icon="cloud-offline-outline" title="تعذر تحميل التنبيهات" message="تعذر التحقق من تنبيهات المخزون؛ أعد المحاولة." actionLabel="إعادة المحاولة" onAction={onRefresh} />
             ) : (
                 <FlatList
                     data={list}

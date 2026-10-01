@@ -43,3 +43,18 @@ export function allowedSupplyOperation(route: string, method: string, permission
   if (method === 'GET') return /^\/purchases(?:\/[a-zA-Z0-9-]+)?$/.test(route);
   return method === 'POST' && /^\/purchases\/[a-zA-Z0-9-]+\/receive$/.test(route) && permissions.canReceivePurchase === true;
 }
+
+/**
+ * Requests that must first sync unsent local sales/stock with the cloud: every
+ * write, the batch search and a stocktake count sheet. Only these run one at a
+ * time; a plain read (lists, a document) never waits for another page's request.
+ */
+export function operationNeedsSync(path: string, method: string): boolean {
+  const route = String(path || "").split("?")[0];
+  return (
+    method !== "GET" ||
+    String(path || "").startsWith("/inventory/operation-batches") ||
+    (/^\/inventory\/stocktake\/[a-zA-Z0-9-]+$/.test(route) &&
+      new URLSearchParams(String(path || "").split("?")[1] || "").get("type") === "sheet")
+  );
+}

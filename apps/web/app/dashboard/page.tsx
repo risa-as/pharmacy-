@@ -15,8 +15,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getAlertStats } from "@/app/lib/alerts";
-import { GlassKpiCard } from "@/app/ui/dashboard/kpi-card";
+import StatCard from "@/app/ui/dashboard/stat-card";
 import SalesChart from "@/app/ui/dashboard/sales-chart";
+import PerformanceTabs, { type PerformancePeriod } from "@/app/ui/dashboard/performance-tabs";
+import SalesProfitChart from "@/app/ui/dashboard/sales-profit-chart";
+import MySalesTabs, { type MySalesPeriod } from "@/app/ui/dashboard/my-sales-tabs";
+import { chartChange } from "@/app/lib/chart-change";
+import { getTopSellers } from "@/app/lib/top-sellers";
 import { getSubscriptionState } from "@/app/lib/subscription-state";
 import { buildSalesByLocalDateQuery, type DailySalesRow } from "@/app/lib/report-sales-aggregates";
 
@@ -170,13 +175,8 @@ async function getAdminData(organizationId: string, branchId?: string) {
                 _count: { select: { items: true } },
             },
         }),
-        prisma.saleItem.groupBy({
-            by: ['drugId'],
-            _sum: { quantity: true },
-            where: { sale: { createdAt: { gte: monthStart }, ...orgBranchWhere } },
-            orderBy: { _sum: { quantity: 'desc' } },
-            take: 5,
-        }),
+        // Net of returns, ties ordered by name (see app/lib/top-sellers.ts).
+        getTopSellers({ saleScope: orgBranchWhere, since: monthStart, limit: 5 }),
         getAlertStats(undefined, organizationId),
 
         prisma.purchase.aggregate({
@@ -189,15 +189,6 @@ async function getAdminData(organizationId: string, branchId?: string) {
         }),
     ]);
 
-    const topDrugIds = topDrugs.map((d: any) => d.drugId);
-    const drugs = await prisma.globalDrug.findMany({
-        where: { id: { in: topDrugIds } },
-        select: { id: true, tradeName: true },
-    });
-    const topDrugsWithNames = topDrugs.map((d: any) => ({
-        ...d,
-        name: drugs.find((dr: any) => dr.id === d.drugId)?.tradeName || 'غير معروف',
-    }));
 
     // 7-day sales chart
     const sevenDaysAgo = new Date(todayStart);
@@ -259,6 +250,25 @@ async function getAdminData(organizationId: string, branchId?: string) {
     }
     const weeklyProfitChart = Object.entries(netDayMap).map(([day, amount]: any) => ({ day, amount: Math.round(amount) }));
 
+    // Comparison baselines for the performance tabs: the previous period up to the same
+    // elapsed time (so a morning is not compared with all of yesterday).
+    const DAY = 24 * 60 * 60 * 1000;
+    const sinceToday = now.getTime() - todayStart.getTime();
+    const prevWeekStart = new Date(sevenDaysAgo.getTime() - 7 * DAY);
+    const prevMonthStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth() - 1, 1) - IRAQ_OFFSET);
+    const prevMonthCut = new Date(Math.min(monthStart.getTime(), prevMonthStart.getTime() + (now.getTime() - monthStart.getTime())));
+    const [weekPurchases, yesterdaySoFar, prevWeekSales, prevMonthSoFar] = await Promise.all([
+        prisma.purchase.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: sevenDaysAgo }, ...orgBranchWhere } }),
+        prisma.sale.aggregate({ _sum: { total: true }, where: { createdAt: { gte: new Date(todayStart.getTime() - DAY), lt: new Date(todayStart.getTime() - DAY + sinceToday) }, ...orgBranchWhere } }),
+        prisma.sale.aggregate({ _sum: { total: true }, where: { createdAt: { gte: prevWeekStart, lt: new Date(prevWeekStart.getTime() + (now.getTime() - sevenDaysAgo.getTime())) }, ...orgBranchWhere } }),
+        prisma.sale.aggregate({ _sum: { total: true }, where: { createdAt: { gte: prevMonthStart, lt: prevMonthCut }, ...orgBranchWhere } }),
+    ]);
+    // Same net formula as the month: sales − cost − (returns − returned cost) − expenses.
+    const todayNetProfit = netDayMap[dayKey(todayStart)] ?? 0;
+    const weekNetProfit = Object.values(netDayMap).reduce((sum, v) => sum + v, 0);
+    const weekRevenue = rawWeeklyItems.reduce((sum, s) => sum + s.total, 0);
+    const weekExpenses = rawWeeklyExpenses.reduce((sum, e) => sum + e.amount, 0);
+
     const todayRevenue = todaySales._sum.total || 0;
     const todayExpenseAmt = todayExpenses._sum.amount || 0;
     const todayReturnsAmt = todayReturns._sum.total || 0;
@@ -308,6 +318,29 @@ async function getAdminData(organizationId: string, branchId?: string) {
             returns: monthReturnsAmt,
             net: monthNet,
         },
+        periods: [
+            {
+                key: 'today', label: 'اليوم', compareLabel: 'عن نفس الوقت أمس',
+                revenue: todayRevenue, salesCount: todaySales._count,
+                purchases: todayPurchases._sum.total || 0, purchasesCount: todayPurchases._count,
+                expenses: todayExpenseAmt, net: Math.round(todayNetProfit),
+                change: chartChange(yesterdaySoFar._sum.total || 0, todayRevenue),
+            },
+            {
+                key: 'week', label: 'آخر 7 أيام', compareLabel: 'عن الأيام السبعة السابقة',
+                revenue: weekRevenue, salesCount: rawWeeklyItems.length,
+                purchases: weekPurchases._sum.total || 0, purchasesCount: weekPurchases._count,
+                expenses: weekExpenses, net: Math.round(weekNetProfit),
+                change: chartChange(prevWeekSales._sum.total || 0, weekRevenue),
+            },
+            {
+                key: 'month', label: 'هذا الشهر', compareLabel: 'عن نفس الفترة من الشهر الماضي',
+                revenue: monthRevenue, salesCount: monthSales._count,
+                purchases: monthPurchases._sum.total || 0, purchasesCount: monthPurchases._count,
+                expenses: monthExpenseAmt, net: Math.round(monthNet),
+                change: chartChange(prevMonthSoFar._sum.total || 0, monthRevenue),
+            },
+        ] satisfies PerformancePeriod[],
         // Alerts & debts
         alerts,
         expiringCount,
@@ -317,7 +350,7 @@ async function getAdminData(organizationId: string, branchId?: string) {
         subscriptionInfo,
         // Lists
         recentSales,
-        topDrugs: topDrugsWithNames,
+        topDrugs,
         weeklySalesChart,
         weeklyProfitChart,
     };
@@ -364,8 +397,55 @@ async function getEmployeeData(branchId?: string, userId?: string) {
         getAlertStats(branchId, undefined),
     ]);
 
+    // The same employee's sales for the last 7 days and this month, each compared with the
+    // previous period up to the same elapsed time (a morning is not compared with all of yesterday).
+    const DAY = 24 * 60 * 60 * 1000;
+    const weekStart = new Date(todayStart.getTime() - 6 * DAY);
+    const monthStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth(), 1) - IRAQ_OFFSET);
+    const prevMonthStart = new Date(Date.UTC(nowIraq.getUTCFullYear(), nowIraq.getUTCMonth() - 1, 1) - IRAQ_OFFSET);
+    const mySales = { ...branchWhere, ...(userId ? { userId } : {}) };
+    const myReturns = { ...branchWhere, ...(userId ? { sale: { userId } } : {}) };
+    const salesBetween = (gte: Date, lt?: Date) => prisma.sale.aggregate({
+        _sum: { total: true }, _count: true,
+        where: { ...mySales, createdAt: lt ? { gte, lt } : { gte } },
+    });
+    const returnsSince = (gte: Date) => prisma.saleReturn.aggregate({
+        _sum: { total: true }, _count: true,
+        where: { ...myReturns, createdAt: { gte } },
+    });
+    const sameElapsed = (prevStart: Date, start: Date) =>
+        new Date(Math.min(start.getTime(), prevStart.getTime() + (now.getTime() - start.getTime())));
+    const yesterdayStart = new Date(todayStart.getTime() - DAY);
+    const prevWeekStart = new Date(weekStart.getTime() - 7 * DAY);
+    const [weekSales, weekReturns, monthSales, monthReturns, yesterdaySoFar, prevWeekSoFar, prevMonthSoFar] = await Promise.all([
+        salesBetween(weekStart), returnsSince(weekStart),
+        salesBetween(monthStart), returnsSince(monthStart),
+        salesBetween(yesterdayStart, sameElapsed(yesterdayStart, todayStart)),
+        salesBetween(prevWeekStart, sameElapsed(prevWeekStart, weekStart)),
+        salesBetween(prevMonthStart, sameElapsed(prevMonthStart, monthStart)),
+    ]);
+    const period = (
+        key: MySalesPeriod['key'], label: string, compareLabel: string,
+        sales: { _sum: { total: number | null }; _count: number },
+        returns: { _sum: { total: number | null }; _count: number },
+        previous: { _sum: { total: number | null } },
+    ): MySalesPeriod => {
+        const revenue = sales._sum.total || 0;
+        const returned = returns._sum.total || 0;
+        return {
+            key, label, compareLabel, revenue, salesCount: sales._count,
+            returns: returned, returnsCount: returns._count, net: revenue - returned,
+            change: chartChange(previous._sum.total || 0, revenue),
+        };
+    };
+
     return {
         drugCount, inventoryCount,
+        periods: [
+            period('today', 'اليوم', 'عن نفس الوقت أمس', todaySales, todayReturns, yesterdaySoFar),
+            period('week', 'آخر 7 أيام', 'عن الأيام السبعة السابقة', weekSales, weekReturns, prevWeekSoFar),
+            period('month', 'هذا الشهر', 'عن نفس الفترة من الشهر الماضي', monthSales, monthReturns, prevMonthSoFar),
+        ],
         today: {
             revenue: todaySales._sum.total || 0,
             salesCount: todaySales._count,
@@ -391,6 +471,16 @@ function fmt(v: number) {
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);
 }
 
+/** «2:41 م» in Baghdad time, whatever the server clock is. */
+function saleTime(date: Date | string) {
+    return new Date(date).toLocaleTimeString('ar-IQ-u-nu-latn', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' });
+}
+
+function greetingNow() {
+    const hour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Asia/Baghdad' }).format(new Date()));
+    return hour >= 5 && hour < 12 ? 'صباح الخير' : 'مساء الخير';
+}
+
 /* ─────────────────────────────────────────────
    Page
 ───────────────────────────────────────────── */
@@ -412,171 +502,167 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
 
         return (
             <main dir="rtl" className="space-y-6">
-                {/* Header */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                {/* Header: greeting + the main platform actions */}
+                <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-l from-primary to-info">
-                            لوحة تحكم المنصة
+                        <h1 className="text-2xl font-bold text-foreground">
+                            {greetingNow()}، {session?.user?.name || 'بك'}
                         </h1>
-                        <p className="text-muted-foreground text-sm">
-                            مرحباً {session?.user?.name || 'بك'} ·{' '}
-                            <span className="text-primary font-medium">مدير المنصة</span>
+                        <p className="mt-0.5 text-sm text-muted-foreground">
+                            {dateLabel} · <span className="font-medium text-primary">مدير المنصة</span>
                         </p>
                     </div>
-                    <div className="text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-lg">{dateLabel}</div>
-                </div>
-
-                {/* Platform KPIs */}
-                <div className="relative rounded-2xl overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-info/10 to-success/10 pointer-events-none" />
-                    <div className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-4 p-4">
-                        <GlassKpiCard
-                            title="إجمالي المؤسسات"
-                            value={d.orgCount}
-                            icon={<Building2 className="w-5 h-5" />}
-                            sub={`${d.activeOrgs} نشطة · ${d.suspendedOrgs} موقوفة`}
-                            href="/dashboard/admin/tenants"
-                        />
-                        <GlassKpiCard
-                            title="التراخيص النشطة"
-                            value={d.activeLicenses}
-                            icon={<Key className="w-5 h-5" />}
-                            sub="رخصة جهاز كاشير نشطة"
-                            href="/dashboard/admin/licenses"
-                        />
-                        <GlassKpiCard
-                            title="جلسات الموبايل"
-                            value={d.activeMobileSessions}
-                            icon={<Smartphone className="w-5 h-5" />}
-                            sub="مستخدم موبايل متصل الآن"
-                        />
-                        <GlassKpiCard
-                            title="إيرادات المنصة"
-                            value={`${fmt(d.platformRevenue)} د.ع`}
-                            icon={<TrendingUp className="w-5 h-5" />}
-                            sub="إجمالي المدفوعات المكتملة"
-                            href="/dashboard/admin/tenants"
-                        />
-                    </div>
-                </div>
-
-                {/* Status cards */}
-                <div className="grid sm:grid-cols-3 gap-4">
-                    <div className="glass-card rounded-xl p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
-                            <Activity className="w-5 h-5 text-success" />
-                        </div>
-                        <div>
-                            <div className="text-2xl font-bold tabular-nums text-foreground">{d.activeOrgs}</div>
-                            <div className="text-xs text-muted-foreground">مؤسسات نشطة</div>
-                        </div>
-                    </div>
-                    <div className="glass-card rounded-xl p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
-                            <AlertTriangle className="w-5 h-5 text-destructive" />
-                        </div>
-                        <div>
-                            <div className="text-2xl font-bold tabular-nums text-foreground">{d.suspendedOrgs}</div>
-                            <div className="text-xs text-muted-foreground">مؤسسات موقوفة</div>
-                        </div>
-                    </div>
-                    <div className="glass-card rounded-xl p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                            <PackageOpen className="w-5 h-5 text-primary" />
-                        </div>
-                        <div>
-                            <div className="text-2xl font-bold tabular-nums text-foreground">{d.distribution.length}</div>
-                            <div className="text-xs text-muted-foreground">باقات مستخدمة</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Plan distribution */}
-                {d.distribution.length > 0 && (
-                    <div className="glass-card rounded-xl p-5">
-                        <h2 className="font-bold text-foreground mb-4 flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-primary" /> توزيع المؤسسات على الباقات
-                        </h2>
-                        <div className="space-y-3">
-                            {d.distribution.map((plan: any) => {
-                                const pct = d.orgCount > 0 ? Math.round((plan.count / d.orgCount) * 100) : 0;
-                                return (
-                                    <div key={plan.name} className="space-y-1">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="font-medium text-foreground">{plan.name}</span>
-                                            <span className="text-muted-foreground">{plan.count} مؤسسة ({pct}٪)</span>
-                                        </div>
-                                        <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full bg-gradient-to-l from-primary to-info transition-all"
-                                                style={{ width: `${pct}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Recent organizations */}
-                <div className="glass-card rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="font-bold text-foreground flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-primary" /> آخر المؤسسات المسجلة
-                        </h2>
-                        <Link href="/dashboard/admin/tenants" className="text-xs text-primary hover:underline flex items-center gap-1">
-                            عرض الكل <ChevronLeft className="w-3 h-3" />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Link href="/dashboard/admin/plans" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted">
+                            <PackageOpen className="h-4 w-4 text-amber-500" /> الباقات
+                        </Link>
+                        <Link href="/dashboard/admin/tenants" className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90">
+                            <Building2 className="h-4 w-4" /> إدارة المؤسسات
                         </Link>
                     </div>
-                    {d.recentOrgs.length > 0 ? (
-                        <div className="space-y-2">
-                            {d.recentOrgs.map((org: any) => (
-                                <div key={org.id} className="flex items-center justify-between p-3 bg-muted/40 rounded-lg text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-2 h-2 rounded-full ${org.isSuspended ? 'bg-destructive' : 'bg-success'}`} />
-                                        <span className="font-medium text-foreground">{org.name}</span>
-                                        {org.plan && (
-                                            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">{org.plan.name}</span>
-                                        )}
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">
-                                        {new Date(org.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-muted-foreground text-center py-4">لا توجد مؤسسات مسجلة</p>
-                    )}
                 </div>
 
-                {/* Quick Admin Links */}
-                <div>
-                    <h2 className="text-base font-bold text-foreground mb-3">وصول سريع</h2>
+                {/* ── أرقام المنصة ── */}
+                <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <StatCard
+                        label="المؤسسات" value={fmt(d.orgCount)} unit="مؤسسة" icon={Building2} tone="primary" bar
+                        href="/dashboard/admin/tenants"
+                        footer={
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success tabular-nums">{fmt(d.activeOrgs)} نشطة</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${d.suspendedOrgs > 0 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'}`}>{fmt(d.suspendedOrgs)} موقوفة</span>
+                            </div>
+                        }
+                    />
+                    <StatCard
+                        label="التراخيص النشطة" value={fmt(d.activeLicenses)} unit="رخصة" icon={Key} tone="success" bar
+                        href="/dashboard/admin/licenses"
+                        footer={<span className="text-xs text-muted-foreground">أجهزة كاشير مفعّلة</span>}
+                    />
+                    <StatCard
+                        label="جلسات الموبايل" value={fmt(d.activeMobileSessions)} unit="جلسة" icon={Smartphone} tone="info" bar
+                        footer={<span className="text-xs text-muted-foreground">مستخدمو التطبيق المتصلون الآن</span>}
+                    />
+                    <StatCard
+                        label="إيرادات المنصة" value={fmt(d.platformRevenue)} unit="د.ع" icon={TrendingUp} tone="warning" bar
+                        href="/dashboard/admin/tenants"
+                        footer={<span className="text-xs text-muted-foreground">إجمالي المدفوعات المكتملة</span>}
+                    />
+                </section>
+
+                {/* ── المؤسسات الموقوفة تحتاج انتباهاً ── */}
+                {d.suspendedOrgs > 0 && (
+                    <Link href="/dashboard/admin/tenants" className="flex items-center gap-3 rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm transition-colors hover:bg-destructive/10">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                            <AlertTriangle className="h-4 w-4" />
+                        </span>
+                        <span className="flex-1">
+                            <span className="font-bold text-foreground">{fmt(d.suspendedOrgs)} مؤسسة موقوفة</span>
+                            <span className="ms-2 text-muted-foreground">راجع حالة اشتراكها من إدارة المؤسسات</span>
+                        </span>
+                        <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </Link>
+                )}
+
+                {/* ── آخر المؤسسات + توزيع الباقات ── */}
+                <section className="grid gap-4 lg:grid-cols-3">
+                    <div className="min-w-0 rounded-xl border border-border bg-card lg:col-span-2">
+                        <div className="flex items-center justify-between px-5 pb-3 pt-4">
+                            <h2 className="text-sm font-bold text-foreground">آخر المؤسسات المسجلة</h2>
+                            <Link href="/dashboard/admin/tenants" className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                                عرض الكل <ChevronLeft className="h-3 w-3" />
+                            </Link>
+                        </div>
+                        {d.recentOrgs.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[28rem] text-sm">
+                                    <thead className="bg-muted/60 text-xs text-muted-foreground">
+                                        <tr>
+                                            <th className="px-5 py-2 text-start font-semibold">المؤسسة</th>
+                                            <th className="py-2 text-start font-semibold">الباقة</th>
+                                            <th className="py-2 text-start font-semibold">الحالة</th>
+                                            <th className="px-5 py-2 text-end font-semibold">تاريخ التسجيل</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                        {d.recentOrgs.map((org: any) => (
+                                            <tr key={org.id} className="transition-colors hover:bg-muted/40">
+                                                <td className="px-5 py-2.5 font-medium text-foreground">{org.name}</td>
+                                                <td className="py-2.5 text-muted-foreground">{org.plan?.name || 'بدون باقة'}</td>
+                                                <td className="py-2.5">
+                                                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${org.isSuspended ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'}`}>
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${org.isSuspended ? 'bg-destructive' : 'bg-success'}`} />
+                                                        {org.isSuspended ? 'موقوفة' : 'نشطة'}
+                                                    </span>
+                                                </td>
+                                                <td className="whitespace-nowrap px-5 py-2.5 text-end text-muted-foreground tabular-nums">
+                                                    {new Date(org.createdAt).toLocaleDateString('ar-IQ-u-nu-latn', { timeZone: 'Asia/Baghdad' })}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="py-10 text-center text-sm text-muted-foreground">لا توجد مؤسسات مسجلة</p>
+                        )}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-card p-5">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h2 className="text-sm font-bold text-foreground">توزيع الباقات</h2>
+                            <span className="text-xs text-muted-foreground">{fmt(d.distribution.length)} باقة مستخدمة</span>
+                        </div>
+                        {d.distribution.length > 0 ? (
+                            <div className="space-y-3.5 text-sm">
+                                {d.distribution.map((plan: any) => {
+                                    const pct = d.orgCount > 0 ? Math.round((plan.count / d.orgCount) * 100) : 0;
+                                    return (
+                                        <div key={plan.name}>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="truncate font-medium text-foreground">{plan.name}</span>
+                                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{fmt(plan.count)} · {pct}٪</span>
+                                            </div>
+                                            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                                                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="py-6 text-center text-sm text-muted-foreground">لا توجد اشتراكات بعد</p>
+                        )}
+                    </div>
+                </section>
+
+                {/* ── وصول سريع ── */}
+                <section>
+                    <h2 className="mb-3 text-sm font-bold text-foreground">وصول سريع</h2>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {[
                             { href: '/dashboard/admin/tenants', icon: Building2, label: 'إدارة المؤسسات', desc: 'عرض وإدارة المؤسسات', color: 'bg-blue-500/10 text-blue-500' },
                             { href: '/dashboard/admin/plans', icon: PackageOpen, label: 'إدارة الباقات', desc: 'تعديل الباقات وحدودها', color: 'bg-amber-500/10 text-amber-500' },
-                            { href: '/dashboard/admin/licenses', icon: Key, label: 'التراخيص', desc: 'تراخيص الأجهزة النشطة', color: 'bg-green-500/10 text-green-500' },
+                            { href: '/dashboard/admin/licenses', icon: Key, label: 'التراخيص', desc: 'تراخيص الأجهزة النشطة', color: 'bg-green-500/10 text-green-600' },
                             { href: '/dashboard/settings', icon: Crown, label: 'إعدادات المنصة', desc: 'أدوات التحكم العالمية', color: 'bg-purple-500/10 text-purple-500' },
-                        ].map((link: any) => {
+                        ].map((link) => {
                             const Icon = link.icon;
                             return (
                                 <Link key={link.href} href={link.href}
-                                    className="flex items-center gap-3 glass-card rounded-xl p-4 hover:bg-accent hover:shadow-sm transition-all group">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${link.color}`}>
-                                        <Icon className="w-5 h-5" />
+                                    className="group flex items-center gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/50">
+                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${link.color}`}>
+                                        <Icon className="h-5 w-5" />
                                     </div>
                                     <div className="min-w-0">
-                                        <h3 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{link.label}</h3>
-                                        <p className="text-xs text-muted-foreground truncate">{link.desc}</p>
+                                        <h3 className="text-sm font-bold text-foreground transition-colors group-hover:text-primary">{link.label}</h3>
+                                        <p className="truncate text-xs text-muted-foreground">{link.desc}</p>
                                     </div>
+                                    <ChevronLeft className="ms-auto h-4 w-4 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-primary" />
                                 </Link>
                             );
                         })}
                     </div>
-                </div>
+                </section>
             </main>
         );
     }
@@ -588,6 +674,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
 
     if (isAdmin && organizationId) {
         const d = await getAdminData(organizationId, branchId);
+        const greeting = greetingNow();
 
         return (
             <main dir="rtl" className="space-y-6">
@@ -631,335 +718,232 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                     </div>
                 )}
 
-                {/* Header */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                {/* Header: greeting + the two most used actions */}
+                <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-l from-primary to-info">
-                            لوحة التحكم
+                        <h1 className="text-2xl font-bold text-foreground">
+                            {greeting}، {session?.user?.name || 'بك'}
                         </h1>
-                        <p className="text-muted-foreground text-sm">
-                            مرحباً {session?.user?.name || 'بك'} ·{' '}
-                            <span className="text-primary font-medium">{roleLabels[role] || role}</span>
+                        <p className="mt-0.5 text-sm text-muted-foreground">
+                            {dateLabel} · <span className="font-medium text-primary">{roleLabels[role] || role}</span> · الفروع: {fmt(d.branchCount)}
                         </p>
                     </div>
-                    <div className="text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-lg">{dateLabel}</div>
-                </div>
-
-                {/* ── اليوم - KPI ── */}
-                <div>
-                    <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" /> ملخص اليوم
-                    </p>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <GlassKpiCard
-                            title="مبيعات اليوم"
-                            value={`${fmt(d.today.revenue)} د.ع`}
-                            icon={<ShoppingCart className="w-5 h-5" />}
-                            sub={`${d.today.salesCount} فاتورة`}
-                            href="/dashboard/sales"
-                        />
-                        <GlassKpiCard
-                            title="مشتريات اليوم"
-                            value={`${fmt(d.today.purchases)} د.ع`}
-                            icon={<Receipt className="w-5 h-5" />}
-                            sub={`${d.today.purchasesCount} فاتورة شراء`}
-                            href="/dashboard/purchases"
-                        />
-                        <GlassKpiCard
-                            title="مصروفات اليوم"
-                            value={`${fmt(d.today.expenses)} د.ع`}
-                            icon={<Banknote className="w-5 h-5" />}
-                            sub="مصروفات تشغيلية"
-                            href="/dashboard/expenses"
-                        />
-                        <GlassKpiCard
-                            title="صافي اليوم"
-                            value={`${fmt(d.today.net)} د.ع`}
-                            icon={<TrendingUp className="w-5 h-5" />}
-                            sub="بعد المصروفات والمرتجعات"
-                            href="/dashboard/reports/profit"
-                        />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Link href="/dashboard/reports/profit" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted">
+                            <TrendingUp className="h-4 w-4 text-success" /> تقرير الأرباح
+                        </Link>
+                        <Link href="/dashboard/pos-temp" className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90">
+                            <ShoppingCart className="h-4 w-4" /> فتح نقطة البيع
+                        </Link>
                     </div>
                 </div>
 
-                {/* ── هذا الشهر — بطاقات مستقلة بتصميم خاص بها: شريط لوني على
-                    حافة البداية، شارة أيقونة، رقم كبير، ثم سطر سفلي مفصول يحمل
-                    النسبة من المبيعات (مشتقة من نفس الأرقام، بلا استعلام جديد). ── */}
-                <div>
-                    <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
-                        <BarChart3 className="w-3.5 h-3.5" /> ملخص الشهر الحالي
-                    </p>
+                {/* ── يحتاج انتباهك ── */}
+                {/* Alerts and expiring stock keep a clear warning signal when there is
+                    something to act on: a coloured side bar, a tinted border and a pulsing dot. */}
+                <section>
+                    <div className="mb-3 flex items-center justify-between">
+                        <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+                            <span className={`h-2 w-2 rounded-full ${d.alerts.total > 0 || d.expiringCount > 0 ? 'bg-warning' : 'bg-success'}`} aria-hidden="true" />
+                            يحتاج انتباهك
+                        </h2>
+                        <Link href="/dashboard/alerts" className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                            كل التنبيهات <ChevronLeft className="h-3 w-3" />
+                        </Link>
+                    </div>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        {(() => {
-                            const rev = d.month.revenue;
-                            const positive = d.month.net >= 0;
-                            const share = (n: number) =>
-                                rev > 0 ? `${Math.round((n / rev) * 100)}٪ من المبيعات` : null;
-                            const cards: any[] = [
-                                {
-                                    label: "إجمالي المبيعات",
-                                    value: d.month.revenue,
-                                    sub: `${d.month.salesCount} فاتورة`,
-                                    icon: ShoppingCart,
-                                    href: "/dashboard/reports/sales",
-                                    bar: "bg-primary",
-                                    chip: "bg-primary/10 text-primary",
-                                },
-                                {
-                                    label: "إجمالي المشتريات",
-                                    value: d.month.purchases,
-                                    sub: `${d.month.purchasesCount} فاتورة`,
-                                    icon: Receipt,
-                                    href: "/dashboard/purchases",
-                                    bar: "bg-info",
-                                    chip: "bg-info/10 text-info",
-                                    badge: share(d.month.purchases),
-                                    badgeTone: "bg-info/10 text-info",
-                                },
-                                {
-                                    label: "إجمالي المصروفات",
-                                    value: d.month.expenses,
-                                    sub: "هذا الشهر",
-                                    icon: Banknote,
-                                    href: "/dashboard/expenses",
-                                    bar: "bg-warning",
-                                    chip: "bg-warning/10 text-warning",
-                                    badge: share(d.month.expenses),
-                                    badgeTone: "bg-warning/10 text-warning",
-                                },
-                                {
-                                    label: "صافي الربح",
-                                    value: d.month.net,
-                                    sub: "بعد الخصومات",
-                                    icon: TrendingUp,
-                                    href: "/dashboard/reports/profit",
-                                    bar: positive ? "bg-success" : "bg-destructive",
-                                    chip: positive
-                                        ? "bg-success/10 text-success"
-                                        : "bg-destructive/10 text-destructive",
-                                    valueTone: positive ? "text-success" : "text-destructive",
-                                    badge: rev > 0 ? `هامش ${Math.round((d.month.net / rev) * 100)}٪` : null,
-                                    badgeTone: positive
-                                        ? "bg-success/10 text-success"
-                                        : "bg-destructive/10 text-destructive",
-                                },
-                            ];
-                            return cards.map((c) => {
-                                const Icon = c.icon;
-                                return (
-                                    <Link
-                                        key={c.label}
-                                        href={c.href}
-                                        className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-                                    >
-                                        <span className={`absolute inset-y-0 start-0 w-1 ${c.bar}`} aria-hidden="true" />
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-medium text-muted-foreground">{c.label}</p>
-                                                <p className={`mt-2 truncate text-2xl font-bold tabular-nums ${c.valueTone || "text-foreground"}`}>
-                                                    {fmt(c.value)}{" "}
-                                                    <span className="text-sm font-normal text-muted-foreground">د.ع</span>
-                                                </p>
-                                            </div>
-                                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${c.chip}`}>
-                                                <Icon className="h-5 w-5" />
-                                            </div>
+                        {[
+                            {
+                                key: 'alerts', href: '/dashboard/alerts', icon: Bell, label: 'تنبيهات نشطة',
+                                value: fmt(d.alerts.total), unit: null as string | null,
+                                attention: d.alerts.total > 0, tone: 'warning' as const,
+                                footer: d.alerts.total > 0 ? (
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive tabular-nums">{fmt(d.alerts.expired)} منتهٍ</span>
+                                        <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning tabular-nums">{fmt(d.alerts.lowStock)} نقص</span>
+                                    </div>
+                                ) : <span className="text-xs text-muted-foreground">لا توجد تنبيهات</span>,
+                            },
+                            {
+                                key: 'expiring', href: '/dashboard/batches', icon: CalendarX, label: 'تنتهي خلال 90 يوماً',
+                                value: fmt(d.expiringCount), unit: 'دفعة',
+                                attention: d.expiringCount > 0, tone: 'destructive' as const,
+                                footer: <span className="text-xs text-muted-foreground">{d.expiringCount > 0 ? 'دفعات بها كمية — راجعها قبل الانتهاء' : 'لا توجد دفعات قريبة الانتهاء'}</span>,
+                            },
+                            {
+                                key: 'debtors', href: '/dashboard/debts', icon: UserX, label: 'مرضى مدينون',
+                                value: fmt(d.debtorCount), unit: 'مريض',
+                                attention: false, tone: 'orange' as const,
+                                footer: <span className="text-xs text-muted-foreground">الإجمالي <span className="font-semibold text-foreground tabular-nums">{fmt(d.debtorBalance)}</span> د.ع</span>,
+                            },
+                            {
+                                key: 'suppliers', href: '/dashboard/suppliers', icon: Truck, label: 'مستحق للموردين',
+                                value: fmt(d.supplierOwed), unit: 'د.ع',
+                                attention: false, tone: 'purple' as const,
+                                footer: <span className="text-xs text-muted-foreground">{d.supplierOwed > 0 ? 'رصيد مفتوح لدى الموردين' : 'لا توجد مستحقات'}</span>,
+                            },
+                        ].map((c) => {
+                            const Icon = c.icon;
+                            const tones = {
+                                warning: { bar: 'bg-warning', border: 'border-warning/40', chip: 'bg-warning/10 text-warning', dot: 'bg-warning' },
+                                destructive: { bar: 'bg-destructive', border: 'border-destructive/40', chip: 'bg-destructive/10 text-destructive', dot: 'bg-destructive' },
+                                orange: { bar: '', border: '', chip: 'bg-orange-500/10 text-orange-500', dot: '' },
+                                purple: { bar: '', border: '', chip: 'bg-purple-500/10 text-purple-500', dot: '' },
+                            }[c.tone];
+                            return (
+                                <Link
+                                    key={c.key}
+                                    href={c.href}
+                                    className={`group relative overflow-hidden rounded-xl border bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${c.attention ? tones.border : 'border-border'}`}
+                                >
+                                    {c.attention && <span className={`absolute inset-y-0 start-0 w-1 ${tones.bar}`} aria-hidden="true" />}
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-medium text-muted-foreground">{c.label}</p>
+                                            <p className="mt-2 truncate text-2xl font-bold tabular-nums text-foreground">
+                                                {c.value}
+                                                {c.unit && <span className="ms-1 text-sm font-normal text-muted-foreground">{c.unit}</span>}
+                                            </p>
                                         </div>
-                                        <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                                            <span className="truncate text-xs text-muted-foreground">{c.sub}</span>
-                                            {c.badge && (
-                                                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${c.badgeTone}`}>
-                                                    {c.badge}
+                                        <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${c.attention || !tones.bar ? tones.chip : 'bg-muted text-muted-foreground'}`}>
+                                            <Icon className="h-5 w-5" />
+                                            {c.attention && (
+                                                <span className="absolute -top-1 -end-1 flex h-3 w-3" aria-label="يحتاج متابعة">
+                                                    <span className={`absolute inline-flex h-full w-full rounded-full opacity-60 motion-safe:animate-ping ${tones.dot}`} />
+                                                    <span className={`relative inline-flex h-3 w-3 rounded-full ring-2 ring-card ${tones.dot}`} />
                                                 </span>
                                             )}
                                         </div>
-                                    </Link>
-                                );
-                            });
-                        })()}
-                    </div>
-                </div>
-
-                {/* ── التنبيهات والديون ── */}
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Alerts */}
-                    <Link href="/dashboard/alerts"
-                        className={`rounded-xl border p-4 flex items-center gap-3 hover:shadow-md transition-all ${d.alerts.total > 0 ? 'border-warning/40 bg-warning/5' : 'border-border bg-card'}`}>
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${d.alerts.total > 0 ? 'bg-warning/10' : 'bg-muted'}`}>
-                            <Bell className={`w-5 h-5 ${d.alerts.total > 0 ? 'text-warning' : 'text-muted-foreground'}`} />
-                        </div>
-                        <div>
-                            <div className="text-xl font-bold tabular-nums text-foreground">{d.alerts.total}</div>
-                            <div className="text-xs text-muted-foreground">تنبيه نشط</div>
-                            <div className="text-xs text-muted-foreground opacity-70">{d.alerts.expired} منتهٍ · {d.alerts.lowStock} نقص</div>
-                        </div>
-                    </Link>
-
-                    {/* Expiring */}
-                    <Link href="/dashboard/batches"
-                        className={`rounded-xl border p-4 flex items-center gap-3 hover:shadow-md transition-all ${d.expiringCount > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-card'}`}>
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${d.expiringCount > 0 ? 'bg-destructive/10' : 'bg-muted'}`}>
-                            <CalendarX className={`w-5 h-5 ${d.expiringCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
-                        </div>
-                        <div>
-                            <div className="text-xl font-bold tabular-nums text-foreground">{d.expiringCount}</div>
-                            <div className="text-xs text-muted-foreground">تنتهي خلال 90 يوم</div>
-                            <div className="text-xs text-muted-foreground opacity-70">دفعة بها كمية</div>
-                        </div>
-                    </Link>
-
-                    {/* Debtors */}
-                    <Link href="/dashboard/debts"
-                        className="rounded-xl border border-border bg-card p-4 flex items-center gap-3 hover:shadow-md transition-all">
-                        <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                            <UserX className="w-5 h-5 text-orange-500" />
-                        </div>
-                        <div>
-                            <div className="text-xl font-bold tabular-nums text-foreground">{d.debtorCount}</div>
-                            <div className="text-xs text-muted-foreground">مريض مدين</div>
-                            <div className="text-xs text-muted-foreground opacity-70">{fmt(d.debtorBalance)} د.ع إجمالاً</div>
-                        </div>
-                    </Link>
-
-                    {/* Supplier outstanding */}
-                    <Link href="/dashboard/suppliers"
-                        className="rounded-xl border border-border bg-card p-4 flex items-center gap-3 hover:shadow-md transition-all">
-                        <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
-                            <Truck className="w-5 h-5 text-purple-500" />
-                        </div>
-                        <div>
-                            <div className="text-xl font-bold tabular-nums text-foreground">{fmt(d.supplierOwed)}</div>
-                            <div className="text-xs text-muted-foreground">مستحق للموردين</div>
-                            <div className="text-xs text-muted-foreground opacity-70">د.ع</div>
-                        </div>
-                    </Link>
-                </div>
-
-                {/* ── العدادات ── */}
-                <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
-                    {[
-                        { label: 'الفروع', value: d.branchCount, icon: Store, href: '/dashboard/branches', color: 'text-blue-500 bg-blue-500/10' },
-                        { label: 'الأدوية', value: d.drugCount, icon: Pill, href: '/dashboard/drugs', color: 'text-green-500 bg-green-500/10' },
-                        { label: 'المخزون', value: d.inventoryCount, icon: Package, href: '/dashboard/inventory', color: 'text-cyan-500 bg-cyan-500/10' },
-                        { label: 'المستخدمين', value: d.userCount, icon: Users, href: '/dashboard/users', color: 'text-violet-500 bg-violet-500/10' },
-                        { label: 'المرضى', value: d.patientCount, icon: Stethoscope, href: '/dashboard/patients', color: 'text-rose-500 bg-rose-500/10' },
-                        { label: 'الموردين', value: d.supplierCount, icon: Truck, href: '/dashboard/suppliers', color: 'text-amber-500 bg-amber-500/10' },
-                    ].map((card: any) => {
-                        const Icon = card.icon;
-                        return (
-                            <Link key={card.label} href={card.href}
-                                className="glass-card rounded-xl p-3 flex flex-col items-center gap-2 hover:shadow-sm hover:scale-[1.02] transition-all text-center">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${card.color}`}>
-                                    <Icon className="w-4 h-4" />
-                                </div>
-                                <div className="text-xl font-bold tabular-nums text-foreground">{card.value}</div>
-                                <div className="text-xs text-muted-foreground">{card.label}</div>
-                            </Link>
-                        );
-                    })}
-                </div>
-
-                {/* ── مخطط المبيعات والأرباح (7 أيام) ── */}
-                <div className="grid lg:grid-cols-2 gap-6">
-                    <SalesChart data={d.weeklySalesChart} title="مبيعات آخر 7 أيام" colorVar="primary" />
-                    <SalesChart data={d.weeklyProfitChart} title="صافي الأرباح آخر 7 أيام" colorVar="success" />
-                </div>
-
-                {/* ── آخر المبيعات + الأكثر مبيعاً ── */}
-                <div className="grid lg:grid-cols-2 gap-6">
-                    <div className="glass-card rounded-xl shadow-sm p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <h2 className="font-bold text-foreground flex items-center gap-2">
-                                <Clock className="w-4 h-4 text-primary" /> آخر المبيعات
-                            </h2>
-                            <Link href="/dashboard/sales" className="text-xs text-primary hover:underline flex items-center gap-1">
-                                عرض الكل <ChevronLeft className="w-3 h-3" />
-                            </Link>
-                        </div>
-                        {d.recentSales.length > 0 ? (
-                            <div className="space-y-2">
-                                {d.recentSales.map((sale: any) => (
-                                    <div key={sale.id} className="flex items-center justify-between p-2.5 bg-muted/50 rounded-lg text-sm">
-                                        <div>
-                                            <span className="font-bold text-foreground">{fmt(sale.total)} <span className="text-xs font-normal text-muted-foreground">د.ع</span></span>
-                                            <span className="text-muted-foreground text-xs mr-2">({sale._count.items} صنف)</span>
-                                        </div>
-                                        <div className="text-left text-xs text-muted-foreground space-y-0.5">
-                                            <div>{sale.user?.name || '—'}</div>
-                                            <div className="opacity-70">{sale.branch?.name}</div>
-                                        </div>
                                     </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-muted-foreground text-sm text-center py-6">لا توجد مبيعات اليوم</p>
-                        )}
-                    </div>
-
-                    <div className="glass-card rounded-xl shadow-sm p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <h2 className="font-bold text-foreground flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-success" /> الأكثر مبيعاً هذا الشهر
-                            </h2>
-                            <Link href="/dashboard/reports/sales" className="text-xs text-primary hover:underline flex items-center gap-1">
-                                تقرير كامل <ChevronLeft className="w-3 h-3" />
-                            </Link>
-                        </div>
-                        {d.topDrugs.length > 0 ? (
-                            <div className="space-y-2">
-                                {d.topDrugs.map((drug: any, i: number) => (
-                                    <div key={drug.drugId} className="flex items-center justify-between p-2.5 bg-muted/50 rounded-lg text-sm">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${i === 0 ? 'bg-warning/20 text-warning' : i === 1 ? 'bg-muted-foreground/20 text-muted-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                                {i + 1}
-                                            </span>
-                                            <span className="font-medium text-foreground truncate">{drug.name}</span>
-                                        </div>
-                                        <span className="text-primary font-bold shrink-0">{drug._sum.quantity} وحدة</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-muted-foreground text-sm text-center py-6">لا توجد بيانات</p>
-                        )}
-                    </div>
-                </div>
-
-                {/* ── وصول سريع ── */}
-                <div>
-                    <h2 className="text-base font-bold text-foreground mb-3">وصول سريع</h2>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {[
-                            { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع جديدة', color: 'bg-primary/10 text-primary' },
-                            { href: '/dashboard/purchases', icon: Receipt, label: 'المشتريات', desc: 'تسجيل فاتورة شراء', color: 'bg-info/10 text-info' },
-                            { href: '/dashboard/inventory', icon: Package, label: 'المخزون', desc: 'إدارة الأصناف والكميات', color: 'bg-cyan-500/10 text-cyan-500' },
-                            { href: '/dashboard/reports/profit', icon: TrendingUp, label: 'تقرير الأرباح', desc: 'صافي الربح والخسارة', color: 'bg-success/10 text-success' },
-                            { href: '/dashboard/patients', icon: Stethoscope, label: 'المرضى', desc: 'إدارة بيانات المرضى', color: 'bg-rose-500/10 text-rose-500' },
-                            { href: '/dashboard/suppliers', icon: Truck, label: 'الموردين', desc: 'إدارة الموردين والمدفوعات', color: 'bg-purple-500/10 text-purple-500' },
-                            { href: '/dashboard/expenses', icon: Banknote, label: 'المصروفات', desc: 'تسجيل المصروفات التشغيلية', color: 'bg-warning/10 text-warning' },
-                            { href: '/dashboard/reports', icon: BarChart3, label: 'التقارير', desc: 'جميع التقارير والتحليلات', color: 'bg-amber-500/10 text-amber-500' },
-                            { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'متابعة ديون المرضى', color: 'bg-orange-500/10 text-orange-500' },
-                            { href: '/dashboard/alerts', icon: Bell, label: 'التنبيهات', desc: 'انتهاء الصلاحية ونقص المخزون', color: 'bg-destructive/10 text-destructive' },
-                            { href: '/dashboard/reports/branch-comparison', icon: Store, label: 'مقارنة الفروع', desc: 'مقارنة أداء الفروع', color: 'bg-teal-500/10 text-teal-500' },
-                            { href: '/dashboard/users', icon: Users, label: 'المستخدمين', desc: 'إدارة الموظفين والصلاحيات', color: 'bg-violet-500/10 text-violet-500' },
-                        ].map((link: any) => {
-                            const Icon = link.icon;
-                            return (
-                                <Link key={link.href} href={link.href}
-                                    className="flex items-center gap-3 glass-card rounded-xl p-3 hover:bg-accent hover:shadow-sm transition-all group">
-                                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${link.color}`}>
-                                        <Icon className="w-4 h-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <h3 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{link.label}</h3>
-                                        <p className="text-xs text-muted-foreground truncate">{link.desc}</p>
-                                    </div>
-                                    <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground/40 mr-auto shrink-0 group-hover:text-primary/60 transition-colors" />
+                                    <div className="mt-4 border-t border-border/60 pt-3">{c.footer}</div>
                                 </Link>
                             );
                         })}
                     </div>
-                </div>
+                </section>
+
+                {/* ── الأداء: اليوم / آخر 7 أيام / هذا الشهر ── */}
+                <PerformanceTabs periods={d.periods} />
+
+                {/* ── المخطط + الأكثر مبيعاً ── */}
+                <section className="grid gap-4 lg:grid-cols-3">
+                    <div className="min-w-0 lg:col-span-2">
+                        <SalesProfitChart
+                            data={d.weeklySalesChart.map((s: any, i: number) => ({ day: s.day, sales: s.amount, profit: d.weeklyProfitChart[i]?.amount ?? 0 }))}
+                        />
+                    </div>
+                    <div className="rounded-xl border border-border bg-card p-5">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h2 className="text-sm font-bold text-foreground">الأكثر مبيعاً هذا الشهر</h2>
+                            <Link href="/dashboard/reports/top-sellers?period=month" className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                                التقرير <ChevronLeft className="h-3 w-3" />
+                            </Link>
+                        </div>
+                        {d.topDrugs.length > 0 ? (
+                            <div className="space-y-3.5 text-sm">
+                                {d.topDrugs.map((drug: any) => {
+                                    const top = d.topDrugs[0]?.quantity || 0;
+                                    const qty = drug.quantity;
+                                    const pct = top > 0 ? Math.max(4, Math.round((qty / top) * 100)) : 0;
+                                    return (
+                                        <div key={drug.drugId}>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="truncate font-medium text-foreground">{drug.name}</span>
+                                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{fmt(qty)} وحدة</span>
+                                            </div>
+                                            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                                                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="py-6 text-center text-sm text-muted-foreground">لا توجد مبيعات هذا الشهر</p>
+                        )}
+                    </div>
+                </section>
+
+                {/* ── آخر المبيعات + نظرة عامة واختصارات ── */}
+                <section className="grid gap-4 lg:grid-cols-3">
+                    <div className="min-w-0 rounded-xl border border-border bg-card lg:col-span-2">
+                        <div className="flex items-center justify-between px-5 pb-3 pt-4">
+                            <h2 className="text-sm font-bold text-foreground">آخر المبيعات</h2>
+                            <Link href="/dashboard/sales" className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                                عرض الكل <ChevronLeft className="h-3 w-3" />
+                            </Link>
+                        </div>
+                        {d.recentSales.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[28rem] text-sm">
+                                    <thead className="bg-muted/60 text-xs text-muted-foreground">
+                                        <tr>
+                                            <th className="px-5 py-2 text-start font-semibold">الوقت</th>
+                                            <th className="py-2 text-start font-semibold">الفرع</th>
+                                            <th className="py-2 text-start font-semibold">الموظف</th>
+                                            <th className="py-2 text-start font-semibold">الأصناف</th>
+                                            <th className="px-5 py-2 text-end font-semibold">المبلغ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                        {d.recentSales.map((sale: any) => (
+                                            <tr key={sale.id} className="transition-colors hover:bg-muted/40">
+                                                <td className="whitespace-nowrap px-5 py-2.5 text-muted-foreground tabular-nums">{saleTime(sale.createdAt)}</td>
+                                                <td className="py-2.5 text-foreground">{sale.branch?.name || '—'}</td>
+                                                <td className="py-2.5 text-foreground">{sale.user?.name || '—'}</td>
+                                                <td className="py-2.5 text-muted-foreground tabular-nums">{sale._count.items}</td>
+                                                <td className="whitespace-nowrap px-5 py-2.5 text-end font-bold text-foreground tabular-nums">
+                                                    {fmt(sale.total)} <span className="text-xs font-normal text-muted-foreground">د.ع</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="py-10 text-center text-sm text-muted-foreground">لا توجد مبيعات بعد</p>
+                        )}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-card p-5">
+                        <h2 className="mb-3 text-sm font-bold text-foreground">نظرة عامة</h2>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                            {[
+                                { label: 'الفروع', value: d.branchCount, icon: Store, href: '/dashboard/branches', color: 'text-blue-500' },
+                                { label: 'الأدوية', value: d.drugCount, icon: Pill, href: '/dashboard/drugs', color: 'text-green-600' },
+                                { label: 'المخزون', value: d.inventoryCount, icon: Package, href: '/dashboard/inventory', color: 'text-cyan-600' },
+                                { label: 'المستخدمون', value: d.userCount, icon: Users, href: '/dashboard/users', color: 'text-violet-500' },
+                                { label: 'المرضى', value: d.patientCount, icon: Stethoscope, href: '/dashboard/patients', color: 'text-rose-500' },
+                                { label: 'الموردون', value: d.supplierCount, icon: Truck, href: '/dashboard/suppliers', color: 'text-amber-600' },
+                            ].map((item) => {
+                                const Icon = item.icon;
+                                return (
+                                    <Link key={item.label} href={item.href} className="flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 transition-colors hover:bg-muted">
+                                        <Icon className={`h-4 w-4 shrink-0 ${item.color}`} />
+                                        <span className="truncate text-muted-foreground">{item.label}</span>
+                                        <span className="ms-auto font-bold text-foreground tabular-nums">{fmt(item.value)}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                        <h2 className="mb-3 mt-5 text-sm font-bold text-foreground">اختصارات</h2>
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold">
+                            {[
+                                { label: 'شراء', icon: Receipt, href: '/dashboard/purchases', color: 'text-info' },
+                                { label: 'مصروف', icon: Banknote, href: '/dashboard/expenses', color: 'text-warning' },
+                                { label: 'الديون', icon: HandCoins, href: '/dashboard/debts', color: 'text-orange-500' },
+                            ].map((s) => {
+                                const Icon = s.icon;
+                                return (
+                                    <Link key={s.href} href={s.href} className="rounded-lg border border-border py-2.5 text-foreground transition-colors hover:bg-muted">
+                                        <Icon className={`mx-auto mb-1 h-4 w-4 ${s.color}`} />
+                                        {s.label}
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </section>
             </main>
         );
     }
@@ -978,156 +962,123 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
                 </div>
             )}
 
-            {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Header: greeting + the main action */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-l from-primary to-info">
-                        لوحة التحكم
+                    <h1 className="text-2xl font-bold text-foreground">
+                        {greetingNow()}، {session?.user?.name || 'بك'}
                     </h1>
-                    <p className="text-muted-foreground text-sm">
-                        مرحباً {session?.user?.name || 'بك'} ·{' '}
-                        <span className="text-primary font-medium">{roleLabels[role] || role}</span>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                        {dateLabel} · <span className="font-medium text-primary">{roleLabels[role] || role}</span>
                     </p>
                 </div>
-                <div className="text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-lg">{dateLabel}</div>
-            </div>
-
-            {/* Today Summary */}
-            <div className="rounded-2xl border border-border bg-card p-4">
-                <p className="text-xs font-bold text-muted-foreground mb-3 flex items-center gap-1.5">
-                    <BarChart3 className="w-3.5 h-3.5" /> ملخص الوردية
-                </p>
-                <div className="grid sm:grid-cols-3 gap-3">
-                    <div className="bg-muted rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <ShoppingCart className="w-4 h-4 text-primary" />
-                            <span className="text-xs text-muted-foreground">مبيعات اليوم</span>
-                        </div>
-                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.revenue)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                        <p className="text-xs text-muted-foreground mt-1">{d.today.salesCount} فاتورة</p>
-                    </div>
-                    <div className="bg-muted rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Undo2 className="w-4 h-4 text-warning" />
-                            <span className="text-xs text-muted-foreground">المرتجعات</span>
-                        </div>
-                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.returns)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                        <p className="text-xs text-muted-foreground mt-1">{d.today.returnsCount} مرتجع</p>
-                    </div>
-                    <div className="bg-muted rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <TrendingUp className="w-4 h-4 text-success" />
-                            <span className="text-xs text-muted-foreground">الصافي</span>
-                        </div>
-                        <div className="text-2xl font-bold text-foreground tabular-nums">{fmt(d.today.net)} <span className="text-sm font-normal text-muted-foreground">د.ع</span></div>
-                        <p className="text-xs text-muted-foreground mt-1">بعد المرتجعات</p>
-                    </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Link href="/dashboard/returns" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted">
+                        <Undo2 className="h-4 w-4 text-warning" /> مرتجع
+                    </Link>
+                    <Link href="/dashboard/pos-temp" className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90">
+                        <ShoppingCart className="h-4 w-4" /> فتح نقطة البيع
+                    </Link>
                 </div>
             </div>
 
-            {/* Alerts */}
-            {(d.alerts.total > 0 || d.expiringCount > 0) && (
-                <div className="grid sm:grid-cols-2 gap-3">
-                    {d.alerts.total > 0 && (
-                        <Link href="/dashboard/alerts"
-                            className="flex items-center gap-3 bg-warning/5 border border-warning/30 rounded-xl p-4 hover:shadow-md transition-shadow">
-                            <div className="w-10 h-10 bg-warning/10 rounded-xl flex items-center justify-center shrink-0">
-                                <Bell className="w-5 h-5 text-warning" />
-                            </div>
-                            <div>
-                                <div className="font-bold text-foreground">لديك {d.alerts.total} تنبيه</div>
-                                <div className="text-xs text-muted-foreground">
-                                    {d.alerts.expired > 0 && <span className="text-destructive font-medium">{d.alerts.expired} منتهي الصلاحية</span>}
-                                    {d.alerts.expired > 0 && d.alerts.lowStock > 0 && ' · '}
-                                    {d.alerts.lowStock > 0 && <span className="text-warning font-medium">{d.alerts.lowStock} نقص مخزون</span>}
-                                </div>
-                            </div>
-                        </Link>
-                    )}
-                    {d.expiringCount > 0 && (
-                        <Link href="/dashboard/batches"
-                            className="flex items-center gap-3 bg-destructive/5 border border-destructive/30 rounded-xl p-4 hover:shadow-md transition-shadow">
-                            <div className="w-10 h-10 bg-destructive/10 rounded-xl flex items-center justify-center shrink-0">
-                                <CalendarX className="w-5 h-5 text-destructive" />
-                            </div>
-                            <div>
-                                <div className="font-bold text-foreground">{d.expiringCount} دفعة تنتهي قريباً</div>
-                                <div className="text-xs text-muted-foreground">خلال 30 يوماً القادمة</div>
-                            </div>
-                        </Link>
-                    )}
+            {/* ── يحتاج انتباهك ── */}
+            <section>
+                <div className="mb-3 flex items-center justify-between">
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+                        <span className={`h-2 w-2 rounded-full ${d.alerts.total > 0 || d.expiringCount > 0 ? 'bg-warning' : 'bg-success'}`} aria-hidden="true" />
+                        يحتاج انتباهك
+                    </h2>
+                    <Link href="/dashboard/alerts" className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                        كل التنبيهات <ChevronLeft className="h-3 w-3" />
+                    </Link>
                 </div>
-            )}
-
-            {/* Quick Actions */}
-            <div>
-                <h2 className="text-sm font-bold text-muted-foreground mb-3">الإجراءات السريعة</h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {(role === 'PHARMACIST' ? [
-                        { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', gradient: 'from-primary to-primary/80' },
-                        { href: '/dashboard/drugs', icon: Pill, label: 'قاعدة الأدوية', desc: `${d.drugCount} دواء مسجل`, gradient: 'from-info to-info/80' },
-                        { href: '/dashboard/patients', icon: Stethoscope, label: 'المرضى', desc: 'إدارة بيانات المرضى', gradient: 'from-success to-success/80' },
-                        { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'الديون والسداد', gradient: 'from-warning to-warning/80' },
-                        { href: '/dashboard/inventory/stocktakes', icon: ClipboardList, label: 'جرد المخزون', desc: `${d.inventoryCount} صنف`, gradient: 'from-cyan-500 to-cyan-500/80' },
-                        { href: '/dashboard/returns', icon: Undo2, label: 'المرتجعات', desc: 'إرجاع فواتير', gradient: 'from-rose-500 to-rose-500/80' },
-                    ] : [
-                        { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', gradient: 'from-primary to-primary/80' },
-                        { href: '/dashboard/returns', icon: Undo2, label: 'المرتجعات', desc: 'إرجاع فواتير', gradient: 'from-info to-info/80' },
-                        { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'الديون والسداد', gradient: 'from-success to-success/80' },
-                        { href: '/dashboard/patients', icon: Stethoscope, label: 'المرضى', desc: 'بحث عن مريض', gradient: 'from-warning to-warning/80' },
-                    ]).map((action: any) => {
-                        const Icon = action.icon;
-                        return (
-                            <Link key={action.href} href={action.href}
-                                className={`bg-gradient-to-br ${action.gradient} text-primary-foreground rounded-2xl p-5 shadow-lg hover:scale-[1.02] transition-transform`}>
-                                <Icon className="w-7 h-7 mb-3 opacity-80" />
-                                <h3 className="font-bold text-lg leading-tight">{action.label}</h3>
-                                <p className="text-sm opacity-75 mt-1">{action.desc}</p>
-                            </Link>
-                        );
-                    })}
+                    <StatCard
+                        label="تنبيهات نشطة" value={fmt(d.alerts.total)} icon={Bell} tone="warning"
+                        attention={d.alerts.total > 0} href="/dashboard/alerts"
+                        footer={d.alerts.total > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive tabular-nums">{fmt(d.alerts.expired)} منتهٍ</span>
+                                <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning tabular-nums">{fmt(d.alerts.lowStock)} نقص</span>
+                            </div>
+                        ) : <span className="text-xs text-muted-foreground">لا توجد تنبيهات</span>}
+                    />
+                    <StatCard
+                        label="تنتهي خلال 30 يوماً" value={fmt(d.expiringCount)} unit="دفعة" icon={CalendarX} tone="destructive"
+                        attention={d.expiringCount > 0} href="/dashboard/batches"
+                        footer={<span className="text-xs text-muted-foreground">{d.expiringCount > 0 ? 'قدّم بيعها أو راجعها قبل الانتهاء' : 'لا توجد دفعات قريبة الانتهاء'}</span>}
+                    />
+                    <StatCard
+                        label="نقص المخزون" value={fmt(d.alerts.lowStock)} unit="صنف" icon={AlertTriangle} tone="warning"
+                        attention={d.alerts.lowStock > 0} href="/dashboard/alerts"
+                        footer={<span className="text-xs text-muted-foreground">{d.alerts.lowStock > 0 ? 'أقل من الحد الأدنى' : 'المخزون ضمن الحدود'}</span>}
+                    />
+                    <StatCard
+                        label="منتهي الصلاحية" value={fmt(d.alerts.expired)} unit="صنف" icon={CalendarX} tone="destructive"
+                        attention={d.alerts.expired > 0} href="/dashboard/alerts"
+                        footer={<span className="text-xs text-muted-foreground">{d.alerts.expired > 0 ? 'أخرجه من الرفوف ولا تبعه' : 'لا يوجد منتهٍ'}</span>}
+                    />
                 </div>
-            </div>
+            </section>
 
-            {/* Info cards */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="glass-card rounded-xl p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
-                        <Pill className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                        <div className="text-2xl font-bold tabular-nums text-foreground">{d.drugCount}</div>
-                        <div className="text-xs text-muted-foreground">دواء مسجل</div>
+            {/* ── مبيعاتي: مبيعات ومرتجعات هذا الموظف فقط، اليوم / آخر 7 أيام / هذا الشهر ── */}
+            <MySalesTabs periods={d.periods} />
+
+            {/* ── الإجراءات السريعة + نظرة عامة ── */}
+            <section className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+                    <h2 className="mb-3 text-sm font-bold text-foreground">الإجراءات السريعة</h2>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {(role === 'PHARMACIST' ? [
+                            { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', color: 'bg-primary/10 text-primary' },
+                            { href: '/dashboard/drugs', icon: Pill, label: 'قاعدة الأدوية', desc: `${fmt(d.drugCount)} دواء مسجل`, color: 'bg-info/10 text-info' },
+                            { href: '/dashboard/patients', icon: Stethoscope, label: 'المرضى', desc: 'إدارة بيانات المرضى', color: 'bg-rose-500/10 text-rose-500' },
+                            { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'الديون والسداد', color: 'bg-orange-500/10 text-orange-500' },
+                            { href: '/dashboard/inventory/stocktakes', icon: ClipboardList, label: 'جرد المخزون', desc: `${fmt(d.inventoryCount)} صنف`, color: 'bg-cyan-500/10 text-cyan-600' },
+                            { href: '/dashboard/returns', icon: Undo2, label: 'المرتجعات', desc: 'إرجاع فواتير', color: 'bg-warning/10 text-warning' },
+                        ] : [
+                            { href: '/dashboard/pos-temp', icon: ShoppingCart, label: 'نقطة البيع', desc: 'إنشاء فاتورة بيع', color: 'bg-primary/10 text-primary' },
+                            { href: '/dashboard/returns', icon: Undo2, label: 'المرتجعات', desc: 'إرجاع فواتير', color: 'bg-warning/10 text-warning' },
+                            { href: '/dashboard/debts', icon: HandCoins, label: 'دفتر الديون', desc: 'الديون والسداد', color: 'bg-orange-500/10 text-orange-500' },
+                            { href: '/dashboard/patients', icon: Stethoscope, label: 'المرضى', desc: 'بحث عن مريض', color: 'bg-rose-500/10 text-rose-500' },
+                        ]).map((action) => {
+                            const Icon = action.icon;
+                            return (
+                                <Link key={action.href} href={action.href}
+                                    className="group flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted/50">
+                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${action.color}`}>
+                                        <Icon className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="text-sm font-bold text-foreground transition-colors group-hover:text-primary">{action.label}</h3>
+                                        <p className="truncate text-xs text-muted-foreground">{action.desc}</p>
+                                    </div>
+                                    <ChevronLeft className="ms-auto h-4 w-4 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-primary" />
+                                </Link>
+                            );
+                        })}
                     </div>
                 </div>
-                <div className="glass-card rounded-xl p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 bg-info/10 rounded-xl flex items-center justify-center shrink-0">
-                        <Package className="w-5 h-5 text-info" />
-                    </div>
-                    <div>
-                        <div className="text-2xl font-bold tabular-nums text-foreground">{d.inventoryCount}</div>
-                        <div className="text-xs text-muted-foreground">صنف في المخزون</div>
-                    </div>
-                </div>
-                <div className={`border rounded-xl p-4 flex items-center gap-3 ${d.alerts.lowStock > 0 ? 'border-warning/30 bg-warning/5' : 'border-border bg-card'}`}>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${d.alerts.lowStock > 0 ? 'bg-warning/10' : 'bg-muted'}`}>
-                        <AlertTriangle className={`w-5 h-5 ${d.alerts.lowStock > 0 ? 'text-warning' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                        <div className="text-2xl font-bold tabular-nums text-foreground">{d.alerts.lowStock}</div>
-                        <div className="text-xs text-muted-foreground">نقص مخزون</div>
-                    </div>
-                </div>
-                <div className={`border rounded-xl p-4 flex items-center gap-3 ${d.alerts.expired > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-card'}`}>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${d.alerts.expired > 0 ? 'bg-destructive/10' : 'bg-muted'}`}>
-                        <CalendarX className={`w-5 h-5 ${d.alerts.expired > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                        <div className="text-2xl font-bold tabular-nums text-foreground">{d.alerts.expired}</div>
-                        <div className="text-xs text-muted-foreground">منتهي الصلاحية</div>
+                <div className="rounded-xl border border-border bg-card p-5">
+                    <h2 className="mb-3 text-sm font-bold text-foreground">نظرة عامة</h2>
+                    <div className="space-y-2 text-sm">
+                        {[
+                            { label: 'دواء مسجل', value: d.drugCount, icon: Pill, color: 'text-green-600' },
+                            { label: 'صنف في المخزون', value: d.inventoryCount, icon: Package, color: 'text-cyan-600' },
+                        ].map((item) => {
+                            const Icon = item.icon;
+                            return (
+                                <div key={item.label} className="flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2.5">
+                                    <Icon className={`h-4 w-4 shrink-0 ${item.color}`} />
+                                    <span className="truncate text-muted-foreground">{item.label}</span>
+                                    <span className="ms-auto font-bold text-foreground tabular-nums">{fmt(item.value)}</span>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
-            </div>
+            </section>
         </main>
     );
 }

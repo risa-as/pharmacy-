@@ -83,3 +83,14 @@
     scroll-behavior: auto !important;
   }
 }
+
+@layer components {
+  .eyebrow { @apply flex items-center gap-2 text-sm font-extrabold text-primary-700; }
+  .section-space { @apply py-20 lg:py-28; }
+  .section-title { @apply mt-5 text-3xl font-black leading-[1.45] tracking-tight text-ink-900 sm:text-4xl lg:text-[2.8rem]; }
+  .section-copy { @apply mt-5 text-lg leading-[1.95] text-slate-600; }
+  .text-link { @apply inline-flex items-center gap-2 font-bold text-primary-700 transition-colors hover:text-primary-900; }
+}
+.editorial-hero { background: radial-gradient(ellipse at 12% 12%, #d9eeeb 0, transparent 48%), linear-gradient(150deg, #f5f8fa, #edf3f5); }
+.product-stage { background: linear-gradient(135deg, #183e4a, #0a1446); box-shadow: 0 30px 70px -35px #0a144660; }
+section[id] { scroll-margin-top: 6rem; }

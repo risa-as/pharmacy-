@@ -1,9 +1,11 @@
+import { checkSessionAndAccess } from '../utils/startup-checks';
 import { AppState } from 'react-native';
 import { request } from '../services/api';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authService, MobileSessionLimitError, SessionInvalidError, User } from '../services/auth';
 import { registerSessionExpiredHandler } from '../services/api';
 import { AppShell, canSwitchBranch, getShell } from '../utils/roles';
+import { clearAssistantSession } from '../utils/assistant';
 
 interface AuthContextType {
     can: (permission: string) => boolean;
@@ -50,6 +52,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const refreshUser = useCallback(async () => {
         try {
             let currentUser = await authService.getCurrentUser();
+            let accessLoaded = false;
 
             if (currentUser && currentUser.role !== 'SUPER_ADMIN') {
                 // 1. Renew the JWT and re-validate the account (revocation point):
@@ -71,10 +74,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 // 2. Enforce the mobile session-seat limit on startup for ADMIN/PHARMACIST.
                 //    On 403 (plan limit exceeded) → force logout. Network error → silent.
                 try {
-                    await authService.verifySessionOnStartup(currentUser!.id);
+                    // Both use the renewed token; neither depends on the other.
+                    await checkSessionAndAccess(
+                        () => authService.verifySessionOnStartup(currentUser!.id), loadAccess,
+                    );
+                    accessLoaded = true;
                 } catch (sessionError: any) {
                     if (sessionError instanceof MobileSessionLimitError) {
                         console.warn('AuthContext: session limit exceeded on startup, forcing logout');
+                        setPermissions({}); setFeatures({});
                         await authService.logout();
                         setUser(null);
                         return;
@@ -83,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
             }
 
-            if (currentUser) await loadAccess(); else { setPermissions({}); setFeatures({}); }
+            if (currentUser) { if (!accessLoaded) await loadAccess(); } else { setPermissions({}); setFeatures({}); }
             setUser(currentUser);
         } catch (error) {
             console.error('AuthContext: failed to load user', error);
@@ -103,6 +111,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // user's role (e.g. admin) until AuthContext is remounted.
     useEffect(() => {
         registerSessionExpiredHandler(() => {
+            clearAssistantSession();
             setUser(null); setPermissions({}); setFeatures({});
         });
     }, []);

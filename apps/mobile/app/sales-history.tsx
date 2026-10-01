@@ -1,5 +1,7 @@
 import { previewRefund } from '../../../packages/shared/src/returns';
+import { readSalesPages } from '../utils/sales-pages';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
     View, Text, ScrollView, TouchableOpacity, RefreshControl, Modal, Alert, ActivityIndicator,
     TextInput, KeyboardAvoidingView, Platform, Pressable, Animated, Easing,
@@ -17,8 +19,6 @@ import { InvoiceItemsTable, InvoiceNumberChip } from '../components/sales/Invoic
 import { formatDate, formatTime, iraqDateString, todayIraq } from '../utils/date';
 import { formatNumber, formatIQD, formatInvoiceNumber, paymentMethodLabel, CURRENCY } from '../utils/format';
 
-const PAGE_LIMIT = 50;
-const MAX_INITIAL_PAGES = 100;
 const SEARCH_DEBOUNCE_MS = 400;
 const DRUG_SEARCH_MIN = 2;
 
@@ -163,41 +163,37 @@ export default function SalesHistoryScreen() {
     const [submittingReturn, setSubmittingReturn] = useState(false);
     const [returnKey, setReturnKey]               = useState(newIdempotencyKey);
     const salesRequestVersion = useRef(0);
+    const pendingSales = useRef<AbortController | null>(null);
 
     const trimmedQuery = query.trim();
     const searchActive = trimmedQuery.length > 0;
     const drugQueryTooShort = searchMode === 'drug' && trimmedQuery.length < DRUG_SEARCH_MIN;
 
     const fetchSales = useCallback(async (offset: number, append: boolean) => {
+        pendingSales.current?.abort();
+        const controller = new AbortController();
+        pendingSales.current = controller;
         const requestVersion = ++salesRequestVersion.current;
         try {
             const from = periodFrom(filter);
-            let nextOffset = append ? offset : 0;
-            let page: Sale[] = [];
-            const collected: Sale[] = [];
-            let pageCount = 0;
-
             // The summary must be based on the complete selected period, not
             // only the first page returned by /sales (which is limited to 50).
-            do {
-                let q = `?limit=${PAGE_LIMIT}&offset=${nextOffset}`;
+            const result = await readSalesPages<Sale>(async (nextOffset, limit) => {
+                let q = `?limit=${limit}&offset=${nextOffset}`;
                 if (from) q += `&from=${from.toISOString()}`;
-                const data = await request<Sale[]>(`/sales${q}`);
-                if (requestVersion !== salesRequestVersion.current) return;
-                page = Array.isArray(data) ? data : [];
-                collected.push(...page);
-                nextOffset += page.length;
-                pageCount += 1;
-            } while (!append && page.length === PAGE_LIMIT && pageCount < MAX_INITIAL_PAGES);
-
-            setSales(prev => (append ? [...prev, ...collected] : collected));
-            setLastPageFull(page.length === PAGE_LIMIT);
+                const data = await request<Sale[]>(`/sales${q}`, { signal: controller.signal });
+                return Array.isArray(data) ? data : [];
+            }, offset, append, controller.signal);
+            if (requestVersion !== salesRequestVersion.current || controller.signal.aborted) return;
+            setSales(prev => (append ? [...prev, ...result.rows] : result.rows));
+            setLastPageFull(result.hasMore);
             setFailed(false);
         } catch (err) {
+            if (controller.signal.aborted) return;
             console.error('SalesHistoryScreen:', err);
             if (requestVersion === salesRequestVersion.current && !append) { setSales([]); setFailed(true); }
         } finally {
-            if (requestVersion === salesRequestVersion.current) {
+            if (requestVersion === salesRequestVersion.current && !controller.signal.aborted) {
                 setLoading(false);
                 setRefreshing(false);
                 setLoadingMore(false);
@@ -205,11 +201,12 @@ export default function SalesHistoryScreen() {
         }
     }, [filter]);
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         setLoading(true);
         setExpandedId(null);
         fetchSales(0, false);
-    }, [fetchSales]);
+        return () => { salesRequestVersion.current++; pendingSales.current?.abort(); };
+    }, [fetchSales]));
 
     const loadDetail = useCallback(async (saleId: string) => {
         setDetailLoading(saleId);

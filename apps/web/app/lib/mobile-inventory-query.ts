@@ -4,6 +4,11 @@ import { buildTenantBranchCondition, normalizeInventoryDashboardPage } from './i
 export const MOBILE_INVENTORY_PAGE_SIZE = 50;
 export type MobileInventorySummary = {
     ids: string[];
+    items: Array<{
+        id: string; drugId: string; barcode: string; drugName: string; tradeName: string;
+        scientificName: string; quantity: number; expiryDate: string | null;
+        price: number; reorderLevel: number; branchId: string; isQuickSale: boolean;
+    }>;
     total: number;
     totalValue: number;
     counts: Record<'all' | 'low-stock' | 'out' | 'near-expiry' | 'expired', number>;
@@ -26,8 +31,10 @@ export function buildMobileInventoryQuery(params: URLSearchParams, tenantWhere: 
     const direction = params.get('direction') === 'desc' ? Prisma.sql`DESC` : Prisma.sql`ASC`;
     return Prisma.sql`
         WITH stock AS (
-            SELECT i.id, i."minStock", i.price, gd."tradeName", gd.barcode,
+            SELECT i.id, i."drugId", i."branchId", i."isQuickSale", i."minStock", i.price,
+                gd."tradeName", gd.barcode, gd."scientificName",
                 COALESCE(SUM(bat.quantity), 0)::double precision AS quantity,
+                MIN(bat."expiryDate") FILTER (WHERE bat.quantity > 0) AS "expiryDate",
                 CEIL(EXTRACT(EPOCH FROM (MIN(bat."expiryDate") FILTER (WHERE bat.quantity > 0)
                     - ${now.toISOString()}::timestamp)) / 86400) AS days
             FROM "public"."Inventory" i
@@ -35,16 +42,23 @@ export function buildMobileInventoryQuery(params: URLSearchParams, tenantWhere: 
             JOIN "public"."Branch" br ON br.id = i."branchId"
             LEFT JOIN "public"."Batch" bat ON bat."inventoryId" = i.id
             WHERE ${buildTenantBranchCondition(tenantWhere, params.get('branchId') || undefined)}
-            GROUP BY i.id, i."minStock", i.price, gd."tradeName", gd.barcode
+            GROUP BY i.id, gd.id
         ), filtered AS (
             SELECT * FROM stock WHERE ${searchWhere} AND (${stockWhere})
         ), page AS (
-            SELECT id, ROW_NUMBER() OVER (ORDER BY ${sortColumn} ${direction}, id ASC) AS position
+            SELECT *, ROW_NUMBER() OVER (ORDER BY ${sortColumn} ${direction}, id ASC) AS position
             FROM filtered ORDER BY ${sortColumn} ${direction}, id ASC
             LIMIT ${MOBILE_INVENTORY_PAGE_SIZE} OFFSET ${(page - 1) * MOBILE_INVENTORY_PAGE_SIZE}
         )
         SELECT
             COALESCE((SELECT json_agg(id ORDER BY position) FROM page), '[]'::json) AS ids,
+            COALESCE((SELECT json_agg(json_build_object(
+                'id', id, 'drugId', "drugId", 'branchId', "branchId", 'isQuickSale', "isQuickSale",
+                'barcode', barcode, 'drugName', "tradeName", 'tradeName', "tradeName",
+                'scientificName', COALESCE("scientificName", ''), 'quantity', quantity,
+                'expiryDate', to_char("expiryDate", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+                'price', price, 'reorderLevel', "minStock"
+            ) ORDER BY position) FROM page), '[]'::json) AS items,
             (SELECT COUNT(*)::integer FROM filtered) AS total,
             COALESCE(SUM(quantity * price), 0)::double precision AS "totalValue",
             json_build_object(

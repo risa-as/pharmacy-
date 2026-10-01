@@ -21,7 +21,7 @@ it('returns both official and old printed number matches, scoped to the employee
     const matches=[{id:'official'},{id:'printed'}];
     const h=setup(matches);
     expect(await h.handler(null,'٢٣٥٠')).toEqual({success:true,sales:matches});
-    expect(h.authorize).toHaveBeenCalledWith('canViewSales');
+    expect(h.authorize).toHaveBeenCalledWith('canViewSales', { read: true }); // a read: may reuse a recent check
     expect(h.findMany.mock.calls[0]?.[0]).toMatchObject({where:{user:{branchId:'own-branch'},OR:expect.arrayContaining([{invoiceNumber:'2350'},{printedReference:'2350'}])}});
 });
 it('discards results if the employee session changed during the search', async () => {

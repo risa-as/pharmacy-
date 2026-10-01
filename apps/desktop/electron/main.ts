@@ -2081,6 +2081,30 @@ ipcMain.handle("get-products", async (_, arg: any) => {
   }
 });
 
+// Dashboard low stock — the same rule as the dashboard applied to get-products
+// (stock > 0 and below the item's minimum), without loading the whole catalogue
+// with its batches: only quantity and minimum per inventory row of this branch.
+ipcMain.handle("get-low-stock", async (_, arg: any) => {
+  try {
+    const branchId = String(arg?.branchId || store.get("branchId") || "");
+    const rows = await prisma.inventory.findMany({
+      where: { ...(branchId ? { branchId } : {}), drug: { isActive: true } },
+      select: { drugId: true, quantity: true, minStock: true, drug: { select: { tradeName: true } } },
+    });
+    const byDrug = new Map<string, { id: string; name: string; stock: number; minStock: number }>();
+    for (const r of rows) {
+      const cur = byDrug.get(r.drugId);
+      if (cur) cur.stock += r.quantity;
+      else byDrug.set(r.drugId, { id: r.drugId, name: r.drug.tradeName, stock: r.quantity, minStock: r.minStock ?? 1 });
+    }
+    const low = [...byDrug.values()].filter((p) => p.stock > 0 && p.stock < p.minStock);
+    return { count: low.length, items: low.slice(0, 6) };
+  } catch (error) {
+    console.error("Error in get-low-stock:", error);
+    return { success: false, count: 0, items: [] };
+  }
+});
+
 // Fast barcode lookup — returns a single product by exact barcode match
 ipcMain.handle("get-product-by-barcode", async (_, { barcode, branchId }: { barcode: string; branchId: string }) => {
   try {
@@ -2292,7 +2316,8 @@ ipcMain.handle("get-today-sales", async (_, userId?: string) => {
     };
   } catch (error) {
     console.error("Error fetching today sales:", error);
-    return { sales: [], total: 0, count: 0, items: 0 };
+    // success:false lets the dashboard keep its last good numbers (the empty fields stay for older callers).
+    return { success: false, sales: [], total: 0, count: 0, items: 0 };
   }
 });
 
@@ -2320,7 +2345,7 @@ async function getInventoryRowForBranch(
 
 ipcMain.handle("get-inventory-items", async (_, { searchTerm, user }) => {
   try {
-    const auth = await authorizeOperations("canViewInventory");
+    const auth = await authorizeOperations("canViewInventory", { read: true });
     user = {...user, branchId:auth.who.branch};
     const effectiveBranchId = resolveInventoryBranchId(user);
     if (!effectiveBranchId) {
@@ -2371,7 +2396,7 @@ ipcMain.handle("get-inventory-items", async (_, { searchTerm, user }) => {
 
 ipcMain.handle("get-inventory-item", async (_, { inventoryId, user }) => {
   try {
-    const auth = await authorizeOperations("canViewInventory");
+    const auth = await authorizeOperations("canViewInventory", { read: true });
     user = {...user, branchId:auth.who.branch};
     const effectiveBranchId = resolveInventoryBranchId(user);
     if (!effectiveBranchId) return null;
@@ -3320,7 +3345,7 @@ ipcMain.handle("open-backup-folder", async () => {
 // 1. Get Debtors List
 ipcMain.handle("get-debtors", async (_event, { branchId, term }) => {
   try {
-    const auth = await authorizeOperations("canViewDebts");
+    const auth = await authorizeOperations("canViewDebts", { read: true });
     branchId = auth.who.branch;
     const whereClause: any = {
       balance: { gt: 0 },
@@ -3352,7 +3377,7 @@ ipcMain.handle("get-debtors", async (_event, { branchId, term }) => {
 // 2. Get Debtor Details (Ledger)
 ipcMain.handle("get-debtor-details", async (_event, patientId) => {
   try {
-    const auth = await authorizeOperations("canViewDebts");
+    const auth = await authorizeOperations("canViewDebts", { read: true });
     if(!await prisma.patient.findFirst({where:{id:patientId,branchId:auth.who.branch}})) throw Error("العميل خارج فرع الجهاز");
     auth.assertCurrent();
     const patient = await prisma.patient.findUnique({
@@ -3659,7 +3684,7 @@ ipcMain.handle("retry-sync-failure", async (_event, failureData) => {
 
 ipcMain.handle("search-sale", async (_event, query) => {
   try {
-    const auth = await authorizeOperations("canViewSales");
+    const auth = await authorizeOperations("canViewSales", { read: true });
     const scoped = { user: {branchId: auth.who.branch} };
     // Normalize Arabic/Eastern-Arabic digits to Western digits
     const normalized = String(query).replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
@@ -3698,7 +3723,7 @@ ipcMain.handle("search-sale", async (_event, query) => {
 
 ipcMain.handle("search-sales-by-drug", async (_event, { query, branchId }) => {
   try {
-    const auth = await authorizeOperations("canViewSales");
+    const auth = await authorizeOperations("canViewSales", { read: true });
     branchId = auth.who.branch;
     const normalized = String(query).trim();
     if (!normalized) return { success: false, error: "يرجى إدخال اسم الدواء أو الباركود" };

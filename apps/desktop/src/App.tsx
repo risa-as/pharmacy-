@@ -2,7 +2,7 @@ import { readStorage, removeStorage } from "../../../packages/shared/src/safe-st
 import StaffSalesPage from "./components/StaffSalesPage";
 import StaffSupplyPage from "./components/StaffSupplyPage";
 import StaffSyncStatus from "./components/StaffSyncStatus";
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useTransition } from 'react';
 import StocktakePage from './components/StocktakePage';
 import WarehouseReceiptsPage from './components/WarehouseReceiptsPage';
 import DashboardPage from './components/DashboardPage';
@@ -16,6 +16,7 @@ import UpdateBanner from './components/UpdateBanner';
 
 import { ShoppingCart, Settings, LogOut, Package, LayoutDashboard, HandCoins, ClipboardList, PackageCheck, ReceiptText, ArrowLeftRight, Moon, Sun, Loader2 } from 'lucide-react';
 import logoUrl from './assets/logo.png';
+import { clearPageCache } from './lib/page-cache';
 
 
 
@@ -66,6 +67,8 @@ type LicenseStatus = 'checking' | 'valid' | 'invalid' | 'no-key';
 
 function App() {
     const [currentUser, setCurrentUser] = useState<any>(null);
+    // Page cache never outlives a user or branch: cleared on logout, switch or branch change.
+    useEffect(() => { clearPageCache(); }, [currentUser?.id, currentUser?.branchId]);
     const [operationsAccess, setOperationsAccess] = useState<any>(null);
     useEffect(() => {
         let active=true; setOperationsAccess(null);
@@ -75,6 +78,16 @@ function App() {
     const [settingsTab,setSettingsTab] = useState<"backups"|"failures">("backups");
     const [sessionLoading, setSessionLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState<Page>('dashboard');
+    // Switching pages renders the new page as a transition: the sidebar answers the
+    // click at once (the target is highlighted) and the app never freezes while a
+    // heavy page (inventory: hundreds of rows) is being rendered.
+    const [, startPageTransition] = useTransition();
+    const [targetPage, setTargetPage] = useState<Page | null>(null);
+    const navigate = (page: Page) => {
+        setTargetPage(page);
+        startPageTransition(() => setCurrentPage(page));
+    };
+    useEffect(() => { setTargetPage(null); }, [currentPage]);
     const [isDark, setIsDark] = useState(false);
 
     // ==================== Electron Focus Fix ====================
@@ -302,13 +315,13 @@ function App() {
                 <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1">
                 {navItems.map((item) => {
                     const Icon = item.icon;
-                    const isActive = currentPage === item.id;
+                    const isActive = (targetPage ?? currentPage) === item.id;
                     return (
                         <button
                             key={item.id}
                             title={item.label}
                             aria-label={item.label}
-                            onClick={() => setCurrentPage(item.id)}
+                            onClick={() => navigate(item.id)}
                             className={`relative group shrink-0 p-2 rounded-lg transition-all duration-200 ${isActive
                                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30'
                                 : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'

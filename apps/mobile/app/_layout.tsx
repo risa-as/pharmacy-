@@ -89,7 +89,7 @@ function RootStack() {
     if (isLoading || !user) return;
     // AuthProvider has finished validating and renewing the startup session.
     return NetInfo.addEventListener(state => {
-      if (state.isConnected && state.isInternetReachable) void syncService.syncData();
+      if (state.isConnected && state.isInternetReachable) void syncService.syncData({ prioritizeForeground: true });
     });
   }, [isLoading, user?.id, user?.branchId]);
 
