@@ -25,6 +25,8 @@ jobs:
       NEXTAUTH_SECRET: ci-only-not-a-production-secret-123456789
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 8.15.4
@@ -69,6 +71,7 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: node --test scripts/audit-mitigations.test.mjs
       - run: pnpm audit:prod
       - uses: actions/upload-artifact@v4
         if: always()
