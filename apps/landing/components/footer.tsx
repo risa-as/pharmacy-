@@ -81,6 +81,7 @@ export default function Footer() {
           <p>© {year} فاراماس للحلول البرمجية. جميع الحقوق محفوظة.</p>
           <div className="flex items-center gap-6">
             <Link href="/privacy" className="transition-colors hover:text-white">سياسة الخصوصية</Link>
+            <Link href="/data-deletion" className="transition-colors hover:text-white">حذف البيانات</Link>
             <Link href="/terms" className="transition-colors hover:text-white">شروط الاستخدام</Link>
           </div>
         </div>

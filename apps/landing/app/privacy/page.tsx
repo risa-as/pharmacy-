@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         <SectionHeading
           badge="القانوني"
           title="سياسة الخصوصية"
-          subtitle="آخر تحديث: مارس 2026"
+          subtitle="آخر تحديث: 7 أكتوبر 2026"
         />
 
         <div className="mt-12 prose prose-slate max-w-none space-y-10 text-right">
@@ -21,7 +21,7 @@ export default function PrivacyPage() {
           <section className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4">1. مقدمة</h2>
             <p className="text-slate-600 leading-relaxed">
-              نظام فاراماس ("نحن"، "الشركة") يلتزم بحماية خصوصية مستخدميه. تصف هذه السياسة كيفية جمع واستخدام وحماية المعلومات التي تقدمها عند استخدامك لنظام فاراماس لإدارة الصيدليات، سواء عبر لوحة تحكم الويب أو تطبيق الهاتف أو برنامج سطح المكتب.
+              فريق فاراماس ("نحن") يلتزم بحماية خصوصية مستخدميه. تصف هذه السياسة كيفية جمع واستخدام وحماية المعلومات التي تقدمها عند استخدامك لنظام فاراماس لإدارة الصيدليات، سواء عبر لوحة تحكم الويب أو تطبيق الهاتف أو برنامج سطح المكتب.
             </p>
           </section>
 
@@ -72,10 +72,10 @@ export default function PrivacyPage() {
           <section className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4">4. حماية البيانات</h2>
             <p className="text-slate-600 leading-relaxed mb-4">
-              نستخدم أحدث تقنيات التشفير (SSL/TLS) لحماية بياناتك أثناء النقل والتخزين. يتم تخزين بياناتك على خوادم آمنة في مراكز بيانات موثوقة.
+              تُستخدم اتصالات HTTPS لحماية البيانات أثناء النقل إلى الخدمة السحابية. تُشفّر بيانات اعتماد WhatsApp ومحتوى محادثاته المحفوظ في فاراماس، ويقتصر الوصول داخل النظام على المستخدمين المخولين في المؤسسة. يجب أيضًا حماية الأجهزة المحلية وحساباتها؛ تشفير الاتصال لا يعني أن كل ملف على جهاز المستخدم مشفّر.
             </p>
             <div className="grid sm:grid-cols-3 gap-4 mt-4">
-              {['تشفير SSL/TLS', 'نسخ احتياطي يومي', 'مراقبة أمنية 24/7'].map((item) => (
+              {['اتصال HTTPS', 'صلاحيات حسب المؤسسة', 'تشفير بيانات WhatsApp المحفوظة'].map((item) => (
                 <div key={item} className="bg-primary-50 rounded-xl p-4 text-center">
                   <span className="text-primary-700 font-semibold text-sm">{item}</span>
                 </div>
@@ -86,7 +86,7 @@ export default function PrivacyPage() {
           <section className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4">5. مشاركة المعلومات</h2>
             <p className="text-slate-600 leading-relaxed">
-              لا نبيع أو نؤجر أو نشارك معلوماتك الشخصية مع أطراف ثالثة، إلا في الحالات التالية: الامتثال للقانون أو أوامر المحاكم، أو لحماية حقوقنا القانونية، أو بموافقتك الصريحة.
+              لا نبيع أو نؤجر بياناتك الشخصية. يستخدم تقديم الخدمة مزوّدي الاستضافة وقاعدة البيانات، وعند تفعيل WhatsApp تُرسل بيانات الرسائل إلى Meta لتنفيذ الإرسال واستقبال حالاته. وقد تُكشف معلومات عند وجود التزام قانوني أو بموافقتك. لا تُرسل محادثات WhatsApp إلى نموذج ذكاء اصطناعي للرد الآلي في التنفيذ الحالي.
             </p>
           </section>
 
@@ -112,14 +112,30 @@ export default function PrivacyPage() {
             </ul>
           </section>
 
+          <section id="whatsapp" className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100 scroll-mt-28">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">7. بيانات WhatsApp وMeta</h2>
+            <div className="space-y-4 text-slate-600 leading-relaxed">
+              <p>ربط WhatsApp اختياري. عند تفعيله للمؤسسة، نعالج معرّفي حساب WhatsApp للأعمال والرقم، وبيانات الاعتماد، والقوالب، وأرقام المستلمين وأسماءهم ونصوص الرسائل وحالات الإرسال والتسليم. تُستخدم هذه البيانات لإدارة الربط والحملات والموافقة على التواصل والفوترة داخل فاراماس.</p>
+              <p>في مسار المشاركة، يستطيع صاحب الرقم متابعة استخدام تطبيق WhatsApp Business. إذا اختار مشاركة السجل في Meta، تصل إلينا المحادثات التي ينقلها Meta. نحفظ النصوص والتعليقات النصية التي يدعمها النظام مشفّرة، بما فيها الرسائل الواردة والصادرة من التطبيق، لعرضها للمستخدمين المخولين في المؤسسة نفسها. لا ينزّل العرض الحالي محتوى المرفقات، ولا ينشئ مرضى تلقائيًا من جهات الاتصال المستوردة.</p>
+              <p>يسمح الربط لـ Meta بمعالجة رقم المستلم ومحتوى الرسالة وبيانات التسليم وفق سياساتها. يجب على المؤسسة الحصول على موافقة التواصل المناسبة؛ استيراد تاريخ المحادثات لا يعد موافقة تسويقية. يمكن للمستلم إيقاف الرسائل بطلب «إيقاف»، ويُحفظ ما يلزم لاحترام طلبه ومنع إعادة الإرسال إليه.</p>
+              <p>تُحفظ سجلات الحملات والموافقات والمحادثات لتقديم الخدمة ومراجعة نتائجها. تُمحى محتويات طابور إشعارات Meta بعد معالجتها بنجاح مع إبقاء معرّفات منع التكرار. لا يحذف إلغاء الربط تلقائيًا سجلات المؤسسة داخل فاراماس؛ يمكن طلب حذفها أو تصديرها وفق التعليمات أدناه، مع مراجعة ما يلزم الاحتفاظ به لأسباب محاسبية أو قانونية أو لمنع تكرار الرسائل والخصومات.</p>
+              <p>يجب ألا تتضمن الحملات العامة تشخيصًا أو وصفة أو تفاصيل صحية خاصة. للمؤسسة مسؤولية اختيار المحتوى والمستلمين المخولين؛ لا تعتمد الخدمة الحالية مساعدًا آليًا لتقديم الاستشارات العلاجية.</p>
+            </div>
+          </section>
+
+          <section id="data-deletion" className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100 scroll-mt-28">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">8. طلب حذف البيانات وإلغاء الربط</h2>
+            <p className="text-slate-600 leading-relaxed">يمكن لصاحب المؤسسة أو صاحب البيانات طلب حذف بياناته المرتبطة بفاراماس وMeta. نتأكد من هوية الطالب وصلاحيته ونطاق الطلب قبل التنفيذ، ولا يزيل فصل WhatsApp وحده البيانات المحفوظة لدينا أو لدى Meta.</p>
+            <a href="/data-deletion" className="inline-block mt-4 text-primary-600 hover:underline font-semibold">عرض خطوات طلب حذف البيانات</a>
+          </section>
+
           <section className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">7. التواصل معنا</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">9. التواصل معنا</h2>
             <p className="text-slate-600 leading-relaxed">
               لأي استفسارات حول سياسة الخصوصية، يمكنك التواصل معنا عبر:
             </p>
             <div className="mt-4 space-y-2 text-slate-700">
-              <p>📧 البريد الإلكتروني: <a href="mailto:privacy@faramace.com" className="text-primary-600 hover:underline">privacy@faramace.com</a></p>
-              <p>📞 الهاتف: <span dir="ltr">+964 780 000 0000</span></p>
+              <p>استخدم <a href="/contact" className="text-primary-600 hover:underline">قنوات التواصل المنشورة لفاراماس</a> للاستفسار عن الخصوصية أو طلب حذف البيانات. لا ترسل كلمة مرور أو رمز وصول أو سجل محادثات مرضى في الطلب الأول.</p>
             </div>
           </section>
 
