@@ -23,7 +23,7 @@ import {
   Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { apiService, newIdempotencyKey } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
@@ -122,6 +122,7 @@ export default function SmartOrdersScreen() {
   const [search, setSearch] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const fetchVersion = useRef(0);
+  const pendingPlanning = useRef<AbortController | null>(null);
   const submitLock = useRef(false);
   const purchaseAttempt = useRef({ signature: "", key: "" });
   const quantityFor = (r: SmartOrderItem) =>
@@ -151,6 +152,9 @@ export default function SmartOrdersScreen() {
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchData = useCallback(
     async (fresh = false) => {
+      pendingPlanning.current?.abort();
+      const controller = new AbortController();
+      pendingPlanning.current = controller;
       const version = ++fetchVersion.current;
       setFetchError("");
       try {
@@ -158,8 +162,9 @@ export default function SmartOrdersScreen() {
           settings,
           selectedBranch ?? undefined,
           fresh,
+          controller.signal,
         );
-        if (version !== fetchVersion.current) return;
+        if (version !== fetchVersion.current || controller.signal.aborted) return;
         setAnalysis(data);
         setItems(
           data.rows.map((r) => ({
@@ -174,13 +179,13 @@ export default function SmartOrdersScreen() {
           })),
         );
       } catch (error) {
-        if (version === fetchVersion.current) {
+        if (version === fetchVersion.current && !controller.signal.aborted) {
           setItems([]);
           setAnalysis(null);
           setFetchError("تعذر تحديث التحليل. تحقق من الاتصال ثم أعد المحاولة.");
         }
       } finally {
-        if (version === fetchVersion.current) {
+        if (version === fetchVersion.current && !controller.signal.aborted) {
           setLoading(false);
           setRefreshing(false);
         }
@@ -188,13 +193,14 @@ export default function SmartOrdersScreen() {
     },
     [selectedBranch, settings],
   );
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     setLoading(true);
     fetchData();
     return () => {
       fetchVersion.current++;
+      pendingPlanning.current?.abort();
     };
-  }, [fetchData]);
+  }, [fetchData]));
   useEffect(() => {
     setSelectedIds(new Set());
     setQuantities({});

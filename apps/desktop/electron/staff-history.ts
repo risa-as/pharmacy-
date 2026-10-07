@@ -2,11 +2,11 @@ import { ipcMain } from "electron";
 import { saleIdPrefix } from "./sale-ref";
 export function registerStaffHistory(
   db: any,
-  authorize: (permission: string) => Promise<any>,
+  authorize: (permission: string, opts?: { read?: boolean }) => Promise<any>,
 ) {
   ipcMain.handle("staff:sales", async (_event, input: any = {}) => {
     try {
-      const session = await authorize("canViewSales");
+      const session = await authorize("canViewSales", { read: true });
       const page = Math.max(
         1,
         Math.min(100000, Math.floor(Number(input.page)) || 1),

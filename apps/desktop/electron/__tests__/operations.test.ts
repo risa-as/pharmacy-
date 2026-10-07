@@ -1,15 +1,15 @@
-import {beforeEach,expect,it,vi} from 'vitest';
+import {beforeEach,describe,expect,it,vi} from 'vitest';
 const h=vi.hoisted(()=>({handlers:new Map<string,any>(),store:new Map<string,any>()}));
 vi.mock('electron',()=>({ipcMain:{handle:(name:string,fn:any)=>h.handlers.set(name,fn)},net:{fetch:(input:any,init:any)=>globalThis.fetch(input,init)}}));
 vi.mock('../store',()=>({default:{get:(key:string)=>h.store.get(key)}}));
 vi.mock('../api-config',()=>({getApiBaseUrl:()=> 'https://example.test/api'}));
 import {registerOperations} from '../operations';
-let prepare:any,refresh:any;
+let prepare:any,refresh:any,authorize:any;
 const response=(data:any,ok=true)=>({ok,json:async()=>data});
 const access={token:'private-token',permissions:{canDoStocktake:true,canViewSuppliers:true,canCreatePurchase:true,canViewWarehouseOrders:true,canReceivePurchase:true,canReturnWarehouseOrder:true},features:{warehouseManagement:true}};
 beforeEach(()=>{
  h.handlers.clear();h.store=new Map(Object.entries({loggedInUserId:'u',syncUserId:'u',syncToken:'signed',branchId:'b',syncOrgId:'org',syncUserRole:'ADMIN'}));
- prepare=vi.fn().mockResolvedValue(undefined);refresh=vi.fn().mockResolvedValue({success:true});registerOperations(prepare,refresh);
+ prepare=vi.fn().mockResolvedValue(undefined);refresh=vi.fn().mockResolvedValue({success:true});authorize=registerOperations(prepare,refresh);
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/session')?response(access):String(url).includes('/purchases/p?')?response({branchId:'b',warehouseOrderId:'o'}):String(url).endsWith('/purchases/p')?response({branchId:'b',warehouseOrderId:'o'}):response({success:true})));
 });
 const call=(input:any)=>h.handlers.get('operations:request')(null,input);
@@ -65,7 +65,9 @@ it('blocks removed warehouse returns before any network request',async()=>{
 });
 
 
-it('shares simultaneous access verification but refreshes permissions on the next request', async () => {
+// Policy changed by the owner (2026-10-01): a successful check may serve reads for
+// 3 minutes. A revocation reaches writes at once and reads after the reuse expires.
+it('shares simultaneous access verification; a revocation reaches writes at once and reads after the reuse', async () => {
  let release!: (value: any) => void;
  const pending = new Promise(resolve => { release = resolve; });
  vi.stubGlobal('fetch', vi.fn(async (url: any) => String(url).endsWith('/session') ? pending : response([])));
@@ -76,8 +78,12 @@ it('shares simultaneous access verification but refreshes permissions on the nex
  expect((await accessCall).success).toBe(true);
  expect((await listCall).success).toBe(true);
  vi.stubGlobal('fetch', vi.fn(async () => response({error:'revoked'}, false)));
- expect((await h.handlers.get('operations:access')()).success).toBe(false);
+ // A write verifies again and sees the revocation immediately.
+ expect((await call({path:'/purchases/p/receive',method:'POST',body:{items:[]}})).success).toBe(false);
  expect(fetch).toHaveBeenCalledOnce();
+ // The failed check dropped the reuse: the next read asks the server and is refused too.
+ expect((await h.handlers.get('operations:access')()).success).toBe(false);
+ expect(fetch).toHaveBeenCalledTimes(2);
 });
 it('does not share an in-flight authorization after switching users', async () => {
  let release!: (value: any) => void;
@@ -111,4 +117,83 @@ it('pulls stock after a receipt answered with a server error, since it may have 
  const normal=fetch;vi.stubGlobal('fetch',vi.fn(async(url:any,opts:any)=>String(url).includes('/receive')?{ok:false,status:502,json:async()=>({message:'bad gateway'})}:normal(url,opts)));
  expect(await call({path:'/purchases/p/receive',method:'POST'})).toMatchObject({success:false,status:502});
  expect(refresh).toHaveBeenCalledOnce();
+});
+
+// Owner's decision (2026-10-01): a successful check may serve READS for 3 minutes; writes always re-verify.
+describe('reusing a successful permission check for reads', () => {
+ const sessions=()=>(fetch as any).mock.calls.filter((c:any[])=>String(c[0]).endsWith('/session')).length;
+ it('two reads within 3 minutes ask the server once; a write asks again', async()=>{
+  await authorize('canDoStocktake',{read:true});
+  await authorize('canDoStocktake',{read:true});
+  expect(sessions()).toBe(1);
+  await authorize('canDoStocktake');
+  expect(sessions()).toBe(2);
+ });
+ it('expires after 3 minutes', async()=>{
+  vi.useFakeTimers({toFake:['Date']});
+  try{
+   vi.setSystemTime(new Date('2026-10-01T10:00:00Z'));
+   await authorize('canDoStocktake',{read:true});
+   vi.setSystemTime(new Date('2026-10-01T10:02:59Z'));
+   await authorize('canDoStocktake',{read:true});
+   expect(sessions()).toBe(1);
+   vi.setSystemTime(new Date('2026-10-01T10:03:01Z'));
+   await authorize('canDoStocktake',{read:true});
+   expect(sessions()).toBe(2);
+  } finally { vi.useRealTimers(); }
+ });
+ it('a change of identity or session version forces a new check', async()=>{
+  await authorize('canDoStocktake',{read:true});
+  h.store.set('syncSessionVersion',2);
+  await authorize('canDoStocktake',{read:true});
+  h.store.set('branchId','b2');
+  await authorize('canDoStocktake',{read:true});
+  expect(sessions()).toBe(3);
+ });
+ it('a failed check drops the reuse at once (revoked permission)', async()=>{
+  await authorize('canDoStocktake',{read:true});
+  vi.stubGlobal('fetch',vi.fn(async()=>response({error:'revoked'},false)));
+  await expect(authorize('canDoStocktake')).rejects.toThrow();
+  vi.stubGlobal('fetch',vi.fn(async()=>response({error:'revoked'},false)));
+  await expect(authorize('canDoStocktake',{read:true})).rejects.toThrow();
+ });
+ it('a reused check still enforces the permission', async()=>{
+  await authorize('canDoStocktake',{read:true});
+  await expect(authorize('canTransferStock',{read:true})).rejects.toThrow();
+ });
+ it('warehouse reads (GET) reuse the check; writes (POST) verify again', async()=>{
+  await call({path:'/purchases/p'});
+  await call({path:'/purchases/p'});
+  expect(sessions()).toBe(1);
+  await call({path:'/purchases/p/receive',method:'POST',body:{items:[]}});
+  expect(sessions()).toBe(2);
+ });
+});
+
+describe('which requests wait for each other', () => {
+ it('a plain read is never refused while another request (e.g. a write) is in flight; a second write still is', async()=>{
+  let release!: () => void;
+  const held = new Promise<void>(r => { release = r; });
+  prepare.mockImplementation(() => held); // the write stays in its sync step
+  const write = call({path:'/purchases/p/receive',method:'POST',body:{items:[]}});
+  await new Promise(r => setTimeout(r, 0));
+  // A list read from another page goes through at once.
+  expect((await call({path:'/purchases'})).success).toBe(true);
+  // A second write is still refused while the first runs.
+  const second = await call({path:'/purchases/p/receive',method:'POST',body:{items:[]}});
+  expect(second).toMatchObject({ success: false, error: 'انتظر اكتمال العملية الحالية' });
+  release();
+  expect((await write).success).toBe(true);
+ });
+ it('a count sheet read syncs first, so it still runs one at a time', async()=>{
+  let release!: () => void;
+  const held = new Promise<void>(r => { release = r; });
+  prepare.mockImplementation(() => held);
+  vi.stubGlobal('fetch',vi.fn(async(url:any)=>String(url).endsWith('/session')?response(access):response({stocktake:{branchId:'b',items:[]},sheet:[]})));
+  const sheet = call({path:'/inventory/stocktake/s1?type=sheet'});
+  await new Promise(r => setTimeout(r, 0));
+  expect((await call({path:'/inventory/stocktake/s2?type=sheet'})).success).toBe(false);
+  release();
+  expect((await sheet).success).toBe(true);
+ });
 });

@@ -13,6 +13,8 @@ import {
   X,
   AlertTriangle,
   PauseCircle,
+  Keyboard,
+  UserRound,
 } from "lucide-react";
 import SyncHealthDashboard from "../SyncHealthDashboard";
 import { formatIQD, getExpiryStatus } from "./pos-utils";
@@ -82,197 +84,147 @@ export default function POSProductGrid({
   // Show products when: user typed text search (>= 2 chars) OR grid toggle is on
   // NOTE: barcode scan does NOT set showSearchResults so no grid flash
   const showProducts = showSearchResults || showGrid;
+  // One quiet style for the header actions; colour is kept for state (shift, selected).
+  const actionButton =
+    "h-9 shrink-0 flex items-center gap-1.5 px-2.5 rounded-lg border border-border bg-background text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors";
   return (
     <div className="flex w-[68%] flex-col border-l border-border/50 bg-muted/20 print:hidden relative">
-      {/* شريط الحالة الذكي */}
-      <div className="bg-zinc-900 text-white h-9 flex items-center justify-between px-4 text-xs font-medium shrink-0">
-        <div className="flex items-center gap-4">
+      {/* شريط الحالة: الاتصال والمستخدم والوقت فقط. قائمة الاختصارات الكاملة في F1
+          (كانت 11 اختصاراً هنا تزدحم وتُقص على الشاشات الصغيرة). */}
+      <div className="bg-zinc-900 text-white h-8 flex items-center justify-between px-4 text-xs font-medium shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
           <div
             className={`flex items-center gap-1.5 ${isOnline ? "text-success" : "text-warning"}`}
           >
-            {isOnline ? (
-              <Wifi className="w-3.5 h-3.5" />
-            ) : (
-              <WifiOff className="w-3.5 h-3.5" />
-            )}
+            {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
             <span>{isOnline ? "متصل" : "غير متصل"}</span>
           </div>
-          <div className="w-px h-4 bg-zinc-700" />
-          <span className="text-zinc-400">مرحباً، {user.name}</span>
+          <div className="w-px h-3.5 bg-zinc-700" />
+          <span className="text-zinc-400 truncate">مرحباً، {user.name}</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-zinc-500">
-            {([
-              ['F1', 'مساعدة'],
-              ['F2', 'بحث'],
-              ['F3', 'خصم'],
-              ['F4', 'نقدي'],
-              ['F5', 'بطاقة'],
-              ['F6', 'آجل'],
-              ['F7', 'إلغاء'],
-              ['F8', 'طباعة'],
-              ['F9', 'إرجاع'],
-              ['F10', 'تعليق'],
-              ['F11', 'معلّقة'],
-            ] as [string, string][]).map(([key, label]) => (
-              <span key={key} className="flex items-center gap-1">
-                <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] tracking-wider text-zinc-300">{key}</span>
-                <span className="text-[10px]">{label}</span>
-              </span>
-            ))}
-          </div>
-          <div className="w-px h-4 bg-zinc-700" />
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="flex items-center gap-1.5 text-zinc-400" title="اضغط F1 لعرض كل الاختصارات">
+            <Keyboard className="w-3.5 h-3.5" />
+            <span>الاختصارات</span>
+            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-zinc-300">F1</kbd>
+          </span>
+          <div className="w-px h-3.5 bg-zinc-700" />
           <div className="flex items-center gap-1.5 text-zinc-400">
             <Clock className="w-3.5 h-3.5" />
             <span className="font-mono tabular-nums">
-              {currentTime.toLocaleTimeString("ar-IQ-u-nu-latn", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {currentTime.toLocaleTimeString("ar-IQ-u-nu-latn", { hour: "2-digit", minute: "2-digit" })}
             </span>
           </div>
         </div>
       </div>
 
-      {/* الهيدر */}
-      <div className="bg-card/90 backdrop-blur-md px-3 py-2 flex justify-between items-center shadow-sm border-b border-border z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center shadow-md shadow-primary/20">
+      {/* الهيدر: العنوان والوردية، ثم أزرار بأسلوب واحد، ثم العميل والمزامنة.
+          اللون للحالة فقط (الوردية)؛ الاختصار في تلميح الزر. */}
+      <div className="bg-card/90 backdrop-blur-md px-3 py-2 flex items-center gap-2 shadow-sm border-b border-border z-10">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center shadow-sm shadow-primary/20">
             <LayoutGrid className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h1 className="text-sm font-black text-foreground tracking-tight leading-tight">نقطة البيع</h1>
-            <p className="text-muted-foreground text-[10px]">
+          <div className="leading-tight hidden lg:block">
+            <h1 className="text-sm font-black text-foreground">نقطة البيع</h1>
+            <p className="text-muted-foreground text-[10px] tabular-nums">
               {products.length} منتج • {cart.reduce((a, c) => a + c.quantity, 0)} في السلة
             </p>
           </div>
-          <div className="w-px h-6 bg-border mx-1"></div>
-          <button
-            onClick={onToggleShift}
-            className={`flex items-center gap-1.5 h-9 px-2.5 rounded-lg font-bold transition-all shadow-sm ${
-              isShiftOpen
-                ? "bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30"
-                : "bg-success/10 text-success hover:bg-success/20 border border-success/30"
-            }`}
-          >
-            <Clock className={`w-4 h-4 ${isShiftOpen ? "animate-pulse" : ""}`} />
-            <div className="flex flex-col items-start leading-none">
-              <span className="text-[10px] opacity-80">
-                {isShiftOpen ? "إنهاء الوردية" : "بدء الوردية"}
-              </span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="font-mono text-xs">
-                  {isShiftOpen ? shiftDuration : "--:--:--"}
-                </span>
-                {isShiftOpen && shiftSafeName && (
-                  <span className="text-[9px] bg-destructive/10 px-1 py-0.5 rounded border border-destructive/20">
-                    {shiftSafeName}
-                  </span>
-                )}
-              </div>
-            </div>
-          </button>
+        </div>
 
+        <button
+          onClick={onToggleShift}
+          title={isShiftOpen ? `إنهاء الوردية${shiftSafeName ? ` • الصندوق: ${shiftSafeName}` : ""}` : "بدء الوردية"}
+          className={`shrink-0 flex items-center gap-2 h-9 px-3 rounded-[10px] text-xs font-bold border transition-colors ${
+            isShiftOpen
+              ? "bg-success/10 text-success border-success/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+              : "bg-muted text-muted-foreground border-border hover:bg-success/10 hover:text-success hover:border-success/30"
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${isShiftOpen ? "bg-success animate-pulse" : "bg-muted-foreground/50"}`} />
+          {isShiftOpen ? (
+            <>
+              <span className="font-mono tabular-nums">{shiftDuration}</span>
+              <span className="font-medium opacity-80 hidden xl:inline">إنهاء</span>
+            </>
+          ) : (
+            <span>بدء الوردية</span>
+          )}
+        </button>
+
+        <div className="w-px h-6 bg-border shrink-0" />
+
+        <div className="flex items-center gap-1 shrink-0">
           {isShiftOpen && (
-            <button
-              onClick={onOpenCashDrop}
-              className="flex items-center gap-1.5 h-9 px-2.5 bg-warning/10 text-warning hover:bg-warning/20 border border-warning/30 rounded-lg font-bold transition-all shadow-sm"
-              title="سحب أو إيداع نقدي في درج الصندوق"
-            >
+            <button onClick={onOpenCashDrop} className={actionButton} title="سحب أو إيداع نقدي في درج الصندوق" aria-label="سحب أو إيداع نقدي">
               <Banknote className="w-4 h-4" />
-              <span className="text-[10px]">سحب/إيداع</span>
+              <span className="hidden xl:inline">سحب/إيداع</span>
             </button>
           )}
-
-          <button
-            onClick={onOpenReturn}
-            className="flex items-center gap-1.5 h-9 px-2.5 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 rounded-lg font-bold transition-all shadow-sm"
-            title="إرجاع بضاعة (F9)"
-          >
+          <button onClick={onOpenReturn} className={actionButton} title="إرجاع بضاعة (F9)" aria-label="إرجاع بضاعة">
             <Undo2 className="w-4 h-4" />
-            <span className="text-[10px]">إرجاع</span>
-            <kbd className="text-[8px] font-mono bg-destructive/10 px-1 py-0.5 rounded border border-destructive/20 opacity-70">
-              F9
-            </kbd>
+            <span className="hidden xl:inline">إرجاع</span>
           </button>
-
-          <button
-            onClick={onOpenHeld}
-            className="relative flex items-center gap-1.5 h-9 px-2.5 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 rounded-lg font-bold transition-all shadow-sm"
-            title="الفواتير المعلّقة (F11)"
-          >
+          <button onClick={onOpenHeld} className={`relative ${actionButton}`} title="الفواتير المعلّقة (F11)" aria-label="الفواتير المعلّقة">
             <PauseCircle className="w-4 h-4" />
-            <span className="text-[10px]">معلّقة</span>
-            <kbd className="text-[8px] font-mono bg-primary/10 px-1 py-0.5 rounded border border-primary/20 opacity-70">
-              F11
-            </kbd>
+            <span className="hidden xl:inline">معلّقة</span>
             {heldCount > 0 && (
-              <span className="absolute -top-2 -left-2 min-w-5 h-5 px-1 bg-primary text-primary-foreground text-[10px] font-black rounded-full flex items-center justify-center shadow-md ring-2 ring-background">
+              <span className="min-w-[18px] h-[18px] px-1 bg-primary text-primary-foreground text-[10px] font-black rounded-full flex items-center justify-center tabular-nums">
                 {heldCount}
               </span>
             )}
           </button>
-
           <button
             onClick={onToggleGrid}
-            title={showGrid ? "إخفاء الكروت" : "إظهار الكروت"}
-            className={`flex items-center gap-1 h-9 px-2 rounded-lg text-[10px] font-bold border transition-all ${
+            title={showGrid ? "إخفاء كروت المنتجات" : "إظهار كروت المنتجات"}
+            aria-pressed={showGrid}
+            className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border transition-colors ${
               showGrid
-                ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20"
-                : "bg-muted text-muted-foreground border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15"
+                : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
             }`}
           >
-            {showGrid ? <LayoutList className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
-            {showGrid ? "إخفاء الكروت" : "إظهار الكروت"}
+            {showGrid ? <LayoutList className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
           </button>
         </div>
-        <div className="flex items-center gap-1.5 relative z-50">
+
+        <div className="flex items-center gap-1 mr-auto relative z-50 shrink-0">
           <SyncHealthDashboard />
-          <button
-            onClick={onOpenPatient}
-            className={`flex items-center gap-1.5 h-9 px-2.5 rounded-lg text-xs font-bold transition-all border ${
+          <div
+            className={`flex items-center h-9 rounded-lg border text-xs font-bold transition-colors ${
               selectedPatient
-                ? "bg-primary/10 text-primary border-primary/30 shadow-sm"
-                : "bg-background text-muted-foreground border-border hover:bg-muted hover:border-border"
+                ? "bg-primary/10 text-primary border-primary/30"
+                : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
             }`}
           >
-            <span className="text-sm">👤</span>
-            <div>
-              <div className="text-[10px]">
-                {selectedPatient ? selectedPatient.name : "تحديد عميل"}
-              </div>
-              {selectedPatient && (
-                <div className="flex items-center gap-1.5 text-[9px] font-normal opacity-80 mt-0.5">
-                  <span>{selectedPatient.phone}</span>
-                  {selectedPatient.loyaltyAccount && (
-                    <span className={`px-1 py-0.5 rounded-full ${
-                      selectedPatient.loyaltyAccount.tier === "GOLD"
-                        ? "bg-warning/10 text-warning"
-                        : selectedPatient.loyaltyAccount.tier === "SILVER"
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-warning/20 text-warning"
-                    }`}>
-                      💎 {selectedPatient.loyaltyAccount.totalPoints} نقطة
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+            <button onClick={onOpenPatient} className="flex items-center gap-1.5 h-full px-2.5 max-w-[8rem] xl:max-w-[11rem]" title={selectedPatient ? "تغيير العميل" : "تحديد عميل"}>
+              <UserRound className="w-4 h-4 shrink-0" />
+              <span className="flex flex-col items-start leading-tight min-w-0">
+                <span className="truncate max-w-[5rem] xl:max-w-[8rem]">{selectedPatient ? selectedPatient.name : "تحديد عميل"}</span>
+                {selectedPatient?.loyaltyAccount && (
+                  <span className="text-[9px] font-medium opacity-80 tabular-nums">
+                    {selectedPatient.loyaltyAccount.totalPoints} نقطة
+                  </span>
+                )}
+              </span>
+            </button>
             {selectedPatient && (
               <button
-                onClick={(e) => { e.stopPropagation(); onClearPatient(); }}
-                className="p-0.5 hover:bg-primary/10 rounded-full transition-colors"
+                onClick={onClearPatient}
+                className="h-full px-1.5 border-r border-primary/20 hover:bg-primary/10 rounded-l-lg"
+                title="إزالة العميل"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
-          </button>
+          </div>
           <button
             onClick={onSync}
-            className="h-9 w-9 flex items-center justify-center bg-background border border-border hover:bg-primary/10 hover:border-primary/30 rounded-lg transition-all text-muted-foreground hover:text-primary"
+            className="h-9 w-9 flex items-center justify-center bg-background border border-border hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
             title="مزامنة"
           >
-            <Database className="w-3.5 h-3.5" />
+            <Database className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -377,15 +329,19 @@ export default function POSProductGrid({
                     : product.stock > 0
                       ? "low"
                       : "out";
+              // Unavailable cards stay readable on the grid background: a visible
+              // card with a dashed border and a clear reason, not a faded-out block.
+              const unavailable = product.stock <= 0 || isExpired;
 
               return (
                 <button
                   key={product.id}
                   onClick={() => onAddToCart(product)}
-                  disabled={product.stock <= 0 || isExpired}
+                  disabled={unavailable}
+                  title={unavailable ? (isExpired ? "منتهي الصلاحية — لا يمكن بيعه" : "نفد من المخزون") : undefined}
                   className={`group relative flex flex-col rounded-2xl p-3 transition-all duration-200 text-right ${
-                    product.stock <= 0 || isExpired
-                      ? "bg-muted opacity-50 cursor-not-allowed border border-transparent"
+                    unavailable
+                      ? "bg-card/80 border border-dashed border-muted-foreground/30 cursor-not-allowed"
                       : "bg-card border border-border hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-1 active:scale-[0.97]"
                   }`}
                 >
@@ -394,7 +350,7 @@ export default function POSProductGrid({
                       {cartItem.quantity}
                     </div>
                   )}
-                  {expiryStatus && (
+                  {expiryStatus && !isExpired && (
                     <div
                       className={`absolute top-1.5 right-1.5 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 ${expiryStatus.color}`}
                     >
@@ -404,8 +360,8 @@ export default function POSProductGrid({
                   )}
                   <div
                     className={`mb-2 h-12 w-full rounded-xl flex items-center justify-center text-xl transition-colors ${
-                      stockLevel === "out"
-                        ? "bg-muted"
+                      unavailable
+                        ? "bg-muted grayscale opacity-60"
                         : stockLevel === "low"
                           ? "bg-gradient-to-br from-destructive/5 to-warning/5 group-hover:from-destructive/10 group-hover:to-warning/10"
                           : "bg-gradient-to-br from-primary/5 to-primary/10 group-hover:from-primary/10 group-hover:to-primary/15"
@@ -413,26 +369,30 @@ export default function POSProductGrid({
                   >
                     💊
                   </div>
-                  <h3 className="line-clamp-1 font-bold text-foreground text-[13px] leading-snug">
+                  <h3 className={`line-clamp-1 font-bold text-[13px] leading-snug ${unavailable ? "text-muted-foreground" : "text-foreground"}`}>
                     {product.name}
                   </h3>
                   <div className="flex w-full items-end justify-between mt-auto pt-2">
-                    <span className="font-black text-primary text-sm tabular-nums">
+                    <span className={`font-black text-sm tabular-nums ${unavailable ? "text-muted-foreground" : "text-primary"}`}>
                       {formatIQD(product.price || 0)}
                     </span>
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
-                        stockLevel === "high"
-                          ? "bg-success/10 text-success"
-                          : stockLevel === "mid"
-                            ? "bg-primary/10 text-primary"
-                            : stockLevel === "low"
-                              ? "bg-warning/10 text-warning"
-                              : "bg-destructive/10 text-destructive"
-                      }`}
-                    >
-                      {product.stock > 0 ? product.stock : "نفد"}
-                    </span>
+                    {unavailable ? (
+                      <span className="shrink-0 whitespace-nowrap text-[10px] font-bold px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+                        {isExpired ? "منتهي" : "نفد"}
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
+                          stockLevel === "high"
+                            ? "bg-success/10 text-success"
+                            : stockLevel === "mid"
+                              ? "bg-primary/10 text-primary"
+                              : "bg-warning/10 text-warning"
+                        }`}
+                      >
+                        {product.stock}
+                      </span>
+                    )}
                   </div>
                 </button>
               );

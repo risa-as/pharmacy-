@@ -1,54 +1,67 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ShoppingBag, AlertTriangle, Clock, RefreshCw, DollarSign, Package, ArrowUpRight } from "lucide-react";
 import { formatCurrency } from "../utils/currency";
-
-interface DashboardStats {
-    todaySales: number;
-    todayCount: number;
-    todayItems: number;
-    lowStockCount: number;
-    recentSales: any[];
-    lowStockProducts: any[];
-}
+import { cacheKey, readCache, revalidate } from "../lib/page-cache";
+import { buildDashboardStats, type DashboardStats } from "../lib/dashboard-stats";
 
 
+
+
+
+const EMPTY_STATS: DashboardStats = {
+    todaySales: 0,
+    todayCount: 0,
+    todayItems: 0,
+    lowStockCount: 0,
+    recentSales: [],
+    lowStockProducts: []
+};
 
 export default function DashboardPage({ user }: { user: any }) {
-    const [stats, setStats] = useState<DashboardStats>({
-        todaySales: 0,
-        todayCount: 0,
-        todayItems: 0,
-        lowStockCount: 0,
-        recentSales: [],
-        lowStockProducts: []
-    });
+    // Last stats for this user and branch are shown at once; a refresh follows in the background.
+    const key = cacheKey(user?.id, user?.branchId, 'dashboard');
+    const keyRef = useRef(key);
+    keyRef.current = key;
+    const cached = readCache<{ stats: DashboardStats; isOnline: boolean }>(key)?.value;
+    const [stats, setStats] = useState<DashboardStats>(cached?.stats ?? EMPTY_STATS);
     const [_loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [isOnline, setIsOnline] = useState(false);
+    const [isOnline, setIsOnline] = useState(cached?.isOnline ?? false);
+    // A failed refresh keeps the last good numbers on screen and says so; it never
+    // turns into zeros that look like a successful load.
+    const [refreshFailed, setRefreshFailed] = useState(false);
+    // Whether any numbers were ever loaded for this user/branch. Without them a
+    // failure is "could not load", and the cards show "—", never zeros.
+    const [hasData, setHasData] = useState(!!cached);
+    const shown = (v: string | number) => (hasData ? v : '—');
+
+    const load = async () => {
+        const [salesData, lowStock, connectionStatus] = await Promise.all([
+            window.ipcRenderer.invoke('get-today-sales', user?.id),
+            // Count and first items only — never the whole catalogue with its batches.
+            window.ipcRenderer.invoke('get-low-stock', { branchId: user?.branchId }),
+            window.ipcRenderer.invoke('get-connection-status').catch(() => false),
+        ]);
+        // The handlers answer errors with an empty result: that is a failed refresh, not zeros.
+        const stats = buildDashboardStats(salesData, lowStock);
+        if (!stats) throw new Error('dashboard data unavailable');
+        return { stats, isOnline: !!connectionStatus };
+    };
 
     const fetchStats = async () => {
         if (!window.ipcRenderer) return;
         setLoading(true);
         try {
-            const [salesData, productsData, connectionStatus] = await Promise.all([
-                window.ipcRenderer.invoke('get-today-sales', user?.id).catch(() => ({ sales: [], total: 0, count: 0, items: 0 })),
-                window.ipcRenderer.invoke('get-products', '').catch(() => []),
-                window.ipcRenderer.invoke('get-connection-status').catch(() => false),
-            ]);
-
-            const lowStock = (productsData || []).filter((p: any) => p.stock > 0 && p.stock < p.minStock);
-
-            setStats({
-                todaySales: salesData?.total || 0,
-                todayCount: salesData?.count || 0,
-                todayItems: salesData?.items || 0,
-                lowStockCount: lowStock.length,
-                recentSales: (salesData?.sales || []).slice(0, 5),
-                lowStockProducts: lowStock.slice(0, 6)
+            const result = await revalidate(key, load, (k) => k === keyRef.current, (v) => {
+                setStats(v.stats);
+                setIsOnline(v.isOnline);
+                setRefreshFailed(false);
+                setHasData(true);
             });
-            setIsOnline(connectionStatus);
-        } catch (e) {
-            console.error("Failed to fetch dashboard stats", e);
+            if (result === 'failed') {
+                console.error("Failed to fetch dashboard stats");
+                if (keyRef.current === key) setRefreshFailed(true);
+            }
         } finally {
             setLoading(false);
         }
@@ -93,6 +106,13 @@ export default function DashboardPage({ user }: { user: any }) {
                     <span>{refreshing ? 'جاري التحديث...' : 'تحديث'}</span>
                 </button>
             </div>
+            {refreshFailed && (
+                <p role="status" className={`-mt-4 mb-4 text-xs ${hasData ? 'text-warning' : 'text-destructive'}`}>
+                    {hasData
+                        ? 'تعذر تحديث الإحصاءات؛ المعروض آخر بيانات تم تحميلها بنجاح.'
+                        : 'تعذر تحميل الإحصاءات؛ لا توجد بيانات محمّلة بعد. اضغط «تحديث» للمحاولة مجدداً.'}
+                </p>
+            )}
 
             {/* Stats Cards */}
             <div className={`grid gap-4 mb-6 ${user?.role === 'CASHIER' ? 'grid-cols-3' : 'grid-cols-4'}`}>
@@ -106,7 +126,7 @@ export default function DashboardPage({ user }: { user: any }) {
                             اليوم
                         </div>
                     </div>
-                    <p className="text-2xl font-black text-foreground tabular-nums">{formatCurrency(stats.todaySales)}</p>
+                    <p className="text-2xl font-black text-foreground tabular-nums">{shown(formatCurrency(stats.todaySales))}</p>
                     <p className="text-xs text-muted-foreground mt-1">إجمالي المبيعات</p>
                 </div>
 
@@ -116,7 +136,7 @@ export default function DashboardPage({ user }: { user: any }) {
                             <ShoppingBag className="w-5 h-5 text-success-foreground" />
                         </div>
                     </div>
-                    <p className="text-2xl font-black text-foreground tabular-nums">{stats.todayCount}</p>
+                    <p className="text-2xl font-black text-foreground tabular-nums">{shown(stats.todayCount)}</p>
                     <p className="text-xs text-muted-foreground mt-1">عدد الفواتير</p>
                 </div>
 
@@ -126,7 +146,7 @@ export default function DashboardPage({ user }: { user: any }) {
                             <Package className="w-5 h-5 text-white" />
                         </div>
                     </div>
-                    <p className="text-2xl font-black text-foreground tabular-nums">{stats.todayItems}</p>
+                    <p className="text-2xl font-black text-foreground tabular-nums">{shown(stats.todayItems)}</p>
                     <p className="text-xs text-muted-foreground mt-1">منتجات مباعة</p>
                 </div>
 
@@ -145,7 +165,7 @@ export default function DashboardPage({ user }: { user: any }) {
                                 </span>
                             )}
                         </div>
-                        <p className="text-2xl font-black text-foreground tabular-nums">{stats.lowStockCount}</p>
+                        <p className="text-2xl font-black text-foreground tabular-nums">{shown(stats.lowStockCount)}</p>
                         <p className="text-xs text-muted-foreground mt-1">مخزون منخفض</p>
                     </div>
                 )}
@@ -164,7 +184,7 @@ export default function DashboardPage({ user }: { user: any }) {
                     {stats.recentSales.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
                             <ShoppingBag className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">لا توجد مبيعات اليوم بعد</p>
+                            <p className="text-sm">{hasData ? 'لا توجد مبيعات اليوم بعد' : 'البيانات غير متاحة بعد'}</p>
                         </div>
                     ) : (
                         <div className="space-y-2">
@@ -217,7 +237,7 @@ export default function DashboardPage({ user }: { user: any }) {
                         {stats.lowStockProducts.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground">
                                 <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                <p className="text-sm">جميع المنتجات بكميات كافية 👍</p>
+                                <p className="text-sm">{hasData ? 'جميع المنتجات بكميات كافية 👍' : 'البيانات غير متاحة بعد'}</p>
                             </div>
                         ) : (
                             <div className="space-y-2">

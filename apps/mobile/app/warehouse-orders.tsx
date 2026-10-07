@@ -9,7 +9,9 @@ import {
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, TextInput, ScrollView, Alert } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
-import { request, newIdempotencyKey } from "../services/api";
+import { request, newIdempotencyKey, getSessionGeneration } from "../services/api";
+import { assistantService } from '../services/assistant';
+import { readAssistantDraft, updateAssistantDraft, takeOrderBatch, pendingAssistantCloses, queueAssistantClose, confirmAssistantClose } from '../utils/assistant';
 import { useAuth } from "../context/AuthContext";
 import {
   usePalette,
@@ -35,8 +37,12 @@ const names: Record<string, string> = {
 };
 export default function WarehouseOrders() {
   const C = usePalette();
-  const { can, features, branchId: own, isAdmin } = useAuth();
-  const params = useLocalSearchParams<{ draft?: string; orderId?: string }>();
+  const { can, features, branchId: own, isAdmin, user } = useAuth();
+  const params = useLocalSearchParams<{ draft?: string; orderId?: string; assistantDraft?: string }>();
+  const owner = `${user?.id ?? ''}:${getSessionGeneration()}`;
+  const [purchaseDraftId, setPurchaseDraftId] = useState<string | null>(null);
+  const [draftNotice, setDraftNotice] = useState('');
+  const [pendingCloses, setPendingCloses] = useState(() => pendingAssistantCloses(owner));
   const [listPage, setListPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
@@ -59,6 +65,19 @@ export default function WarehouseOrders() {
   const lock = useRef(false);
   const attempt = useRef({ signature: "", key: "" });
   const generation = useRef(0);
+  const activeOwner = useRef(owner);
+  activeOwner.current = owner;
+  const sessionGeneration = getSessionGeneration();
+  const validSession = () => activeOwner.current === owner && getSessionGeneration() === sessionGeneration;
+  useEffect(() => {
+    generation.current++;
+    lock.current = false;
+    attempt.current = { signature: '', key: '' };
+    setBusy(false); setError(''); setOrders([]); setOrder(null); setPurchase(null);
+    setCreating(false); setCart({}); setWarehouse(null); setCatalog([]); setNote('');
+    setBranch(own); setPurchaseDraftId(null); setDraftNotice('');
+    setPendingCloses(pendingAssistantCloses(owner));
+  }, [owner]);
   const allowed = can("canViewWarehouseOrders");
   const manage = can("canCreateWarehouseOrder");
   const label = {
@@ -81,7 +100,7 @@ export default function WarehouseOrders() {
       const d = await request<any>(
         `/warehouses/orders?page=${page}&status=${encodeURIComponent(filter)}`,
       );
-      if (v === generation.current) {
+      if (v === generation.current && validSession()) {
         setOrders((previous) =>
           page === 1 ? d.orders : [...previous, ...d.orders],
         );
@@ -89,7 +108,7 @@ export default function WarehouseOrders() {
         setHasMore(d.hasMore);
       }
     } catch (e) {
-      if (v === generation.current)
+      if (v === generation.current && validSession())
         setError(e instanceof Error ? e.message : "تعذر التحميل");
     }
   };
@@ -98,6 +117,7 @@ export default function WarehouseOrders() {
       request<any>(`/warehouses/orders/${id}`),
       request<any>(`/warehouses/orders/${id}/returns`),
     ]);
+    if (!validSession()) return;
     setOrder(d.order);
     setPurchase(d.purchase);
     setReturns(r.returns);
@@ -113,20 +133,31 @@ export default function WarehouseOrders() {
     try {
       await work();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر تنفيذ العملية");
+      if (validSession()) setError(e instanceof Error ? e.message : "تعذر تنفيذ العملية");
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (validSession()) { lock.current = false; setBusy(false); }
     }
   };
   const begin = async () => {
     const d = await request<any>("/warehouses/directory");
+    if (!validSession()) return;
+    if (params.assistantDraft && !readAssistantDraft(owner, params.assistantDraft)) throw new Error('المسودة غير متاحة في جلسة التطبيق الحالية؛ جهّزها مجدداً من المساعد');
     setWarehouses(d.warehouses);
     setNote("");
     setCreating(true);
     setWarehouse(null);
     setCart({});
-    if (params.draft) {
+    setPurchaseDraftId(null);
+    setDraftNotice('');
+    if (params.assistantDraft) {
+      const draft = readAssistantDraft(owner, params.assistantDraft);
+      if (!draft) throw new Error('المسودة غير متاحة في جلسة التطبيق الحالية؛ جهّزها مجدداً من المساعد');
+      setBranch(draft.branchId);
+      setCart(Object.fromEntries(draft.items.map(i => [i.barcode, { ...i, quantity: String(i.quantity) }])));
+      setPurchaseDraftId(draft.draftId);
+      setDraftNotice('✓ تم إنشاء المسودة للمراجعة. الكميات بالعبوات؛ لم يُرسل أي طلب بعد.');
+      if (draft.draftId) void assistantService.imported(draft.draftId).catch(() => {});
+    } else if (params.draft) {
       try {
         const draft = JSON.parse(params.draft);
         setBranch(draft.branchId);
@@ -147,13 +178,21 @@ export default function WarehouseOrders() {
     if (!allowed) return;
     void run(async () => {
       await load();
+      if (!validSession()) return;
       if (params.orderId) await open(params.orderId);
-      else if (params.draft) await begin();
+      else if (params.draft || params.assistantDraft) await begin();
     });
     return () => {
       generation.current++;
     };
-  }, [allowed]);
+  }, [allowed, owner, params.assistantDraft, params.draft]);
+  useEffect(() => {
+    if (!creating || !params.assistantDraft) return;
+    const source = readAssistantDraft(owner, params.assistantDraft);
+    const items = Object.values(cart);
+    if (!source || items.some(i => !Number.isSafeInteger(Number(i.quantity)) || Number(i.quantity) <= 0)) return;
+    updateAssistantDraft(owner, params.assistantDraft, { ...source, items: items.map(i => ({ barcode: i.barcode, name: i.name, quantity: Number(i.quantity), unitsPerPack: i.unitsPerPack ?? 1, drugId: i.drugId ?? '' })) });
+  }, [cart, creating, owner, params.assistantDraft]);
   useEffect(() => {
     if (!warehouse) return;
     let active = true;
@@ -207,11 +246,9 @@ export default function WarehouseOrders() {
       await load();
     });
   const sent = () =>
-    confirm("إرسال طلب للمذخر", async () => {
+    confirm(Object.keys(cart).length > 100 ? `إرسال أول 100 من ${Object.keys(cart).length} صنف للمذخر` : "إرسال طلب للمذخر", async () => {
       if (!branch || !warehouse) throw new Error("اختر الفرع والمذخر");
-      const items = Object.values(cart);
-      if (items.length > 100)
-        throw new Error("الحد الأقصى 100 صنف لكل طلب؛ قسّم المختارات.");
+      const { sending: items, remaining } = takeOrderBatch(Object.values(cart));
       if (
         !items.length ||
         items.some(
@@ -232,13 +269,30 @@ export default function WarehouseOrders() {
               quantity: Number(i.quantity),
             })),
             notes: note,
+            ...(purchaseDraftId ? { purchaseDraftId } : {}),
           }),
         ),
-      });
+      }, false, { noRetry: true });
+      if (!validSession()) return;
       attempt.current = { signature: "", key: "" };
-      setCreating(false);
-      setCart({});
-      router.setParams({ draft: undefined });
+      setCart(Object.fromEntries(remaining.map(i => [i.barcode, i])));
+      if (params.assistantDraft) {
+        const source = readAssistantDraft(owner, params.assistantDraft);
+        if (source) updateAssistantDraft(owner, params.assistantDraft, remaining.length ? { ...source, items: remaining.map(i => ({ ...i, quantity: Number(i.quantity) })) } : null);
+      }
+      setCreating(remaining.length > 0);
+      setDraftNotice(remaining.length ? `تم إرسال ${items.length} صنف. بقي ${remaining.length} صنف لم يُرسل؛ راجعه قبل الطلب التالي.` : '✓ تم إرسال طلب الشراء للمذخر بنجاح.');
+      if (!remaining.length) {
+        router.setParams({ draft: undefined, assistantDraft: undefined });
+        if (purchaseDraftId) {
+          queueAssistantClose(owner, purchaseDraftId); setPendingCloses(pendingAssistantCloses(owner));
+          try { await assistantService.close(purchaseDraftId); if (validSession()) confirmAssistantClose(owner, purchaseDraftId); }
+          catch { /* Sending succeeded. Keep explicit retry of draft completion. */ }
+          if (!validSession()) return;
+          setPendingCloses(pendingAssistantCloses(owner));
+          setPurchaseDraftId(null);
+        }
+      }
       await load();
     });
   const sendReturn = () =>
@@ -272,6 +326,13 @@ export default function WarehouseOrders() {
             {error}
           </Text>
         )}
+        {!!draftNotice && <Text accessibilityLiveRegion="polite" style={{ ...label, color: C.success }}>{draftNotice}</Text>}
+        {pendingCloses.length > 0 && <Surface style={{ gap: 8 }}>
+          <Text style={{ ...label, color: C.warning }}>لم يُؤكد إغلاق مسودة سابقة. إعادة المحاولة لا ترسل طلب شراء آخر.</Text>
+          <AppButton compact variant="outline" label="إعادة محاولة إغلاق المسودة" disabled={busy} onPress={() => void run(async () => {
+            for (const id of pendingCloses) { await assistantService.close(id); if (!validSession()) return; confirmAssistantClose(owner, id); setPendingCloses(pendingAssistantCloses(owner)); }
+          })} />
+        </Surface>}
         {busy && <StateBlock loading title="جاري المعالجة…" />}
         {!order && !creating && (
           <>
@@ -355,12 +416,12 @@ export default function WarehouseOrders() {
               subtitle="اختر فرع الاستلام والمذخر ثم أضف الأصناف."
               icon="bag-add-outline"
             >
-              <BranchSelector
+              {params.assistantDraft ? <Text style={label}>فرع المسودة: {readAssistantDraft(owner, params.assistantDraft)?.branchName ?? 'الفرع المحدد في البطاقة'}</Text> : <BranchSelector
                 selectedBranchId={branch}
-                onSelectBranch={setBranch}
+                onSelectBranch={id => { if (!busy) setBranch(id); }}
                 allowAll={false}
                 inline
-              />
+              />}
               <Text style={{ ...label, fontSize: 12, fontWeight: "700" }}>
                 المذخر
               </Text>
@@ -369,7 +430,7 @@ export default function WarehouseOrders() {
                   key={w.id}
                   label={w.name}
                   selected={warehouse?.id === w.id}
-                  onPress={() => setWarehouse(w)}
+                  onPress={() => { if (!busy) setWarehouse(w); }}
                 />
               ))}
             </OperationHeading>
@@ -379,6 +440,7 @@ export default function WarehouseOrders() {
             <Text style={{ ...label, fontWeight: "800" }}>
               أصناف الطلب ({Object.keys(cart).length})
             </Text>
+            {Object.keys(cart).length > 100 && <Text style={{ ...label, color: C.warning }}>المسودة أكبر من 100 صنف. كل إرسال يشمل أول 100 صنف فقط؛ يبقى الباقي للمراجعة والتأكيد في طلب تالٍ.</Text>}
             {Object.values(cart).map((i) => (
               <Surface key={i.barcode} style={{ gap: 8 }}>
                 <OperationItem
@@ -392,6 +454,7 @@ export default function WarehouseOrders() {
                 </Text>
                 <TextInput
                   accessibilityLabel={`كمية ${i.name || i.barcode}`}
+                  editable={!busy}
                   keyboardType="number-pad"
                   value={i.quantity}
                   onChangeText={(v) =>
@@ -405,6 +468,7 @@ export default function WarehouseOrders() {
                 <AppButton
                   compact
                   label="إزالة"
+                  disabled={busy}
                   variant="outline"
                   onPress={() =>
                     setCart((p) => {
@@ -446,7 +510,7 @@ export default function WarehouseOrders() {
                       compact
                       label={cart[i.barcode] ? "مضاف" : "إضافة للطلب"}
                       variant="outline"
-                      disabled={!!cart[i.barcode]}
+                      disabled={busy || !!cart[i.barcode]}
                       onPress={() =>
                         setCart((p) => ({
                           ...p,
@@ -467,11 +531,12 @@ export default function WarehouseOrders() {
               placeholderTextColor={C.mutedForeground}
               style={input}
               value={note}
+              editable={!busy}
               onChangeText={setNote}
             />
             <AppButton
               compact
-              label="مراجعة وإرسال الطلب"
+              label={Object.keys(cart).length > 100 ? 'مراجعة وإرسال أول 100 صنف' : 'مراجعة وإرسال الطلب'}
               disabled={busy || !manage || !warehouse}
               onPress={sent}
             />
@@ -769,10 +834,20 @@ export default function WarehouseOrders() {
         {(order || creating) && (
           <AppButton
             compact
-            label="العودة لقائمة الطلبات"
+            label={creating && params.assistantDraft ? 'إنهاء المسودة والعودة للطلبات' : 'العودة لقائمة الطلبات'}
             variant="outline"
             disabled={busy}
             onPress={() => {
+              if (creating && params.assistantDraft) {
+                updateAssistantDraft(owner, params.assistantDraft, null);
+                if (purchaseDraftId) {
+                  const id = purchaseDraftId;
+                  queueAssistantClose(owner, id); setPendingCloses(pendingAssistantCloses(owner));
+                  void assistantService.close(id).then(() => { if (validSession()) { confirmAssistantClose(owner, id); setPendingCloses(pendingAssistantCloses(owner)); } }).catch(() => {});
+                }
+                setPurchaseDraftId(null); setCart({}); setDraftNotice('');
+                router.setParams({ assistantDraft: undefined, draft: undefined });
+              }
               setOrder(null);
               setCreating(false);
               void run(load);

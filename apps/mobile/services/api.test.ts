@@ -22,6 +22,96 @@ const flush = async () => {
     await Promise.resolve();
 };
 
+describe('cancelled page reads', () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+        setCachedToken(`cancel-${Math.random()}`);
+    });
+    it('sends nothing when the page was already closed', async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const controller = new AbortController();
+        controller.abort();
+        await expect(request('/reports/cancel-before', { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+    it('shows a report failure rather than a successful empty day', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'Unavailable' }, 503)));
+        await expect(apiService.getReports()).rejects.toMatchObject({ status: 503 });
+    });
+    it('does not report zero safety alerts when their query failed', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'Unavailable' }, 503)));
+        await expect(apiService.getAlerts()).rejects.toMatchObject({ status: 503 });
+    });
+    it('keeps a purchase load failure distinct from an empty purchase list', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'Unavailable' }, 503)));
+        await expect(apiService.getPurchases()).rejects.toMatchObject({ status: 503 });
+    });
+    it('refreshes a report from the server instead of returning its cached value', async () => {
+        const fetch = vi.fn().mockResolvedValueOnce(jsonResponse({ revenue: 10 })).mockResolvedValueOnce(jsonResponse({ revenue: 20 }));
+        vi.stubGlobal('fetch', fetch);
+        await apiService.getReports();
+        await expect(apiService.getReports('daily', undefined, true)).resolves.toEqual({ revenue: 20 });
+        expect(fetch).toHaveBeenCalledTimes(2);
+    });
+    it('cancels an obsolete read without retrying or cancelling another reader', async () => {
+        const fetchMock = vi.fn((_url: unknown, options: RequestInit) => new Promise<Response>((resolve, reject) => {
+            if (fetchMock.mock.calls.length === 2) resolve(jsonResponse({ current: true }));
+            else options.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const controller = new AbortController();
+        const obsolete = request('/reports/cancel-overlap', { signal: controller.signal });
+        const rejected = expect(obsolete).rejects.toThrow('aborted');
+        await flush();
+        const current = request('/reports/cancel-overlap');
+        await flush();
+        controller.abort();
+        await rejected;
+        await expect(current).resolves.toEqual({ current: true });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    it('keeps cancellation active while the response body is arriving', async () => {
+        const controller = new AbortController();
+        const fetchMock = vi.fn(async (_url: unknown, options: RequestInit) => ({
+            status: 200, ok: true,
+            json: () => new Promise((_resolve, reject) => {
+                options.signal?.addEventListener('abort', () => reject(new Error('aborted body')));
+            }),
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const pending = request('/reports/cancel-body', { signal: controller.signal });
+        const rejected = expect(pending).rejects.toThrow('aborted body');
+        await flush(); await flush();
+        controller.abort();
+        await rejected;
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('assistant requests', () => {
+    beforeEach(() => { vi.restoreAllMocks(); (globalThis as { __DEV__?: boolean }).__DEV__ = false; setCachedToken(`ai-token-${Math.random()}`); });
+    it('allows the provider more than the normal eight-second request limit', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn((_url: unknown, options: RequestInit) => new Promise<Response>((resolve, reject) => {
+            options.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            setTimeout(() => resolve(jsonResponse({ response: 'answer' })), 9_000);
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const pending = request('/ai/chat', { method: 'POST', body: '{}' }, false, { noRetry: true });
+            await vi.advanceTimersByTimeAsync(9_100);
+            await expect(pending).resolves.toEqual({ response: 'answer' }); expect(fetchMock).toHaveBeenCalledTimes(1);
+        } finally { vi.useRealTimers(); }
+    });
+    it('does not replay a charged POST when its response is lost', async () => {
+        const fetchMock = vi.fn().mockRejectedValue(new TypeError('network')); vi.stubGlobal('fetch', fetchMock);
+        await expect(request('/ai/chat', { method: 'POST', body: '{}' }, false, { noRetry: true })).rejects.toThrow();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('mobile inventory response cache', () => {
     it('deduplicates simultaneous GETs before asynchronous token preparation completes', async () => {
         const fetchMock = vi.fn().mockImplementation(async () => jsonResponse([{ id: 'shared' }]));
@@ -200,4 +290,14 @@ describe('purchase receipt submission', () => {
         await expect(apiService.getPurchaseStatus('p')).resolves.toBe('COMPLETED');
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });
+});
+
+it('manual dashboard refresh bypasses the thirty-second stats cache', async () => {
+    setCachedToken('dashboard-refresh-test');
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ salesToday: 100 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await apiService.getStats('branch'); await apiService.getStats('branch');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await apiService.getStats('branch', true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 });

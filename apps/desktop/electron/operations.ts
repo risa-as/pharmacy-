@@ -3,7 +3,10 @@ import { operationJson } from "./operations-response";
 import { ipcMain } from "electron";
 import store from "./store";
 import { getApiBaseUrl } from "./api-config";
-import { allowedOperation, allowedSupplyOperation } from "./operations-policy";
+import { allowedOperation, allowedSupplyOperation, operationNeedsSync } from "./operations-policy";
+
+/** How long a successful permission check may serve reads (owner's decision, 2026-10-01). */
+export const READ_REUSE_MS = 3 * 60_000;
 
 export function registerOperations(
   prepare: () => Promise<void>,
@@ -15,17 +18,35 @@ export function registerOperations(
     branch: String(store.get("branchId") || ""),
     token: String(store.get("syncToken") || ""),
   });
-  // Share only an in-flight verification for the exact same credentials.
-  // Completed results are never cached: permission revocation remains immediate.
+  // Share an in-flight verification for the exact same credentials.
+  //
+  // Policy (decided by the owner, 2026-10-01): a SUCCESSFUL verification may be
+  // reused for up to READ_REUSE_MS, but only by reads that ask for it (viewing
+  // inventory, debts, sales history, warehouse pages). Every write verifies with
+  // the server again. The reuse is keyed on the full identity (user, branch,
+  // token, server, organization, role, session version, license), so any change
+  // forces a new check, and any failed check drops it at once. A revoked
+  // permission therefore stops reads within READ_REUSE_MS at most, and writes
+  // immediately.
   let verification: { key: string; promise: ReturnType<typeof verifySession> } | undefined;
-  async function session() {
-    const key = JSON.stringify([identity(), getApiBaseUrl(), store.get("syncOrgId"),
-      store.get("syncUserRole"), store.get("syncSessionVersion"), store.get("licenseKey")]);
+  let lastOk: { key: string; at: number; result: Awaited<ReturnType<typeof verifySession>> } | undefined;
+  const sessionKey = () => JSON.stringify([identity(), getApiBaseUrl(), store.get("syncOrgId"),
+    store.get("syncUserRole"), store.get("syncSessionVersion"), store.get("licenseKey")]);
+  async function session(opts: { reuseMs?: number } = {}) {
+    const key = sessionKey();
+    if (opts.reuseMs && lastOk?.key === key && Date.now() - lastOk.at < opts.reuseMs) return lastOk.result;
     if (verification?.key === key) return verification.promise;
     const pending = { key, promise: verifySession() };
     verification = pending;
-    try { return await pending.promise; }
-    finally { if (verification === pending) verification = undefined; }
+    try {
+      const result = await pending.promise;
+      // Stored only if the identity did not change while the server answered.
+      if (sessionKey() === key) lastOk = { key, at: Date.now(), result };
+      return result;
+    } catch (e) {
+      lastOk = undefined;
+      throw e;
+    } finally { if (verification === pending) verification = undefined; }
   }
   async function verifySession() {
     const who = identity();
@@ -59,7 +80,8 @@ export function registerOperations(
   }
   ipcMain.handle("operations:access", async () => {
     try {
-      const { data } = await session();
+      // Opening a warehouse/stocktake/transfer page is a read.
+      const { data } = await session({ reuseMs: READ_REUSE_MS });
       const { token, ...access } = data;
       return { success: true, ...access };
     } catch (e) {
@@ -85,10 +107,17 @@ export function registerOperations(
         const method = input?.method || "GET";
         if (!allowedOperation(input?.path, method))
           throw Error("عملية غير مسموحة");
-        if (busy) throw Error("انتظر اكتمال العملية الحالية");
-        busy = true;
-        acquired = true;
-        const { who, data: access } = await session();
+        // Only writes and reads that sync first run one at a time. A plain read
+        // (a list, a document) is never refused because another page's request
+        // (often one left running when the user moved on) is still in flight.
+        const exclusive = operationNeedsSync(input.path, method);
+        if (exclusive) {
+          if (busy) throw Error("انتظر اكتمال العملية الحالية");
+          busy = true;
+          acquired = true;
+        }
+        // Reads (GET) may reuse a recent successful check; writes always verify again.
+        const { who, data: access } = await session(method === "GET" ? { reuseMs: READ_REUSE_MS } : {});
         mark("session");
         const url = new URL(`${getApiBaseUrl()}${input.path}`);
         url.searchParams.set("branchId", who.branch);
@@ -158,13 +187,7 @@ export function registerOperations(
         mark("documentChecks");
         // Unsynced local sales/stock must reach the cloud before counting or
         // changing stock: once per count sheet, not once per page of batches.
-        if (
-          method !== "GET" ||
-          input.path.startsWith("/inventory/operation-batches") ||
-          (/^\/inventory\/stocktake\/[a-zA-Z0-9-]+$/.test(route) &&
-            new URLSearchParams(input.path.split("?")[1] || "").get("type") === "sheet")
-        )
-          await prepare();
+        if (exclusive) await prepare();
         mark("prepare");
         if (JSON.stringify(who) !== JSON.stringify(identity()))
           throw Error("تغيرت الجلسة؛ أعد المحاولة");
@@ -256,8 +279,9 @@ export function registerOperations(
       }
     },
   );
-  return async (permission: string) => {
-    const { who, data } = await session();
+  /** `{ read: true }` for viewing only (may reuse a recent check); writes omit it. */
+  return async (permission: string, opts: { read?: boolean } = {}) => {
+    const { who, data } = await session(opts.read ? { reuseMs: READ_REUSE_MS } : {});
     if (!data.permissions?.[permission])
       throw Error("ليس لديك صلاحية تنفيذ هذه العملية");
     return {

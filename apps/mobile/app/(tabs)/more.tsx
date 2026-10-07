@@ -118,6 +118,7 @@ export default function MoreScreen() {
             {
                 title: 'الإدارة',
                 items: [
+                    ...(user?.role === 'ADMIN' ? [{ title: 'المساعد الذكي', subtitle: 'المحادثة وأدوات المخزون وطلب الشراء', icon: 'sparkles-outline' as IconName, tone: 'primary' as Tone, href: '/assistant' as Href }] : []),
                     // The manager shell has no POS tab; this is its only entry point.
                     { title: 'نقطة البيع', subtitle: 'تسجيل فاتورة بيع جديدة', icon: 'cart-outline', tone: 'success', href: '/(tabs)/sales' as Href },
                     { title: 'المصروفات', subtitle: 'عرض وإضافة مصروفات الصيدلية', icon: 'cash-outline', tone: 'warning', href: '/accounting/expenses' as Href },

@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { useRouter, Href } from 'expo-router';
+import { useRouter, Href, useFocusEffect } from 'expo-router';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Radius } from '../../constants/colors';
@@ -147,6 +147,7 @@ export default function ReportsScreen() {
     const [period, setPeriod] = useState<Period>('daily');
     const [selectedBranch, setSelectedBranch] = useState<string | null>(authBranchId);
     const [branchName, setBranchName] = useState<string | null>(null);
+    const pendingReport = useRef<AbortController | null>(null);
 
     useEffect(() => {
         if (!selectedBranch) { setBranchName(ALL_BRANCHES_LABEL); return; }
@@ -155,26 +156,30 @@ export default function ReportsScreen() {
         }).catch(() => {});
     }, [selectedBranch]);
 
-    const fetchReport = useCallback(async () => {
+    const fetchReport = useCallback(async (forceRefresh = false) => {
+        pendingReport.current?.abort();
+        const controller = new AbortController();
+        pendingReport.current = controller;
         try {
-            const data = await apiService.getReports(period, selectedBranch ?? undefined);
+            const data = await apiService.getReports(period, selectedBranch ?? undefined, forceRefresh, controller.signal);
+            if (controller.signal.aborted) return;
             setReport(data);
             setFailed(!data);
         } catch (err) {
+            if (controller.signal.aborted) return;
             console.error('ReportsScreen:', err);
             setFailed(true);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
         }
     }, [period, selectedBranch]);
 
-    useEffect(() => { setLoading(true); fetchReport(); }, [fetchReport]);
+    useFocusEffect(useCallback(() => { setLoading(true); fetchReport(); return () => pendingReport.current?.abort(); }, [fetchReport]));
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         triggerSync('stats');
-        fetchReport();
+        fetchReport(true);
     }, [fetchReport, triggerSync]);
 
     const chartData = useMemo<ChartPoint[]>(() => {
