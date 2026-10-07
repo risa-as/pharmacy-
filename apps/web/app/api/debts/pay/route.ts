@@ -22,11 +22,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'بيانات غير صحيحة' }, { status: 400 });
         }
 
-        const patient = await prisma.patient.findUnique({
-            where: { id: patientId },
+        const patient = await prisma.patient.findFirst({
+            where: { id: patientId, ...tenantCtx.tenantBranchWhere },
             include: {
                 sales: {
-                    where: { payment: { method: 'CREDIT' } },
+                    where: { payment: { method: 'CREDIT' }, ...tenantCtx.tenantBranchWhere },
                     include: {
                         payment: true,
                         debtPayments: true,
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         }
 
         // Cap the payment at the patient's recorded balance
-        const finalTotal = Math.min(amount, patient.balance);
+        const finalTotal = Math.min(amount, patient.balance, unpaidSales.reduce((sum: number, sale: any) => sum + sale.remaining, 0));
         let leftover = finalTotal;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

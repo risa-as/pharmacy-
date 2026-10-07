@@ -71,7 +71,7 @@ export default async function DebtDetailPage(
                     {sales.filter((s: any) => !s.isPaid).length} فاتورة غير مسددة من أصل {sales.length}
                 </p>
                 {(() => {
-                    const totalBilled = sales.reduce((sum: number, s: any) => sum + s.total - s.discount, 0);
+                    const totalBilled = sales.reduce((sum: number, s: any) => sum + s.netTotal, 0);
                     const totalPaid = sales.reduce((sum: number, s: any) => sum + s.totalPaid, 0);
                     return (
                         <div className="flex gap-6 mt-4 pt-3 border-t border-white/20 text-xs">
@@ -125,7 +125,10 @@ export default async function DebtDetailPage(
                                     </div>
                                 </div>
                                 <div className="text-left">
-                                    <p className="text-sm font-bold text-foreground">{formatIQD(sale.total - sale.discount)}</p>
+                                    <p className="text-sm font-bold text-foreground">{formatIQD(sale.netTotal)}</p>
+                                    {sale.returnedTotal > 0 && (
+                                        <p className="text-xs text-muted-foreground">المرتجع: {formatIQD(sale.returnedTotal)}</p>
+                                    )}
                                     {!sale.isPaid && (
                                         <p className="text-xs text-destructive">متبقي: {formatIQD(sale.remaining)}</p>
                                     )}

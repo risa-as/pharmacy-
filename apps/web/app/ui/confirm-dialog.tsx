@@ -9,7 +9,7 @@ export interface ConfirmOptions {
     message: string;
     confirmText?: string;
     cancelText?: string;
-    variant?: "warning" | "danger";
+    variant?: "warning" | "danger" | "primary";
 }
 
 /**
@@ -53,11 +53,15 @@ export function useConfirm() {
     const iconTone =
         variant === "danger"
             ? "bg-destructive/10 text-destructive"
-            : "bg-warning/10 text-warning";
+            : variant === "primary"
+                ? "bg-primary/10 text-primary"
+                : "bg-warning/10 text-warning";
     const confirmTone =
         variant === "danger"
             ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-            : "bg-warning hover:bg-warning/90 text-warning-foreground";
+            : variant === "primary"
+                ? "bg-primary hover:bg-primary/90 text-primary-foreground"
+                : "bg-warning hover:bg-warning/90 text-warning-foreground";
 
     const dialog = options
         ? createPortal(

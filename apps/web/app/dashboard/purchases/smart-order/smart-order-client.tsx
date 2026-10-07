@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { buildHandoff, saveHandoff } from "@/app/lib/smart-purchasing-handoff";
 import {
-  Sparkles,
   RefreshCw,
   Search,
   ArrowLeft,
@@ -13,6 +12,7 @@ import {
   Package,
   ChevronDown,
   Calculator,
+  Lightbulb,
 } from "lucide-react";
 import SuggestionDetails from "./suggestion-details";
 import {
@@ -384,7 +384,7 @@ export default function SmartOrderClient({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Sparkles className="text-primary" />
+            <Lightbulb className="text-primary" />
             الشراء الذكي
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

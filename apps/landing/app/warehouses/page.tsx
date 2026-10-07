@@ -7,7 +7,7 @@ import {
 import SectionHeading from '../../components/section-heading';
 import CTAButton from '../../components/cta-button';
 import WarehouseFlow from '../../components/warehouse-flow';
-import { WarehouseQuoteMockup } from '../../components/mockups';
+import { BrowserShot, shots } from '../../components/screenshot';
 
 export const metadata: Metadata = {
   title: 'شبكة المذاخر | فاراماس',
@@ -72,7 +72,7 @@ export default function WarehousesPage() {
                 </CTAButton>
               </div>
             </div>
-            <WarehouseQuoteMockup className="animate-fade-in-up [animation-delay:150ms]" />
+            <BrowserShot shot={shots.portalOrders} className="animate-fade-in-up [animation-delay:150ms]" />
           </div>
         </div>
       </section>

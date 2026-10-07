@@ -1,3 +1,4 @@
+import { mapPlanningRows, yieldPlanning } from './planning-batch';
 import { prisma } from '@/app/lib/prisma';
 import type { TenantContext } from '@/app/lib/tenant-utils';
 import { checkFeatureAccess } from '@/app/lib/saas-guards';
@@ -47,11 +48,20 @@ export async function resolveCardBranch(ctx: TenantContext, requested?: string |
 
 // ─── "شنو أطلب اليوم؟" ────────────────────────────────────────────────────────
 
-export async function buildReorderCard(ctx: TenantContext, opts: { branchId?: string | null; now?: Date } = {}): Promise<ReorderCard> {
+export async function buildReorderCard(ctx: TenantContext, opts: { branchId?: string | null; now?: Date; monthlyStockouts?: { coverageDays?: number } } = {}): Promise<ReorderCard> {
     const branch = await resolveCardBranch(ctx, opts.branchId);
-    const [data, settings] = await Promise.all([getPlanningData(ctx, branch.id), resolvePlanningSettings(ctx, branch.id)]);
-    const options = settings.options;
-    const planned = data.rows.map(r => planRow(r, options, data.today)).filter(r => r.action);
+    const request = opts.monthlyStockouts;
+    if (request && request.coverageDays !== undefined && (!Number.isSafeInteger(request.coverageDays) || request.coverageDays < 1 || request.coverageDays > 365))
+        throw new Error('مدة التغطية يجب أن تكون بين 1 و365 يوماً');
+    const [data, settings] = await Promise.all([
+        getPlanningData(ctx, branch.id, undefined, undefined, { currentMonth: !!request, now: opts.now }),
+        resolvePlanningSettings(ctx, branch.id),
+    ]);
+    // Explicit coverage overrides saved coverage/safety for this request only.
+    // Retain supplier lead time and cover the requested days AFTER arrival.
+    const options = request ? { ...settings.options, coverageDays: request.coverageDays ?? settings.options.coverageDays, safetyDays: 0, fromArrival: true } : settings.options;
+    const planned = (await mapPlanningRows(data.rows, r => planRow(r, options, data.today)))
+        .filter(r => request ? r.out && r.sold > 0 && r.netSales > 0 && r.suggestedQty > 0 : r.action);
     // Most urgent first: out of stock, then lost sales before arrival, then shortest coverage.
     planned.sort((a, b) =>
         Number(b.out) - Number(a.out)
@@ -59,8 +69,8 @@ export async function buildReorderCard(ctx: TenantContext, opts: { branchId?: st
         || (a.coverage ?? Infinity) - (b.coverage ?? Infinity)
         || b.suggestedQty - a.suggestedQty);
 
-    const lines: ReorderLine[] = planned.slice(0, MAX_LINES).map(r => {
-        const reasons: string[] = [];
+    const lines: ReorderLine[] = planned.slice(0, request ? 500 : MAX_LINES).map(r => {
+        const reasons: string[] = request ? [`مبيعات الشهر: ${fmtN(r.sold)} وحدة، مرتجعاتها: ${fmtN(r.returned)}، أيام الرصد: ${r.observedDays}`] : [];
         if (r.out) reasons.push('نفد المخزون القابل للبيع');
         else reasons.push(`المخزون القابل للبيع ${fmtN(r.currentStock)} وحدة`);
         if (r.averageDailySales > 0) reasons.push(`متوسط البيع ${fmtRate(r.averageDailySales)} وحدة/يوم (صافي بعد المرتجعات، ${data.days} يوماً)`);
@@ -69,6 +79,7 @@ export async function buildReorderCard(ctx: TenantContext, opts: { branchId?: st
         if (r.pending > 0) reasons.push(`طلبات مفتوحة: ${fmtN(r.pending)} وحدة`);
         if (r.shortageUnits > 0) reasons.push(`نقص متوقع ${fmtN(r.shortageUnits)} وحدة خلال ${options.coverageDays} يوماً دون طلب`);
         const limits = [...r.qualityReasons];
+        if (request) limits.push('المتوسط يشمل اليوم الجاري؛ أيام النفاد غير موثقة وقد تقلل تقدير الطلب.');
         if (r.cost === null) limits.push('تكلفة الشراء غير مسجلة');
         if (!r.unitsPerPack) limits.push('عدد الوحدات في العبوة غير مؤكد؛ لا يدخل مسودة الطلب');
         return {
@@ -87,12 +98,18 @@ export async function buildReorderCard(ctx: TenantContext, opts: { branchId?: st
 
     return {
         kind: 'reorder',
-        title: `ماذا تطلب اليوم — ${branch.name}`,
+        title: request ? `شراء النافد المباع هذا الشهر — تغطية ${options.coverageDays} يوماً — ${branch.name}` : `ماذا تطلب اليوم — ${branch.name}`,
         scope: {
             branchId: branch.id, branchName: branch.name, from: data.from, to: data.to, generatedAt: data.generatedAt,
-            notes: [data.notice, `${settingsLine(options, settings.source)}. هي نفسها المستخدمة في صفحة الشراء الذكي، وتُحفظ من هناك للفرع أو للمؤسسة.`],
+            notes: request ? [data.notice,
+                'المقصود بالمنتهية هنا: نفاد المخزون القابل للبيع، وليس طلب الدفعات منتهية الصلاحية.',
+                'مبيعات الشهر الحالي حتى وقت التحديث بتوقيت بغداد؛ المتوسط على أيام الرصد التقويمية بما فيها اليوم الجاري.',
+                `تغطية ${options.coverageDays} يوماً من الوصول، مدة التوريد المحفوظة ${options.leadDays} يوم، بلا أيام أمان إضافية. لم تتغير الإعدادات المحفوظة.`,
+                'تُخصم الطلبات المؤكدة بحسب موعد وصولها وصلاحيتها؛ الأصناف المغطاة بالكامل لا تدخل المسودة. تُقرّب الكمية إلى عبوات كاملة.',
+                ...(planned.length > 500 ? ['تتجاوز النتائج 500 صنف؛ المسودة تشمل أول 500 صنف معروض فقط.'] : []),
+            ] : [data.notice, `${settingsLine(options, settings.source)}. هي نفسها المستخدمة في صفحة الشراء الذكي، وتُحفظ من هناك للفرع أو للمؤسسة.`],
         },
-        options: { ...options, source: settings.source as Exclude<SettingsSource, 'CUSTOM'> },
+        options: { ...options, source: request ? 'CUSTOM' : settings.source as Exclude<SettingsSource, 'CUSTOM'> },
         lines,
         totalCandidates: planned.length,
         canDraft: draftBlockedReason === null,
@@ -161,8 +178,15 @@ export async function buildWasteCard(ctx: TenantContext, opts: { windowDays?: nu
 
     let unknownValueLines = 0, incomingExpiring = 0;
     const atRisk: { row: PlannedRow; line: WasteLine; lots: { expiryDate: string; unsold: number }[] }[] = [];
-    for (const r of rows) {
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        if (rowIndex > 0 && rowIndex % 256 === 0) await yieldPlanning();
+        const r = rows[rowIndex];
         if (branch && r.branchId !== branch.id) continue;
+        // No lot can expire within this window: no risk or expiring-incoming
+        // count can be produced. Keep equality at limitDate excluded, as the
+        // simulation ends before that day.
+        if (!r.lots.some(l => l.expiryDate >= today && l.expiryDate < limitDate)
+            && !r.incoming.some(l => l.expiryDate && l.expiryDate < limitDate)) continue;
         // First-expiry-first simulation at the current sale rate: units of EACH lot left unsold at its expiry.
         const sim = simulateStock(r, r.rate, windowDays, 0, 0, today);
         if (sim.expiredIncoming > 1e-7) incomingExpiring++;

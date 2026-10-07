@@ -25,6 +25,8 @@ jobs:
       NEXTAUTH_SECRET: ci-only-not-a-production-secret-123456789
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 8.15.4
@@ -33,11 +35,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @faramace/shared build
       - run: pnpm check:dependencies
       - run: node --test scripts/check-dependencies.test.mjs
       - run: node --test scripts/security-compatibility.test.mjs
       - run: node --test scripts/image-size-security.test.mjs
       - run: pnpm --filter web exec prisma generate
+      - run: pnpm --filter desktop exec prisma generate
       # Historical migrations are pinned by hash and never edited.
       - run: node --test scripts/migrations.test.mjs
       # pg_dump must match the postgres:17 service.
@@ -69,6 +73,7 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: node --test scripts/audit-mitigations.test.mjs
       - run: pnpm audit:prod
       - uses: actions/upload-artifact@v4
         if: always()

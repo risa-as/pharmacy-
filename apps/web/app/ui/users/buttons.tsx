@@ -6,7 +6,7 @@ export function UpdateUser({ id }: { id: string }) {
     return (
         <Link
             href={`/dashboard/users/${id}/edit`}
-            className="rounded-md border p-2 hover:bg-muted transition-colors hover:text-primary"
+            className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
             title="تعديل"
         >
             <Pencil className="w-4 h-4" />
@@ -21,7 +21,7 @@ export function DeleteUser({ id }: { id: string }) {
 
     return (
         <form>
-            <DeleteButton action={deleteUserWithId} description="المستخدم" />
+            <DeleteButton action={deleteUserWithId} description="المستخدم" className="rounded-lg border-border p-1.5 text-muted-foreground hover:border-destructive/50" />
         </form>
     );
 }

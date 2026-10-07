@@ -136,6 +136,7 @@ export async function getPatientDebts(patientId: string) {
                 include: {
                     payment: true,
                     items: { include: { drug: true } },
+                    returns: { select: { total: true } },
                     debtPayments: {
                         orderBy: { createdAt: "desc" },
                     },
@@ -149,11 +150,15 @@ export async function getPatientDebts(patientId: string) {
 
     const sales = patient.sales.map((s: any) => {
         const totalPaid = s.debtPayments.reduce((sum: any, dp: any) => sum + dp.amount, 0);
-        const remaining = s.total - s.discount - totalPaid;
+        const returnedTotal = s.returns.reduce((sum: number, r: { total: number }) => sum + r.total, 0);
+        const netTotal = Math.max(0, s.total - s.discount - returnedTotal);
+        const remaining = netTotal - totalPaid;
         return {
             id: s.id,
             total: s.total,
             discount: s.discount,
+            netTotal,
+            returnedTotal,
             remaining: Math.max(0, remaining),
             totalPaid,
             isPaid: remaining <= 0,

@@ -33,9 +33,11 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-readiness/types/**/*.ts",
+    ".next-verify/types/**/*.ts",
+    ".next-video-demo/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-verify/types/**/*.ts"
+    ".next-assistant-review/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

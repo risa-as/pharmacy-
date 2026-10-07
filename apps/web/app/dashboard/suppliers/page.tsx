@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import MoreActions from '@/app/ui/order-more-actions';
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
-import { Plus, Users, Mail, Phone, MapPin, FileText, ShoppingCart, TrendingDown, CheckCircle2, Building2 } from "lucide-react";
+import { Plus, Users, Mail, Phone, MapPin, FileText, ShoppingCart, TrendingDown, CheckCircle2, Building2, Truck } from "lucide-react";
 import { DeleteSupplier } from "@/app/ui/suppliers/buttons";
 import SupplierWarehouseLinkCell from "@/app/ui/suppliers/SupplierWarehouseLinkCell";
 import { canRequestSupplierLink } from "@/app/lib/supplier-link-request";
@@ -76,7 +76,7 @@ export default async function Page() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
-                        <Building2 className="w-6 h-6 text-primary" />
+                        <Truck className="w-6 h-6 text-primary" />
                         الموردين
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1">

@@ -18,11 +18,11 @@ export async function listPharmacyReturns(identity: WarehouseScopeInput, params:
     const where = Prisma.sql`${scope}
         ${branchId ? Prisma.sql`AND o."branchId" = ${branchId}` : Prisma.empty}
         ${search ? Prisma.sql`AND (o."orderNumber" ILIKE ${pattern} OR w.name ILIKE ${pattern} OR r.reason ILIKE ${pattern} OR r."creditNoteNumber" ILIKE ${pattern})` : Prisma.empty}`;
-    const from = Prisma.sql`FROM "WarehouseReturn" r JOIN "WarehouseOrder" o ON o.id = r."orderId" AND o."warehouseId" = r."warehouseId"
-        JOIN "Branch" b ON b.id = o."branchId" JOIN "Warehouse" w ON w.id = r."warehouseId"`;
+    const from = Prisma.sql`FROM "public"."WarehouseReturn" r JOIN "public"."WarehouseOrder" o ON o.id = r."orderId" AND o."warehouseId" = r."warehouseId"
+        JOIN "public"."Branch" b ON b.id = o."branchId" JOIN "public"."Warehouse" w ON w.id = r."warehouseId"`;
     const [rows, counts] = await Promise.all([
         prisma.$queryRaw<any[]>(Prisma.sql`SELECT r.id, r."orderId", r.status, r.reason, r."createdAt", r."totalAmount", r."creditNoteNumber",
-            o."orderNumber", w.name AS "warehouseName", (SELECT COUNT(*)::int FROM "WarehouseReturnItem" i WHERE i."returnId" = r.id) AS "itemCount"
+            o."orderNumber", w.name AS "warehouseName", (SELECT COUNT(*)::int FROM "public"."WarehouseReturnItem" i WHERE i."returnId" = r.id) AS "itemCount"
             ${from} WHERE ${where} ${status ? Prisma.sql`AND r.status = ${status}` : Prisma.empty}
             ORDER BY r."createdAt" DESC, r.id DESC LIMIT 26 OFFSET ${(page - 1) * 25}`),
         prisma.$queryRaw<{ status: string; count: number }[]>(Prisma.sql`SELECT r.status, COUNT(*)::int AS count ${from} WHERE ${where} GROUP BY r.status`),

@@ -38,6 +38,8 @@ export interface UserPermissions {
     // Patients & CRM
     canViewPatients: boolean;
     canEditPatient: boolean;
+    canManageWhatsAppTemplates: boolean;
+    canSendWhatsAppCampaigns: boolean;
 
     // Suppliers & Purchases
     canViewSuppliers: boolean;
@@ -66,6 +68,7 @@ export interface UserPermissions {
 
 // Default permissions by role
 const ADMIN_DEFAULTS: UserPermissions = {
+    canManageWhatsAppTemplates: true, canSendWhatsAppCampaigns: true,
     canViewWarehouseOrders: true,
     canCreateWarehouseOrder: true,
     canApproveWarehouseOrder: true,
@@ -86,6 +89,7 @@ const ADMIN_DEFAULTS: UserPermissions = {
 };
 
 const PHARMACIST_DEFAULTS: UserPermissions = {
+    canManageWhatsAppTemplates: false, canSendWhatsAppCampaigns: false,
     canViewWarehouseOrders: true,
     canCreateWarehouseOrder: true,
     canApproveWarehouseOrder: true,
@@ -106,6 +110,7 @@ const PHARMACIST_DEFAULTS: UserPermissions = {
 };
 
 const CASHIER_DEFAULTS: UserPermissions = {
+    canManageWhatsAppTemplates: false, canSendWhatsAppCampaigns: false,
     canViewWarehouseOrders: false,
     canCreateWarehouseOrder: false,
     canApproveWarehouseOrder: false,
@@ -133,6 +138,7 @@ const CASHIER_DEFAULTS: UserPermissions = {
 // canPayDebt) must never inherit ANY role's permissions just because it fell
 // through the switch. See app/lib/__tests__/permissions.test.ts.
 const ALL_FALSE_DEFAULTS: UserPermissions = {
+    canManageWhatsAppTemplates: false, canSendWhatsAppCampaigns: false,
     canViewWarehouseOrders: false,
     canCreateWarehouseOrder: false,
     canApproveWarehouseOrder: false,
@@ -235,6 +241,8 @@ export const PERMISSION_LABELS: Record<keyof UserPermissions, { label: string; c
     canExportExcel: { label: 'تصدير Excel', category: 'التقارير' },
     canViewPatients: { label: 'عرض المرضى', category: 'العملاء' },
     canEditPatient: { label: 'تعديل بيانات مريض', category: 'العملاء' },
+    canManageWhatsAppTemplates: { label: 'إدارة قوالب WhatsApp', category: 'العملاء' },
+    canSendWhatsAppCampaigns: { label: 'مراسلة العملاء وجدولة WhatsApp', category: 'العملاء' },
     canViewSuppliers: { label: 'عرض الموردين', category: 'التوريد' },
     canCreatePurchase: { label: 'إنشاء طلب شراء', category: 'التوريد' },
     canPaySupplier: { label: 'تسديد الموردين', category: 'التوريد' },

@@ -1,6 +1,8 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
+import { spawnSync } from 'node:child_process';
+import { partitionFindings, imageSizePatchSha256 } from './audit-mitigations.mjs';
 
 // Official npm Bulk Advisory API:
 // https://docs.npmjs.com/cli/v11/commands/npm-audit/#bulk-advisory-endpoint
@@ -40,15 +42,25 @@ try {
     }
   }
   const findings = [...unique.values()];
+  const patch = lock.patchedDependencies?.['image-size@1.2.1'];
+  const evidence = { declared: patch?.path === 'patches/image-size@1.2.1.patch' && Boolean(patch.hash), sha256: '', runtimeVerified: false };
+  if (evidence.declared) {
+    evidence.sha256 = createHash('sha256').update(readFileSync(patch.path, 'utf8').replace(/\r\n/g, '\n')).digest('hex');
+    if (evidence.sha256 === imageSizePatchSha256 && findings.some(f => f.package === 'image-size')) {
+      const regression = spawnSync(process.execPath, ['--test', 'scripts/image-size-security.test.mjs'], { encoding: 'utf8', timeout: 60000 });
+      evidence.runtimeVerified = !regression.error && regression.status === 0;
+    }
+  }
+  const { actionable, mitigated } = partitionFindings(findings, evidence);
   const summary = { info: 0, low: 0, moderate: 0, high: 0, critical: 0 };
-  for (const finding of findings) summary[finding.severity]++;
+  for (const finding of actionable) summary[finding.severity]++;
   const report = { checkedAt, complete: true, source: 'npm Bulk Advisory API', lockSha256: createHash('sha256').update(source).digest('hex'),
     scope: 'All production/shared/optional lock entries; excludes only dev:true. Counts are unique advisories, not dependency paths.',
-    included, developmentOnly, inventory, summary, findings };
+    included, developmentOnly, inventory, summary, findings, actionable, mitigated, mitigationEvidence: evidence };
   writeFileSync('artifacts/audit-prod.json', JSON.stringify(report, null, 2));
-  writeFileSync('artifacts/audit-prod-status.json', JSON.stringify({ checkedAt, complete: true, code: findings.length ? 1 : 0 }));
-  console.log(JSON.stringify({ included, developmentOnly, summary, findings: findings.map(f => ({ package: f.package, severity: f.severity, title: f.title, url: f.url })) }, null, 2));
-  process.exitCode = findings.length ? 1 : 0;
+  writeFileSync('artifacts/audit-prod-status.json', JSON.stringify({ checkedAt, complete: true, code: actionable.length ? 1 : 0 }));
+  console.log(JSON.stringify({ included, developmentOnly, summary, mitigated: mitigated.map(f => ({ package: f.package, url: f.url, mitigation: f.mitigation })), findings: actionable.map(f => ({ package: f.package, severity: f.severity, title: f.title, url: f.url })) }, null, 2));
+  process.exitCode = actionable.length ? 1 : 0;
 } catch (error) {
   writeFileSync('artifacts/audit-prod.json', JSON.stringify({ checkedAt, complete: false, error: error.message }, null, 2));
   writeFileSync('artifacts/audit-prod-status.json', JSON.stringify({ checkedAt, complete: false, code: 2, error: error.message }));

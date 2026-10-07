@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 // sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
 // sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
 import { toast } from 'sonner';
+import { StatusPill } from '@/app/ui/data-table';
+import { useConfirm } from '@/app/ui/confirm-dialog';
 
 export function StartTransferButton() {
     return (
@@ -20,9 +22,16 @@ export function StartTransferButton() {
 
 export function ReceiveTransferButton({ id, isReceiving }: { id: string, isReceiving?: boolean }) {
     const router = useRouter();
+    const { confirm, dialog } = useConfirm();
 
     const handleReceive = async () => {
-        if (!confirm('هل أنت متأكد من استلام هذه الشحنة وإضافتها للمخزون؟ (لا يمكن التراجع عن هذه الخطوة)')) return;
+        if (!await confirm({
+            title: 'تأكيد استلام التحويل',
+            message: 'بعد التأكيد تضاف الشحنة إلى مخزون هذا الفرع. راجع الدواء والدفعة والكمية قبل الاستلام.',
+            confirmText: 'تأكيد الاستلام',
+            cancelText: 'الرجوع للمراجعة',
+            variant: 'primary',
+        })) return;
 
         try {
             const res = await fetch(`/api/inventory/transfers/${id}/receive`, {
@@ -40,13 +49,16 @@ export function ReceiveTransferButton({ id, isReceiving }: { id: string, isRecei
     };
 
     return (
+        <>
+        {dialog}
         <button
             onClick={handleReceive}
-            className={`rounded-md px-3 py-1 text-sm font-bold transition-all ${isReceiving ? 'bg-success text-success-foreground hover:bg-success/90' : 'bg-success/10 text-success ring-1 ring-inset ring-success/20 hover:bg-success/20'
+            className={`whitespace-nowrap rounded-lg border px-2.5 py-1 text-xs font-bold transition-colors ${isReceiving ? 'border-success bg-success text-success-foreground hover:bg-success/90' : 'border-success/20 bg-success/10 text-success hover:bg-success/20'
                 }`}
         >
             تأكيد الاستلام
         </button>
+        </>
     );
 }
 
@@ -54,23 +66,19 @@ export function ReceiveTransferButton({ id, isReceiving }: { id: string, isRecei
 export function TransferStatus({ status }: { status: string }) {
     if (status === 'IN_TRANSIT') {
         return (
-            <span className="inline-flex items-center rounded-full bg-warning/10 px-2 py-1 text-xs font-bold text-warning ring-1 ring-inset ring-warning/20">
-                <Clock className="w-3 h-3 ml-1" />
+            <StatusPill tone="warning">
+                <Clock className="w-3 h-3" />
                 قيد النقل
-            </span>
+            </StatusPill>
         );
     }
     if (status === 'COMPLETED') {
         return (
-            <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-1 text-xs font-bold text-success ring-1 ring-inset ring-success/20">
-                <CheckCircle2 className="w-3 h-3 ml-1" />
+            <StatusPill tone="success">
+                <CheckCircle2 className="w-3 h-3" />
                 مستلمة
-            </span>
+            </StatusPill>
         );
     }
-    return (
-        <span className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border/50">
-            {status}
-        </span>
-    );
+    return <StatusPill tone="muted">{status}</StatusPill>;
 }

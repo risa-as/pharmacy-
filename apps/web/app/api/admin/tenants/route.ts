@@ -3,12 +3,17 @@ import { prisma } from '@/app/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { auth } from '@/auth';
 import bcrypt from 'bcryptjs';
+import { compactTenants, TenantReadError } from '@/app/lib/admin-tenant-data';
 import { generateLicenseKey } from '@/app/lib/license-utils';
 
 export const dynamic = 'force-dynamic';
 
 // GET: List all tenants (super admin only)
-export async function GET() {
+export async function GET(request: NextRequest) {
+    if (request.nextUrl.searchParams.get("view") === "compact") {
+        try { return NextResponse.json({ tenants: await compactTenants() }); }
+        catch(e) { return NextResponse.json({ error: e instanceof TenantReadError ? e.message : "تعذر تحميل المؤسسات." }, { status: e instanceof TenantReadError ? e.status : 500 }); }
+    }
     try {
         const session = await auth();
         if (!session?.user || (session.user.role !== 'SUPER_ADMIN')) {

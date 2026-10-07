@@ -6,7 +6,7 @@ import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 
 /** Stock of an inventory row = sum of its batches (same basis as GET /api/inventory). */
-const STOCK_SQL = Prisma.sql`COALESCE((SELECT SUM(b.quantity) FROM "Batch" b WHERE b."inventoryId" = i.id), 0)`;
+const STOCK_SQL = Prisma.sql`COALESCE((SELECT SUM(b.quantity) FROM "public"."Batch" b WHERE b."inventoryId" = i.id), 0)`;
 
 /**
  * Items in stock but at or below the reorder level — the same rule the mobile
@@ -20,7 +20,7 @@ async function countLowStock(tenantBranchWhere: Record<string, any>, branchId: s
     const conditions = [...scopeConditions(tenantBranchWhere, branchId), Prisma.sql`i."minStock" > 0`];
     const [row] = await prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(*)::int AS count
-        FROM "Inventory" i
+        FROM "public"."Inventory" i
         WHERE ${Prisma.join(conditions, ' AND ')}
           AND ${STOCK_SQL} > 0 AND ${STOCK_SQL} <= i."minStock"
     `;
@@ -31,7 +31,7 @@ async function countLowStock(tenantBranchWhere: Record<string, any>, branchId: s
 async function countOutOfStock(tenantBranchWhere: Record<string, any>, branchId: string | null): Promise<number> {
     const conditions = scopeConditions(tenantBranchWhere, branchId);
     const [row] = await prisma.$queryRaw<{ count: number }[]>`
-        SELECT COUNT(*)::int AS count FROM "Inventory" i
+        SELECT COUNT(*)::int AS count FROM "public"."Inventory" i
         WHERE ${Prisma.join(conditions, ' AND ')} AND ${STOCK_SQL} <= 0
     `;
     return row?.count ?? 0;
@@ -45,7 +45,7 @@ function scopeConditions(tenantBranchWhere: Record<string, any>, branchId: strin
     }
     const orgId = tenantBranchWhere.branch?.organizationId;
     if (typeof orgId === 'string') {
-        conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "Branch" br WHERE br.id = i."branchId" AND br."organizationId" = ${orgId})`);
+        conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "public"."Branch" br WHERE br.id = i."branchId" AND br."organizationId" = ${orgId})`);
     }
     if (branchId) conditions.push(Prisma.sql`i."branchId" = ${branchId}`);
     return conditions;

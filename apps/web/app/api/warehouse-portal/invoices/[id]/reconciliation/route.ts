@@ -16,12 +16,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const result = await prisma.$transaction(tx => runWarehouseOperation(tx, command, async () => {
             const found = await tx.warehouseInvoice.findFirst({ where: { id, warehouseId: ctx.warehouseId, status: { not: 'CANCELLED' } } });
             if (!found) throw new WarehouseOperationError('الفاتورة غير موجودة', 404);
-            await tx.$queryRaw`SELECT id FROM "WarehouseOrder" WHERE id = ${found.orderId} FOR UPDATE`;
-            await tx.$queryRaw`SELECT id FROM "WarehouseInvoice" WHERE id = ${id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseOrder" WHERE id = ${found.orderId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseInvoice" WHERE id = ${id} FOR UPDATE`;
             const invoice = await tx.warehouseInvoice.findUniqueOrThrow({ where: { id } });
             const purchase = await tx.purchase.findUnique({ where: { warehouseOrderId: invoice.orderId }, include: { supplier: true } });
             if (!purchase || purchase.supplier.warehouseId !== ctx.warehouseId || purchase.supplier.organizationId !== invoice.organizationId || purchase.status !== 'COMPLETED') throw new WarehouseOperationError('اربط فاتورة الاستلام أولاً.');
-            await tx.$queryRaw`SELECT id FROM "Purchase" WHERE id = ${purchase.id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."Purchase" WHERE id = ${purchase.id} FOR UPDATE`;
             const current = await tx.purchase.findUniqueOrThrow({ where: { id: purchase.id } });
             if (Math.abs(current.total - invoice.total) > 0.0001) throw new WarehouseOperationError('إجماليا الفاتورتين مختلفان؛ دقق البنود قبل مطابقة السداد.');
             const event = await tx.warehouseOrderEvent.create({ data: { orderId: invoice.orderId, type: 'PAYMENT_MATCH_PROPOSED', actorType: 'WAREHOUSE', actorName: ctx.user.name ?? ctx.user.email,

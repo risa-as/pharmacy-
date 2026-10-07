@@ -12,8 +12,8 @@ export async function loadWarehouseStock(warehouseId: string, canViewFinance: bo
             SELECT c.id, c."minStock", d."tradeName", COUNT(b.id) AS batches,
                 COALESCE(SUM(CASE WHEN b."expiryDate" > ${now} THEN GREATEST(b.quantity,0) ELSE 0 END),0) AS quantity,
                 MIN(CASE WHEN b.quantity > 0 AND b."expiryDate" > ${now} THEN b."expiryDate" END) AS expiry
-            FROM "WarehouseCatalogItem" c JOIN "GlobalDrug" d ON d.id = c."drugId"
-            LEFT JOIN "WarehouseBatch" b ON b."catalogItemId" = c.id
+            FROM "public"."WarehouseCatalogItem" c JOIN "public"."GlobalDrug" d ON d.id = c."drugId"
+            LEFT JOIN "public"."WarehouseBatch" b ON b."catalogItemId" = c.id
             WHERE c."warehouseId" = ${warehouseId}
                 ${search ? Prisma.sql`AND (d."tradeName" ILIKE ${pattern} OR c.barcode ILIKE ${pattern})` : Prisma.empty}
             GROUP BY c.id, d."tradeName"

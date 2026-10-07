@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
                     ...(hasWarehousePermission(gate.actor, 'canEditCatalog') ? { isAvailable, drugId: drug.id, ...(minStock !== undefined ? { minStock } : {}) } : {}),
                 };
                 await prisma.$transaction(async tx => {
-                    await tx.$queryRaw`SELECT id FROM "WarehouseCatalogItem" WHERE id = ${existing.id} FOR UPDATE`;
+                    await tx.$queryRaw`SELECT id FROM "public"."WarehouseCatalogItem" WHERE id = ${existing.id} FOR UPDATE`;
                     const before = await tx.warehouseCatalogItem.findUniqueOrThrow({ where: { id: existing.id } });
                     await tx.warehouseCatalogItem.update({ where: { id: existing.id }, data: updateData });
                     await tx.auditLog.create({ data: { userId: ctx.user.id, userName: ctx.user.name ?? ctx.user.email ?? ctx.user.id,

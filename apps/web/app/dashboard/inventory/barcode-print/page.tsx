@@ -109,7 +109,7 @@ export default function BarcodePrintPage() {
             <body>
                 ${labelsHTML}
                 <script>
-                    document.querySelectorAll('.barcode').forEach((svg: any) => {
+                    document.querySelectorAll('.barcode').forEach((svg) => {
                         try {
                             JsBarcode(svg, svg.dataset.barcode, {
                                 format: "CODE128",

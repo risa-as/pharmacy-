@@ -102,6 +102,8 @@ const GROUPS: { id: string; label: string; icon: LucideIcon; perms: PermMeta[] }
         icon: UsersIcon,
         perms: [
             { key: 'canViewPatients', kind: 'page', label: 'صفحات العملاء', desc: 'المرضى ونقاط الولاء والوصفات' },
+            { key: 'canManageWhatsAppTemplates', kind: 'action', requires: 'canViewPatients', label: 'إدارة قوالب WhatsApp', desc: 'إنشاء نسخ القوالب وإرسالها للاعتماد' },
+            { key: 'canSendWhatsAppCampaigns', kind: 'action', requires: 'canViewPatients', label: 'مراسلة العملاء وجدولة WhatsApp', desc: 'اختيار المستلمين الموافقين، والإرسال الفوري أو المجدول ومتابعة النتائج' },
             { key: 'canEditPatient', kind: 'action', requires: 'canViewPatients', label: 'تعديل بيانات مريض', desc: 'تعديل الملف الشخصي والحساسيات والأمراض المزمنة' },
         ],
     },

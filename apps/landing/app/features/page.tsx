@@ -8,7 +8,8 @@ import {
 
 import SectionHeading from '../../components/section-heading';
 import CTAButton from '../../components/cta-button';
-import { DashboardMockup, PhoneMockup, PosShot, WarehouseQuoteMockup } from '../../components/mockups';
+import { BrowserShot, PhoneShot, DesktopShot, shots } from '../../components/screenshot';
+import SmartPurchasing from '../../components/smart-purchasing';
 
 export const metadata: Metadata = {
   title: 'المميزات | فاراماس',
@@ -55,11 +56,12 @@ export default function FeaturesPage() {
         <SectionHeading
           badge="مميزات النظام"
           title="كل ما تحتاجه الصيدلية، في أربع منصات مترابطة"
-          subtitle="لوحة للإدارة، وكاشير لا يتوقف، وتطبيق في جيبك، وشبكة تربطك بالمذاخر — بقاعدة بيانات واحدة."
+          subtitle="لوحة للإدارة، وكاشير لا يتوقف، وتطبيق في جيبك، وشبكة تربطك بالمذاخر — ببيانات متزامنة بين المنصات."
           className="mb-20"
         />
 
         <div className="space-y-28">
+          <SmartPurchasing />
           <Block
             id="web"
             icon={<Globe size={24} />}
@@ -74,7 +76,7 @@ export default function FeaturesPage() {
               { title: 'كشف حساب لكل مورد', icon: <Truck size={20} /> },
               { title: 'صناديق وديون العملاء', icon: <Wallet size={20} /> },
             ]}
-            visual={<DashboardMockup />}
+            visual={<BrowserShot shot={shots.dashboard} />}
           />
 
           <Block
@@ -93,7 +95,7 @@ export default function FeaturesPage() {
               { title: 'ورديات وتسليم الصندوق', icon: <Clock size={20} /> },
               { title: 'نقدي وآجل وزين كاش', icon: <CreditCard size={20} /> },
             ]}
-            visual={<PosShot />}
+            visual={<DesktopShot />}
           />
 
           <Block
@@ -112,7 +114,7 @@ export default function FeaturesPage() {
             ]}
             visual={
               <div className="flex justify-center rounded-3xl bg-gradient-to-b from-primary-50 to-white py-10">
-                <PhoneMockup className="scale-110" />
+                <PhoneShot className="w-[260px]" />
               </div>
             }
           />
@@ -130,7 +132,7 @@ export default function FeaturesPage() {
               { title: 'تسعير لكل صنف', icon: <ClipboardList size={20} /> },
               { title: 'فاتورة شراء تلقائية', icon: <FileText size={20} /> },
             ]}
-            visual={<WarehouseQuoteMockup />}
+            visual={<BrowserShot shot={shots.portalOrders} />}
           />
 
           <section id="security" className="scroll-mt-28 rounded-3xl bg-ink-950 p-8 text-white md:p-12">

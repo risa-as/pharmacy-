@@ -1,0 +1,13 @@
+CREATE TABLE "public"."WaConnection" ("organizationId" TEXT NOT NULL,"phoneId" TEXT NOT NULL,"businessId" TEXT NOT NULL,"tokenEncrypted" TEXT NOT NULL,"secretEncrypted" TEXT NOT NULL,"verifyEncrypted" TEXT NOT NULL,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "WaConnection_pkey" PRIMARY KEY ("organizationId"));
+CREATE UNIQUE INDEX "WaConnection_phoneId_key" ON "public"."WaConnection"("phoneId");
+CREATE TABLE "public"."WaTemplateVersion" ("id" TEXT NOT NULL,"organizationId" TEXT NOT NULL,"name" TEXT NOT NULL,"body" TEXT NOT NULL,"language" TEXT NOT NULL,"category" TEXT NOT NULL,"status" TEXT NOT NULL DEFAULT 'DRAFT',"metaId" TEXT,"metaName" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "WaTemplateVersion_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "WaTemplateVersion_organizationId_createdAt_idx" ON "public"."WaTemplateVersion"("organizationId","createdAt");
+CREATE TABLE "public"."WaConsent" ("organizationId" TEXT NOT NULL,"phone" TEXT NOT NULL,"allowed" BOOLEAN NOT NULL,"evidence" TEXT NOT NULL,"recordedBy" TEXT NOT NULL,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "WaConsent_pkey" PRIMARY KEY ("organizationId","phone"));
+CREATE TABLE "public"."WaCampaign" ("id" TEXT NOT NULL,"organizationId" TEXT NOT NULL,"branchId" TEXT,"createdBy" TEXT NOT NULL,"templateId" TEXT NOT NULL,"name" TEXT NOT NULL,"previewHash" TEXT NOT NULL,"status" TEXT NOT NULL DEFAULT 'QUEUED',"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "WaCampaign_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "WaCampaign_organizationId_createdAt_idx" ON "public"."WaCampaign"("organizationId","createdAt");
+ALTER TABLE "public"."WaCampaign" ADD CONSTRAINT "WaCampaign_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "public"."WaTemplateVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE TABLE "public"."WaMessage" ("id" TEXT NOT NULL,"campaignId" TEXT NOT NULL,"organizationId" TEXT NOT NULL,"patientId" TEXT NOT NULL,"phone" TEXT NOT NULL,"name" TEXT NOT NULL,"text" TEXT NOT NULL,"parameters" JSONB NOT NULL,"status" TEXT NOT NULL DEFAULT 'QUEUED',"providerId" TEXT,"error" TEXT,"claimedAt" TIMESTAMP(3),"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "WaMessage_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "WaMessage_providerId_key" ON "public"."WaMessage"("providerId");
+CREATE UNIQUE INDEX "WaMessage_campaignId_phone_key" ON "public"."WaMessage"("campaignId","phone");
+CREATE INDEX "WaMessage_status_updatedAt_idx" ON "public"."WaMessage"("status","updatedAt");
+ALTER TABLE "public"."WaMessage" ADD CONSTRAINT "WaMessage_campaignId_fkey" FOREIGN KEY ("campaignId") REFERENCES "public"."WaCampaign"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

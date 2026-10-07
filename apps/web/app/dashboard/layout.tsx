@@ -69,7 +69,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
             <div className="md:hidden print:hidden">
                 <SideNav settings={settings} userPermissions={userPermissions} userRole={userRole} userEmail={userEmail} userName={userName} />
             </div>
-            <div className="flex-grow pt-14 md:pt-0 overflow-y-auto bg-muted/60 dark:bg-background print:overflow-visible print:pt-0" dir="rtl">
+            <div className="flex-grow pt-14 md:pt-0 overflow-y-auto bg-[hsl(var(--canvas))] dark:bg-background print:overflow-visible print:pt-0" dir="rtl">
                 {/* Subscription banner (warning/grace states) */}
                 <SubscriptionBanner
                     state={subscriptionResult.state}

@@ -56,7 +56,7 @@ export async function settleSaleLoyalty(tx: Prisma.TransactionClient, saleId: st
     const gross = sold.reduce((s, i) => s + i.quantity * i.price, 0);
     const returnedGross = back.reduce((s, i) => s + i.quantity * (priceOf.get(i.drugId) ?? 0), 0);
     const sums = await tx.$queryRaw<{ type: string; points: number }[]>`
-        SELECT type, COALESCE(SUM(ABS(points)), 0)::int AS points FROM "LoyaltyTransaction"
+        SELECT type, COALESCE(SUM(ABS(points)), 0)::int AS points FROM "public"."LoyaltyTransaction"
         WHERE "accountId" = ${account.id} AND "saleId" = ${saleId} GROUP BY type`;
     const sum = (type: string) => sums.find(r => r.type === type)?.points ?? 0;
 

@@ -82,7 +82,7 @@ async function change(
       throw new Error("حالة غير صالحة");
     const stocktake = await prisma.$transaction(
       async (tx) => {
-        await tx.$queryRaw`SELECT id FROM "Stocktake" WHERE id=${id} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "public"."Stocktake" WHERE id=${id} FOR UPDATE`;
         const current = await tx.stocktake.findFirst({
           where: { AND: [ctx.tenantBranchWhere, { id }] },
           include: { items: true },
@@ -163,7 +163,7 @@ async function change(
             !Number.isSafeInteger(input.systemQuantity)
           )
             throw new Error("أدخل أعداداً صحيحة غير سالبة");
-          await tx.$queryRaw`SELECT id FROM "Batch" WHERE id=${input.batchId} FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM "public"."Batch" WHERE id=${input.batchId} FOR UPDATE`;
           const batch = await tx.batch.findFirst({
             where: {
               id: input.batchId,

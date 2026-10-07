@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Package, Zap } from "lucide-react";
+import { Plus, Zap } from "lucide-react";
+import { formatCurrency } from "@/app/lib/utils/currency";
+import { displayText } from "@/app/lib/display-text";
 import AddBatchModal from "./add-batch-modal";
 import { UpdateInventory, DeleteInventory } from "./buttons";
 
@@ -104,105 +106,95 @@ export default function InventoryTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-xl bg-transparent border border-border shadow-sm">
-        <table className="min-w-full text-foreground">
-          <thead className="bg-card/50 text-right text-sm font-semibold text-foreground border-b border-border">
+      {/* Same layout and styling as the batches table (app/ui/batches/batch-table.tsx). */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-right">
+          <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
             <tr>
-              <th scope="col" className="px-2 py-3 font-cairo text-center w-12">
-                #
-              </th>
-              <th scope="col" className="px-3 py-3 font-cairo">
-                اسم الدواء
-              </th>
-              <th scope="col" className="px-3 py-3 font-cairo">
-                الفرع
-              </th>
-              <th scope="col" className="px-3 py-3 font-cairo">
-                الكمية الحالية
-              </th>
-              <th scope="col" className="px-3 py-3 font-cairo">
-                الحدود
-              </th>
-              <th scope="col" className="px-3 py-3 font-cairo">
-                الحالة
-              </th>
-              <th scope="col" className="px-3 py-3 font-cairo">
-                سعر البيع
-              </th>
-              <th scope="col" className="px-3 py-3 font-cairo text-center">
-                <span className="flex items-center justify-center gap-1">
-                  <Zap className="w-4 h-4 text-amber-500" />
+              <th scope="col" className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">اسم الدواء</th>
+              <th scope="col" className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الفرع</th>
+              <th scope="col" className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الكمية الحالية</th>
+              <th scope="col" className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">سعر البيع</th>
+              <th scope="col" className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الحالة</th>
+              <th scope="col" className="px-3 py-3 text-center font-medium font-cairo whitespace-nowrap">
+                <span className="inline-flex items-center justify-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
                   بيع سريع
                 </span>
               </th>
-              <th scope="col" className="px-3 py-3 font-cairo">
-                إجراءات
-              </th>
+              <th scope="col" className="px-3 py-3 text-center font-medium font-cairo whitespace-nowrap">إجراءات</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border bg-transparent">
-            {items.map((item: any, index: number) => {
-              const status =
-                item.currentStock === 0
-                  ? "نفد"
-                  : item.currentStock < item.minStock
-                    ? "نقص في المخزون"
-                    : item.currentStock > item.maxStock
-                      ? "مخزون زائد"
-                      : "جيد";
+          <tbody className="divide-y divide-border bg-card">
+            {items.map((item: any) => {
+              const out = item.currentStock === 0;
+              const low = !out && item.currentStock < item.minStock;
+              const surplus = !out && !low && item.currentStock > item.maxStock;
 
-              const statusColor =
-                item.currentStock === 0
-                  ? "bg-destructive/10 text-destructive"
-                  : item.currentStock < item.minStock
-                    ? "bg-warning/10 text-warning"
-                    : item.currentStock > item.maxStock
-                      ? "bg-amber-500/10 text-amber-600"
-                      : "bg-success/10 text-success";
+              let statusText = "جيد";
+              let statusClass = "bg-success/10 text-success border-success/20";
+              let barClass = "bg-primary";
+              if (out) {
+                statusText = "نفد";
+                statusClass = "bg-destructive/10 text-destructive border-destructive/20";
+                barClass = "bg-destructive";
+              } else if (low) {
+                statusText = "نقص في المخزون";
+                statusClass = "bg-warning/10 text-warning border-warning/20";
+                barClass = "bg-warning";
+              } else if (surplus) {
+                statusText = "مخزون زائد";
+                statusClass = "bg-amber-500/10 text-amber-600 border-amber-500/20";
+                barClass = "bg-amber-500";
+              }
+              // Share of this branch's maximum stock currently held.
+              const fillPct = item.maxStock > 0
+                ? Math.min(100, Math.round((item.currentStock / item.maxStock) * 100))
+                : 0;
 
               return (
-                <tr
-                  key={item.id}
-                  className="hover:bg-muted/50 transition-colors"
-                >
-                  <td className="whitespace-nowrap px-2 py-3 text-center text-sm text-muted-foreground font-mono">
-                    {index + 1}
-                  </td>
-                  <td className="px-3 py-3 min-w-[160px]">
-                    <div className="flex flex-col">
-                      <span className="font-medium text-foreground">
+                <tr key={item.id} className="hover:bg-muted/40 transition-colors">
+                  <td className="px-3 py-3">
+                    <div className="max-w-[180px]">
+                      <p className="font-semibold text-foreground truncate" title={item.drug.tradeName}>
                         {item.drug.tradeName}
-                      </span>
-                      <span
-                        className="text-xs text-muted-foreground font-mono"
-                        title={item.drug.barcode}
-                      >
-                        {item.drug.barcode.length > 20
-                          ? item.drug.barcode.slice(0, 20) + "…"
-                          : item.drug.barcode}
-                      </span>
+                      </p>
+                      {displayText(item.drug.barcode) ? (
+                        <p className="text-[10px] text-muted-foreground truncate text-right" dir="ltr" title={item.drug.barcode}>
+                          {displayText(item.drug.barcode)}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground/50">—</p>
+                      )}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
-                    {item.branch.name}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 font-bold text-foreground">
-                    {item.currentStock}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground dir-ltr text-right">
-                    {item.minStock} / {item.maxStock}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${statusColor}`}
-                    >
-                      {status}
+                  <td className="px-3 py-3 text-muted-foreground">
+                    <span className="block max-w-[140px] truncate" title={item.branch.name}>
+                      {item.branch.name}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 font-bold text-foreground">
-                    {item.price.toFixed(2)}
+                  <td className="px-3 py-3">
+                    <div className="min-w-[105px] space-y-1">
+                      <span className="font-bold text-foreground">{item.currentStock}</span>
+                      <div className="h-1 w-full max-w-[90px] rounded-sm bg-muted overflow-hidden">
+                        <div className={`h-full rounded-sm ${barClass}`} style={{ width: `${fillPct}%` }} />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-tight whitespace-nowrap">
+                        الأدنى: <span className="font-semibold text-foreground">{item.minStock}</span>
+                        {" · "}
+                        الأقصى: <span className="font-semibold text-foreground">{item.maxStock}</span>
+                      </p>
+                    </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-center">
+                  <td className="px-3 py-3 font-bold text-foreground whitespace-nowrap" dir="ltr">
+                    {formatCurrency(Number(item.price) || 0)}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className={`inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-bold ${statusClass}`}>
+                      {statusText}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-center">
                     <button
                       dir="ltr"
                       onClick={() => handleQuickSaleToggle(item.id)}
@@ -223,8 +215,8 @@ export default function InventoryTable({
                       />
                     </button>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3">
-                    <div className="flex items-center gap-2">
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-center gap-1.5">
                       {canAddDrug && (
                         <button
                           onClick={() =>
@@ -236,7 +228,7 @@ export default function InventoryTable({
                             })
                           }
                           title="إضافة دفعة"
-                          className="flex items-center justify-center text-primary hover:text-primary hover:bg-primary/10 p-2 rounded-lg border border-border/60"
+                          className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
                         >
                           <Plus className="w-4 h-4" />
                         </button>
@@ -248,17 +240,6 @@ export default function InventoryTable({
                 </tr>
               );
             })}
-            {items.length === 0 && (
-              <tr>
-                <td
-                  colSpan={9}
-                  className="px-6 py-10 text-center text-muted-foreground"
-                >
-                  <Package className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                  المخزون فارغ.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>

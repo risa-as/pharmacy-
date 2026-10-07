@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 
                     // Serialize all returns for this invoice. The second device
                     // must re-read prior returns after waiting for the first one.
-                    await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${ret.saleId} FOR UPDATE`;
+                    await tx.$queryRaw`SELECT id FROM "public"."Sale" WHERE id = ${ret.saleId} FOR UPDATE`;
                     const existingAfterLock = await tx.saleReturn.findUnique({ where: { id: ret.id } });
                     if (existingAfterLock) { if (existingAfterLock.branchId !== branchId || existingAfterLock.saleId !== ret.saleId) throw new ReturnConflictError('معرف المرتجع مستخدم لعملية أخرى.'); return { status: 'duplicate' as const }; }
                     if (ret.refundVersion !== 2) throw new ReturnConflictError('يتطلب هذا المرتجع تحديث تطبيق سطح المكتب لدعم الخصم ودفعات الإرجاع. إذا سبق دفعه فاحتفظ به للمراجعة ولا تكرر الدفع.');

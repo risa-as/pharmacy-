@@ -19,25 +19,21 @@ describe('paginated mobile inventory route', () => {
         expect(mocks.query).not.toHaveBeenCalled();
     });
 
-    it('hydrates only selected ids with tenant intersection and preserves database order', async () => {
-        mocks.query.mockResolvedValue([{ ids: ['b', 'a'], total: 51, totalValue: 900, counts }]);
-        mocks.inventory.mockResolvedValue(['a', 'b'].map(id => ({
-            id, drugId: `drug-${id}`, price: 10, minStock: 5, branchId: 'own',
-            drug: { tradeName: id, barcode: id, scientificName: null, isQuickSale: false },
-            batches: [{ quantity: 2, expiryDate: new Date('2027-01-01') }, { quantity: 0, expiryDate: new Date('2020-01-01') }],
-        })));
+    it('returns page items in database order from one tenant-scoped snapshot', async () => {
+        const items = ['b', 'a'].map(id => ({ id, drugId: `drug-${id}`, price: 10, quantity: 2, expiryDate: '2027-01-01T00:00:00.000Z' }));
+        mocks.query.mockResolvedValue([{ ids: ['b', 'a'], items, total: 51, totalValue: 900, counts }]);
         const response = await GET(new Request('http://localhost/api/inventory/page?branchId=other'));
         const body = await response.json();
-        expect(mocks.inventory.mock.calls[0][0].where).toEqual({
-            AND: [{ branchId: 'own' }, { branchId: 'other' }, { id: { in: ['b', 'a'] } }],
-        });
+        expect(mocks.query).toHaveBeenCalledTimes(1);
+        expect(mocks.query.mock.calls[0][0].values).toEqual(expect.arrayContaining(['own', 'other']));
+        expect(mocks.inventory).not.toHaveBeenCalled();
         expect(body.items.map((item: { id: string }) => item.id)).toEqual(['b', 'a']);
         expect(body.items[0]).toMatchObject({ quantity: 2, expiryDate: '2027-01-01T00:00:00.000Z' });
         expect(body).toMatchObject({ hasMore: true, total: 51, totalValue: 900, counts });
     });
 
     it('returns summary on an empty last page without a hydration query', async () => {
-        mocks.query.mockResolvedValue([{ ids: [], total: 51, totalValue: 900, counts }]);
+        mocks.query.mockResolvedValue([{ ids: [], items: [], total: 51, totalValue: 900, counts }]);
         const body = await (await GET(new Request('http://localhost/api/inventory/page?page=3'))).json();
         expect(body).toMatchObject({ items: [], hasMore: false, page: 3, total: 51 });
         expect(mocks.inventory).not.toHaveBeenCalled();

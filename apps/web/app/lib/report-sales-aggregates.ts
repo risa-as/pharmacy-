@@ -80,8 +80,8 @@ export function buildSalesByLocalDateQuery({
     SELECT
       to_char((s."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS "date",
       COALESCE(SUM(s."total"), 0)::double precision AS "total"
-    FROM "Sale" s
-    JOIN "Branch" br ON br."id" = s."branchId"
+    FROM "public"."Sale" s
+    JOIN "public"."Branch" br ON br."id" = s."branchId"
     WHERE ${andSql(conditions)}
     GROUP BY 1
     ORDER BY 1 ASC

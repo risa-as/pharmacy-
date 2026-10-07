@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { Plus, Building2, Users, Package, Receipt } from "lucide-react";
+import { Plus, Building2, Users, Package, Receipt, Store } from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
 import { UpdateBranch, DeleteBranch } from "@/app/ui/branches/buttons";
@@ -35,7 +35,7 @@ export default async function Page() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-primary" />
+            <Store className="w-6 h-6 text-primary" />
             إدارة الفروع
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { buildContext, createProvider, providerConfig, sanitizeHistory, SYSTEM_PROMPT, type AIProvider, type ChatMessage } from '@/app/lib/ai-assistant';
 import { reserveAiRequest, completeAiRequest, AI_PROVIDER_TIMEOUT_MS } from '@/app/lib/ai-usage';
+import { ASSISTANT_IDENTITY_RESPONSE, isAssistantIdentityQuestion } from '@/app/lib/assistant-identity';
 
 const MAX_MESSAGE_CHARS = 2_000;
 
@@ -38,11 +39,15 @@ export async function POST(req: Request) {
     if (!message) {
       return NextResponse.json({ error: 'الرسالة فارغة' }, { status: 400 });
     }
+    if (isAssistantIdentityQuestion(message)) {
+      return NextResponse.json({ response: ASSISTANT_IDENTITY_RESPONSE, cards: [], quotaUsed: false });
+    }
     const history = sanitizeHistory(body.history);
 
     // Data first: cards are deterministic and remain useful even when the
     // language model is not configured, over its limit, or failing.
-    const { context, cards, categories } = await buildContext(message, tenantCtx, history);
+    const { context, cards, categories, directResponse } = await buildContext(message, tenantCtx, history);
+    if(directResponse) return NextResponse.json({response:directResponse,cards,quotaUsed:false});
 
     // The selected provider must be constructible BEFORE any quota is reserved:
     // a key for the other provider does not count as configured.

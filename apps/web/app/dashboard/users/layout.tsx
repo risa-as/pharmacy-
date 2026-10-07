@@ -9,18 +9,18 @@
  */
 
 import HubTabNav, { type HubTab, type HubAction } from "@/app/ui/hub-tab-nav";
-import { Users, Shield, BookOpen, Plus } from "lucide-react";
+import { Users, BookOpen, Plus, UserCog, ShieldCheck } from "lucide-react";
 
 const TABS: HubTab[] = [
   {
     name: "المستخدمين",
     href: "/dashboard/users",
-    icon: <Users className="w-3.5 h-3.5 shrink-0" />,
+    icon: <UserCog className="w-3.5 h-3.5 shrink-0" />,
   },
   {
     name: "إدارة الصلاحيات",
     href: "/dashboard/users/permissions",
-    icon: <Shield className="w-3.5 h-3.5 shrink-0" />,
+    icon: <ShieldCheck className="w-3.5 h-3.5 shrink-0" />,
   },
   {
     name: "دليل الصلاحيات",

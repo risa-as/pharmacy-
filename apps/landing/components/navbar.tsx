@@ -9,6 +9,7 @@ import Logo from './logo';
 const APP_LOGIN = 'https://app.faramace.com/login';
 
 const navLinks = [
+  { name: 'الشراء الذكي', href: '/#smart-purchasing' },
   { name: 'المميزات', href: '/features' },
   { name: 'المذاخر', href: '/warehouses', badge: 'جديد' },
   { name: 'الأسعار', href: '/pricing' },
@@ -21,7 +22,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   // Pages that open on a dark band keep a light header until the user scrolls.
-  const overDark = !scrolled && (pathname === '/' || pathname === '/warehouses');
+  const overDark = !scrolled && pathname === '/warehouses';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -74,10 +75,10 @@ export default function Navbar() {
             <Link
               href="/contact"
               className={`rounded-xl px-5 py-2.5 font-bold shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-lift ${
-                overDark ? 'bg-accent text-ink-950 hover:bg-amber-400' : 'bg-primary-700 text-white hover:bg-primary-800'
+                overDark ? 'bg-primary-400 text-ink-950 hover:bg-primary-300' : 'bg-primary-700 text-white hover:bg-primary-800'
               }`}
             >
-              اطلب عرضاً تجريبياً
+              احجز عرضاً توضيحياً
             </Link>
           </div>
 
@@ -98,7 +99,7 @@ export default function Navbar() {
         <div id="mobile-menu" className="absolute inset-x-0 top-full border-t border-slate-100 bg-white px-4 pb-6 pt-3 shadow-lift lg:hidden">
           <nav className="flex flex-col gap-1" aria-label="التنقل على الجوال">
             {navLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="flex items-center justify-between rounded-xl px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50">
+              <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="flex items-center justify-between rounded-xl px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50">
                 {link.name}
                 {link.badge && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-black text-ink-950">{link.badge}</span>}
               </Link>

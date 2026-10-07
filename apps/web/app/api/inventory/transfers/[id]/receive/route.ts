@@ -13,7 +13,7 @@ export async function PUT(
   try {
     const result = await prisma.$transaction(
       async (tx) => {
-        await tx.$queryRaw`SELECT id FROM "Transfer" WHERE id=${id} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "public"."Transfer" WHERE id=${id} FOR UPDATE`;
         const transfer = await tx.transfer.findFirst({
           where: { id, toBranch: ctx.branchModelWhere },
           include: { items: true },

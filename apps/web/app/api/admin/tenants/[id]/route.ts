@@ -3,6 +3,17 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
+import { readTenantDetail, requireTenantAdministrator, TenantReadError } from "@/app/lib/admin-tenant-data";
+import { TENANT_TABS, tenantTab } from "@/app/lib/admin-tenants";
+
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+    try {
+        const value = request.nextUrl.searchParams.get("tab") ?? "overview";
+        await requireTenantAdministrator();
+        if (!TENANT_TABS.some(t => t.id === value)) return NextResponse.json({ error: "التبويب غير صالح." }, { status: 400 });
+        return NextResponse.json(await readTenantDetail((await context.params).id, tenantTab(value)));
+    } catch(e) { return NextResponse.json({ error: e instanceof TenantReadError ? e.message : "تعذر تحميل المؤسسة." }, { status: e instanceof TenantReadError ? e.status : 500 }); }
+}
 
 export async function PATCH(
     request: NextRequest,
@@ -68,6 +79,8 @@ export async function DELETE(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        await requireTenantAdministrator();
+
         // Await the entire params object
         const params = await context.params;
         const tenantId = params.id;
@@ -83,6 +96,12 @@ export async function DELETE(
 
         if (!organization) {
             return NextResponse.json({ error: "المؤسسة غير موجودة" }, { status: 404 });
+        }
+
+        let body: { confirmationName?: string };
+        try { body = await request.json(); } catch { return NextResponse.json({ error: "اكتب اسم المؤسسة لتأكيد الحذف." }, { status: 400 }); }
+        if (!body || typeof body.confirmationName !== 'string' || body.confirmationName !== organization.name) {
+            return NextResponse.json({ error: "اسم التأكيد لا يطابق اسم المؤسسة الحالي." }, { status: 409 });
         }
 
         // Delete associated records in a transaction to maintain referential integrity.
@@ -115,9 +134,14 @@ export async function DELETE(
             });
 
             // 4. Finally, delete the organization
-            await tx.organization.delete({
-                where: { id: tenantId }
+            // Recheck the confirmed name at the write itself. A concurrent rename
+            // must roll back the related deletions rather than delete stale data.
+            const deleted = await tx.organization.deleteMany({
+                where: { id: tenantId, name: body.confirmationName }
             });
+            if (deleted.count !== 1) {
+                throw new TenantReadError("تغيرت بيانات المؤسسة؛ حدّث الصفحة وأعد تأكيد الاسم.", 409);
+            }
         });
 
         return NextResponse.json({ success: true, message: "تم حذف المؤسسة بنجاح" }, { status: 200 });
@@ -125,8 +149,8 @@ export async function DELETE(
     } catch (error: any) {
         console.error("Failed to delete tenant:", error);
         return NextResponse.json(
-            { error: error.message || "حدث خطأ أثناء الحذف" },
-            { status: 500 }
+            { error: error instanceof TenantReadError ? error.message : "تعذر حذف المؤسسة؛ قد توجد سجلات مرتبطة بها." },
+            { status: error instanceof TenantReadError ? error.status : 500 }
         );
     }
 }

@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
         if (body.kind !== 'OPENING_PAYMENT' || typeof body.customerId !== 'string' || typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount <= 0 || typeof body.reference !== 'string' || body.reference.trim().length < 3) throw new WarehouseOperationError('حدد العميل والمبلغ ومرجع سند القبض.', 400);
         const command = warehouseCommand(ctx.warehouseId, `opening-payment:${body.customerId}`, body);
         const result = await prisma.$transaction(tx => runWarehouseOperation(tx, command, async () => {
-            await tx.$queryRaw`SELECT id FROM "WarehouseCustomer" WHERE id = ${body.customerId} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseCustomer" WHERE id = ${body.customerId} AND "warehouseId" = ${ctx.warehouseId} FOR UPDATE`;
             const customer = await tx.warehouseCustomer.findFirst({ where: { id: body.customerId, warehouseId: ctx.warehouseId } });
             if (!customer) throw new WarehouseOperationError('العميل غير موجود', 404);
             if (body.amount > customer.openingBalance) throw new WarehouseOperationError('المبلغ يتجاوز الرصيد الافتتاحي المتبقي.');

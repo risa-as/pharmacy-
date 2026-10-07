@@ -6,14 +6,14 @@ import {
   Pill,
   Globe,
   Building2,
-  ChevronLeft,
-  ChevronRight,
   PackageSearch,
 } from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
 import { UpdateDrug, DeleteDrug } from "@/app/ui/drugs/buttons";
-import GlobalDrugSearch from "@/app/ui/drugs/global-search";
+import BatchSearch from "@/app/ui/batches/batch-search";
+import TablePagination from "@/app/ui/table-pagination";
+import { displayText } from "@/app/lib/display-text";
 import { getTenantContext } from "@/app/lib/tenant-utils";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
@@ -79,20 +79,7 @@ async function getDrugs(
   return { drugs, total, totalCatalog, customCount };
 }
 
-// Deterministic accent colour per drug so the avatar fallbacks aren't all identical.
-const AVATAR_COLORS = [
-  "bg-blue-500/10 text-blue-500",
-  "bg-emerald-500/10 text-emerald-500",
-  "bg-violet-500/10 text-violet-500",
-  "bg-amber-500/10 text-amber-600",
-  "bg-rose-500/10 text-rose-500",
-  "bg-cyan-500/10 text-cyan-500",
-];
-function avatarColor(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
-}
+const pill = "inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-bold";
 
 function StatChip({
   icon,
@@ -112,22 +99,16 @@ function StatChip({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors ${
-        active
-          ? "border-primary ring-2 ring-primary/30"
-          : "border-border hover:bg-muted"
+      className={`glass-card p-5 flex items-center gap-4 transition-colors ${
+        active ? "ring-2 ring-primary/40" : "hover:bg-muted/40"
       }`}
     >
-      <div
-        className={`flex h-9 w-9 items-center justify-center rounded-lg ${tone}`}
-      >
+      <div className={`w-12 h-12 rounded-xl ${tone} flex items-center justify-center shrink-0`}>
         {icon}
       </div>
       <div>
-        <div className="text-lg font-bold leading-none text-foreground font-mono">
-          {value.toLocaleString("en-US")}
-        </div>
-        <div className="text-xs text-muted-foreground mt-1">{label}</div>
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="text-2xl font-bold text-foreground">{value.toLocaleString("en-US")}</p>
       </div>
     </Link>
   );
@@ -181,22 +162,23 @@ export default async function Page(
   };
 
   return (
-    <div className="glass-card w-full p-6" dir="rtl" suppressHydrationWarning>
-      {/* Header */}
-      <div className="flex w-full flex-wrap items-start justify-between gap-4 mb-5">
+    <div className="space-y-6" dir="rtl" suppressHydrationWarning>
+      {/* الرأس */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold font-cairo text-foreground">
+          <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
+            <Pill className="w-6 h-6 text-primary" />
             قاعدة الأدوية
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            إدارة كتالوج الأدوية العالمي والمخصّص لصيدليتك.
+            إدارة كتالوج الأدوية العالمي والمخصّص لصيدليتك
           </p>
         </div>
         <div className="flex items-center gap-2">
           {isSuperAdmin && (
             <Link
               href="/dashboard/drugs/import"
-              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border/60 bg-card hover:bg-muted text-foreground transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold border border-border bg-card hover:bg-muted text-foreground transition-colors"
             >
               <FileSpreadsheet className="h-4 w-4" />
               <span className="hidden md:block">استيراد أدوية</span>
@@ -212,250 +194,160 @@ export default async function Page(
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+      {/* بطاقات الإحصائيات — وهي أيضاً فلتر المصدر */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatChip
-          icon={<Pill className="h-5 w-5" />}
+          icon={<Pill className="w-6 h-6 text-primary" />}
           label="إجمالي الأدوية"
           value={totalCatalog}
-          tone="bg-primary/10 text-primary"
+          tone="bg-primary/10"
           href={filterHref("all")}
           active={source === "all"}
         />
         <StatChip
-          icon={<Building2 className="h-5 w-5" />}
+          icon={<Building2 className="w-6 h-6 text-emerald-600" />}
           label="مخصّصة لصيدليتك"
           value={customCount}
-          tone="bg-emerald-500/10 text-emerald-500"
+          tone="bg-emerald-500/10"
           href={filterHref("custom")}
           active={source === "custom"}
         />
         <StatChip
-          icon={<Globe className="h-5 w-5" />}
+          icon={<Globe className="w-6 h-6 text-blue-500" />}
           label="أدوية عالمية"
           value={globalCount}
-          tone="bg-blue-500/10 text-blue-500"
+          tone="bg-blue-500/10"
           href={filterHref("global")}
           active={source === "global"}
         />
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="w-full max-w-md">
-          <GlobalDrugSearch placeholder="ابحث بالاسم التجاري أو المادة الفعالة أو الباركود..." />
+      {/* الجدول — بنفس تصميم جدول الدفعات وسلوكه */}
+      <div className="glass-card overflow-hidden">
+        {/* البحث */}
+        <div className="p-4 border-b border-border flex items-center gap-3 flex-wrap">
+          <BatchSearch
+            currentQuery={query}
+            placeholder="ابحث بالاسم التجاري أو المادة الفعالة أو الباركود..."
+          />
+          <span className="text-sm text-muted-foreground">
+            {query ? (
+              <>
+                {total.toLocaleString("en-US")} نتيجة لـ &quot;<span className="font-bold text-foreground">{query}</span>&quot;
+              </>
+            ) : (
+              <>{total.toLocaleString("en-US")} دواء</>
+            )}
+          </span>
+          {(query || source !== "all") && (
+            <Link href="/dashboard/drugs" className="text-sm text-primary hover:underline">
+              إظهار الكل
+            </Link>
+          )}
         </div>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          {query || source !== "all" ? (
-            <>
-              <span>
-                {source === "custom"
-                  ? "مخصّصة لصيدليتك"
-                  : source === "global"
-                    ? "أدوية عالمية"
-                    : "نتائج البحث"}
-                :{" "}
-                <span className="font-bold text-foreground">
-                  {total.toLocaleString("en-US")}
-                </span>
-              </span>
-              <Link
-                href="/dashboard/drugs"
-                className="text-primary hover:underline"
-              >
-                إظهار الكل
-              </Link>
-            </>
-          ) : null}
-        </div>
-      </div>
 
-      {/* Table */}
-      <div className="rounded-xl bg-card border border-border shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-foreground">
-            <thead className="bg-muted text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
-              <tr>
-                <th scope="col" className="px-4 py-3 font-cairo w-14">
-                  #
-                </th>
-                <th scope="col" className="px-4 py-3 font-cairo">
-                  الدواء
-                </th>
-                <th scope="col" className="px-4 py-3 font-cairo w-40">
-                  الباركود
-                </th>
-                <th scope="col" className="px-4 py-3 font-cairo w-32">
-                  المصدر
-                </th>
-                <th scope="col" className="px-4 py-3 font-cairo w-32">
-                  الحالة
-                </th>
-                <th scope="col" className="px-4 py-3 font-cairo w-24">
-                  الإجراءات
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border bg-card">
-              {drugs.map((drug: any, index: number) => (
-                <tr
-                  key={drug.id}
-                  className="text-sm hover:bg-muted/50 transition-colors"
-                >
-                  <td className="px-4 py-3 font-mono text-right text-muted-foreground">
-                    {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {drug.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={drug.image}
-                          alt=""
-                          className="h-9 w-9 rounded-lg object-cover shrink-0 border border-border"
-                        />
-                      ) : (
-                        <div
-                          className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold shrink-0 ${avatarColor(drug.tradeName || drug.id)}`}
-                        >
-                          {(drug.tradeName || "?").trim().charAt(0)}
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="font-bold text-right text-foreground break-words">
+        {drugs.length === 0 ? (
+          <div className="py-16 text-center">
+            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <PackageSearch className="w-8 h-8 text-muted-foreground opacity-50" />
+            </div>
+            <p className="text-foreground font-medium">
+              {query
+                ? "لا توجد نتائج للبحث"
+                : source === "custom"
+                  ? "لا توجد أدوية مخصّصة لصيدليتك بعد"
+                  : source === "global"
+                    ? "لا توجد أدوية عالمية"
+                    : "لا توجد أدوية بعد"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {query ? (
+                "جرّب كلمة بحث أخرى"
+              ) : (
+                <Link href="/dashboard/drugs/create" className="text-primary hover:underline">
+                  إضافة أول دواء
+                </Link>
+              )}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-right">
+              <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
+                <tr>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الدواء</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الباركود</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">المصدر</th>
+                  <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الحالة</th>
+                  <th className="px-3 py-3 text-center font-medium font-cairo whitespace-nowrap">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border bg-card">
+                {drugs.map((drug: any) => (
+                  <tr key={drug.id} className="hover:bg-muted/40 transition-colors">
+                    <td className="px-3 py-3">
+                      <div className="max-w-[280px]">
+                        <p className="font-semibold text-foreground truncate" title={drug.tradeName}>
                           {drug.tradeName}
-                        </div>
-                        {drug.scientificName && (
-                          <div className="text-xs text-right text-muted-foreground break-words">
-                            {drug.scientificName}
-                          </div>
+                        </p>
+                        {displayText(drug.scientificName) ? (
+                          <p className="text-[11px] text-muted-foreground truncate text-right" dir="ltr" title={drug.scientificName}>
+                            {displayText(drug.scientificName)}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground/50">—</p>
                         )}
                       </div>
-                    </div>
-                  </td>
-                  <td
-                    className="px-4 py-3 font-mono text-muted-foreground whitespace-nowrap text-right"
-                    dir="ltr"
-                  >
-                    {drug.barcode || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right text-muted-foreground whitespace-nowrap">
-                    {drug.origin || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {drug.isActive ? (
-                        <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success ring-1 ring-inset ring-success/20">
-                          نشط
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive ring-1 ring-inset ring-destructive/20">
-                          غير نشط
-                        </span>
-                      )}
-                      {drug.organizationId ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 ring-1 ring-inset ring-emerald-500/20">
-                          خاص
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-500 ring-1 ring-inset ring-blue-500/20">
-                          عالمي
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      {isSuperAdmin ||
-                      drug.organizationId === organizationId ? (
-                        <>
-                          <UpdateDrug id={drug.id} />
-                          <DeleteDrug id={drug.id} />
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted-foreground py-2">
-                          للقراءة فقط
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {drugs.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center">
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <PackageSearch className="h-10 w-10 opacity-40" />
-                      <p className="text-sm">
-                        {query
-                          ? "لا توجد أدوية مطابقة للبحث."
-                          : source === "custom"
-                            ? "لا توجد أدوية مخصّصة لصيدليتك بعد."
-                            : source === "global"
-                              ? "لا توجد أدوية عالمية."
-                              : "لا توجد أدوية بعد."}
-                      </p>
-                      {query ? (
-                        <Link
-                          href="/dashboard/drugs"
-                          className="text-xs text-primary hover:underline"
-                        >
-                          مسح البحث وإظهار الكل
-                        </Link>
-                      ) : (
-                        <Link
-                          href="/dashboard/drugs/create"
-                          className="text-xs text-primary hover:underline"
-                        >
-                          إضافة أول دواء
-                        </Link>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border bg-card px-4 py-3">
-            <p className="text-sm text-muted-foreground hidden sm:block">
-              إظهار{" "}
-              <span className="font-medium font-mono text-foreground">
-                {(currentPage - 1) * ITEMS_PER_PAGE + 1}
-              </span>{" "}
-              –{" "}
-              <span className="font-medium font-mono text-foreground">
-                {Math.min(currentPage * ITEMS_PER_PAGE, total)}
-              </span>{" "}
-              من{" "}
-              <span className="font-medium font-mono text-foreground">
-                {total.toLocaleString("en-US")}
-              </span>
-            </p>
-            <div className="flex items-center gap-2">
-              <Link
-                href={pageHref(currentPage - 1)}
-                aria-disabled={currentPage <= 1}
-                className={`inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border bg-card transition-colors ${currentPage <= 1 ? "pointer-events-none opacity-40" : "hover:bg-muted text-foreground"}`}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-              <span className="text-sm font-medium text-foreground px-2">
-                صفحة {currentPage} من {totalPages}
-              </span>
-              <Link
-                href={pageHref(currentPage + 1)}
-                aria-disabled={currentPage >= totalPages}
-                className={`inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border bg-card transition-colors ${currentPage >= totalPages ? "pointer-events-none opacity-40" : "hover:bg-muted text-foreground"}`}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Link>
-            </div>
+                    </td>
+                    <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
+                      <span className="block max-w-[160px] truncate text-right" dir="ltr" title={displayText(drug.barcode) ?? undefined}>
+                        {displayText(drug.barcode) ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-muted-foreground whitespace-nowrap">
+                      {displayText(drug.origin) ?? <span className="text-muted-foreground/50">—</span>}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {drug.isActive ? (
+                          <span className={`${pill} bg-success/10 text-success border-success/20`}>نشط</span>
+                        ) : (
+                          <span className={`${pill} bg-destructive/10 text-destructive border-destructive/20`}>غير نشط</span>
+                        )}
+                        {drug.organizationId ? (
+                          <span className={`${pill} bg-emerald-500/10 text-emerald-600 border-emerald-500/20`}>خاص</span>
+                        ) : (
+                          <span className={`${pill} bg-blue-500/10 text-blue-600 border-blue-500/20`}>عالمي</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {isSuperAdmin || drug.organizationId === organizationId ? (
+                          <>
+                            <UpdateDrug id={drug.id} />
+                            <DeleteDrug id={drug.id} />
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">للقراءة فقط</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
+
+        {/* الترقيم */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={total}
+          unit="دواء"
+          hrefFor={pageHref}
+        />
       </div>
     </div>
   );

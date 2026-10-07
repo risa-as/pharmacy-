@@ -2,7 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import Link from "next/link";
-import { Activity, ArrowUpDown, Search, Package, TrendingUp, TrendingDown, ScanBarcode } from "lucide-react";
+import { ArrowUpDown, Search, Package, TrendingUp, TrendingDown, ScanBarcode, ArrowLeftRight } from "lucide-react";
+import DateRangeFilter from "@/app/ui/reports/date-range-filter";
+import TablePagination from "@/app/ui/table-pagination";
+import { buildDateRange, filterByTimeOfDay } from "@/app/lib/report-period";
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
@@ -37,7 +40,7 @@ const STOCKTAKE_REASON_LABELS: Record<string, string> = {
 
 export default async function ProductMovementPage(
     props: {
-        searchParams?: Promise<{ q?: string; barcode?: string; drugId?: string; branch?: string }>;
+        searchParams?: Promise<{ q?: string; barcode?: string; drugId?: string; branch?: string; from?: string; to?: string; fromTime?: string; toTime?: string; page?: string }>;
     }
 ) {
     const searchParams = await props.searchParams;
@@ -54,6 +57,22 @@ export default async function ProductMovementPage(
     const query = (searchParams?.q ?? searchParams?.barcode)?.trim();
     const selectedDrugId = searchParams?.drugId?.trim();
     const selectedBranchId = searchParams?.branch;
+    const from = searchParams?.from;
+    const to = searchParams?.to;
+    const fromTime = searchParams?.fromTime;
+    const toTime = searchParams?.toTime;
+    const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+        && !Number.isNaN(Date.parse(value))
+        && new Date(value).toISOString().slice(0, 10) === value;
+    const isTime = (value: string) => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+    const invalidPeriod = (!!from !== !!to) || (!!from && !isDate(from)) || (!!to && !isDate(to))
+        || (!!from && !!to && from > to) || (!!fromTime && !isTime(fromTime)) || (!!toTime && !isTime(toTime));
+    const period = !invalidPeriod && from && to ? buildDateRange(from, to, fromTime, toTime) : null;
+    const dateWhere = period ? { createdAt: { gte: period.start, lte: period.end } } : {};
+    // Incoming transfers use the receipt time shown in the ledger, not their creation time.
+    const receiptDateWhere = period ? { updatedAt: { gte: period.start, lte: period.end } } : {};
+    const periodParams = { from, to, fromTime, toTime };
+
 
     // فلتر الفرع للنماذج التي تملك علاقة branch مباشرة (Sale/Purchase/SaleReturn/Stocktake)
     const branchFilter: any = selectedBranchId
@@ -78,7 +97,7 @@ export default async function ProductMovementPage(
     // نطاق رؤية الأدوية: أدوية المنظمة الحالية + الكتالوج العام
     const orgDrugScope: any = organizationId ? { OR: [{ organizationId }, { organizationId: null, warehouseId: null }] } : {};
 
-    if (selectedDrugId || query) {
+    if (!invalidPeriod && (selectedDrugId || query)) {
         // حلّ الدواء: منتج محدّد من القائمة (drugId)، أو أفضل تطابق لنص البحث (باركود/اسم)
         let drug: { id: string; tradeName: string; barcode: string } | null = null;
 
@@ -123,87 +142,78 @@ export default async function ProductMovementPage(
             const [saleItems, purchaseItems, returnItems, transferOut, transferIn, stocktakeItems] = await Promise.all([
                 // المبيعات (صادر)
                 prisma.saleItem.findMany({
-                    where: { drugId: drug.id, sale: branchFilter },
+                    where: { drugId: drug.id, sale: { ...branchFilter, ...dateWhere } },
                     include: { sale: { include: { branch: true } } },
                     orderBy: { sale: { createdAt: "desc" } },
-                    take: 100,
                 }),
                 // المشتريات (وارد)
                 prisma.purchaseItem.findMany({
-                    where: { drugId: drug.id, purchase: branchFilter },
+                    where: { drugId: drug.id, purchase: { ...branchFilter, ...dateWhere } },
                     include: { purchase: { include: { branch: true } } },
                     orderBy: { purchase: { createdAt: "desc" } },
-                    take: 100,
                 }),
                 // المرتجعات (وارد — تُعاد للمخزون)
                 prisma.saleReturnItem.findMany({
-                    where: { drugId: drug.id, saleReturn: branchFilter },
+                    where: { drugId: drug.id, saleReturn: { ...branchFilter, ...dateWhere } },
                     include: { saleReturn: { include: { branch: true } } },
                     orderBy: { saleReturn: { createdAt: "desc" } },
-                    take: 100,
                 }),
                 // التحويلات الصادرة (يُخصم المخزون عند الإنشاء)
                 prisma.transferItem.findMany({
                     where: {
                         drugId: drug.id,
-                        transfer: { ...transferScope('fromBranchId', 'fromBranch'), status: { in: ['IN_TRANSIT', 'COMPLETED'] } },
+                        transfer: { ...transferScope('fromBranchId', 'fromBranch'), ...dateWhere, status: { in: ['IN_TRANSIT', 'COMPLETED'] } },
                     },
                     include: { transfer: { include: { fromBranch: true, toBranch: true } } },
                     orderBy: { transfer: { createdAt: "desc" } },
-                    take: 100,
                 }),
                 // التحويلات الواردة (يُضاف المخزون عند الاستلام فقط)
                 prisma.transferItem.findMany({
                     where: {
                         drugId: drug.id,
-                        transfer: { ...transferScope('toBranchId', 'toBranch'), status: 'COMPLETED' },
+                        transfer: { ...transferScope('toBranchId', 'toBranch'), ...receiptDateWhere, status: 'COMPLETED' },
                     },
                     include: { transfer: { include: { fromBranch: true, toBranch: true } } },
                     orderBy: { transfer: { updatedAt: "desc" } },
-                    take: 100,
                 }),
                 // تسويات الجرد المكتملة (± الفرق)
                 prisma.stocktakeItem.findMany({
                     where: {
                         difference: { not: 0 },
                         batch: { inventory: { drugId: drug.id } },
-                        stocktake: { status: 'COMPLETED', ...branchFilter },
+                        stocktake: { status: 'COMPLETED', ...branchFilter, ...dateWhere },
                     },
                     include: { stocktake: { include: { branch: true } } },
                     orderBy: { stocktake: { createdAt: "desc" } },
-                    take: 100,
                 }),
             ]);
 
             for (const si of saleItems) {
                 movements.push({ date: si.sale.createdAt, type: "بيع", quantity: -si.quantity, reference: `فاتورة #${si.sale.documentNumber}`, branch: si.sale.branch.name });
-                totalOut += si.quantity;
             }
             for (const pi of purchaseItems) {
                 movements.push({ date: pi.purchase.createdAt, type: "شراء", quantity: pi.quantity, reference: `مشتريات #${pi.purchase.documentNumber}`, branch: pi.purchase.branch.name });
-                totalIn += pi.quantity;
             }
             for (const ri of returnItems) {
                 const ref = `مرتجع ${ri.saleReturn.documentNumber}`;
                 movements.push({ date: ri.saleReturn.createdAt, type: "مرتجع", quantity: ri.quantity, reference: ref, branch: ri.saleReturn.branch.name });
-                totalIn += ri.quantity;
             }
             for (const ti of transferOut) {
                 movements.push({ date: ti.transfer.createdAt, type: "تحويل صادر", quantity: -ti.quantity, reference: `إلى ${ti.transfer.toBranch.name}`, branch: ti.transfer.fromBranch.name });
-                totalOut += ti.quantity;
             }
             for (const ti of transferIn) {
                 movements.push({ date: ti.transfer.updatedAt, type: "تحويل وارد", quantity: ti.quantity, reference: `من ${ti.transfer.fromBranch.name}`, branch: ti.transfer.toBranch.name });
-                totalIn += ti.quantity;
             }
             for (const sti of stocktakeItems) {
                 const ref = sti.reason ? STOCKTAKE_REASON_LABELS[sti.reason] || "جرد مخزون" : "جرد مخزون";
                 movements.push({ date: sti.stocktake.createdAt, type: "تسوية جرد", quantity: sti.difference, reference: ref, branch: sti.stocktake.branch.name });
-                if (sti.difference > 0) totalIn += sti.difference; else totalOut += Math.abs(sti.difference);
             }
 
             movements.sort((a, b) => b.date.getTime() - a.date.getTime());
-            movements = movements.slice(0, 300);
+            // Apply the same daily hour window as the reports before totals and pagination.
+            movements = filterByTimeOfDay(movements.map(m => ({ ...m, createdAt: m.date })), fromTime, toTime);
+            totalIn = movements.reduce((sum, m) => sum + Math.max(0, m.quantity), 0);
+            totalOut = movements.reduce((sum, m) => sum + Math.max(0, -m.quantity), 0);
         }
     }
 
@@ -211,14 +221,25 @@ export default async function ProductMovementPage(
     const sp = new URLSearchParams();
     if (query) sp.set('q', query);
     if (selectedDrugId) sp.set('drugId', selectedDrugId);
+    Object.entries(periodParams).forEach(([key, value]) => { if (value) sp.set(key, value); });
     const extraParams = sp.toString() || undefined;
+    const pageSize = 100;
+    const totalPages = Math.max(1, Math.ceil(movements.length / pageSize));
+    const page = Math.min(totalPages, Math.max(1, Number.parseInt(searchParams?.page || "1", 10) || 1));
+    const visibleMovements = movements.slice((page - 1) * pageSize, page * pageSize);
+    const hrefFor = (nextPage: number) => {
+        const params = new URLSearchParams(sp);
+        if (selectedBranchId) params.set('branch', selectedBranchId);
+        params.set('page', String(nextPage));
+        return `/dashboard/inventory/product-movement?${params.toString()}`;
+    };
 
     return (
         <div className="space-y-6" dir="rtl">
             {/* الرأس */}
             <div>
                 <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
-                    <Activity className="w-6 h-6 text-primary" />
+                    <ArrowLeftRight className="w-6 h-6 text-primary" />
                     حركة منتج
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">سجل كامل لحركة المخزون: بيع، شراء، مرتجعات، تحويلات، وتسويات الجرد</p>
@@ -231,12 +252,24 @@ export default async function ProductMovementPage(
                 extraParams={extraParams}
             />
 
+            <DateRangeFilter
+                baseUrl="/dashboard/inventory/product-movement"
+                currentFrom={from}
+                currentTo={to}
+                currentFromTime={fromTime}
+                currentToTime={toTime}
+                extraParams={{ q: query, drugId: selectedDrugId, branch: selectedBranchId }}
+                showTimeFilter
+            />
+            {invalidPeriod && <p role="alert" className="text-sm text-destructive">اختر فترة صحيحة؛ تاريخ البداية يجب ألا يتجاوز تاريخ النهاية، والوقت بصيغة ساعة ودقيقة.</p>}
+
             {/* البحث بالباركود */}
             <div className="glass-card p-5">
                 <form className="flex flex-col sm:flex-row gap-4 sm:items-end">
                     {selectedBranchId && (
                         <input type="hidden" name="branch" value={selectedBranchId} />
                     )}
+                    {Object.entries(periodParams).map(([name, value]) => value ? <input key={name} type="hidden" name={name} value={value} /> : null)}
                     <div className="flex-1 w-full">
                         <label className="block text-sm font-bold text-foreground mb-2">باركود أو اسم المنتج</label>
                         <div className="relative">
@@ -280,7 +313,7 @@ export default async function ProductMovementPage(
                     </div>
                     <ul className="divide-y divide-border">
                         {matches.map((m) => {
-                            const params = new URLSearchParams();
+                            const params = new URLSearchParams(sp);
                             params.set('drugId', m.id);
                             if (query) params.set('q', query);
                             if (selectedBranchId) params.set('branch', selectedBranchId);
@@ -305,6 +338,7 @@ export default async function ProductMovementPage(
 
             {selectedDrug && (
                 <>
+                    <p className="text-sm text-muted-foreground">الحركات والمجاميع تخص {period ? period.label : "كامل السجل"}{!period && (fromTime || toTime) ? ` (${fromTime || "00:00"} → ${toTime || "23:59"})` : ""}، وتشمل جميع صفحات النتائج.</p>
                     {/* بطاقات الملخّص */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="glass-card p-5 flex items-center gap-4">
@@ -365,7 +399,7 @@ export default async function ProductMovementPage(
                                 <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
                                     <ArrowUpDown className="w-8 h-8 text-muted-foreground opacity-50" />
                                 </div>
-                                <p className="text-foreground font-medium">لا توجد حركة مسجلة لهذا المنتج</p>
+                                <p className="text-foreground font-medium">لا توجد حركات لهذا المنتج ضمن الفترة المحددة</p>
                             </div>
                         ) : (
                             <div className="overflow-x-auto">
@@ -380,7 +414,7 @@ export default async function ProductMovementPage(
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border bg-card">
-                                        {movements.map((m, idx) => (
+                                        {visibleMovements.map((m, idx) => (
                                             <tr key={idx} className="hover:bg-muted/40 transition-colors">
                                                 <td className="px-4 py-3 text-muted-foreground" suppressHydrationWarning>
                                                     {new Date(m.date).toLocaleDateString("ar-IQ", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Baghdad" })}
@@ -401,6 +435,7 @@ export default async function ProductMovementPage(
                                 </table>
                             </div>
                         )}
+                        <TablePagination currentPage={page} totalPages={totalPages} totalCount={movements.length} unit="حركة" hrefFor={hrefFor} />
                     </div>
                 </>
             )}

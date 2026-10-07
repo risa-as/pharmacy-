@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     )
       return NextResponse.json({ error: "الفرع خارج نطاقك" }, { status: 403 });
     const stocktake = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Branch" WHERE id = ${branchId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "public"."Branch" WHERE id = ${branchId} FOR UPDATE`;
       const pending = await tx.stocktake.findFirst({
         where: { branchId, status: { in: ["PENDING", "REVIEW"] } },
       });

@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { prepareTransferAttempt, finishTransferAttempt, pendingTransferBody } from '@/app/lib/transfer-attempt';
 import { useRouter } from 'next/navigation';
 // sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
 // sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
@@ -12,10 +13,15 @@ const inputClass =
 
 export default function CreateTransferForm({
     branches,
-    availableStock
+    availableStock,
+    actorId,
+    sourceBranchId
 }: {
     branches: { id: string, name: string }[];
+    actorId: string;
+    sourceBranchId: string;
     availableStock: {
+        batchId: string;
         drugId: string;
         tradeName: string;
         barcode: string | null;
@@ -26,12 +32,28 @@ export default function CreateTransferForm({
     }[];
 }) {
     const router = useRouter();
-    const transferAttempt = useRef({signature:'',key:''});
+    const attemptName = `branch-transfer:v1:${actorId}:${sourceBranchId}`;
     const [toBranchId, setToBranchId] = useState('');
     const [notes, setNotes] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedItems, setSelectedItems] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [pendingBody, setPendingBody] = useState<any>(null);
+    useEffect(() => {
+        let active = true;
+        if (navigator.locks) navigator.locks.request(attemptName, () => pendingTransferBody(attemptName)).then(body => {
+            if (!active || !body) return;
+            setPendingBody(body);
+            setToBranchId(body.toBranchId);
+            setNotes(body.notes || '');
+            setSelectedItems(body.items.map((item: any) => ({
+                ...availableStock.find(stock => stock.batchId === item.batchId), ...item,
+                tradeName: availableStock.find(stock => stock.batchId === item.batchId)?.tradeName || 'دواء في محاولة التحويل السابقة',
+                transferQuantity: item.quantity, availableQuantity: item.quantity,
+            })));
+        }).catch(error => { if (active) toast.error(error.message); });
+        return () => { active = false; };
+    }, [attemptName, availableStock]);
 
     // Filter available stock based on search
     const filteredStock = availableStock.filter((item: any) =>
@@ -45,7 +67,7 @@ export default function CreateTransferForm({
     );
 
     const handleAddItem = (stockItem: any) => {
-        const exists = selectedItems.find((i: any) => i.drugId === stockItem.drugId && i.batchNumber === stockItem.batchNumber);
+        const exists = selectedItems.find((i: any) => i.batchId === stockItem.batchId);
         if (exists) {
             toast.error('هذا المنتج بهذه الدفعة مضاف مسبقاً للقائمة');
             return;
@@ -89,10 +111,12 @@ export default function CreateTransferForm({
 
         setIsSubmitting(true);
 
-        const payload = {
+        const payload = pendingBody || {
+            fromBranchId: sourceBranchId,
             toBranchId,
             notes,
             items: selectedItems.map((item: any) => ({
+                batchId: item.batchId,
                 drugId: item.drugId,
                 batchNumber: item.batchNumber,
                 expiryDate: item.expiryDate,
@@ -102,17 +126,20 @@ export default function CreateTransferForm({
         };
 
         try {
-            const signature = JSON.stringify(payload);
-            if (transferAttempt.current.signature !== signature) transferAttempt.current = {signature,key:crypto.randomUUID()};
+            if (!navigator.locks) throw new Error('هذا المتصفح لا يدعم حفظ محاولة التحويل بأمان؛ استخدم متصفحًا حديثًا عبر اتصال آمن.');
+            const attempt = await navigator.locks.request(attemptName, () => prepareTransferAttempt(attemptName, payload));
+            setPendingBody(payload);
             const res = await fetch('/api/inventory/transfers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({...payload,idempotencyKey:transferAttempt.current.key})
+                body: JSON.stringify({...payload,idempotencyKey:attempt.key})
             });
 
             const data = await res.json();
 
             if (!res.ok) throw new Error(data.error || 'حدث خطأ أثناء الإرسال');
+            await navigator.locks.request(attemptName, () => finishTransferAttempt(attemptName, attempt.key));
+            setPendingBody(null);
 
             toast.success('تم إرسال التحويل بنجاح');
             router.push('/dashboard/inventory/transfers?tab=outgoing');
@@ -125,6 +152,7 @@ export default function CreateTransferForm({
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
+            {pendingBody && <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm">توجد محاولة تحويل سابقة لم تتأكد نتيجتها. زر الإرسال يتحقق منها بمفتاحها نفسه دون خصم جديد؛ أعد المحاولة قبل إنشاء تحويل آخر.</p>}
             {/* الفرع المستلم + ملاحظات */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
@@ -133,6 +161,7 @@ export default function CreateTransferForm({
                         الفرع المستلم (الوجهة) <span className="text-destructive">*</span>
                     </label>
                     <select
+                        disabled={!!pendingBody || isSubmitting}
                         value={toBranchId}
                         onChange={(e) => setToBranchId(e.target.value)}
                         className={inputClass}
@@ -153,6 +182,7 @@ export default function CreateTransferForm({
                     <input
                         type="text"
                         value={notes}
+                        disabled={!!pendingBody || isSubmitting}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="معلومات إضافية عن سبب التحويل..."
                         className={inputClass}
@@ -180,6 +210,7 @@ export default function CreateTransferForm({
                     <input
                         type="text"
                         value={searchQuery}
+                        disabled={!!pendingBody || isSubmitting}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="ابحث عن دواء في رصيدك (الاسم أو الباركود)..."
                         className="block w-full rounded-lg border border-border py-2.5 pr-10 pl-4 text-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
@@ -193,6 +224,7 @@ export default function CreateTransferForm({
                                     <button
                                         key={idx}
                                         type="button"
+                                        disabled={!!pendingBody || isSubmitting}
                                         onClick={() => handleAddItem(item)}
                                         className="w-full text-right px-4 py-3 hover:bg-muted/60 border-b border-border last:border-0 flex justify-between items-center gap-3 transition-colors"
                                     >
@@ -240,6 +272,7 @@ export default function CreateTransferForm({
                                             <td className="px-5 py-3">
                                                 <input
                                                     type="number"
+                                                    disabled={!!pendingBody || isSubmitting}
                                                     min="1"
                                                     max={item.availableQuantity}
                                                     value={item.transferQuantity}
@@ -252,6 +285,7 @@ export default function CreateTransferForm({
                                                 <button
                                                     type="button"
                                                     onClick={() => handleRemoveItem(idx)}
+                                                    disabled={!!pendingBody || isSubmitting}
                                                     className="text-destructive p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
                                                     title="حذف"
                                                 >

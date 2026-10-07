@@ -188,15 +188,15 @@ export async function POST(req: NextRequest) {
                         const [{ allowed }] = await prismaTx.$queryRaw`
                             SELECT (
                                 COALESCE((SELECT SUM(p.amount * COALESCE(s."loyaltyRate", ${current}))
-                                          FROM "Sale" s JOIN "Payment" p ON p."saleId" = s.id
+                                          FROM "public"."Sale" s JOIN "public"."Payment" p ON p."saleId" = s.id
                                           WHERE s."patientId" = ${txData.patientId} AND p.method::text <> 'CREDIT'
                                             AND p.status::text = 'COMPLETED'), 0)
                               + COALESCE((SELECT SUM(dp.amount * COALESCE(dp."loyaltyRate", ${current}))
-                                          FROM "DebtPayment" dp JOIN "Sale" s ON s.id = dp."saleId"
+                                          FROM "public"."DebtPayment" dp JOIN "public"."Sale" s ON s.id = dp."saleId"
                                           WHERE s."patientId" = ${txData.patientId}), 0)
                             )::float8 AS allowed`;
                         const [{ earned }] = await prismaTx.$queryRaw`
-                            SELECT COALESCE(SUM(ABS(points)), 0)::int AS earned FROM "LoyaltyTransaction"
+                            SELECT COALESCE(SUM(ABS(points)), 0)::int AS earned FROM "public"."LoyaltyTransaction"
                             WHERE "accountId" = ${account!.id} AND type = 'EARN' AND "saleId" IS NOT NULL`;
                         // +1 absorbs floating-point rounding of the device's floor().
                         if (Number(earned) + txData.points > Math.floor(Number(allowed)) + 1) return 'excess';
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
                         // A point's value as stamped on the sale; current value only for older sales.
                         const value = sale.loyaltyRedemptionValue ?? branch.organization?.loyaltyRedemptionValue ?? 0;
                         const [{ redeemed }] = await prismaTx.$queryRaw`
-                            SELECT COALESCE(SUM(ABS(points)), 0)::int AS redeemed FROM "LoyaltyTransaction"
+                            SELECT COALESCE(SUM(ABS(points)), 0)::int AS redeemed FROM "public"."LoyaltyTransaction"
                             WHERE "saleId" = ${txData.saleId} AND type = 'REDEEM'`;
                         const onSale = Number(redeemed) + txData.points;
                         if (Math.floor(onSale * value) > (sale.discount ?? 0) + 0.01) return 'excess';

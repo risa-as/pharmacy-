@@ -1,347 +1,425 @@
-'use client';
-
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, ChevronLeft, ChevronRight, RotateCcw, RefreshCw, Laptop } from 'lucide-react';
-
-const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-    CREATE: { label: 'إنشاء', color: 'bg-success/10 text-success' },
-    UPDATE: { label: 'تعديل', color: 'bg-primary/10 text-primary' },
-    DELETE: { label: 'حذف', color: 'bg-destructive/10 text-destructive' },
-    RETURN: { label: 'مرتجع', color: 'bg-warning/10 text-warning' },
-    LOGIN: { label: 'تسجيل دخول', color: 'bg-info/10 text-info' },
-    PRICE_CHANGE: { label: 'تغيير سعر', color: 'bg-warning/10 text-warning' },
-    TRANSFER: { label: 'تحويل', color: 'bg-info/10 text-info' },
-    DEBT_PAYMENT: { label: 'تسديد دين', color: 'bg-success/10 text-success' },
-    ADD_BATCH: { label: 'إضافة مخزون', color: 'bg-success/10 text-success' },
-    SHIFT_OPEN: { label: 'فتح وردية', color: 'bg-info/10 text-info' },
-    SHIFT_CLOSE: { label: 'إغلاق وردية', color: 'bg-muted text-foreground' },
-};
-
-const ENTITY_LABELS: Record<string, string> = {
-    SALE: 'مبيعات',
-    INVENTORY: 'مخزون',
-    DRUG: 'دواء',
-    USER: 'مستخدم',
-    EXPENSE: 'مصاريف',
-    TRANSFER: 'تحويل',
-    PATIENT: 'مريض',
-    SUPPLIER: 'مورد',
-    SUPPLIER_PAYMENT: 'دفعة مورد',
-    SHIFT: 'وردية',
-    PURCHASE: 'مشتريات',
-    SETTING: 'إعدادات',
-    DEBT: 'دين',
-    BATCH: 'دفعة مخزون',
-};
-
-// Human-readable labels for the JSON keys stored in `details`. Anything not
-// listed (raw IDs, the internal `source` flag) is hidden from the cell.
-const DETAIL_LABELS: Record<string, string> = {
-    total: 'الإجمالي',
-    amount: 'المبلغ',
-    quantity: 'الكمية',
-    drug: 'الدواء',
-    barcode: 'باركود',
-    expectedCash: 'المتوقع',
-    actualCash: 'الفعلي',
-    status: 'الحالة',
-    method: 'الطريقة',
-    changes: 'التغييرات',
-};
-
-const NUMERIC_KEYS = new Set(['total', 'amount', 'quantity', 'expectedCash', 'actualCash']);
-
-/** Turns the stored JSON details into a compact, readable Arabic summary. */
-function formatDetails(raw: string | null): string {
-    if (!raw) return '—';
-    let obj: any;
+"use client";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import {
+  Search,
+  RotateCcw,
+  RefreshCw,
+  Laptop,
+  ClipboardList,
+  AlertCircle,
+  SlidersHorizontal,
+  ChevronDown,
+} from "lucide-react";
+import DateRangeFilter from "./date-range-filter";
+import TablePagination from "../table-pagination";
+import {
+  TableCard,
+  DataTable,
+  THead,
+  Th,
+  DateTimeCell,
+  StatusPill,
+} from "../data-table";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITIES,
+  auditDetails,
+  auditSource,
+  type AuditEntry,
+} from "./audit-log-display";
+interface Props {
+  users: { id: string; name: string | null }[];
+  branches: { id: string; name: string }[];
+}
+export default function AuditLogClient({ users, branches }: Props) {
+  const params = useSearchParams(),
+    router = useRouter();
+  const from = params?.get("from") || "",
+    to = params?.get("to") || "";
+  const [logs, setLogs] = useState<AuditEntry[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [loaded, setLoaded] = useState(false);
+  const [page, setPage] = useState(1),
+    [totalPages, setTotalPages] = useState(1),
+    [total, setTotal] = useState(0);
+  const [searchInput, setSearchInput] = useState(""),
+    [search, setSearch] = useState("");
+  const [userId, setUser] = useState(""),
+    [entity, setEntity] = useState(""),
+    [action, setAction] = useState(""),
+    [branchId, setBranch] = useState("");
+  const requestRef = useRef(0);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+  useEffect(() => {
+    setPage(1);
+  }, [from, to]);
+  const fetchLogs = useCallback(async () => {
+    const sequence = ++requestRef.current;
+    setLoading(true);
+    setError("");
     try {
-        obj = JSON.parse(raw);
-    } catch {
-        return raw; // not JSON — show as-is
+      const query = new URLSearchParams({ page: String(page), limit: "30" });
+      Object.entries({
+        search,
+        userId,
+        entity,
+        action,
+        branchId,
+        from,
+        to,
+      }).forEach(([k, v]) => {
+        if (v) query.set(k, v);
+      });
+      const response = await fetch(`/api/audit-log?${query}`, {
+        cache: "no-store",
+      });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || "تعذر تحميل سجل النشاطات.");
+      if (
+        !Array.isArray(result.logs) ||
+        !result.pagination ||
+        typeof result.pagination.total !== "number"
+      )
+        throw Error("تعذر قراءة بيانات السجل.");
+      if (sequence !== requestRef.current) return;
+      if (page > Math.max(1, result.pagination.totalPages)) {
+        setPage(Math.max(1, result.pagination.totalPages));
+        return;
+      }
+      setLogs(result.logs);
+      setTotalPages(Math.max(1, result.pagination.totalPages));
+      setTotal(result.pagination.total);
+      setLoaded(true);
+    } catch (e) {
+      if (sequence === requestRef.current)
+        setError(e instanceof Error ? e.message : "تعذر تحميل سجل النشاطات.");
+    } finally {
+      if (sequence === requestRef.current) setLoading(false);
     }
-    if (!obj || typeof obj !== 'object') return String(raw);
-
-    const parts: string[] = [];
-    for (const [key, value] of Object.entries(obj)) {
-        if (key === 'source' || value == null) continue;
-        const label = DETAIL_LABELS[key];
-        if (!label) continue; // hide raw IDs and unknown internal keys
-        let display: string;
-        if (NUMERIC_KEYS.has(key) && typeof value === 'number') {
-            display = value.toLocaleString('en-US');
-        } else if (typeof value === 'object') {
-            display = Object.keys(value as object).join('، ');
-        } else {
-            display = String(value);
-        }
-        parts.push(`${label}: ${display}`);
-    }
-    return parts.length ? parts.join(' · ') : '—';
-}
-
-/** True when the entry originated from a desktop offline-sync push. */
-function isFromDesktop(raw: string | null): boolean {
-    if (!raw) return false;
-    try {
-        return JSON.parse(raw)?.source === 'desktop-sync';
-    } catch {
-        return false;
-    }
-}
-
-interface AuditLogClientProps {
-    users: { id: string; name: string | null }[];
-    branches: { id: string; name: string }[];
-}
-
-export default function AuditLogClient({ users, branches }: AuditLogClientProps) {
-    const [logs, setLogs] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [total, setTotal] = useState(0);
-
-    // Filters — `searchInput` is what the user types; `search` is the debounced
-    // value actually sent to the API (avoids one request per keystroke).
-    const [searchInput, setSearchInput] = useState('');
-    const [search, setSearch] = useState('');
-    const [selectedUser, setSelectedUser] = useState('');
-    const [selectedEntity, setSelectedEntity] = useState('');
-    const [selectedAction, setSelectedAction] = useState('');
-    const [selectedBranch, setSelectedBranch] = useState('');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
-
-    // Debounce the search box (400ms) before it triggers a fetch.
-    useEffect(() => {
-        const t = setTimeout(() => {
-            setSearch(searchInput);
-            setPage(1);
-        }, 400);
-        return () => clearTimeout(t);
-    }, [searchInput]);
-
-    const fetchLogs = useCallback(async () => {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams({ page: page.toString(), limit: '30' });
-            if (search) params.set('search', search);
-            if (selectedUser) params.set('userId', selectedUser);
-            if (selectedEntity) params.set('entity', selectedEntity);
-            if (selectedAction) params.set('action', selectedAction);
-            if (selectedBranch) params.set('branchId', selectedBranch);
-            if (dateFrom) params.set('from', dateFrom);
-            if (dateTo) params.set('to', dateTo);
-
-            const res = await fetch(`/api/audit-log?${params.toString()}`);
-            const json = await res.json();
-            setLogs(json.logs || []);
-            setTotalPages(json.pagination?.totalPages || 1);
-            setTotal(json.pagination?.total || 0);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    }, [page, search, selectedUser, selectedEntity, selectedAction, selectedBranch, dateFrom, dateTo]);
-
-    useEffect(() => {
-        fetchLogs();
-    }, [fetchLogs]);
-
-    const hasActiveFilters = useMemo(
-        () => !!(searchInput || selectedUser || selectedEntity || selectedAction || selectedBranch || dateFrom || dateTo),
-        [searchInput, selectedUser, selectedEntity, selectedAction, selectedBranch, dateFrom, dateTo],
-    );
-
-    const resetFilters = () => {
-        setSearchInput('');
-        setSearch('');
-        setSelectedUser('');
-        setSelectedEntity('');
-        setSelectedAction('');
-        setSelectedBranch('');
-        setDateFrom('');
-        setDateTo('');
-        setPage(1);
+  }, [page, search, userId, entity, action, branchId, from, to]);
+  useEffect(() => {
+    void fetchLogs();
+    return () => {
+      requestRef.current++;
     };
-
-    const formatDate = (d: string) =>
-        new Date(d).toLocaleString('ar-IQ', {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit',
-        });
-
-    const selectClass = 'border rounded-lg px-3 py-2 text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40';
-
-    return (
-        <div className="space-y-4">
-            {/* Filters */}
-            <div className="bg-card rounded-xl shadow-sm border p-4">
-                <div className="flex flex-wrap gap-3 items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">بحث</label>
-                        <div className="relative">
-                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <input
-                                type="text"
-                                placeholder="بحث بالاسم أو التفاصيل..."
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                className={`w-full pr-9 pl-3 py-2 border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40`}
-                            />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">المستخدم</label>
-                        <select value={selectedUser} onChange={(e) => { setSelectedUser(e.target.value); setPage(1); }} className={selectClass}>
-                            <option value="">الكل</option>
-                            {users.map((u) => <option key={u.id} value={u.id}>{u.name || u.id}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">النوع</label>
-                        <select value={selectedEntity} onChange={(e) => { setSelectedEntity(e.target.value); setPage(1); }} className={selectClass}>
-                            <option value="">الكل</option>
-                            {Object.entries(ENTITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">الإجراء</label>
-                        <select value={selectedAction} onChange={(e) => { setSelectedAction(e.target.value); setPage(1); }} className={selectClass}>
-                            <option value="">الكل</option>
-                            {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">الفرع</label>
-                        <select value={selectedBranch} onChange={(e) => { setSelectedBranch(e.target.value); setPage(1); }} className={selectClass}>
-                            <option value="">الكل</option>
-                            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">من</label>
-                        <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className={selectClass} />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">إلى</label>
-                        <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className={selectClass} />
-                    </div>
-                </div>
-            </div>
-
-            {/* Toolbar: count + actions */}
-            <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="text-sm text-muted-foreground">
-                    إجمالي السجلات: <span className="font-bold text-foreground">{total.toLocaleString('en-US')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    {hasActiveFilters && (
-                        <button
-                            onClick={resetFilters}
-                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border bg-card hover:bg-muted transition-colors"
-                        >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            مسح الفلاتر
-                        </button>
-                    )}
-                    <button
-                        onClick={fetchLogs}
-                        disabled={loading}
-                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border bg-card hover:bg-muted transition-colors disabled:opacity-50"
-                    >
-                        <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                        تحديث
-                    </button>
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
-                {loading ? (
-                    <div className="flex items-center justify-center h-40">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    </div>
-                ) : logs.length === 0 ? (
-                    <div className="p-10 text-center text-muted-foreground">
-                        <p className="text-sm">لا توجد سجلات مطابقة</p>
-                        {hasActiveFilters && (
-                            <button onClick={resetFilters} className="mt-3 text-xs text-primary hover:underline">
-                                مسح الفلاتر وإظهار الكل
-                            </button>
-                        )}
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="bg-muted border-b">
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">التاريخ</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">المستخدم</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الإجراء</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">النوع</th>
-                                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">التفاصيل</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {logs.map((log: any) => {
-                                    const actionInfo = ACTION_LABELS[log.action] || { label: log.action, color: 'bg-muted text-foreground' };
-                                    const details = formatDetails(log.details);
-                                    const fromDesktop = isFromDesktop(log.details);
-                                    return (
-                                        <tr key={log.id} className="border-b border-border/40 hover:bg-muted/50 transition-colors">
-                                            <td className="py-3 px-4 text-muted-foreground text-xs whitespace-nowrap">{formatDate(log.createdAt)}</td>
-                                            <td className="py-3 px-4 font-medium text-foreground whitespace-nowrap">
-                                                <span className="inline-flex items-center gap-1.5">
-                                                    {log.userName}
-                                                    {fromDesktop && (
-                                                        <span title="من تطبيق سطح المكتب (مزامنة)" className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                                            <Laptop className="w-3 h-3" />
-                                                            مزامنة
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${actionInfo.color}`}>
-                                                    {actionInfo.label}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">{ENTITY_LABELS[log.entity] || log.entity}</td>
-                                            <td className="py-3 px-4 text-muted-foreground text-xs max-w-[320px] truncate" title={details}>{details}</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-3 mt-4">
-                    <button
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        disabled={page <= 1}
-                        className="p-2 rounded-lg border bg-card hover:bg-muted disabled:opacity-40 transition-colors"
-                    >
-                        <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm text-muted-foreground">
-                        صفحة {page} من {totalPages}
-                    </span>
-                    <button
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                        disabled={page >= totalPages}
-                        className="p-2 rounded-lg border bg-card hover:bg-muted disabled:opacity-40 transition-colors"
-                    >
-                        <ChevronLeft className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
+  }, [fetchLogs]);
+  const filterCount = [
+    searchInput,
+    userId,
+    entity,
+    action,
+    branchId,
+    from || to,
+  ].filter(Boolean).length;
+  const branchNames = useMemo(
+    () => new Map(branches.map((b) => [b.id, b.name])),
+    [branches],
+  );
+  const reset = () => {
+    setSearchInput("");
+    setSearch("");
+    setUser("");
+    setEntity("");
+    setAction("");
+    setBranch("");
+    setPage(1);
+    router.push("/dashboard/reports/audit-log");
+  };
+  const selectClass =
+    "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-all";
+  const empty =
+    error && !loaded
+      ? "تعذر تحميل السجل"
+      : filterCount
+        ? "لا توجد نشاطات تطابق الفلاتر"
+        : "لا توجد نشاطات مسجّلة بعد";
+  return (
+    <div className="space-y-4">
+      <DateRangeFilter
+        baseUrl="/dashboard/reports/audit-log"
+        currentFrom={from}
+        currentTo={to}
+      />
+      <div className="glass-card p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-bold">
+            <SlidersHorizontal className="w-4 h-4 text-primary" />
+            تصفية النشاطات
+          </h2>
+          {filterCount > 0 && (
+            <button
+              onClick={reset}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              مسح الفلاتر ({filterCount})
+            </button>
+          )}
         </div>
-    );
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+          <div className="sm:col-span-2">
+            <label
+              htmlFor="audit-search"
+              className="block text-xs font-medium text-muted-foreground mb-1.5"
+            >
+              البحث في السجل
+            </label>
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                id="audit-search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="اسم المستخدم، تفاصيل النشاط أو المرجع..."
+                className={`${selectClass} pr-9`}
+              />
+            </div>
+          </div>
+          {[
+            {
+              id: "user",
+              label: "المستخدم",
+              value: userId,
+              set: setUser,
+              options: users.map((u) => [u.id, u.name || "مستخدم بلا اسم"]),
+            },
+            {
+              id: "entity",
+              label: "القسم",
+              value: entity,
+              set: setEntity,
+              options: Object.entries(AUDIT_ENTITIES),
+            },
+            {
+              id: "action",
+              label: "الإجراء",
+              value: action,
+              set: setAction,
+              options: Object.entries(AUDIT_ACTIONS).map(([k, v]) => [
+                k,
+                v.label,
+              ]),
+            },
+            {
+              id: "branch",
+              label: "الفرع",
+              value: branchId,
+              set: setBranch,
+              options: branches.map((b) => [b.id, b.name]),
+            },
+          ].map((f) => (
+            <div key={f.id}>
+              <label
+                htmlFor={`audit-${f.id}`}
+                className="block text-xs font-medium text-muted-foreground mb-1.5"
+              >
+                {f.label}
+              </label>
+              <select
+                id={`audit-${f.id}`}
+                value={f.value}
+                onChange={(e) => {
+                  f.set(e.target.value);
+                  setPage(1);
+                }}
+                className={selectClass}
+              >
+                <option value="">الكل</option>
+                {f.options.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            {error}
+            {loaded && (
+              <p className="text-xs mt-1">
+                المعروض آخر نتيجة تم تحميلها؛ قد لا يطابق الفلاتر الحالية. اضغط
+                تحديث للمحاولة مجددًا.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      <TableCard>
+        <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+              <ClipboardList className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold">النشاطات المسجّلة</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {loaded
+                  ? `${total.toLocaleString("en-US")} نشاط ضمن الفلاتر المحددة`
+                  : "جارٍ تحميل السجل…"}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => void fetchLogs()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+            />
+            تحديث
+          </button>
+        </div>
+        {loading && (
+          <div
+            role="status"
+            className="px-4 py-2 bg-primary/5 text-xs text-primary"
+          >
+            جارٍ تحديث النشاطات…
+          </div>
+        )}
+        {!loaded && loading ? (
+          <div className="space-y-3 p-6" aria-label="جارٍ تحميل النشاطات">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="h-10 rounded-lg bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="py-14 px-5 text-center">
+            <ClipboardList className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="font-medium text-sm">{empty}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {error
+                ? "استخدم زر التحديث لإعادة المحاولة."
+                : "ستظهر هنا النشاطات المسجّلة عند تنفيذ العمليات."}
+            </p>
+          </div>
+        ) : (
+          <DataTable>
+            <THead>
+              <Th>التاريخ والوقت</Th>
+              <Th>المستخدم</Th>
+              <Th>الإجراء</Th>
+              <Th>القسم</Th>
+              <Th>الفرع</Th>
+              <Th>التفاصيل والمرجع</Th>
+            </THead>
+            <tbody className="divide-y divide-border">
+              {logs.map((log) => {
+                const info = AUDIT_ACTIONS[log.action] || {
+                    label: log.action,
+                    tone: "muted" as const,
+                  },
+                  fields = auditDetails(log.details),
+                  source = auditSource(log.details);
+                return (
+                  <tr
+                    key={log.id}
+                    className="hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-3 py-3 align-top">
+                      <DateTimeCell date={log.createdAt} />
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <p className="text-sm font-medium whitespace-nowrap">
+                        {log.userName || "غير معروف"}
+                      </p>
+                      {source.kind !== "unknown" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
+                          {source.kind === "desktop" && (
+                            <Laptop className="w-3 h-3" />
+                          )}
+                          {source.label}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <StatusPill tone={info.tone}>{info.label}</StatusPill>
+                    </td>
+                    <td className="px-3 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
+                      {AUDIT_ENTITIES[log.entity] || log.entity}
+                    </td>
+                    <td className="px-3 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
+                      {log.branchId
+                        ? branchNames.get(log.branchId) || "فرع غير متاح"
+                        : "غير مرتبط بفرع"}
+                    </td>
+                    <td className="px-3 py-3 align-top min-w-[220px] max-w-[420px]">
+                      <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                        {fields.length
+                          ? fields
+                              .map((f) => `${f.label}: ${f.value}`)
+                              .join(" · ")
+                          : log.entity === "MOBILE_OPERATION"
+                            ? "سجل تنفيذ للعملية؛ تفاصيلها في مستندها الأصلي."
+                            : "لا توجد تفاصيل إضافية"}
+                      </p>
+                      {(fields.length > 0 || log.entityId) && (
+                        <details className="mt-1.5 group">
+                          <summary className="text-xs text-primary cursor-pointer inline-flex items-center gap-1 list-none">
+                            عرض التفاصيل
+                            <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
+                          </summary>
+                          <dl className="mt-2 p-3 rounded-lg bg-muted/40 space-y-2 text-xs">
+                            {fields.map((f, i) => (
+                              <div key={i}>
+                                <dt className="font-medium text-foreground">
+                                  {f.label}
+                                </dt>
+                                <dd className="text-muted-foreground mt-0.5 break-words whitespace-pre-wrap">
+                                  {f.value}
+                                </dd>
+                              </div>
+                            ))}
+                            {log.entityId && (
+                              <div>
+                                <dt className="font-medium">مرجع السجل</dt>
+                                <dd
+                                  dir="ltr"
+                                  className="text-muted-foreground break-all text-right font-mono mt-0.5"
+                                >
+                                  {log.entityId}
+                                </dd>
+                              </div>
+                            )}
+                          </dl>
+                        </details>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </DataTable>
+        )}
+        <TablePagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={total}
+          unit="نشاط"
+          onPageChange={setPage}
+        />
+      </TableCard>
+      <p className="text-xs text-muted-foreground">
+        الأوقات بتوقيت بغداد. سجلات المزامنة تظهر بعد وصول العملية إلى الخادم؛
+        بلاغ التطبيق لا يُعد إثباتًا لتنفيذ العملية.
+      </p>
+    </div>
+  );
 }

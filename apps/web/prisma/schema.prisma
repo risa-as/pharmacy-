@@ -1677,6 +1677,175 @@ model WhatsAppTemplate {
   updatedAt DateTime @updatedAt
 }
 
+// Durable campaign outbox. Historic payloads remain immutable after queueing.
+model WaConnection {
+  organizationId String @id
+  phoneId String @unique
+  businessId String
+  tokenEncrypted String
+  secretEncrypted String
+  verifyEncrypted String
+  updatedAt DateTime
+  mode String @default("MANUAL")
+  state String @default("ACTIVE")
+  allocationId String?
+  fundingId String?
+  billingVerifiedAt DateTime? @db.Timestamptz(3)
+  disconnectedAt DateTime? @db.Timestamptz(3)
+  contactsSyncState String @default("NOT_REQUESTED")
+  historySyncState String @default("NOT_REQUESTED")
+  contactsSyncRequestId String?
+  historySyncRequestId String?
+  onboardedAt DateTime? @db.Timestamptz(3)
+}
+
+model WaTemplateVersion {
+  id String @id
+  organizationId String
+  name String
+  body String
+  language String
+  category String
+  status String @default("DRAFT")
+  metaId String?
+  metaName String?
+  createdAt DateTime @default(now())
+  campaigns WaCampaign[]
+  @@index([organizationId, createdAt])
+}
+
+model WaConsent {
+  organizationId String
+  phone String
+  allowed Boolean
+  evidence String
+  recordedBy String
+  updatedAt DateTime
+  @@id([organizationId, phone])
+}
+
+model WaCampaign {
+  id String @id
+  organizationId String
+  branchId String?
+  createdBy String
+  templateId String
+  name String
+  previewHash String
+  priceQuote Json?
+  scheduledAt DateTime? @db.Timestamptz(3)
+  status String @default("QUEUED")
+  createdAt DateTime @default(now())
+  template WaTemplateVersion @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  messages WaMessage[]
+  attempts WaCampaignAttempt[]
+  @@index([organizationId, createdAt])
+}
+
+model WaPricingPolicy {
+  id        String   @id @default("singleton")
+  revision  Int      @default(1)
+  config    Json
+  updatedBy String
+  updatedAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model WaCampaignAttempt {
+  id             String @id
+  organizationId String
+  createdBy      String
+  previewHash    String
+  campaignId     String?
+  status         String @default("RECORDED")
+  createdAt      DateTime @default(now())
+  campaign       WaCampaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+}
+
+model WaMessage {
+  id String @id
+  campaignId String
+  organizationId String
+  patientId String
+  phone String
+  name String
+  text String
+  parameters Json
+  status String @default("QUEUED")
+  providerId String? @unique
+  error String?
+  providerErrorCode String?
+  claimedAt DateTime?
+  updatedAt DateTime
+  campaign WaCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  @@unique([campaignId, phone])
+  @@index([status, updatedAt])
+}
+
+model WaWallet {
+  organizationId String @id
+  availableIqd BigInt @default(0)
+  reservedIqd BigInt @default(0)
+  updatedAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model WaWalletEntry {
+  id String @id
+  organizationId String
+  operationKey String @unique
+  requestHash String
+  kind String
+  availableDelta BigInt
+  reservedDelta BigInt
+  reference String
+  createdBy String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([organizationId, createdAt])
+  @@unique([organizationId, kind, reference])
+}
+
+model WaMessageCharge {
+  messageId String @id
+  organizationId String
+  amountIqd BigInt
+  policyRevision Int
+  state String @default("RESERVED")
+  updatedAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model WaSignupAttempt {
+  id String @id
+  organizationId String
+  createdBy String
+  revision String?
+  tokenEncrypted String?
+  state String @default("STARTED")
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model WaWebhookEvent {
+  id String @id
+  organizationId String
+  phoneId String
+  payloadEncrypted String
+  state String @default("QUEUED")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  claimedAt DateTime? @db.Timestamptz(3)
+  @@index([state, createdAt])
+}
+
+model WaInboxMessage {
+  organizationId String
+  providerId String
+  phone String
+  direction String
+  source String
+  contentEncrypted String
+  sentAt DateTime @db.Timestamptz(3)
+  @@id([organizationId, providerId])
+  @@index([organizationId, phone, sentAt])
+}
+
 // =======================
 // AI Demand Forecasting
 // =======================

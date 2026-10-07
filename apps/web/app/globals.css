@@ -39,6 +39,11 @@
         --info:                205 60% 40%;
         --info-foreground:     0 0% 100%;
 
+        /* Content canvas behind the dashboard and warehouse portal pages (#F3F6F9), and the
+           hairline of the cards on it. Light only: dark mode keeps bg-background. */
+        --canvas:              210 33% 96.5%;
+        --card-border:         214 20% 89%;
+
         /* Structure */
         --border:              40 12% 88%;
         --input:               40 12% 88%;
@@ -214,29 +219,26 @@
 
 /* ═══ Glassmorphism Utility ═══ */
 @layer components {
+    /* Light: a solid white card with a hairline, so it stands apart from the canvas.
+       (The translucent glass took on the canvas colour and the cards blended into it.) */
     .glass-card {
-        background-color: hsl(var(--card) / 0.8);
-        border: 1px solid hsl(var(--border) / 0.4);
+        background-color: hsl(var(--card));
+        border: 1px solid hsl(var(--card-border));
         border-radius: 0.75rem;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 12px -6px rgb(15 23 42 / 0.08);
+    }
+
+    /* Dark: unchanged glass. */
+    .dark .glass-card {
+        background-color: hsl(var(--card) / 0.25);
+        border-color: hsl(var(--border) / 0.3);
         box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06);
     }
 
     @supports (backdrop-filter: blur(0)) {
-        .glass-card {
+        .dark .glass-card {
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            background-color: hsl(var(--card) / 0.15);
-            border-color: hsl(var(--border) / 0.2);
-        }
-    }
-
-    .dark .glass-card {
-        background-color: hsl(var(--card) / 0.25);
-        border-color: hsl(var(--border) / 0.3);
-    }
-
-    @supports (backdrop-filter: blur(0)) {
-        .dark .glass-card {
             background-color: hsl(var(--card) / 0.18);
         }
     }

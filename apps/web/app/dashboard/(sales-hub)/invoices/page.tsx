@@ -2,15 +2,18 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from "@/app/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { PlusIcon, Receipt, TrendingUp, Package, FileText, Wallet } from "lucide-react";
+import { PlusIcon, Receipt, TrendingUp, Package, Wallet } from "lucide-react";
 import Link from "next/link";
-import { Suspense } from "react";
 import { DeleteInvoice, ViewInvoice } from "@/app/ui/invoices/buttons";
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { NextResponse } from 'next/server';
 import { BranchFilter } from "@/app/ui/reports/branch-filter";
 import DateRangeFilter from "@/app/ui/reports/date-range-filter";
-import InvoicesSearch from "@/app/ui/invoices/invoices-search";
+import TableSearch from "@/app/ui/table-search";
+import TablePagination from "@/app/ui/table-pagination";
+import { formatCurrency } from "@/app/lib/utils/currency";
+
+const pill = "inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-bold";
 
 function buildDateRange(from: string, to: string) {
     const IRAQ_OFFSET = 3 * 60 * 60 * 1000;
@@ -158,88 +161,113 @@ export default async function Page(
                 })}
             </div>
 
-            {/* جدول الفواتير */}
+            {/* جدول الفواتير — بنفس تصميم جدول الدفعات وسلوكه */}
             <div className="glass-card overflow-hidden">
-                <div className="px-5 py-4 border-b border-border">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        {/* Title */}
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                                <FileText className="w-4 h-4 text-primary" />
-                            </div>
-                            <div>
-                                <h2 className="font-bold text-foreground font-cairo leading-tight">سجل فواتير الشراء</h2>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    {search
-                                        ? `${totalCount.toLocaleString()} نتيجة بحث`
-                                        : `${totalCount.toLocaleString()} فاتورة${totalPages > 1 ? ` — صفحة ${page} من ${totalPages}` : ''}`}
-                                </p>
-                            </div>
-                        </div>
-                        {/* Search */}
-                        <Suspense fallback={<div className="h-10 w-full sm:w-80 rounded-lg bg-muted/80 animate-pulse" />}>
-                            <InvoicesSearch />
-                        </Suspense>
-                    </div>
+                {/* البحث */}
+                <div className="p-4 border-b border-border flex items-center gap-3 flex-wrap">
+                    <TableSearch currentQuery={search ?? ""} param="search" placeholder="بحث باسم المورد أو رقم الفاتورة..." />
+                    <span className="text-sm text-muted-foreground">
+                        {search ? (
+                            <>
+                                {totalCount.toLocaleString("en-US")} نتيجة لـ &quot;<span className="font-bold text-foreground">{search}</span>&quot;
+                            </>
+                        ) : (
+                            <>{totalCount.toLocaleString("en-US")} فاتورة</>
+                        )}
+                    </span>
                 </div>
 
                 {invoices.length === 0 ? (
-                    <div className="p-12 text-center text-muted-foreground">
-                        <Receipt className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                        <p>لا توجد فواتير{search ? ' مطابقة للبحث' : ' حتى الآن'}</p>
+                    <div className="py-16 text-center">
+                        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Receipt className="w-8 h-8 text-muted-foreground opacity-50" />
+                        </div>
+                        <p className="text-foreground font-medium">
+                            {search ? "لا توجد نتائج للبحث" : "لا توجد فواتير شراء"}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            {search ? "جرّب كلمة بحث أخرى" : hasDateFilter ? "لا توجد فواتير في الفترة المحددة" : "ستظهر فواتير الشراء هنا عند إنشائها"}
+                        </p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-card/50 text-muted-foreground text-sm">
+                        <table className="w-full text-sm text-right">
+                            <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                                 <tr>
-                                    <th className="px-4 py-3 text-right font-bold">المورد</th>
-                                    <th className="px-4 py-3 text-right font-bold">الفرع</th>
-                                    <th className="px-4 py-3 text-right font-bold">الأصناف</th>
-                                    <th className="px-4 py-3 text-right font-bold">الإجمالي</th>
-                                    <th className="px-4 py-3 text-right font-bold">التاريخ</th>
-                                    <th className="px-4 py-3 text-center font-bold">الإجراءات</th>
+                                    <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">المورد</th>
+                                    <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الفرع</th>
+                                    <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الأصناف</th>
+                                    <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الإجمالي</th>
+                                    <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">التاريخ</th>
+                                    <th className="px-3 py-3 text-right font-medium font-cairo whitespace-nowrap">الحالة</th>
+                                    <th className="px-3 py-3 text-center font-medium font-cairo whitespace-nowrap">الإجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-border">
+                            <tbody className="divide-y divide-border bg-card">
                                 {invoices.map((invoice) => {
                                     const due = Math.max(0, invoice.total - invoice.paidAmount);
+                                    const createdAt = new Date(invoice.createdAt);
+                                    let payText = "مدفوعة";
+                                    let payClass = "bg-success/10 text-success border-success/20";
+                                    if (due > 0 && invoice.paidAmount > 0) {
+                                        payText = "مدفوعة جزئياً";
+                                        payClass = "bg-warning/10 text-warning border-warning/20";
+                                    } else if (due > 0) {
+                                        payText = "غير مدفوعة";
+                                        payClass = "bg-destructive/10 text-destructive border-destructive/20";
+                                    }
                                     return (
-                                        <tr key={invoice.id} className="hover:bg-muted/50 transition-colors">
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="font-bold text-foreground">{invoice.supplier.name}</span>
-                                                    {invoice.invoiceNumber && (
-                                                        <span className="font-mono text-xs text-muted-foreground">#{invoice.invoiceNumber}</span>
-                                                    )}
+                                        <tr key={invoice.id} className="hover:bg-muted/40 transition-colors">
+                                            <td className="px-3 py-3">
+                                                <div className="max-w-[200px]">
+                                                    <p className="font-semibold text-foreground truncate" title={invoice.supplier.name}>
+                                                        {invoice.supplier.name}
+                                                    </p>
+                                                    <p className="text-[10px] text-muted-foreground font-mono truncate text-right" dir="ltr">
+                                                        {invoice.invoiceNumber ? `#${invoice.invoiceNumber}` : invoice.documentNumber}
+                                                    </p>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-muted-foreground">{invoice.branch.name}</td>
-                                            <td className="px-4 py-3">
-                                                <span className="bg-primary/10 text-primary px-2 py-1 rounded-full text-sm">
-                                                    {invoice._count.items} صنف
+                                            <td className="px-3 py-3 text-muted-foreground">
+                                                <span className="block max-w-[160px] truncate" title={invoice.branch.name}>
+                                                    {invoice.branch.name}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 font-bold text-foreground">
-                                                <div className="flex flex-col">
-                                                    <span dir="ltr" className="text-right">{invoice.total.toLocaleString()} د.ع</span>
-                                                    {due > 0 && (
-                                                        <span className="text-[10px] w-fit px-2 py-0.5 rounded-full mt-1 bg-warning/10 text-warning font-bold">
-                                                            مستحق {fmt(due)}
-                                                        </span>
+                                            <td className="px-3 py-3 text-muted-foreground whitespace-nowrap">
+                                                <span className="font-bold text-foreground">{invoice._count.items}</span> صنف
+                                            </td>
+                                            <td className="px-3 py-3 whitespace-nowrap">
+                                                <div className="font-bold text-foreground" dir="ltr">{formatCurrency(invoice.total)}</div>
+                                                {due > 0 && (
+                                                    <div className="text-[10px] text-muted-foreground" dir="ltr">
+                                                        مستحق {formatCurrency(due)}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-3" suppressHydrationWarning>
+                                                <div className="text-xs text-muted-foreground leading-tight whitespace-nowrap" dir="ltr">
+                                                    <div>{createdAt.toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad" })}</div>
+                                                    <div className="text-[10px] text-muted-foreground/60">
+                                                        {createdAt.toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Baghdad" })}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <div className="flex flex-wrap items-center gap-1">
+                                                    {invoice.status === "CANCELLED" ? (
+                                                        <span className={`${pill} bg-muted text-muted-foreground border-border`}>ملغاة</span>
+                                                    ) : (
+                                                        <>
+                                                            <span className={`${pill} ${payClass}`}>{payText}</span>
+                                                            {invoice.status === "PENDING" && (
+                                                                <span className={`${pill} bg-info/10 text-info border-info/20`}>بانتظار الاستلام</span>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3" suppressHydrationWarning>
-                                                <div className="text-foreground">
-                                                    {new Date(invoice.createdAt).toLocaleDateString('ar-IQ', { timeZone: 'Asia/Baghdad' })}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {new Date(invoice.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Baghdad' })}
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center justify-center gap-2">
+                                            <td className="px-3 py-3">
+                                                <div className="flex items-center justify-center gap-1.5">
                                                     <ViewInvoice id={invoice.id} />
                                                     <DeleteInvoice id={invoice.id} />
                                                 </div>
@@ -252,28 +280,14 @@ export default async function Page(
                     </div>
                 )}
 
-                {/* Pagination */}
-                {totalPages > 1 && !search && (
-                    <div className="flex items-center justify-center gap-2 p-4 border-t border-border">
-                        {page > 1 && (
-                            <Link
-                                href={buildPageUrl(page - 1)}
-                                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
-                            >
-                                السابق
-                            </Link>
-                        )}
-                        <span className="text-sm text-muted-foreground px-2">{page} / {totalPages}</span>
-                        {page < totalPages && (
-                            <Link
-                                href={buildPageUrl(page + 1)}
-                                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
-                            >
-                                التالي
-                            </Link>
-                        )}
-                    </div>
-                )}
+                {/* الترقيم */}
+                <TablePagination
+                    currentPage={page}
+                    totalPages={totalPages}
+                    totalCount={totalCount}
+                    unit="فاتورة"
+                    hrefFor={buildPageUrl}
+                />
             </div>
         </div>
     );

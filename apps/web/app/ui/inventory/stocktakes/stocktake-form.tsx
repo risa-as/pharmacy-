@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 // sonner لا react-hot-toast: الجذر (app/layout.tsx) يركّب <Toaster/> الخاص بـ
 // sonner فقط، فنداءات react-hot-toast كانت تُنفَّذ بصمت دون ظهور أي رسالة.
 import { toast } from "sonner";
+import { useConfirm } from "@/app/ui/confirm-dialog";
 
 export default function StocktakeForm({
   stocktakeId,
@@ -21,6 +22,7 @@ export default function StocktakeForm({
   canReview?: boolean;
 }) {
   const router = useRouter();
+  const { confirm, dialog } = useConfirm();
   const [items, setItems] = useState(
     initialData.map((item) => ({
       ...item,
@@ -71,9 +73,13 @@ export default function StocktakeForm({
 
   const completeStocktake = async () => {
     if (
-      !confirm(
-        "إذا وُجد عجز يُرسل الجرد إلى المدير قبل تعديل المخزون وتسجيل المصروف. دون عجز تُعتمد الكميات مباشرة. هل تريد المتابعة؟",
-      )
+      loading || !(await confirm({
+        title: "إنهاء العد وإرسال النتيجة",
+        message: "إذا وُجد عجز، يُرسل الجرد إلى المدير لمراجعته قبل تعديل المخزون وتسجيل المصروف. إذا لم يوجد عجز، تُعتمد الكميات مباشرة.",
+        confirmText: "إنهاء العد",
+        cancelText: "الرجوع للجرد",
+        variant: "primary",
+      }))
     )
       return;
 
@@ -106,11 +112,15 @@ export default function StocktakeForm({
   const reviewAction = async (action: "APPROVE" | "RECOUNT") => {
     if (
       loading ||
-      !confirm(
-        action === "APPROVE"
-          ? "ستُحدّث الكميات وتُسجّل قيمة العجز كمصروف، والتلف المحدد كمصروف تلف. تأكيد الاعتماد؟"
-          : "سيُحفظ العد السابق في سجل المراجعة وتُفتح مسودة لإعادة العد دون تعديل المخزون. متابعة؟",
-      )
+      !(await confirm({
+        title: action === "APPROVE" ? "اعتماد نتيجة الجرد" : "طلب إعادة العد",
+        message: action === "APPROVE"
+          ? "بعد الاعتماد، تُحدّث كميات المخزون وتُسجّل قيمة العجز كمصروف. يُسجّل التلف المحدد كمصروف تلف. راجع الأعداد قبل التأكيد."
+          : "يُحفظ العد السابق في سجل المراجعة، وتُفتح مسودة لإعادة العد دون تعديل كميات المخزون.",
+        confirmText: action === "APPROVE" ? "تأكيد الاعتماد" : "تأكيد إعادة العد",
+        cancelText: "الرجوع للمراجعة",
+        variant: "primary",
+      }))
     )
       return;
     setLoading(true);
@@ -413,6 +423,7 @@ export default function StocktakeForm({
           </button>
         </div>
       )}
+      {dialog}
     </div>
   );
 }

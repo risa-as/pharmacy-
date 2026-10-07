@@ -5,7 +5,7 @@ export class SyncSafeConflict extends Error {}
 /** Desktop ids may be local-only. Never redirect a known foreign id, and never
  * guess between multiple drawers. The branch lock also serializes first creation. */
 export async function resolveSyncSafe(tx: Prisma.TransactionClient, branchId: string, incoming?: string | null) {
-    await tx.$queryRaw`SELECT id FROM "Branch" WHERE id = ${branchId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "public"."Branch" WHERE id = ${branchId} FOR UPDATE`;
     if (incoming) {
         const exact = await tx.safe.findUnique({ where: { id: incoming }, select: { id: true, branchId: true } });
         if (exact) {

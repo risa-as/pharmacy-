@@ -25,7 +25,7 @@ export default function CTAButton({
 
   const variants = {
     primary: 'bg-primary-700 text-white shadow-soft hover:bg-primary-800 hover:shadow-lift',
-    accent: 'bg-accent text-ink-950 shadow-soft hover:bg-amber-400 hover:shadow-lift',
+    accent: 'bg-primary-400 text-ink-950 shadow-soft hover:bg-primary-300 hover:shadow-lift',
     secondary: 'bg-white text-primary-800 shadow-soft ring-1 ring-slate-200 hover:ring-primary-200 hover:shadow-lift',
     outline: 'bg-transparent text-primary-700 ring-1 ring-inset ring-primary-300 hover:bg-primary-50',
     glass: 'bg-white/10 text-white ring-1 ring-inset ring-white/25 backdrop-blur-md hover:bg-white/20',

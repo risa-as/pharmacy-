@@ -127,12 +127,12 @@ export async function POST(req: NextRequest) {
                         } else {
                             const doc = txn.referenceType === 'SALE'
                                 ? (await tx.$queryRaw<{ branchId: string; total: number; method: string | null }[]>`
-                                    SELECT s."branchId", s.total, p.method::text AS method FROM "Sale" s
-                                    LEFT JOIN "Payment" p ON p."saleId" = s.id WHERE s.id = ${txn.referenceId} FOR UPDATE OF s`)[0]
+                                    SELECT s."branchId", s.total, p.method::text AS method FROM "public"."Sale" s
+                                    LEFT JOIN "public"."Payment" p ON p."saleId" = s.id WHERE s.id = ${txn.referenceId} FOR UPDATE OF s`)[0]
                                 : (await tx.$queryRaw<{ branchId: string; total: number; method: string | null }[]>`
-                                    SELECT r."branchId", r.total, p.method::text AS method FROM "SaleReturn" r
-                                    JOIN "Sale" s ON s.id = r."saleId"
-                                    LEFT JOIN "Payment" p ON p."saleId" = s.id
+                                    SELECT r."branchId", r.total, p.method::text AS method FROM "public"."SaleReturn" r
+                                    JOIN "public"."Sale" s ON s.id = r."saleId"
+                                    LEFT JOIN "public"."Payment" p ON p."saleId" = s.id
                                     WHERE r.id = ${txn.referenceId} FOR UPDATE OF r`)[0];
                             if (!doc) {
                                 const wait = await tx.syncMovementWait.upsert({

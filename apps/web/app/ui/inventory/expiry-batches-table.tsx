@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, Trash2, Clock, Package } from "lucide-react";
+import { Search, Trash2, Clock } from "lucide-react";
 import WriteOffModal from "./write-off-modal";
+import {
+    TableCard, TableToolbar, SearchField, ResultCount, DataTable, THead, Th, TBody, rowClass, cellClass,
+    PrimaryCell, MutedText, StatusPill, Actions, EmptyState,
+} from "@/app/ui/data-table";
 
 export interface ExpiryRow {
     id: string;
@@ -21,6 +25,7 @@ type FilterKey = "all" | "expired" | "expiring";
 
 const fmt = (v: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
 
+/** Same layout and styling as the batches table; the list is loaded in full, so tabs and search filter in place. */
 export default function ExpiryBatchesTable({ rows, canWriteOff }: { rows: ExpiryRow[]; canWriteOff: boolean }) {
     const [filter, setFilter] = useState<FilterKey>("all");
     const [query, setQuery] = useState("");
@@ -50,139 +55,106 @@ export default function ExpiryBatchesTable({ rows, canWriteOff }: { rows: Expiry
         });
     }, [rows, filter, query]);
 
-    const tabs: { key: FilterKey; label: string }[] = [
-        { key: "all", label: "الكل" },
-        { key: "expired", label: "منتهية" },
-        { key: "expiring", label: "قريبة الانتهاء" },
+    const tabs: { key: FilterKey; label: string; active: string; idle: string }[] = [
+        { key: "all", label: "الكل", active: "bg-primary text-primary-foreground", idle: "text-foreground" },
+        { key: "expired", label: "منتهية", active: "bg-destructive text-white", idle: "text-destructive" },
+        { key: "expiring", label: "قريبة الانتهاء", active: "bg-warning text-white", idle: "text-warning" },
     ];
 
     return (
-        <div className="glass-card overflow-hidden">
-            {/* الفلترة والبحث */}
-            <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex flex-wrap gap-1.5">
+        <TableCard>
+            <TableToolbar>
+                <SearchField value={query} onChange={setQuery} placeholder="بحث بالاسم أو الباركود أو رقم الدفعة..." />
+                {/* Status tabs, styled like the inventory page tabs */}
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-1 overflow-x-auto max-w-full">
                     {tabs.map((tab) => {
                         const active = filter === tab.key;
                         return (
                             <button
                                 key={tab.key}
                                 onClick={() => setFilter(tab.key)}
-                                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                                    active
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted text-muted-foreground hover:bg-muted/70"
+                                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-bold transition-all ${
+                                    active ? tab.active : `${tab.idle} hover:bg-background`
                                 }`}
                             >
                                 {tab.label}
-                                <span
-                                    className={`text-xs rounded-full px-1.5 py-0.5 ${
-                                        active ? "bg-primary-foreground/20" : "bg-background"
-                                    }`}
-                                >
+                                <span className={`text-xs rounded-full px-1.5 py-0.5 font-mono ${active ? "bg-white/20" : "bg-muted"}`}>
                                     {counts[tab.key]}
                                 </span>
                             </button>
                         );
                     })}
                 </div>
-
-                <div className="relative sm:mr-auto sm:max-w-xs w-full">
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                        type="text"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="بحث بالاسم أو رقم الدفعة..."
-                        className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-                    />
-                </div>
-            </div>
+                <ResultCount total={filtered.length} query={query.trim()} unit="دفعة" />
+            </TableToolbar>
 
             {filtered.length === 0 ? (
-                <div className="py-10 text-center text-muted-foreground">
-                    <p className="text-sm">لا توجد نتائج مطابقة</p>
-                </div>
+                <EmptyState icon={<Search />} title="لا توجد نتائج" hint="جرّب كلمة بحث أو تبويباً آخر" />
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
-                            <tr>
-                                <th className="px-6 py-3.5 text-right font-medium font-cairo">الدواء</th>
-                                <th className="px-6 py-3.5 text-right font-medium font-cairo">رقم الدفعة</th>
-                                <th className="px-6 py-3.5 text-right font-medium font-cairo">الفرع</th>
-                                <th className="px-6 py-3.5 text-right font-medium font-cairo">الكمية</th>
-                                <th className="px-6 py-3.5 text-right font-medium font-cairo">سعر التكلفة</th>
-                                <th className="px-6 py-3.5 text-right font-medium font-cairo">تاريخ الانتهاء</th>
-                                <th className="px-6 py-3.5 text-right font-medium font-cairo">الحالة</th>
-                                {canWriteOff && (
-                                    <th className="px-6 py-3.5 text-center font-medium font-cairo">إجراء</th>
-                                )}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border bg-card">
-                            {filtered.map((batch) => {
-                                const expired = batch.status === "expired";
-                                return (
-                                    <tr key={batch.id} className="hover:bg-muted/40 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                                                        expired ? "bg-destructive/10" : "bg-warning/10"
-                                                    }`}
-                                                >
-                                                    <Package className={`w-4 h-4 ${expired ? "text-destructive" : "text-warning"}`} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="font-semibold text-foreground truncate">{batch.drugName}</p>
-                                                    {batch.barcode && (
-                                                        <p className="text-xs text-muted-foreground" dir="ltr">{batch.barcode}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-muted-foreground font-mono text-xs" dir="ltr">
-                                            {batch.batchNumber || "—"}
-                                        </td>
-                                        <td className="px-6 py-4 text-muted-foreground">{batch.branchName}</td>
-                                        <td className="px-6 py-4 font-bold text-foreground">{batch.quantity}</td>
-                                        <td className="px-6 py-4 text-muted-foreground" dir="ltr">{fmt(batch.costPrice)}</td>
-                                        <td className="px-6 py-4 text-muted-foreground" dir="ltr" suppressHydrationWarning>
-                                            {batch.expiryLabel}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {expired ? (
-                                                <span className="inline-flex items-center gap-1 rounded-md bg-destructive/10 text-destructive border border-destructive/20 px-2.5 py-1 text-xs font-bold">
-                                                    <Trash2 className="w-3 h-3" />
-                                                    منتهٍ منذ {Math.abs(batch.daysLeft)} يوم
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 rounded-md bg-warning/10 text-warning border border-warning/20 px-2.5 py-1 text-xs font-bold">
-                                                    <Clock className="w-3 h-3" />
-                                                    {batch.daysLeft} يوم
-                                                </span>
-                                            )}
-                                        </td>
-                                        {canWriteOff && (
-                                            <td className="px-6 py-4">
-                                                <div className="flex justify-center">
-                                                    <button
-                                                        onClick={() => setTarget(batch)}
-                                                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/10 hover:border-destructive/50 transition-colors"
-                                                        title="شطب الدفعة"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                        شطب
-                                                    </button>
-                                                </div>
-                                            </td>
+                <DataTable>
+                    <THead>
+                        <Th>الدواء</Th>
+                        <Th>رقم الدفعة</Th>
+                        <Th>الفرع</Th>
+                        <Th>الكمية</Th>
+                        <Th>سعر التكلفة</Th>
+                        <Th>تاريخ الانتهاء</Th>
+                        <Th>الحالة</Th>
+                        {canWriteOff && <Th center>إجراء</Th>}
+                    </THead>
+                    <TBody>
+                        {filtered.map((batch) => {
+                            const expired = batch.status === "expired";
+                            return (
+                                <tr key={batch.id} className={rowClass}>
+                                    <td className={cellClass}>
+                                        <PrimaryCell title={batch.drugName} subtitle={batch.barcode} subtitleLtr />
+                                    </td>
+                                    <td className={`${cellClass} font-mono text-xs text-muted-foreground`}>
+                                        <span className="block max-w-[100px] truncate text-right" dir="ltr">{batch.batchNumber || "—"}</span>
+                                    </td>
+                                    <td className={`${cellClass} text-muted-foreground`}>
+                                        <MutedText>{batch.branchName}</MutedText>
+                                    </td>
+                                    <td className={`${cellClass} font-bold text-foreground`}>{batch.quantity}</td>
+                                    <td className={`${cellClass} font-bold text-foreground whitespace-nowrap`} dir="ltr">
+                                        {fmt(batch.costPrice)} د.ع
+                                    </td>
+                                    <td className={`${cellClass} text-xs text-muted-foreground whitespace-nowrap`} dir="ltr" suppressHydrationWarning>
+                                        {batch.expiryLabel}
+                                    </td>
+                                    <td className={cellClass}>
+                                        {expired ? (
+                                            <StatusPill tone="destructive">
+                                                <Trash2 className="w-3 h-3" />
+                                                منتهٍ منذ {Math.abs(batch.daysLeft)} يوم
+                                            </StatusPill>
+                                        ) : (
+                                            <StatusPill tone="warning">
+                                                <Clock className="w-3 h-3" />
+                                                {batch.daysLeft} يوم
+                                            </StatusPill>
                                         )}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                    </td>
+                                    {canWriteOff && (
+                                        <td className={cellClass}>
+                                            <Actions>
+                                                <button
+                                                    onClick={() => setTarget(batch)}
+                                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-destructive hover:bg-destructive/10 hover:border-destructive/50 transition-colors"
+                                                    title="شطب الدفعة"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    شطب
+                                                </button>
+                                            </Actions>
+                                        </td>
+                                    )}
+                                </tr>
+                            );
+                        })}
+                    </TBody>
+                </DataTable>
             )}
 
             {/* Modal تأكيد الشطب */}
@@ -198,6 +170,6 @@ export default function ExpiryBatchesTable({ rows, canWriteOff }: { rows: Expiry
                     onClose={() => setTarget(null)}
                 />
             )}
-        </div>
+        </TableCard>
     );
 }

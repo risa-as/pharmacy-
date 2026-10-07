@@ -10,9 +10,9 @@ overrides:
   decode-uri-component: 0.5.0
   '@xmldom/xmldom': 0.8.15
   protobufjs: ^7.6.6
-  '@grpc/grpc-js': ^1.14.4
+  '@grpc/grpc-js': ^1.14.5
   sharp: ^0.35.4
-  dompurify: ^3.4.15
+  dompurify: ^3.4.16
   fflate: ^0.8.3
   tmp: ^0.2.7
   minimist: ^1.2.8
@@ -20,18 +20,18 @@ overrides:
   minimatch@^3: ^3.1.4
   minimatch@^5: ^5.1.8
   minimatch@^9: ^9.0.7
-  brace-expansion@^1: ^1.1.18
-  brace-expansion@^2: ^2.1.4
+  brace-expansion@^1: ^1.1.21
+  brace-expansion@^2: ^2.1.6
   picomatch@^2: ^2.3.2
   picomatch@^4: ^4.0.4
   postcss-selector-parser@^6: ^6.1.3
   '@babel/core': 7.29.7
   '@tootallnate/once': 2.0.1
   ajv@^8: 8.20.0
-  brace-expansion@^5: 5.0.9
+  brace-expansion@^5: 5.0.12
   browserslist: 4.28.9
   effect: 3.22.1
-  fast-uri: 3.1.7
+  fast-uri: 3.1.8
   js-yaml@^3: 3.15.2
   js-yaml@^4: 4.3.2
   node-forge: 1.4.0
@@ -2672,8 +2672,8 @@ packages:
     engines: {node: '>=18.0.0'}
     dev: false
 
-  /@grpc/grpc-js@1.14.4:
-    resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
+  /@grpc/grpc-js@1.14.5:
+    resolution: {integrity: sha512-7VZM+SVdEcUUqSQeNI3zM8Qs/BhQKZndPo2h5VkYkAM8Iz0wJIa8mKV5ekQGqG8UUsnkQ0NMxIxwkIHYvj0qOw==}
     engines: {node: '>=12.10.0'}
     dependencies:
       '@grpc/proto-loader': 0.8.0
@@ -5197,7 +5197,7 @@ packages:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.7
+      fast-uri: 3.1.8
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
     dev: false
@@ -5774,19 +5774,19 @@ packages:
       big-integer: 1.6.52
     dev: false
 
-  /brace-expansion@1.1.18:
-    resolution: {integrity: sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==}
+  /brace-expansion@1.1.21:
+    resolution: {integrity: sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw==}
     dependencies:
       balanced-match: 1.0.2
       concat-map: 0.0.1
 
-  /brace-expansion@2.1.4:
-    resolution: {integrity: sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==}
+  /brace-expansion@2.1.7:
+    resolution: {integrity: sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g==}
     dependencies:
       balanced-match: 1.0.2
 
-  /brace-expansion@5.0.9:
-    resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
+  /brace-expansion@5.0.12:
+    resolution: {integrity: sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==}
     engines: {node: 20 || >=22}
     dependencies:
       balanced-match: 4.0.2
@@ -6729,8 +6729,8 @@ packages:
       domelementtype: 2.3.0
     dev: false
 
-  /dompurify@3.4.15:
-    resolution: {integrity: sha512-EUBjM+B+lkDE41iE82DDSCfkoPGfXx8IxFxPMjNzm/Uk4xDet77rTN9wqlxlVg71kK7XGuUMv6wUxJUwwv+Xyw==}
+  /dompurify@3.4.16:
+    resolution: {integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==}
     requiresBuild: true
     optionalDependencies:
       '@types/trusted-types': 2.0.7
@@ -7690,8 +7690,8 @@ packages:
       pako: 2.1.0
     dev: false
 
-  /fast-uri@3.1.7:
-    resolution: {integrity: sha512-dOvZVzjdZdz7phd9v6jCbwxrBW3fK6n8Rc0CtdmM4bumzMnxywBYhuph6J819RRw/ku+rLbelwfMunktuzVVHg==}
+  /fast-uri@3.1.8:
+    resolution: {integrity: sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==}
     dev: false
 
   /fastq@1.20.1:
@@ -8225,7 +8225,7 @@ packages:
     resolution: {integrity: sha512-1kGbqVQBZPAAu4+/R1XxPQKP0ydbNYoLAr4l0ZO2bMV0kLyLW4I1gAk++qBLWt7DPORTzmWRMsCZe86gDjShJA==}
     engines: {node: '>=18'}
     dependencies:
-      '@grpc/grpc-js': 1.14.4
+      '@grpc/grpc-js': 1.14.5
       '@grpc/proto-loader': 0.8.0
       duplexify: 4.1.3
       google-auth-library: 10.5.0
@@ -8995,7 +8995,7 @@ packages:
     optionalDependencies:
       canvg: 3.0.11
       core-js: 3.48.0
-      dompurify: 3.4.15
+      dompurify: 3.4.16
       html2canvas: 1.4.1
     dev: false
 
@@ -9853,25 +9853,25 @@ packages:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
     engines: {node: 18 || 20 || >=22}
     dependencies:
-      brace-expansion: 5.0.9
+      brace-expansion: 5.0.12
     dev: false
 
   /minimatch@3.1.5:
     resolution: {integrity: sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w==}
     dependencies:
-      brace-expansion: 1.1.18
+      brace-expansion: 1.1.21
 
   /minimatch@5.1.9:
     resolution: {integrity: sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==}
     engines: {node: '>=10'}
     dependencies:
-      brace-expansion: 2.1.4
+      brace-expansion: 2.1.7
 
   /minimatch@9.0.9:
     resolution: {integrity: sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==}
     engines: {node: '>=16 || 14 >=14.17'}
     dependencies:
-      brace-expansion: 2.1.4
+      brace-expansion: 2.1.7
 
   /minimist@1.2.8:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}

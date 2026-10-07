@@ -21,12 +21,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const result = await prisma.$transaction(tx => runWarehouseOperation(tx, command, async () => {
             const record = await tx.warehouseReturn.findFirst({ where: { id, warehouseId: ctx.warehouseId, status: 'ACCEPTED' } });
             if (!record?.purchaseId) throw new WarehouseOperationError('الإشعار الدائن المرتبط غير موجود.', 404);
-            await tx.$queryRaw`SELECT id FROM "WarehouseOrder" WHERE id = ${record.orderId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseOrder" WHERE id = ${record.orderId} FOR UPDATE`;
             const current = await tx.warehouseReturn.findUniqueOrThrow({ where: { id } });
             if (body.amount > current.creditBalance - current.refundedAmount) throw new WarehouseOperationError('المبلغ يتجاوز الرصيد الدائن غير المردود.');
-            await tx.$queryRaw`SELECT id FROM "WarehouseInvoice" WHERE "orderId" = ${record.orderId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."WarehouseInvoice" WHERE "orderId" = ${record.orderId} FOR UPDATE`;
             const invoice = await tx.warehouseInvoice.findUniqueOrThrow({ where: { orderId: record.orderId } });
-            await tx.$queryRaw`SELECT id FROM "Purchase" WHERE id = ${record.purchaseId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "public"."Purchase" WHERE id = ${record.purchaseId} FOR UPDATE`;
             const purchase = await tx.purchase.findUniqueOrThrow({ where: { id: record.purchaseId } });
             if (body.amount > invoice.paidAmount - invoice.total || body.amount > purchase.paidAmount - purchase.total) {
                 throw new WarehouseOperationError('رصيد الدفعات بين الطرفين يحتاج مطابقة قبل تسجيل الرد النقدي.');

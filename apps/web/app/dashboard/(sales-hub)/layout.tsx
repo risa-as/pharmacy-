@@ -8,13 +8,13 @@
  */
 
 import HubTabNav, { type HubTab } from "@/app/ui/hub-tab-nav";
-import { ShoppingCart, FileText, Undo2, CreditCard } from "lucide-react";
+import { FileText, Undo2, Receipt, Coins } from "lucide-react";
 
 const TABS: HubTab[] = [
-    { name: "المبيعات",   href: "/dashboard/sales",     icon: <ShoppingCart className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "المبيعات",   href: "/dashboard/sales",     icon: <Receipt className="w-3.5 h-3.5 shrink-0" /> },
     { name: "الفواتير",   href: "/dashboard/invoices",  icon: <FileText className="w-3.5 h-3.5 shrink-0" /> },
     { name: "المرتجعات",  href: "/dashboard/returns",   icon: <Undo2 className="w-3.5 h-3.5 shrink-0" /> },
-    { name: "المدفوعات",  href: "/dashboard/payments",  icon: <CreditCard className="w-3.5 h-3.5 shrink-0" /> },
+    { name: "المدفوعات",  href: "/dashboard/payments",  icon: <Coins className="w-3.5 h-3.5 shrink-0" /> },
 ];
 
 export default function SalesLayout({

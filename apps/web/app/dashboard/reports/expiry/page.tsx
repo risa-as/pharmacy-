@@ -233,44 +233,37 @@ export default async function ExpiryReportPage(
                 The name is not the only offender here — barcodes reach 90 chars
                 and sync-generated batch numbers 45, so both are clamped too.
               */}
-              <table className="w-full table-fixed min-w-[960px] text-sm">
+              <table className="w-full table-fixed min-w-[960px] text-sm text-right">
                 <thead className="bg-muted/60 text-muted-foreground text-xs border-b border-border uppercase tracking-wide">
                   <tr>
-                    <th className="w-[6%] px-3 py-3.5 text-right font-medium font-cairo">
-                      #
-                    </th>
-                    <th className="w-[26%] px-4 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[32%] px-4 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                       الدواء
                     </th>
-                    <th className="w-[11%] px-4 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[11%] px-4 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                       الفرع
                     </th>
-                    <th className="w-[15%] px-4 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[15%] px-4 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                       رقم الدفعة
                     </th>
-                    <th className="w-[7%] px-4 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[7%] px-4 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                       الكمية
                     </th>
-                    <th className="w-[14%] px-4 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[14%] px-4 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                       تاريخ الانتهاء
                     </th>
-                    <th className="w-[21%] px-4 py-3.5 text-right font-medium font-cairo">
+                    <th className="w-[21%] px-4 py-3.5 text-right font-medium font-cairo whitespace-nowrap">
                       المتبقي
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border bg-card">
-                  {cat.items.map((batch: any, index: number) => {
+                  {cat.items.map((batch: any) => {
                     const days = getDaysRemaining(batch.expiryDate);
                     return (
                       <tr
                         key={batch.id}
                         className="hover:bg-muted/40 transition-colors"
                       >
-                        {/* Numbered per category table, so each restarts at 1. */}
-                        <td className="px-3 py-4 font-mono text-muted-foreground">
-                          {index + 1}
-                        </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
                             <div

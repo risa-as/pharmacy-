@@ -1,5 +1,4 @@
 "use client";
-import { HandCoins } from "@/app/ui/debts/debt-icon";
 
 
 import Link from "next/link";
@@ -26,7 +25,6 @@ import {
   BookOpen,
   FileSpreadsheet,
   Settings as SettingsIcon,
-  Wallet,
   ArrowRightLeft,
   Undo2,
   CheckSquare,
@@ -51,6 +49,21 @@ import {
   Download,
   HardDrive,
   Warehouse,
+  Cross,
+  HeartHandshake,
+  Receipt,
+  BookUser,
+  ArrowLeftRight,
+  Route,
+  Layers,
+  PackagePlus,
+  Lightbulb,
+  PieChart,
+  GitCompareArrows,
+  PiggyBank,
+  Wallet,
+  UserCog,
+  ShieldCheck,
 } from "lucide-react";
 
 import { clearSession } from "@/app/lib/actions/auth-actions";
@@ -109,6 +122,7 @@ const controlTowerSections: NavSection[] = [
     label: "المنصة",
     links: [
       { name: "معلومات الدفع", href: "/dashboard/admin/payment-info", icon: Landmark },
+      { name: "تسعير WhatsApp", href: "/dashboard/admin/whatsapp-pricing", icon: MessageSquare },
       { name: "إعدادات التنزيل", href: "/dashboard/admin/downloads", icon: Download },
       { name: "تسوية الملكية", href: "/dashboard/admin/ownership", icon: Landmark },
       { name: "قاعدة الأدوية العالمية", href: "/dashboard/admin/drugs", icon: Pill },
@@ -125,11 +139,10 @@ const controlTowerSections: NavSection[] = [
 const sections: NavSection[] = [
   {
     label: "",
-    links: [{ name: "الرئيسية", href: "/dashboard", icon: LayoutDashboard }],
-  },
-  {
-    label: "",
-    links: [{ name: "نقطة البيع", href: "/dashboard/pos-temp", icon: ShoppingCart }],
+    links: [
+      { name: "الرئيسية", href: "/dashboard", icon: LayoutDashboard },
+      { name: "الإشعارات والتنبيهات", href: "/dashboard/alerts", icon: Bell },
+    ],
   },
   {
     label: "",
@@ -137,12 +150,12 @@ const sections: NavSection[] = [
       {
         name: "الصيدلة",
         href: "#",
-        icon: Pill,
+        icon: Cross,
         subLinks: [
-          { name: "قاعدة الأدوية", href: "/dashboard/drugs" },
+          { name: "قاعدة الأدوية", href: "/dashboard/drugs", icon: Pill },
           // Drug Import → accessible via "استيراد" button inside Drugs page
-          { name: "الوصفات", href: "/dashboard/prescriptions" },
-          { name: "الدفعات", href: "/dashboard/batches" },
+          { name: "الوصفات", href: "/dashboard/prescriptions", icon: ScrollText },
+          { name: "الدفعات", href: "/dashboard/batches", icon: Layers },
         ],
       },
     ],
@@ -158,11 +171,13 @@ const sections: NavSection[] = [
           {
             name: "المخزون",
             href: "/dashboard/inventory",
+            icon: Warehouse,
             excludeFor: ["/dashboard/inventory/product-movement"],
           },
           {
             name: "المبيعات",
             href: "/dashboard/sales",
+            icon: Receipt,
             activeFor: [
               "/dashboard/invoices",
               "/dashboard/returns",
@@ -170,15 +185,17 @@ const sections: NavSection[] = [
             ],
           },
           // { name: "نقطة البيع (مؤقت)", href: "/dashboard/pos-temp" },
-          { name: "دفتر الديون", href: "/dashboard/debts", icon: HandCoins },
+          { name: "دفتر الديون", href: "/dashboard/debts", icon: BookUser },
           {
             name: "حركة المنتجات",
             href: "/dashboard/inventory/product-movement",
+            icon: ArrowLeftRight,
             plan: "pro",
           },
           {
             name: "تحويلات بين الفروع",
             href: "/dashboard/inventory/transfers",
+            icon: Route,
             plan: "enterprise",
           },
         ],
@@ -191,17 +208,21 @@ const sections: NavSection[] = [
       {
         name: "العملاء والتوريد",
         href: "#",
-        icon: Users,
+        icon: HeartHandshake,
         subLinks: [
           {
             name: "المرضى",
             href: "/dashboard/patients",
+            icon: Users,
             activeFor: ["/dashboard/loyalty"],
+            excludeFor: ["/dashboard/patients/whatsapp"],
           },
-          { name: "الموردون", href: "/dashboard/suppliers" },
+          { name: "مراسلة العملاء", href: "/dashboard/patients/whatsapp", icon: MessageSquare },
+          { name: "الموردون", href: "/dashboard/suppliers", icon: Truck },
           {
             name: "المشتريات",
             href: "/dashboard/purchases",
+            icon: PackagePlus,
             // مسارات تحت /dashboard/purchases لها روابطها المستقلة في الشريط:
             // «الطلبات الذكية» أدناه و«طلبات المذاخر» في قسم المذاخر.
             excludeFor: [
@@ -209,7 +230,7 @@ const sections: NavSection[] = [
               "/dashboard/purchases/warehouse-orders",
             ],
           },
-          { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order" },
+          { name: "الطلبات الذكية", href: "/dashboard/purchases/smart-order", icon: Lightbulb },
         ],
       },
     ],
@@ -220,11 +241,12 @@ const sections: NavSection[] = [
       {
         name: "الإدارة",
         href: "#",
-        icon: BarChart3,
+        icon: Landmark,
         subLinks: [
           {
             name: "التقارير",
             href: "/dashboard/reports",
+            icon: BarChart3,
             excludeFor: [
               "/dashboard/reports/analytics",
               "/dashboard/reports/branch-comparison",
@@ -233,28 +255,32 @@ const sections: NavSection[] = [
           {
             name: "التقارير المتقدمة",
             href: "/dashboard/reports/analytics",
+            icon: PieChart,
             plan: "enterprise",
             adminOnly: true,
           },
           {
             name: "مقارنة الفروع",
             href: "/dashboard/reports/branch-comparison",
+            icon: GitCompareArrows,
             plan: "enterprise",
           },
-          { name: "الصندوق", href: "/dashboard/finance/safes", icon: Wallet },
-          { name: "المصاريف", href: "/dashboard/expenses" },
+          { name: "الصندوق", href: "/dashboard/finance/safes", icon: PiggyBank },
+          { name: "المصاريف", href: "/dashboard/expenses", icon: Wallet },
           {
             name: "الفريق",
             href: "/dashboard/users",
+            icon: UserCog,
             excludeFor: ["/dashboard/users/permissions"],
           },
           {
             name: "الصلاحيات",
             href: "/dashboard/users/permissions",
+            icon: ShieldCheck,
             activeFor: ["/dashboard/users/permissions-guide"],
             plan: "pro",
           },
-          { name: "إدارة الفروع", href: "/dashboard/branches", plan: "pro" },
+          { name: "إدارة الفروع", href: "/dashboard/branches", icon: Store, plan: "pro" },
         ],
       },
     ],
@@ -429,6 +455,11 @@ export default function SideNav({
         .map((link: any) => {
           if (link.subLinks) {
             const visibleSubLinks = link.subLinks.filter((sub: any) => {
+              if (sub.href === "/dashboard/patients/whatsapp" && userPermissions) {
+                return userPermissions.canViewPatients &&
+                  (userPermissions.canManageWhatsAppTemplates ||
+                    userPermissions.canSendWhatsAppCampaigns);
+              }
               // روابط خاصة بالمدير فقط — تُخفى عن باقي الأدوار
               if (
                 sub.adminOnly &&
@@ -628,7 +659,7 @@ export default function SideNav({
                       <div
                         id={panelId}
                         hidden={!isExpanded}
-                        className="space-y-1 pr-9 pl-3 pt-1"
+                        className="space-y-1 pr-5 pl-3 pt-1"
                       >
                         {link.subLinks.map((subLink: any) => {
                           const isSubActive = isSubLinkActive(subLink, pathname);
@@ -638,7 +669,7 @@ export default function SideNav({
                               href={subLink.href}
                               onClick={() => setMobileOpen(false)}
                               className={cn(
-                                "flex h-8 items-center rounded-md px-3 text-[12px] font-semibold transition-all duration-150 relative gap-1",
+                                "flex h-8 items-center rounded-md px-3 text-[12px] font-semibold transition-all duration-150 relative gap-2",
                                 {
                                   "bg-primary text-primary-foreground": isSubActive,
                                   "text-muted-foreground hover:text-foreground hover:bg-muted/50":

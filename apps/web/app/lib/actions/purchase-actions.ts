@@ -253,7 +253,7 @@ export async function deletePurchase(purchaseId: string) {
     }
 
     await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "Purchase" WHERE "id" = ${purchaseId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT "id" FROM "public"."Purchase" WHERE "id" = ${purchaseId} FOR UPDATE`;
         const current = await tx.purchase.findFirst({ where: { id: purchaseId, ...tenantCtx.tenantBranchWhere } });
         if (!current || !['PENDING', 'CANCELLED'].includes(current.status)) throw new Error('تغيرت حالة الطلب؛ لا يمكن حذفه.');
         const linked = await tx.warehouseOrderEvent.findFirst({ where: { type: 'APPROVED', payload: { path: ['purchaseId'], equals: purchaseId } } });

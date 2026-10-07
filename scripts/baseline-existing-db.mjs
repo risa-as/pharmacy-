@@ -104,16 +104,27 @@ try {
     // 2. Where the database stands in the chain.
     const exactPrefix = recorded.size > 0 && names.slice(0, recorded.size).every((n) => recorded.has(n));
     let k = -1;
+    let mismatchedDefinitions = [];
     if (exactPrefix && diffAgainstPrefix(names, recorded.size, TARGET, SHADOW).code === 0) {
         k = recorded.size;
     } else {
         for (let count = names.length; count > lastRecorded; count--) {
             const r = diffAgainstPrefix(names, count, TARGET, SHADOW);
-            if (r.code === 0) { k = count; break; }
+            if (r.code === 0) {
+                // A function-only migration can leave Prisma's table schema
+                // unchanged. Do not record it as applied until its SQL objects
+                // also match; an older matching prefix must deploy it normally.
+                const replay = client(SHADOW);
+                try { mismatchedDefinitions = await changedSqlObjects(db, replay); }
+                finally { await replay.$disconnect(); }
+                if (!mismatchedDefinitions.length) { k = count; break; }
+                continue;
+            }
             if (r.code !== 2) fail(`prisma migrate diff failed at ${count} migrations:\n${r.out}`);
         }
     }
     if (k < 0) {
+        if (mismatchedDefinitions.length) fail(`SQL object definitions or enabled state differ from the replayed migrations: ${mismatchedDefinitions.join(', ')}`);
         const diff = diffAgainstPrefix(names, names.length, TARGET, SHADOW, true);
         fail(`the database matches no point of the migration chain that includes its recorded history.\n`
             + `Difference from the full chain (review; do not apply blindly):\n${diff.out.slice(0, 6000)}`);

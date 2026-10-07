@@ -3,7 +3,9 @@ export const dynamic = 'force-dynamic';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { prisma } from '@/app/lib/prisma';
-import { auth } from '@/auth';
+import { transferAccess } from '@/app/lib/transfer-access';
+import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
 import { ArrowRight, Building2 } from 'lucide-react';
 import CreateTransferForm from '@/app/ui/inventory/transfers/create-form';
 
@@ -12,14 +14,16 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-    const session = await auth();
-    const branchId = session?.user?.branchId;
-
+    const ctx = await transferAccess();
+    if (ctx instanceof NextResponse) redirect('/dashboard?denied=1');
+    const branchId = ctx.user.branchId;
     if (!branchId) return <div>يرجى تسجيل الدخول</div>;
+    const source = await prisma.branch.findFirst({ where: { AND: [ctx.branchModelWhere, { id: branchId }] } });
+    if (!source) redirect('/dashboard?denied=1');
 
     // Fetch branches to select from (exclude current branch)
     const branches = await prisma.branch.findMany({
-        where: { id: { not: branchId } },
+        where: { organizationId: source.organizationId, id: { not: branchId } },
         select: { id: true, name: true }
     });
 
@@ -28,13 +32,13 @@ export default async function Page() {
         where: {
             branchId,
             batches: {
-                some: { quantity: { gt: 0 } }
+                some: { quantity: { gt: 0 }, expiryDate: { gt: new Date() } }
             }
         },
         include: {
             drug: { select: { id: true, tradeName: true, barcode: true } },
             batches: {
-                where: { quantity: { gt: 0 } }
+                where: { quantity: { gt: 0 }, expiryDate: { gt: new Date() } }
             }
         }
     });
@@ -42,6 +46,7 @@ export default async function Page() {
     // Flatten data for the client component
     const availableStock = inventory.flatMap((inv: any) =>
         inv.batches.map((batch: any) => ({
+            batchId: batch.id,
             drugId: inv.drug.id,
             tradeName: inv.drug.tradeName,
             barcode: inv.drug.barcode,
@@ -82,7 +87,7 @@ export default async function Page() {
                 </div>
             ) : (
                 <div className="glass-card p-6">
-                    <CreateTransferForm branches={branches} availableStock={availableStock} />
+                    <CreateTransferForm branches={branches} availableStock={availableStock} actorId={ctx.user.id} sourceBranchId={source.id} />
                 </div>
             )}
         </div>

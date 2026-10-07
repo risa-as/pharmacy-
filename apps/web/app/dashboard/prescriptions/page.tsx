@@ -10,6 +10,7 @@ import {
   Stethoscope,
   Pill,
   Layers,
+  ScrollText,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -104,7 +105,7 @@ export default async function PrescriptionsPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
-            <FileText className="w-6 h-6 text-primary" />
+            <ScrollText className="w-6 h-6 text-primary" />
             الوصفات الطبية
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

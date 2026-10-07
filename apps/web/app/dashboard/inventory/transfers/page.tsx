@@ -4,11 +4,12 @@ import { prisma } from '@/app/lib/prisma';
 import TransfersTable from '@/app/ui/inventory/transfers/table';
 import { StartTransferButton } from '@/app/ui/inventory/transfers/buttons';
 import { auth } from '@/auth';
+import { notFound } from 'next/navigation';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { requireFeature } from '@/app/lib/page-guards';
 import UpgradeRequired from '@/app/ui/plan-enforcement/UpgradeRequired';
 import { NextResponse } from 'next/server';
-import { ArrowLeftRight, Search, Clock, ArrowUpRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { Clock, ArrowUpRight, CheckCircle2, Loader2, Route } from 'lucide-react';
 
 export const metadata: Metadata = {
     title: 'تحويلات الأدوية بين الأفرع | Faramace',
@@ -20,17 +21,25 @@ export default async function Page(
             query?: string;
             page?: string;
             tab?: string;
+            branch?: string;
         }>;
     }
 ) {
     const searchParams = await props.searchParams;
     const session = await auth();
-    const branchId = session?.user?.branchId;
+    const accountBranchId = session?.user?.branchId;
 
-    if (!branchId) return <div>يرجى تسجيل الدخول</div>;
+    if (!accountBranchId) return <div>يرجى تسجيل الدخول</div>;
 
     const tenantCtx = await getTenantContext();
     if (tenantCtx instanceof NextResponse) return null;
+    const branches = await prisma.branch.findMany({
+        where: tenantCtx.branchModelWhere,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
+    const branchId = searchParams?.branch || accountBranchId;
+    if (!branches.some((branch) => branch.id === branchId)) notFound();
     if (tenantCtx.organizationId) {
         const upgrade = await requireFeature(tenantCtx.organizationId, 'interBranchTransfers');
         if (upgrade) return <UpgradeRequired {...upgrade} />;
@@ -65,7 +74,7 @@ export default async function Page(
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-2xl font-bold font-cairo text-foreground flex items-center gap-2">
-                        <ArrowLeftRight className="w-6 h-6 text-primary" />
+                        <Route className="w-6 h-6 text-primary" />
                         التحويلات بين الأفرع
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
@@ -74,6 +83,18 @@ export default async function Page(
                 </div>
                 <StartTransferButton />
             </div>
+
+            {branches.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap" aria-label="اختيار فرع التحويلات">
+                    <span className="text-sm font-bold text-muted-foreground">الفرع:</span>
+                    {branches.map((branch) => (
+                        <a key={branch.id}
+                            href={`/dashboard/inventory/transfers?branch=${encodeURIComponent(branch.id)}&tab=${tab}&query=${encodeURIComponent(query)}`}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${branch.id === branchId ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground hover:border-primary/50'}`}
+                        >{branch.name}</a>
+                    ))}
+                </div>
+            )}
 
             {/* بطاقات الإحصائيات */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -104,7 +125,7 @@ export default async function Page(
                         return (
                             <a
                                 key={t.key}
-                                href={`/dashboard/inventory/transfers?tab=${t.key}&query=${encodeURIComponent(query)}`}
+                                href={`/dashboard/inventory/transfers?branch=${encodeURIComponent(branchId)}&tab=${t.key}&query=${encodeURIComponent(query)}`}
                                 className={`relative px-4 py-3 text-sm font-bold transition-colors flex items-center gap-2 ${
                                     active
                                         ? 'text-primary'
@@ -123,21 +144,6 @@ export default async function Page(
                             </a>
                         );
                     })}
-                </div>
-
-                {/* البحث */}
-                <div className="p-4 border-b border-border">
-                    <form method="GET" className="relative max-w-sm">
-                        <input type="hidden" name="tab" value={tab} />
-                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <input
-                            type="text"
-                            name="query"
-                            defaultValue={query}
-                            placeholder="بحث في التحويلات..."
-                            className="w-full pr-10 pl-4 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-                        />
-                    </form>
                 </div>
 
                 <Suspense

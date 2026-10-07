@@ -406,7 +406,7 @@ export async function approveWarehouseOrder(input: {
                 });
             }
 
-            await tx.$queryRaw`SELECT "id" FROM "WarehouseCustomer" WHERE "id" = ${customer.id} FOR UPDATE`;
+            await tx.$queryRaw`SELECT "id" FROM "public"."WarehouseCustomer" WHERE "id" = ${customer.id} FOR UPDATE`;
             customer = await tx.warehouseCustomer.findUniqueOrThrow({ where: { id: customer.id } });
             const purchase = await tx.purchase.create({
                 data: {
