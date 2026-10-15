@@ -12,6 +12,7 @@ on:
       - 'patches/**'
       - '.github/workflows/mobile-update.yml'
       - 'scripts/check-mobile-runtime.mjs'
+      - 'scripts/check-mobile-runtime.test.mjs'
   workflow_dispatch:
 
 permissions:
@@ -45,7 +46,9 @@ jobs:
       - name: Mobile TypeScript
         run: pnpm --filter faramace-mobile typecheck
       - name: Verify native compatibility before publishing
-        run: node scripts/check-mobile-runtime.mjs
+        run: |
+          node --test scripts/check-mobile-runtime.test.mjs
+          node scripts/check-mobile-runtime.mjs
       - name: Verify Expo authentication
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
 
@@ -14,10 +14,23 @@ const canonical = value => {
     return value;
 };
 const hash = value => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+const nativeAssets = {};
+const collectFiles = value => {
+    if (typeof value === 'string' && value.startsWith('./')) {
+        const filePath = resolve(root, 'apps/mobile', value);
+        if (existsSync(filePath) && statSync(filePath).isFile()) {
+            nativeAssets[value] = createHash('sha256').update(readFileSync(filePath)).digest('hex');
+        }
+    } else if (value && typeof value === 'object') {
+        Object.values(value).forEach(collectFiles);
+    }
+};
+collectFiles(nativeConfig);
 const expected = {
     version,
     configHash: hash(nativeConfig),
     dependenciesHash: hash(pkg.dependencies),
+    nativeAssetsHash: hash(nativeAssets),
     // Conservative: transitive native dependency changes can affect compatibility.
     lockHash: createHash('sha256').update(read('pnpm-lock.yaml').replace(/\r\n/g, '\n')).digest('hex'),
 };
