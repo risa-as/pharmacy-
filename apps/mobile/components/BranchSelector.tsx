@@ -13,7 +13,7 @@ interface Branch {
 interface BranchSelectorProps {
     selectedBranchId: string | null;
     onSelectBranch: (branchId: string | null) => void;
-    /** When true, renders nothing if only one branch exists (filter is meaningless). */
+    /** Select the sole branch automatically and hide its field once selected. */
     hideIfSingle?: boolean;
     /** Keep the branch visible while preventing changes during an operation. */
     disabled?: boolean;
@@ -43,13 +43,23 @@ export const BranchSelector = ({ selectedBranchId, onSelectBranch, hideIfSingle,
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
+        let active = true;
         apiService.getBranches()
-            .then(list => setBranches(Array.isArray(list) ? list : []))
+            .then(list => { if (active) setBranches(Array.isArray(list) ? list : []); })
             .catch(() => {})
-            .finally(() => setLoading(false));
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
     }, []);
 
-    if (hideIfSingle && (loading || branches.length <= 1)) return null;
+    const soleBranchId = branches.length === 1 ? branches[0].id : null;
+    useEffect(() => {
+        if (hideIfSingle && !loading && !disabled && soleBranchId && selectedBranchId !== soleBranchId) {
+            onSelectBranch(soleBranchId);
+        }
+    }, [hideIfSingle, loading, disabled, soleBranchId, selectedBranchId, onSelectBranch]);
+
+    // Never hide an unresolved/empty list or a locked operation's different branch.
+    if (hideIfSingle && soleBranchId && selectedBranchId === soleBranchId) return null;
 
     const options: Array<{ id: string | null; name: string }> = [
         ...(allowAll ? [{ id: null, name: ALL_BRANCHES_LABEL }] : []),

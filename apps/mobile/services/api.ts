@@ -1,9 +1,11 @@
 import type { PlanningResult, PlanningSettings } from '../utils/smart-planning';
+import { foregroundReads } from '../utils/foreground-work';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { pollingService } from './polling';
+import { clearAssistantSession } from '../utils/assistant';
 
 // متغير لتخزين الرابط في الذاكرة لتجنب القراءة من الستورج في كل طلب
 /**
@@ -60,6 +62,8 @@ function _cacheTTL(endpoint: string): number {
 // Weekly / monthly reports aggregate large date ranges on the server and can
 // exceed the default 8 s limit. Override per path prefix as needed.
 const _TIMEOUT_MS: Array<[string, number]> = [
+    ['/ai/chat', 75_000],
+    ['/ai/insights', 45_000],
     ['/smart-order', 30_000],
     ['/warehouses/orders', 40_000],
     ['/inventory/stocktake', 40_000],
@@ -141,6 +145,11 @@ export class ApiError extends Error {
     constructor(message: string, readonly status: number, readonly code?: string) { super(message); this.name = 'ApiError'; }
 }
 
+function inventoryEntryFailure(error: unknown) {
+    if (error instanceof ApiError) return { success: false as const, message: error.message, status: error.status, code: error.code };
+    return { success: false as const, message: 'تعذر التأكد من نتيجة الطلب. راجع المخزون قبل إعادة الإضافة.' };
+}
+
 export class SessionChangedError extends Error {
     constructor(message = 'Session changed while the request was in flight') { super(message); this.name = 'SessionChangedError'; }
 }
@@ -153,6 +162,7 @@ export function rotateCachedToken(token:string, previousToken:string, generation
 }
 export function setCachedToken(token: string | null) {
     if (cachedToken !== token) {
+        clearAssistantSession();
         _sessionGeneration++;
         _branchCache = null;
         _responseCache.clear();
@@ -279,6 +289,10 @@ async function fetchOnce<T>(
     }
 
     const controller = new AbortController();
+    const callerSignal = options.signal;
+    const cancel = () => controller.abort();
+    if (callerSignal?.aborted) controller.abort();
+    callerSignal?.addEventListener('abort', cancel);
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -287,8 +301,6 @@ async function fetchOnce<T>(
             headers,
             signal: controller.signal,
         });
-
-        clearTimeout(timeoutId);
 
         // A response authenticated with an old account must not log out or
         // return data into a newer session after the token has changed.
@@ -325,19 +337,20 @@ async function fetchOnce<T>(
             throw new SessionChangedError('Session changed while the request was in flight');
         }
         return result;
-    } catch (error) {
+    } finally {
         clearTimeout(timeoutId);
-        throw error;
+        callerSignal?.removeEventListener('abort', cancel);
     }
 }
 
 // Helper to make authenticated requests with exponential backoff retry on network errors
-async function request<T>(
+async function requestCore<T>(
     endpoint: string,
     options: RequestInit = {},
     noAutoLogout = false,
     behavior: { forceRefresh?: boolean; noRetry?: boolean } = {},
 ): Promise<T> {
+    if (options.signal?.aborted) throw Object.assign(new Error('Request cancelled'), { name: 'AbortError' });
     const isGet = !options.method || options.method.toUpperCase() === 'GET';
     const cacheScope = _cacheScope(endpoint);
     const sessionGeneration = _sessionGeneration;
@@ -357,7 +370,7 @@ async function request<T>(
     }
 
     // ── 2. In-flight deduplication (GET only) ────────────────────────────────
-    if (isGet && !behavior.forceRefresh) {
+    if (isGet && !behavior.forceRefresh && !options.signal) {
         const pending = _inflight.get(endpoint);
         if (pending) return pending as Promise<T>;
     }
@@ -400,7 +413,7 @@ async function request<T>(
                 return result;
             } catch (error) {
                 lastError = error;
-                if (!isNetworkError(error) || attempt === MAX_RETRIES) break;
+                if (options.signal?.aborted || !isNetworkError(error) || attempt === MAX_RETRIES) break;
                 const delay = BACKOFF_MS[attempt] ?? 4000;
                 if (__DEV__) console.warn(`[API] Retry ${attempt + 1} for ${endpoint} in ${delay}ms`);
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -409,7 +422,7 @@ async function request<T>(
         throw lastError;
     };
 
-    if (isGet) {
+    if (isGet && !options.signal) {
         const promise = execute();
         _inflight.set(endpoint, promise);
         void promise.finally(() => {
@@ -418,6 +431,8 @@ async function request<T>(
         }).catch(() => {});
         return promise;
     }
+
+    if (isGet) return execute();
 
     // Writes are never cached. Preserve exact-path invalidation for every
     // successful HTTP mutation, then clear the inventory and its derived data
@@ -437,16 +452,22 @@ async function backgroundRequest<T>(endpoint: string, options: RequestInit = {})
     return request<T>(endpoint, options, true);
 }
 
+async function request<T>(endpoint: string, options: RequestInit = {}, noAutoLogout = false, behavior: { forceRefresh?: boolean; noRetry?: boolean } = {}): Promise<T> {
+    const done = !noAutoLogout && (!options.method || options.method.toUpperCase() === 'GET') ? foregroundReads.begin() : () => {};
+    try { return await requestCore<T>(endpoint, options, noAutoLogout, behavior); }
+    finally { done(); }
+}
+
 // Export request helpers
 export { request, backgroundRequest };
 
 // API Service methods
 export const apiService = {
     // Dashboard Stats
-    async getStats(branchId?: string) {
+    async getStats(branchId?: string, forceRefresh = false) {
         try {
             const query = branchId ? `?branchId=${branchId}` : '';
-            return await request<any>(`/stats${query}`);
+            return await request<any>(`/stats${query}`, {}, false, { forceRefresh });
         } catch (error) {
             console.error('API Error getStats:', error);
             // For development, allow mock stats
@@ -582,7 +603,7 @@ export const apiService = {
             });
         } catch (error) {
             console.error('API Error checkBarcodeExact:', error);
-            return { success: false, message: 'Server error' };
+            return inventoryEntryFailure(error);
         }
     },
 
@@ -606,7 +627,7 @@ export const apiService = {
             });
         } catch (error) {
             console.error('API Error addBatch:', error);
-            return { success: false, message: 'Server error' };
+            return inventoryEntryFailure(error);
         }
     },
 
@@ -625,6 +646,7 @@ export const apiService = {
         /** ميزة وحدة التسعير: عدد الأشرطة في الباكيت — يُثبّت على الدواء ومشترك بين كل الصيدليات. */
         unitsPerPack?: number | null;
     }) {
+        if (!data.branchId?.trim()) return { success: false, message: 'اختر الفرع الذي ستُضاف إليه الكمية.' };
         try {
             return await request<any>(`/inventory/add-to-branch`, {
                 method: 'POST',
@@ -633,7 +655,7 @@ export const apiService = {
             });
         } catch (error) {
             console.error('API Error addToBranch:', error);
-            return { success: false, message: 'Server error' };
+            return inventoryEntryFailure(error);
         }
     },
 
@@ -661,6 +683,7 @@ export const apiService = {
         /** ميزة وحدة التسعير: عدد الأشرطة في الباكيت — يُثبّت على الدواء ومشترك بين كل الصيدليات. */
         unitsPerPack?: number | null;
     }) {
+        if (!data.branchId?.trim()) return { success: false, message: 'اختر الفرع الذي ستُضاف إليه الكمية.' };
         try {
             return await request<any>(`/inventory/create-quick`, {
                 method: 'POST',
@@ -669,7 +692,7 @@ export const apiService = {
             });
         } catch (error) {
             console.error('API Error createQuickDrug:', error);
-            return { success: false, message: 'Server error' };
+            return inventoryEntryFailure(error);
         }
     },
 
@@ -723,20 +746,20 @@ export const apiService = {
     },
 
     // Get alerts
-    async getAlerts(branchId?: string) {
+    async getAlerts(branchId?: string, forceRefresh = false, signal?: AbortSignal) {
         try {
             const query = branchId ? `?branchId=${branchId}` : '';
-            return await request<any[]>(`/alerts${query}`);
+            return await request<any[]>(`/alerts${query}`, { signal }, false, { forceRefresh });
         } catch (error) {
-            console.error('API Error getAlerts:', error);
-            return [];
+            if (!signal?.aborted) console.error('API Error getAlerts:', error);
+            throw error;
         }
     },
 
-    async getSmartPlanning(settings: PlanningSettings, branchId?: string, forceRefresh = false) {
+    async getSmartPlanning(settings: PlanningSettings, branchId?: string, forceRefresh = false, signal?: AbortSignal) {
         const params = new URLSearchParams({ format: 'planning', ...Object.fromEntries(Object.entries(settings).map(([k, v]) => [k, String(v)])) });
         if (branchId) params.set('branchId', branchId);
-        return request<PlanningResult>(`/smart-order?${params}`, {}, false, { forceRefresh });
+        return request<PlanningResult>(`/smart-order?${params}`, { signal }, false, { forceRefresh });
     },
 
     // Get Smart Orders
@@ -761,13 +784,13 @@ export const apiService = {
     },
 
     // Get Purchases List
-    async getPurchases(branchId?: string) {
+    async getPurchases(branchId?: string, signal?: AbortSignal) {
         try {
             const query = branchId ? `?branchId=${branchId}` : '';
-            return await request<any[]>(`/purchases${query}`);
+            return await request<any[]>(`/purchases${query}`, { signal });
         } catch (error) {
-            console.error('API Error getPurchases:', error);
-            return [];
+            if (!signal?.aborted) console.error('API Error getPurchases:', error);
+            throw error;
         }
     },
 
@@ -837,13 +860,13 @@ export const apiService = {
     },
 
     // Get Reports (Sales)
-    async getReports(period: 'daily' | 'weekly' | 'monthly' = 'daily', branchId?: string) {
+    async getReports(period: 'daily' | 'weekly' | 'monthly' = 'daily', branchId?: string, forceRefresh = false, signal?: AbortSignal) {
         try {
             const query = branchId ? `&branchId=${branchId}` : '';
-            return await request<any>(`/reports/sales?period=${period}${query}`);
+            return await request<any>(`/reports/sales?period=${period}${query}`, { signal }, false, { forceRefresh });
         } catch (error) {
-            console.error('API Error getReports:', error);
-            return { sales: [], summary: { total: 0, count: 0 } };
+            if (!signal?.aborted) console.error('API Error getReports:', error);
+            throw error;
         }
     },
 

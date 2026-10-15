@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { apiService } from '../../services/api';
+import { apiService, getSessionGeneration } from '../../services/api';
 import { dbService } from '../../services/db';
 import { syncService } from '../../services/sync';
 import { useTheme } from '../../context/ThemeContext';
@@ -17,6 +17,7 @@ import { ScreenHeader, HeaderIconButton } from '../../components/ui/ScreenHeader
 import { StatusBadge, SegmentedTabs, FormField, AppButton } from '../../components/ui/Kit';
 import { formatNumber, CURRENCY } from '../../utils/format';
 import { consumeManualEntry } from '../../utils/manual-entry';
+import { resolveInventoryEntryBranch, inventoryBarcodeDestination } from '../../utils/inventory-entry';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
@@ -127,6 +128,8 @@ export default function InventoryScreen() {
     const [refreshing, setRefreshing]     = useState(false);
     const [loading, setLoading]           = useState(true);
     const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+    const selectedBranchRef = useRef(selectedBranch);
+    selectedBranchRef.current = selectedBranch;
     const [isOnline, setIsOnline]         = useState(true);
     // Only the most recent load may update the screen. This prevents an older
     // branch/pre-save request from replacing the result of a newer refresh.
@@ -323,17 +326,35 @@ export default function InventoryScreen() {
         }
     }, [showBatchModal, showBranchModal, showCreateModal]);
 
+    const requireEntryBranch = async () => {
+        const session = getSessionGeneration();
+        try {
+            const branchId = await resolveInventoryEntryBranch(isAdmin, selectedBranchRef.current, authBranchId, () => apiService.getBranches(), () => selectedBranchRef.current);
+            if (session !== getSessionGeneration()) return null;
+            if (!branchId) Alert.alert('اختر الفرع', 'حدد الفرع الذي ستُضاف إليه الكمية قبل إضافة صنف أو دفعة.');
+            else if (isAdmin) {
+                selectedBranchRef.current = branchId;
+                setSelectedBranch(branchId);
+            }
+            return branchId;
+        } catch {
+            if (session === getSessionGeneration()) Alert.alert('تعذر تحميل الفروع', 'تحقق من الاتصال ثم أعد المحاولة.');
+            return null;
+        }
+    };
+
     const handleScannedProduct = async (code: string) => {
         if (!isOnline) { Alert.alert('تنبيه', 'يجب أن تكون متصلاً بالإنترنت لإضافة عناصر جديدة.'); return; }
+        const branchId = await requireEntryBranch();
+        if (!branchId) return;
         setLoading(true);
         try {
-            const res = await apiService.checkBarcodeExact(code, selectedBranch || undefined);
-            if (res.success && res.exists) {
-                if (res.inventory) setShowBatchModal(res.inventory);
-                else if (res.drug) setShowBranchModal(res.drug);
-            } else {
-                setShowCreateModal(code);
-            }
+            const res = await apiService.checkBarcodeExact(code, branchId);
+            const destination = inventoryBarcodeDestination(res);
+            if (destination === 'batch') setShowBatchModal(res.inventory);
+            else if (destination === 'branch') setShowBranchModal(res.drug);
+            else if (destination === 'create') setShowCreateModal(code);
+            else Alert.alert('تعذر التحقق من المنتج', res.message || 'لم تكتمل قراءة الباركود. لم يُفتح نموذج الإضافة؛ حاول التحقق مجدداً.');
         } catch { Alert.alert('خطأ', 'فشل التحقق من المنتج'); }
         finally { setLoading(false); }
     };
@@ -494,7 +515,9 @@ export default function InventoryScreen() {
         }, { currentPrice: Number(showBatchModal?.price) || null });
     };
 
-    const handleAddToBranch = () => {
+    const handleAddToBranch = async () => {
+        const branchId = await requireEntryBranch();
+        if (!branchId) return;
         if (!formData.price || !formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء كافة الحقول الأساسية'); return;
         }
@@ -502,7 +525,7 @@ export default function InventoryScreen() {
             setModalLoading(true);
             try {
                 const result = await apiService.addToBranch({
-                    drugId: showBranchModal.id, branchId: selectedBranch!,
+                    drugId: showBranchModal.id, branchId,
                     price: parseFloat(formData.price) || 0,
                     cost: computedStripCost,
                     minStock: parseInt(formData.minStock) || 5,
@@ -525,7 +548,9 @@ export default function InventoryScreen() {
         }, { sellPrice: parseFloat(formData.price) || 0 });
     };
 
-    const handleCreateDrug = () => {
+    const handleCreateDrug = async () => {
+        const branchId = await requireEntryBranch();
+        if (!branchId) return;
         if (!formData.tradeName || !formData.price || !formData.quantity || !formData.expiryDate) {
             Alert.alert('تنبيه', 'يرجى ملء الحقول الأساسية'); return;
         }
@@ -536,7 +561,7 @@ export default function InventoryScreen() {
                     barcode: showCreateModal!, tradeName: formData.tradeName,
                     scientificName: formData.scientificName, drugType: 'Tablet', dosage: 'Custom',
                     unit: 'Box', category: 'General', manufacturer: 'Unknown', country: 'Unknown',
-                    branchId: selectedBranch!, price: parseFloat(formData.price) || 0,
+                    branchId, price: parseFloat(formData.price) || 0,
                     costPrice: computedStripCost,
                     minStock: parseInt(formData.minStock) || 5, maxStock: parseInt(formData.maxStock) || 100,
                     batchNumber: formData.batchNumber || '',
@@ -868,9 +893,9 @@ export default function InventoryScreen() {
         </View>
     ) : null;
 
-    const openManualAdd = () => {
+    const openManualAdd = async () => {
         if (!isOnline) { Alert.alert('تنبيه', 'يجب أن تكون متصلاً بالإنترنت لإضافة عناصر جديدة.'); return; }
-        if (isAdmin && !selectedBranch) { Alert.alert('اختر الفرع', 'حدد الفرع الذي ستُضاف إليه الكمية قبل إضافة صنف أو دفعة.'); return; }
+        if (!(await requireEntryBranch())) return;
         setManualBarcode('');
         setShowAddChooser(true);
     };
@@ -928,35 +953,32 @@ export default function InventoryScreen() {
                     >
                         <Ionicons name="scan-outline" size={21} color={C.primary} />
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => {
+                            setShowSortMenu(true);
+                            sortSheetY.setValue(400);
+                            Animated.spring(sortSheetY, { toValue: 0, useNativeDriver: false, bounciness: 2 }).start();
+                        }}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel="ترتيب المخزون"
+                        style={{ width: 40, height: 40, borderRadius: Radius.control, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        <Ionicons name="swap-vertical" size={20} color={C.primary} />
+                    </TouchableOpacity>
                 </View>
 
-                {/* Branch + sort + status tabs */}
+                {isAdmin && (
+                    <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} hideIfSingle />
+                )}
+
+                {/* Status tabs stay compact when the single-branch selector is hidden. */}
                 <View style={{ backgroundColor: C.card, borderRadius: Radius.card, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 10 }}>
-                        {isAdmin ? (
-                            <BranchSelector selectedBranchId={selectedBranch} onSelectBranch={setSelectedBranch} inline />
-                        ) : (
-                            <Text style={{ flex: 1, color: C.mutedForeground, fontSize: 13.5, textAlign: 'right' }}>فرعك الحالي</Text>
-                        )}
-                        <TouchableOpacity
-                            onPress={() => {
-                                setShowSortMenu(true);
-                                sortSheetY.setValue(400);
-                                Animated.spring(sortSheetY, { toValue: 0, useNativeDriver: false, bounciness: 2 }).start();
-                            }}
-                            activeOpacity={0.8}
-                            accessibilityLabel="ترتيب"
-                            style={{ width: 44, height: 44, borderRadius: Radius.control, backgroundColor: C.primaryMuted, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <Ionicons name="swap-vertical" size={20} color={C.primary} />
-                        </TouchableOpacity>
-                    </View>
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         contentContainerStyle={{ flexDirection: 'row-reverse', gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}
-                        style={{ borderTopWidth: 1, borderTopColor: C.border }}
                     >
                         {TABS.map(t => {
                             const active = t.key === activeTab;

@@ -324,6 +324,7 @@ export function AppButton({ label, onPress, icon, variant = 'primary', loading, 
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
+            accessibilityLabel={label}
             style={[{
                 flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: compact ? 4 : 8,
                 backgroundColor: isDisabled && variant === 'primary' ? C.border : palette.bg,

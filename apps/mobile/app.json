@@ -2,7 +2,16 @@
   "expo": {
     "name": "Faramace",
     "slug": "faramace",
-    "version": "1.0.0",
+    "version": "1.0.1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/808c2b2a-ec42-46c1-8a3a-0e2054b7ea40",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 1500
+    },
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

@@ -8,6 +8,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { dbService } from "../services/db";
 import { syncService } from "../services/sync";
 import { notificationsService } from "../services/notifications";
+import { startAutomaticUpdates } from "../services/app-updates";
 
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { AuthProvider, useAuth } from "../context/AuthContext";
@@ -89,7 +90,7 @@ function RootStack() {
     if (isLoading || !user) return;
     // AuthProvider has finished validating and renewing the startup session.
     return NetInfo.addEventListener(state => {
-      if (state.isConnected && state.isInternetReachable) void syncService.syncData();
+      if (state.isConnected && state.isInternetReachable) void syncService.syncData({ prioritizeForeground: true });
     });
   }, [isLoading, user?.id, user?.branchId]);
 
@@ -139,6 +140,8 @@ function RootStack() {
 }
 
 export default function RootLayout() {
+  useEffect(startAutomaticUpdates, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>

@@ -6,7 +6,12 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit --incremental false",
+    "update:production": "node ../../scripts/check-mobile-runtime.mjs && eas update --channel production --platform all --non-interactive",
+    "update:preview": "node ../../scripts/check-mobile-runtime.mjs && eas update --channel preview --platform all --non-interactive",
+    "build:production:apk": "eas build --platform android --profile production-apk"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -34,6 +39,8 @@
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "expo-system-ui": "~6.0.9",
+    "expo-updates": "~29.0.18",
+    "expo-updates": "~29.0.18",
     "expo-web-browser": "~15.0.11",
     "nativewind": "^2.0.11",
     "react": "19.1.0",

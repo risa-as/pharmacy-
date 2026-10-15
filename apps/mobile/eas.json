@@ -1,14 +1,19 @@
 {
     "cli": {
-        "version": ">= 5.0.0",
+        "version": ">= 21.2.0",
         "appVersionSource": "remote"
     },
     "build": {
         "development": {
+            "channel": "development",
+            "environment": "development",
             "developmentClient": true,
             "distribution": "internal"
         },
         "preview": {
+            "channel": "preview",
+            "environment": "preview",
+            "autoIncrement": true,
             "distribution": "internal",
             "android": {
                 "buildType": "apk"
@@ -20,6 +25,9 @@
             }
         },
         "production": {
+            "channel": "production",
+            "environment": "production",
+            "autoIncrement": true,
             "android": {
                 "buildType": "app-bundle"
             },
@@ -27,6 +35,13 @@
             "prebuildCommand": "prebuild --clean --no-install",
             "env": {
                 "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
+            }
+        },
+        "production-apk": {
+            "extends": "production",
+            "distribution": "internal",
+            "android": {
+                "buildType": "apk"
             }
         }
     },

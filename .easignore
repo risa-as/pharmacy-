@@ -1,0 +1,102 @@
+# Dependency directories
+node_modules/
+.pnpm-store
+
+# Next.js
+.next/
+.next-*/
+out/
+build/
+
+# Turborepo
+.turbo/
+
+# Vite/Electron/Expo
+dist/
+dist-electron/
+.expo/
+release/
+apps/desktop/release/
+apps/desktop/dist/
+apps/desktop/dist-electron/
+apps/desktop/out/
+apps/desktop/release-seed/
+
+# Environment variables
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and databases
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# Local seed / utility scripts
+add-inventory-demo.mjs
+
+# Project specific temporary and output files
+apps/web/backups/
+apps/desktop/settings_output.txt
+apps/desktop/settings_output_utf8.txt
+apps/web/output.txt
+apps/web/branch_id.txt
+apps/web/karada_id.txt
+apps/web/test_error.json
+tmp-test.ts
+system_audit.md.resolved
+extract.txt
+settings_output_utf8.txt
+tmp/
+temp/
+coverage/
+artifacts/
+*.tsbuildinfo
+
+# AI & Tooling
+.claude/
+
+# Review / audit documents: kept local, never pushed (owner decision 2026-09-23)
+/docs/quality/
+/warehouse-remediation.md
+# EAS Build: output directories may be Windows junctions/symlinks.
+# No trailing slash: exclude the link itself before EAS tries to recreate it.
+**/.next
+**/.next-*
+**/dist
+**/dist-electron
+**/.expo
+**/build
+**/out
+**/release
+**/.env*
+/artifacts
+/docs/quality
+
+# Android signing files are provided by EAS credentials, never by the archive.
+# Native projects are generated from app.json, including the EAS Update config.
+/apps/mobile/android
+/apps/mobile/ios
+**/credentials.json
+**/*.jks
+**/*.keystore
+**/local.properties
