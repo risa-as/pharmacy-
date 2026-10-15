@@ -25,6 +25,7 @@ type NavigationTree = { routes: readonly { name: string; state?: NavigationTree 
 export function isSafeUpdateHistory(state: NavigationTree | undefined): boolean {
     if (!state) return false;
     return state.routes.every(route => {
+        if (route.name === '__root') return isSafeUpdateHistory(route.state); // Expo's generated outer slot.
         if (route.name === '(tabs)') return true; // Hidden tab editors register guards.
         if (route.name === 'settings') return !!route.state && route.state.routes.every(r => ['about', 'theme'].includes(r.name));
         return ['index', 'more', 'settings/about', 'settings/theme'].includes(route.name);

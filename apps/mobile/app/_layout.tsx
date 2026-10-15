@@ -1,6 +1,6 @@
 import { routePermission } from "../utils/route-access";
 import { View, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Stack, router, usePathname, useRootNavigationState } from "expo-router";
+import { Stack, router, usePathname, useNavigationContainerRef } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { CAIRO_FONTS } from "../utils/cairo-font-assets";
@@ -30,16 +30,25 @@ function RootStack() {
   const { isDarkMode } = useTheme();
   const { can, isLoading, user } = useAuth();
   const pathname = usePathname();
-  const safeHistory = isSafeUpdateHistory(useRootNavigationState());
+  const navigationRef = useNavigationContainerRef();
   const required = routePermission(pathname);
   const { hasUnsavedCheckout, flushDraft } = useCheckout();
-  const updateSafety = useRef({ pathname, safeHistory, hasUnsavedCheckout, isLoading, flushDraft });
-  updateSafety.current = { pathname, safeHistory, hasUnsavedCheckout, isLoading, flushDraft };
+  const updateSafety = useRef({ pathname, hasUnsavedCheckout, isLoading, flushDraft });
+  updateSafety.current = { pathname, hasUnsavedCheckout, isLoading, flushDraft };
   const interactionVersion = useRef(0);
   useEffect(() => startAutomaticUpdates({
     canReload: () => {
       const current = updateSafety.current;
-      return !current.isLoading && current.safeHistory && !current.hasUnsavedCheckout && !hasUpdateProtection() && isSafeUpdateRoute(current.pathname);
+      const safety = {
+        authReady: !current.isLoading,
+        safeHistory: isSafeUpdateHistory(navigationRef.current?.getRootState()),
+        checkoutEmpty: !current.hasUnsavedCheckout,
+        formsClosed: !hasUpdateProtection(),
+        safeRoute: isSafeUpdateRoute(current.pathname),
+      };
+      const safe = Object.values(safety).every(Boolean);
+      if (!safe) console.info('[Faramace updates] Resume deferred', JSON.stringify(safety));
+      return safe;
     },
     beforeReload: () => updateSafety.current.flushDraft(),
     interactionVersion: () => interactionVersion.current,
