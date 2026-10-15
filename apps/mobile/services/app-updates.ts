@@ -1,6 +1,23 @@
 import { AppState } from 'react-native';
 import * as Updates from 'expo-updates';
 
+export type AppUpdateResult = 'ready' | 'current' | 'cancelled' | 'unsupported';
+let activeCheck: Promise<AppUpdateResult> | undefined;
+
+/** Share a single check/download between the About screen and background checks. */
+export function checkAndDownloadAppUpdate(shouldContinue = () => true): Promise<AppUpdateResult> {
+    if (__DEV__ || !Updates.isEnabled) return Promise.resolve('unsupported');
+    if (activeCheck) return activeCheck;
+    activeCheck = (async (): Promise<AppUpdateResult> => {
+        const result = await Updates.checkForUpdateAsync();
+        if (!shouldContinue()) return 'cancelled';
+        if (!result.isAvailable && !result.isRollBackToEmbedded) return 'current';
+        const fetched = await Updates.fetchUpdateAsync();
+        return fetched.isNew || fetched.isRollBackToEmbedded ? 'ready' : 'current';
+    })().finally(() => { activeCheck = undefined; });
+    return activeCheck;
+}
+
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const STARTUP_DELAY_MS = 15_000;
 
@@ -31,11 +48,7 @@ export function startAutomaticUpdates(): () => void {
         lastAttempt = now;
         inFlight = true;
         try {
-            const result = await Updates.checkForUpdateAsync();
-            if (!stopped && (result.isAvailable || result.isRollBackToEmbedded)) {
-                const fetched = await Updates.fetchUpdateAsync();
-                downloaded = fetched.isNew || fetched.isRollBackToEmbedded;
-            }
+            downloaded = await checkAndDownloadAppUpdate(() => !stopped) === 'ready';
         } catch {
             // Offline / update service unavailable: keep the installed app usable.
         } finally {

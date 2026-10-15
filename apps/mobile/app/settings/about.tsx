@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, ScrollView, Linking, Image } from 'react-native';
 import Constants from 'expo-constants';
+import { AppUpdateCard } from '../../components/AppUpdateCard';
 import { Radius } from '../../constants/colors';
 import { usePalette, Surface, IconTile, SectionTitle, ListRow } from '../../components/ui/Kit';
 import { Text } from '../../components/ui/Typography';
@@ -39,6 +40,8 @@ export default function AboutScreen() {
                     </View>
                 ))}
             </Surface>
+
+            <AppUpdateCard />
 
             <View>
                 <SectionTitle title="روابط" />
