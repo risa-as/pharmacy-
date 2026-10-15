@@ -19,6 +19,10 @@ vi.mock('react-native', () => ({
     },
 }));
 vi.mock('expo-updates', () => ({
+    runtimeVersion: '1.0.1',
+    updateId: 'test-update-id',
+    isEmbeddedLaunch: false,
+    channel: 'production',
     get isEnabled() { return mocks.enabled; },
     checkForUpdateAsync: mocks.check,
     fetchUpdateAsync: mocks.fetch,
