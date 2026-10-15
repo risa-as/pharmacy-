@@ -7,7 +7,11 @@
  * travel through route params and survive going back from the review.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, ActivityIndicator, View, TouchableOpacity, AppState } from 'react-native';
+import { Text } from '../components/ui/Typography';
+import { useAuth } from './AuthContext';
+import { checkoutDraftKey, createCheckoutDraftStore, type CheckoutDraft } from '../services/checkout-draft';
+import { useUpdateProtection } from '../hooks/useUpdateProtection';
 import { apiService, newIdempotencyKey } from '../services/api';
 
 export type PaymentMethod = 'CASH' | 'CARD' | 'CREDIT';
@@ -45,6 +49,8 @@ interface LoyaltySettings {
 interface LoyaltyAccount { totalPoints: number; tier: string }
 
 interface CheckoutContextValue {
+    hasUnsavedCheckout: boolean;
+    flushDraft: () => Promise<void>;
     cart: CartItem[];
     patient: CheckoutPatient | null;
     method: PaymentMethod | null;
@@ -101,6 +107,21 @@ export function useCheckout(): CheckoutContextValue {
 const POINT_STEP = 100;
 
 export function CheckoutProvider({ children }: { children: React.ReactNode }) {
+    const { user, branchId, isLoading } = useAuth();
+    if (isLoading) return <ActivityIndicator style={{ flex: 1 }} />;
+    const storageKey = user ? checkoutDraftKey(user.id, branchId) : null;
+    // A different employee/branch never sees or overwrites the previous draft.
+    return <ScopedCheckoutProvider key={storageKey ?? 'signed-out'} storageKey={storageKey}>{children}</ScopedCheckoutProvider>;
+}
+
+function ScopedCheckoutProvider({ children, storageKey }: { children: React.ReactNode; storageKey: string | null }) {
+    const store = useMemo(() => storageKey ? createCheckoutDraftStore(storageKey) : null, [storageKey]);
+    const [draftReady, setDraftReady] = useState(!storageKey);
+    const [draftReadFailed, setDraftReadFailed] = useState(false);
+    const [loadAttempt, setLoadAttempt] = useState(0);
+    const [loyaltySettingsLoaded, setLoyaltySettingsLoaded] = useState(false);
+    const [loyaltyAccountLoaded, setLoyaltyAccountLoaded] = useState(false);
+    const [loyaltyAccountOwner, setLoyaltyAccountOwner] = useState<string | null>(null);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [patient, setPatientState] = useState<CheckoutPatient | null>(null);
     const [method, setMethod] = useState<PaymentMethod | null>(null);
@@ -114,6 +135,47 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
     const [safetyNonce, setSafetyNonce] = useState(0);
     const [recentItems, setRecentItems] = useState<CartItem[]>([]);
+
+    useEffect(() => {
+        if (!store) return;
+        let active = true;
+        setDraftReadFailed(false);
+        void store.load().then(draft => {
+            if (!active) return;
+            if (draft) {
+                cartRef.current = draft.cart;
+                setCart(draft.cart); setPatientState(draft.patient); setMethod(draft.method);
+                setManualDiscountState(draft.manualDiscount); setPointsToRedeemState(draft.pointsToRedeem);
+                setIdempotencyKey(draft.idempotencyKey);
+            }
+            setDraftReady(true);
+        }).catch(() => { if (active) setDraftReadFailed(true); });
+        return () => { active = false; };
+    }, [store, loadAttempt]);
+
+    const draft: CheckoutDraft = useMemo(() => ({ version: 1, cart, patient, method, manualDiscount, pointsToRedeem, idempotencyKey }),
+        [cart, patient, method, manualDiscount, pointsToRedeem, idempotencyKey]);
+    const snapshotRef = useRef(draft);
+    snapshotRef.current = draft;
+    const warnedAboutStorage = useRef(false);
+    useEffect(() => {
+        if (!draftReady || !store) return;
+        void store.save(draft).catch(() => {
+            if (warnedAboutStorage.current) return;
+            warnedAboutStorage.current = true;
+            Alert.alert('تعذّر حفظ مسودة الفاتورة', 'لا تغلق التطبيق قبل إكمال الفاتورة. تحقق من مساحة التخزين المتوفرة.');
+        });
+    }, [store, draftReady, draft]);
+    const flushDraft = useCallback(async () => { if (store) await store.save(snapshotRef.current); }, [store]);
+    useEffect(() => {
+        if (!store || !draftReady) return;
+        const sub = AppState.addEventListener('change', state => {
+            if (state === 'background') void store.save(snapshotRef.current).catch(() => {});
+        });
+        return () => sub.remove();
+    }, [store, draftReady]);
+    const hasUnsavedCheckout = cart.length > 0 || patient !== null || method !== null || manualDiscount > 0 || pointsToRedeem > 0;
+    useUpdateProtection(!draftReady || hasUnsavedCheckout);
 
     const recordSold = useCallback((sold: CartItem[]) => {
         setRecentItems(prev => {
@@ -140,28 +202,32 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
 
     // Loyalty programme settings (once).
     useEffect(() => {
-        apiService.getLoyaltySettings().then(setLoyaltySettings).catch(() => {});
+        apiService.getLoyaltySettings().then(settings => { setLoyaltySettings(settings); setLoyaltySettingsLoaded(true); }).catch(() => {});
     }, []);
 
     // Loyalty account follows the selected customer.
     useEffect(() => {
         setLoyaltyAccount(null);
-        setPointsToRedeemState(0);
-        if (!patient) return;
+        setLoyaltyAccountLoaded(false);
+        if (!patient) { setLoyaltyAccountOwner(''); setLoyaltyAccountLoaded(true); return; }
         let active = true;
         apiService.getLoyaltyAccount(patient.id)
-            .then(acc => { if (active) setLoyaltyAccount(acc); })
+            .then(acc => { if (active) { setLoyaltyAccount(acc); setLoyaltyAccountOwner(patient.id); setLoyaltyAccountLoaded(true); } })
             .catch(() => {});
         return () => { active = false; };
     }, [patient]);
 
     // Any change to what is being sold means a new sale attempt.
     const cartSignature = cart.map(i => `${i.id}:${i.quantity}:${i.price}`).join('|');
-    const firstRender = useRef(true);
+    const previousAttemptInputs = useRef<string | null>(null);
     useEffect(() => {
-        if (firstRender.current) { firstRender.current = false; return; }
+        if (!draftReady) return;
+        const signature = JSON.stringify([cartSignature, patient?.id, method, manualDiscount, pointsToRedeem]);
+        if (previousAttemptInputs.current === null) { previousAttemptInputs.current = signature; return; }
+        if (previousAttemptInputs.current === signature) return;
+        previousAttemptInputs.current = signature;
         setIdempotencyKey(newIdempotencyKey());
-    }, [cartSignature, patient?.id, method, manualDiscount, pointsToRedeem]);
+    }, [draftReady, cartSignature, patient?.id, method, manualDiscount, pointsToRedeem]);
 
     // Drug interactions + allergies: re-checked whenever the set of drugs or the
     // customer changes (removals included). Failure is surfaced, never hidden.
@@ -211,8 +277,9 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
 
     // Keep redemption within bounds when the bill shrinks.
     useEffect(() => {
+        if (!draftReady || !loyaltySettingsLoaded || !loyaltyAccountLoaded || loyaltyAccountOwner !== (patient?.id ?? '')) return;
         if (pointsToRedeem > maxRedeemablePoints) setPointsToRedeemState(maxRedeemablePoints);
-    }, [maxRedeemablePoints, pointsToRedeem]);
+    }, [draftReady, loyaltySettingsLoaded, loyaltyAccountLoaded, loyaltyAccountOwner, patient?.id, maxRedeemablePoints, pointsToRedeem]);
 
     // Mirror of `cart` so mutations can validate synchronously (alerts must not
     // run inside state updaters, which React may invoke more than once).
@@ -293,9 +360,9 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
         commitCart(cartRef.current.filter(i => i.id !== id));
     }, [commitCart]);
 
-    const setPatient = useCallback((p: CheckoutPatient | null) => setPatientState(p), []);
-    const setManualDiscount = useCallback((amount: number) => setManualDiscountState(Math.max(0, amount || 0)), []);
-    const setPointsToRedeem = useCallback((points: number) => setPointsToRedeemState(Math.max(0, points || 0)), []);
+    const setPatient = useCallback((p: CheckoutPatient | null) => { setPatientState(p); setPointsToRedeemState(0); }, []);
+    const setManualDiscount = useCallback((amount: number) => setManualDiscountState(Math.max(0, Number.isFinite(amount) ? amount : 0)), []);
+    const setPointsToRedeem = useCallback((points: number) => setPointsToRedeemState(Math.max(0, Number.isFinite(points) ? points : 0)), []);
     const recheckSafety = useCallback(() => setSafetyNonce(n => n + 1), []);
 
     const resetCheckout = useCallback(() => {
@@ -312,6 +379,7 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     }, [commitCart]);
 
     const value: CheckoutContextValue = {
+        hasUnsavedCheckout, flushDraft,
         cart, patient, method, manualDiscount: effectiveManualDiscount, pointsToRedeem,
         loyaltySettings, loyaltyAccount, interactions, allergyWarnings, safetyStatus,
         subTotal, itemCount, loyaltyDiscount, totalDiscount, total, maxRedeemablePoints,
@@ -321,5 +389,11 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
         recentItems, recordSold, dropRecent,
     };
 
+    if (!draftReady) return <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+        {draftReadFailed ? <React.Fragment>
+            <Text style={{ textAlign: 'center' }}>تعذّر استعادة مسودة الفاتورة. لم تُحذف بياناتها.</Text>
+            <TouchableOpacity onPress={() => setLoadAttempt(n => n + 1)}><Text style={{ textAlign: 'center', padding: 16 }}>إعادة المحاولة</Text></TouchableOpacity>
+        </React.Fragment> : <ActivityIndicator />}
+    </View>;
     return <CheckoutContext.Provider value={value}>{children}</CheckoutContext.Provider>;
 }

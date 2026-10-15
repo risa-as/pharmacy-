@@ -1,22 +1,23 @@
 import { routePermission } from "../utils/route-access";
 import { View, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Stack, router, usePathname } from "expo-router";
+import { Stack, router, usePathname, useRootNavigationState } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { CAIRO_FONTS } from "../utils/cairo-font-assets";
 import { TypographyProvider, Text } from "../components/ui/Typography";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { I18nManager } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { dbService } from "../services/db";
 import { syncService } from "../services/sync";
 import { notificationsService } from "../services/notifications";
+import { hasUpdateProtection, isSafeUpdateRoute, isSafeUpdateHistory } from '../services/update-protection';
 import { startAutomaticUpdates } from "../services/app-updates";
 
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { SyncProvider, useSyncStatus } from "../context/SyncContext";
-import { CheckoutProvider } from "../context/CheckoutContext";
+import { CheckoutProvider, useCheckout } from "../context/CheckoutContext";
 import { Colors, LightColors } from "../constants/colors";
 import ThemedAlertHost from "../components/ThemedAlert";
 
@@ -28,7 +29,21 @@ const SLIDE_ANIMATION = I18nManager.isRTL
 function RootStack() {
   const { isDarkMode } = useTheme();
   const { can, isLoading, user } = useAuth();
-  const required = routePermission(usePathname());
+  const pathname = usePathname();
+  const safeHistory = isSafeUpdateHistory(useRootNavigationState());
+  const required = routePermission(pathname);
+  const { hasUnsavedCheckout, flushDraft } = useCheckout();
+  const updateSafety = useRef({ pathname, safeHistory, hasUnsavedCheckout, isLoading, flushDraft });
+  updateSafety.current = { pathname, safeHistory, hasUnsavedCheckout, isLoading, flushDraft };
+  const interactionVersion = useRef(0);
+  useEffect(() => startAutomaticUpdates({
+    canReload: () => {
+      const current = updateSafety.current;
+      return !current.isLoading && current.safeHistory && !current.hasUnsavedCheckout && !hasUpdateProtection() && isSafeUpdateRoute(current.pathname);
+    },
+    beforeReload: () => updateSafety.current.flushDraft(),
+    interactionVersion: () => interactionVersion.current,
+  }), []);
   const C = Colors(isDarkMode);
   const { setSyncing, markSynced } = useSyncStatus();
 
@@ -99,7 +114,7 @@ function RootStack() {
 
   const denied = !isLoading && user && required && !can(required);
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} onTouchStart={() => { interactionVersion.current++; }}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
       {/* Every screen draws its own header (components/ui/ScreenHeader). */}
       <Stack
@@ -144,7 +159,6 @@ function RootStack() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(CAIRO_FONTS);
-  useEffect(startAutomaticUpdates, []);
   useEffect(() => {
     if (fontsLoaded) console.info("[Faramace typography] Cairo fonts ready");
     if (fontError) console.warn("Cairo fonts unavailable; using the system font", fontError.message);

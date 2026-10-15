@@ -1,3 +1,4 @@
+import { useUpdateProtection } from '../hooks/useUpdateProtection';
 import { Ionicons } from "@expo/vector-icons";
 import { prependOperationBatches } from "../utils/operation-batch-selection";
 import { BatchBarcodeScanner } from "./BatchBarcodeScanner";
@@ -56,6 +57,7 @@ export default function InventoryOperations({
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+    useUpdateProtection(creating || busy || picker || scanning || !!detail || Object.keys(lines).length > 0);
   const lock = useRef(false);
   const version = useRef(0);
   const attempt = useRef({ signature: "", key: "" });

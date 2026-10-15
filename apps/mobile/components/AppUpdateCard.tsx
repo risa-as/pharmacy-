@@ -4,6 +4,7 @@ import * as Updates from 'expo-updates';
 import { checkAndDownloadAppUpdate } from '../services/app-updates';
 import { Surface, SectionTitle, usePalette } from './ui/Kit';
 import { Text } from './ui/Typography';
+import { hasUpdateProtection } from '../services/update-protection';
 import { useCheckout } from '../context/CheckoutContext';
 import { Radius } from '../constants/colors';
 
@@ -11,7 +12,7 @@ type Status = 'idle' | 'checking' | 'current' | 'ready' | 'error' | 'restarting'
 
 export function AppUpdateCard() {
     const C = usePalette();
-    const { cart } = useCheckout();
+    const { hasUnsavedCheckout, flushDraft } = useCheckout();
     const { isUpdatePending, isChecking, isDownloading } = Updates.useUpdates();
     const [status, setStatus] = useState<Status>('idle');
     const [lastChecked, setLastChecked] = useState<Date>();
@@ -38,8 +39,8 @@ export function AppUpdateCard() {
 
     function confirmRestart() {
         if (busy || busyRef.current || !ready) return;
-        if (cart.length > 0) {
-            Alert.alert('أكمل الفاتورة أولاً', 'توجد أصناف في سلة البيع. أكمل الفاتورة أو أفرغ السلة قبل إعادة تشغيل التطبيق.');
+        if (hasUnsavedCheckout || hasUpdateProtection()) {
+            Alert.alert('أكمل العمل المفتوح أولاً', 'توجد فاتورة أو بيانات قيد الإدخال. أكملها أو احفظها قبل تطبيق التحديث.');
             return;
         }
         Alert.alert('تطبيق التحديث الآن؟', 'سيُعاد تشغيل التطبيق. احفظ أي فاتورة أو بيانات غير محفوظة قبل المتابعة. يمكنك أيضاً ترك التحديث ليُطبَّق عند فتح التطبيق لاحقاً.', [
@@ -48,11 +49,11 @@ export function AppUpdateCard() {
                 if (!mounted.current || busyRef.current) return;
                 busyRef.current = true;
                 setStatus('restarting');
-                void Updates.reloadAsync().catch(() => {
+                void flushDraft().then(() => Updates.reloadAsync()).catch(() => {
                     busyRef.current = false;
                     if (!mounted.current) return;
                     setStatus('ready');
-                    Alert.alert('تعذّر تطبيق التحديث', 'أغلق التطبيق بالكامل وافتحه مجدداً لتطبيق التحديث الذي تم تنزيله.');
+                    Alert.alert('تعذّر تطبيق التحديث', 'حاول مجدداً بعد إكمال العمل المفتوح والتأكد من توفر مساحة التخزين.');
                 });
             } },
         ]);
@@ -73,7 +74,7 @@ export function AppUpdateCard() {
             <SectionTitle title="تحديثات التطبيق" />
             <Surface style={{ gap: 12 }}>
                 <Text accessibilityLiveRegion="polite" style={{ color: status === 'error' && !ready ? C.danger : ready ? C.success : C.foreground, textAlign: 'right', fontSize: 14 }}>{message}</Text>
-                {ready && <Text style={{ color: C.mutedForeground, textAlign: 'right', fontSize: 12.5 }}>يمكنك تطبيقه الآن أو عند إغلاق التطبيق بالكامل وفتحه مجدداً.</Text>}
+                {ready && <Text style={{ color: C.mutedForeground, textAlign: 'right', fontSize: 12.5 }}>سيُطبَّق تلقائياً عند العودة للتطبيق إذا لم توجد فاتورة أو بيانات قيد الإدخال.</Text>}
                 {lastChecked && <Text style={{ color: C.mutedForeground, textAlign: 'right', fontSize: 12 }}>آخر تحقق ناجح: {lastChecked.toLocaleString('ar-IQ')}</Text>}
                 {supported && <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={ready ? confirmRestart : check} style={{ backgroundColor: C.primary, borderRadius: Radius.control, padding: 12, minHeight: 48, alignItems: 'center', opacity: busy ? 0.6 : 1 }}>
                     {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={{ color: '#FFFFFF', fontWeight: '700', textAlign: 'center' }}>{label}</Text>}

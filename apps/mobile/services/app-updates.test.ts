@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     listener: undefined as undefined | ((state: string) => void),
     remove: vi.fn(),
     enabled: true,
+    pending: false,
     check: vi.fn(),
     fetch: vi.fn(),
     reload: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('react-native', () => ({
     },
 }));
 vi.mock('expo-updates', () => ({
+    get latestContext() { return { isUpdatePending: mocks.pending }; },
     runtimeVersion: '1.0.1',
     updateId: 'test-update-id',
     isEmbeddedLaunch: false,
@@ -38,6 +40,8 @@ describe('automatic app updates', () => {
         vi.stubGlobal('__DEV__', false);
         vi.clearAllMocks();
         mocks.enabled = true;
+        mocks.pending = false;
+        mocks.reload.mockResolvedValue(undefined);
         mocks.state.currentState = 'active';
         mocks.listener = undefined;
         mocks.check.mockResolvedValue({ isAvailable: true });
@@ -121,7 +125,7 @@ describe('automatic app updates', () => {
         expect(mocks.check).not.toHaveBeenCalled();
         mocks.state.currentState = 'active';
         mocks.listener?.('active');
-        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(400);
         expect(mocks.fetch).toHaveBeenCalledTimes(1);
     });
     it('does not overlap a slow check or download after unmounting', async () => {
@@ -135,5 +139,85 @@ describe('automatic app updates', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(mocks.fetch).not.toHaveBeenCalled();
         expect(mocks.remove).toHaveBeenCalled();
+    });
+});
+
+describe('safe ordinary reopen updates', () => {
+    let stop: (() => void) | undefined;
+    const state = (next: string) => { mocks.state.currentState = next; mocks.listener?.(next); };
+    beforeEach(() => {
+        vi.useFakeTimers(); vi.stubGlobal('__DEV__', false); vi.clearAllMocks();
+        mocks.enabled = true; mocks.pending = true; mocks.state.currentState = 'active';
+        mocks.check.mockResolvedValue({ isAvailable: true }); mocks.fetch.mockResolvedValue({ isNew: true }); mocks.reload.mockResolvedValue(undefined);
+    });
+    afterEach(() => { stop?.(); stop = undefined; vi.useRealTimers(); vi.unstubAllGlobals(); });
+    it('applies a native-downloaded update after Home and ordinary reopening', async () => {
+        const flush = vi.fn().mockResolvedValue(undefined);
+        stop = startAutomaticUpdates({ canReload: () => true, beforeReload: flush });
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(mocks.reload).not.toHaveBeenCalled();
+        state('background'); state('active');
+        await vi.advanceTimersByTimeAsync(400);
+        expect(flush).toHaveBeenCalledTimes(1); expect(mocks.reload).toHaveBeenCalledTimes(1);
+        expect(mocks.check).not.toHaveBeenCalled();
+    });
+    it('does not interrupt an invoice and retries on a later safe reopening', async () => {
+        let safe = false;
+        stop = startAutomaticUpdates({ canReload: () => safe });
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.reload).not.toHaveBeenCalled();
+        safe = true;
+        await vi.advanceTimersByTimeAsync(1000); expect(mocks.reload).not.toHaveBeenCalled();
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.reload).toHaveBeenCalledTimes(1);
+    });
+    it('does not treat a system dialog or notification shade as closing the app', async () => {
+        stop = startAutomaticUpdates({ canReload: () => true });
+        state('inactive'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.reload).not.toHaveBeenCalled();
+    });
+    it('checks and downloads on reopening when no update is cached', async () => {
+        mocks.pending = false;
+        stop = startAutomaticUpdates({ canReload: () => true });
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.fetch).toHaveBeenCalledTimes(1); expect(mocks.reload).toHaveBeenCalledTimes(1);
+    });
+    it('cancels a pending reload if the user starts interacting', async () => {
+        let interaction = 0;
+        stop = startAutomaticUpdates({ canReload: () => true, interactionVersion: () => interaction });
+        state('background'); state('active'); interaction++;
+        await vi.advanceTimersByTimeAsync(400); expect(mocks.reload).not.toHaveBeenCalled();
+    });
+    it('rechecks invoice safety after waiting for storage', async () => {
+        let safe = true; let resolve!: () => void;
+        stop = startAutomaticUpdates({ canReload: () => safe, beforeReload: () => new Promise<void>(r => { resolve = r; }) });
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        safe = false; resolve(); await vi.advanceTimersByTimeAsync(0);
+        expect(mocks.reload).not.toHaveBeenCalled();
+    });
+    it('keeps using the app if saving the draft fails', async () => {
+        stop = startAutomaticUpdates({ canReload: () => true, beforeReload: () => Promise.reject(new Error('disk full')) });
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.reload).not.toHaveBeenCalled();
+    });
+    it('does not reload in background or after the controller is unmounted', async () => {
+        stop = startAutomaticUpdates({ canReload: () => true });
+        state('background'); state('active'); state('background');
+        await vi.advanceTimersByTimeAsync(400); expect(mocks.reload).not.toHaveBeenCalled();
+        state('active'); stop(); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.reload).not.toHaveBeenCalled();
+    });
+    it('recovers from reload failure on the next reopening', async () => {
+        mocks.reload.mockRejectedValueOnce(new Error('temporary reload failure'));
+        stop = startAutomaticUpdates({ canReload: () => true });
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.reload).toHaveBeenCalledTimes(2);
+    });
+    it('stays on the current version when no update is available', async () => {
+        mocks.pending = false; mocks.check.mockResolvedValue({ isAvailable: false });
+        stop = startAutomaticUpdates({ canReload: () => true });
+        state('background'); state('active'); await vi.advanceTimersByTimeAsync(400);
+        expect(mocks.fetch).not.toHaveBeenCalled(); expect(mocks.reload).not.toHaveBeenCalled();
     });
 });

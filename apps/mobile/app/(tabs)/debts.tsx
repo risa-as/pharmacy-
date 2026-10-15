@@ -1,3 +1,4 @@
+import { useUpdateProtection } from '../../hooks/useUpdateProtection';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, FlatList, TouchableOpacity, Alert, RefreshControl, KeyboardAvoidingView, Platform, Modal, ScrollView } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -47,6 +48,7 @@ export default function DebtsScreen() {
     const [amountTouched, setAmountTouched] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const inFlight = useRef(false);
+    useUpdateProtection(!!target || submitting);
 
     const fetchDebtors = useCallback(async () => {
         try {

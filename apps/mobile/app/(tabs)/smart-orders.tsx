@@ -1,3 +1,4 @@
+import { useUpdateProtection } from '../../hooks/useUpdateProtection';
 import React, {
   useEffect,
   useState,
@@ -127,6 +128,7 @@ export default function SmartOrdersScreen() {
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+    useUpdateProtection(selectedIds.size > 0 || Object.keys(quantities).length > 0 || !!createModal || settingsOpen || submitting);
   const [receiveBranchName, setReceiveBranchName] = useState<string | null>(
     null,
   );

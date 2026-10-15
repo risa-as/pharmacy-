@@ -21,10 +21,15 @@ export function checkAndDownloadAppUpdate(shouldContinue = () => true): Promise<
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const STARTUP_DELAY_MS = 15_000;
 
-/** Download quietly; Expo applies the cached update on the next cold launch.
- * Never reload a running POS session: carts and unsaved forms must survive.
- */
-export function startAutomaticUpdates(): () => void {
+export interface AutomaticUpdateOptions {
+    canReload?: () => boolean;
+    beforeReload?: () => Promise<void>;
+    interactionVersion?: () => number;
+}
+
+/** Download during use; apply only on a real background → foreground return,
+ * on a safe screen, without interrupting input or an unfinished invoice. */
+export function startAutomaticUpdates(options: AutomaticUpdateOptions = {}): () => void {
     if (__DEV__ || !Updates.isEnabled) return () => {};
 
     // Release diagnostics contain no account or patient data. This identifies
@@ -40,9 +45,35 @@ export function startAutomaticUpdates(): () => void {
     let inFlight = false;
     let downloaded = false;
     let lastAttempt = 0;
+    let wasBackgrounded = AppState.currentState === 'background';
+    let resumeTicket = 0;
+    let reloading = false;
+    let resumeTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const applyOnResume = async (ticket: number, interaction: number) => {
+        const eligible = () => !stopped && !reloading && ticket === resumeTicket &&
+            AppState.currentState === 'active' && (options.canReload?.() ?? false) &&
+            interaction === (options.interactionVersion?.() ?? 0);
+        try {
+            if (!eligible()) return;
+            if (!downloaded && !Updates.latestContext?.isUpdatePending) {
+                downloaded = await checkAndDownloadAppUpdate(() => !stopped) === 'ready';
+            }
+            if ((!downloaded && !Updates.latestContext?.isUpdatePending) || !eligible()) return;
+            await options.beforeReload?.();
+            // Re-check after storage/network waits: the user may have begun work.
+            if (!eligible()) return;
+            reloading = true;
+            console.info('[Faramace updates] Applying downloaded update on safe resume');
+            await Updates.reloadAsync();
+        } catch {
+            reloading = false; // Keep using the current app; retry on a later return.
+        }
+    };
 
     const check = async () => {
         if (stopped || inFlight || downloaded || AppState.currentState !== 'active') return;
+        if (Updates.latestContext?.isUpdatePending) { downloaded = true; return; }
         const now = Date.now();
         if (lastAttempt && now - lastAttempt < CHECK_INTERVAL_MS) return;
         lastAttempt = now;
@@ -59,10 +90,22 @@ export function startAutomaticUpdates(): () => void {
     const startupTimer = setTimeout(() => { void check(); }, STARTUP_DELAY_MS);
     const interval = setInterval(() => { void check(); }, CHECK_INTERVAL_MS);
     const subscription = AppState.addEventListener('change', state => {
-        if (state === 'active') void check();
+        if (state === 'background') {
+            wasBackgrounded = true;
+            resumeTicket++;
+            clearTimeout(resumeTimer);
+        } else if (state === 'active' && wasBackgrounded) {
+            wasBackgrounded = false;
+            const ticket = ++resumeTicket;
+            const interaction = options.interactionVersion?.() ?? 0;
+            // Let route/auth/checkout refs settle before considering a reload.
+            resumeTimer = setTimeout(() => { void applyOnResume(ticket, interaction); void check(); }, 350);
+        } else if (state === 'active') void check();
     });
     return () => {
         stopped = true;
+        resumeTicket++;
+        clearTimeout(resumeTimer);
         clearTimeout(startupTimer);
         clearInterval(interval);
         subscription.remove();
