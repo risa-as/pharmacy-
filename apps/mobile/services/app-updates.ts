@@ -10,6 +10,15 @@ const STARTUP_DELAY_MS = 15_000;
 export function startAutomaticUpdates(): () => void {
     if (__DEV__ || !Updates.isEnabled) return () => {};
 
+    // Release diagnostics contain no account or patient data. This identifies
+    // the OTA actually running on a device, rather than just a published update.
+    console.info('[Faramace updates]', JSON.stringify({
+        runtimeVersion: Updates.runtimeVersion,
+        updateId: Updates.updateId,
+        isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+        channel: Updates.channel,
+    }));
+
     let stopped = false;
     let inFlight = false;
     let downloaded = false;
