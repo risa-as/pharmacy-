@@ -2,7 +2,7 @@ name: Mobile automatic updates
 
 on:
   push:
-    branches: [004-dynamic-subscriptions, codex/release-readiness-fixes, codex/mobile-automatic-updates]
+    branches: [codex/release-readiness-fixes]
     paths:
       - 'apps/mobile/**'
       - 'packages/**'
@@ -24,6 +24,7 @@ concurrency:
 
 jobs:
   update:
+    if: ${{ github.ref == 'refs/heads/codex/release-readiness-fixes' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
