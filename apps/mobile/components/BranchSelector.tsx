@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, FlatList, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
 import { Radius } from '../constants/colors';
 import { usePalette } from './ui/Kit';
+import { Text } from './ui/Typography';
 
 interface Branch {
     id: string;

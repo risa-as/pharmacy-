@@ -1,6 +1,6 @@
 import { routePermission } from '../../utils/route-access';
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, ScrollView } from 'react-native';
 import { router, useFocusEffect, Href } from 'expo-router';
 import { AppIcon as Ionicons } from '../../components/ui/AppIcon';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,6 +10,7 @@ import { Radius } from '../../constants/colors';
 import { usePalette, Surface, SectionTitle, ListRow, Tone } from '../../components/ui/Kit';
 import { initials } from '../../utils/format';
 import { roleLabel } from '../../utils/roles';
+import { Text } from '../../components/ui/Typography';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 

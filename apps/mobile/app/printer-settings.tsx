@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { printerService } from '../services/printer';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { usePalette, Surface, SectionTitle, AppButton, InfoNote } from '../components/ui/Kit';
+import { Text } from '../components/ui/Typography';
 
 interface PrinterDevice { deviceName: string; macAddress: string }
 

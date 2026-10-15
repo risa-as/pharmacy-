@@ -7,7 +7,7 @@ import {
   operationTone,
 } from "../components/OperationDesign";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, TextInput, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { request, newIdempotencyKey, getSessionGeneration } from "../services/api";
 import { assistantService } from '../services/assistant';
@@ -23,6 +23,7 @@ import {
 import { ScreenHeader } from "../components/ui/ScreenHeader";
 import { BranchSelector } from "../components/BranchSelector";
 import { Radius } from "../constants/colors";
+import { Text, TextInput } from '../components/ui/Typography';
 const names: Record<string, string> = {
   SENT: "بانتظار المذخر",
   REVIEWING: "قيد المراجعة",

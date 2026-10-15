@@ -11,15 +11,7 @@ import {
   operationTone,
 } from "./OperationDesign";
 import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  Alert,
-  Modal,
-  TouchableOpacity,
-} from "react-native";
+import { View, ScrollView, Alert, Modal, TouchableOpacity } from 'react-native';
 import { request, newIdempotencyKey } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -32,6 +24,7 @@ import {
 import { ScreenHeader } from "./ui/ScreenHeader";
 import { BranchSelector } from "./BranchSelector";
 import { Radius } from "../constants/colors";
+import { Text, TextInput } from './ui/Typography';
 const n = (v: number) => v.toLocaleString("en-US");
 export default function InventoryOperations({
   mode,

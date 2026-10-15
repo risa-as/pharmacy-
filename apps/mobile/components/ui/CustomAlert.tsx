@@ -1,18 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import {
-    Modal,
-    View,
-    Text,
-    TouchableOpacity,
-    Animated,
-    StyleSheet,
-    Dimensions,
-    Platform,
-} from 'react-native';
+import { Modal, View, TouchableOpacity, Animated, StyleSheet, Dimensions, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors } from '../../constants/colors';
 import { registerAlertHandler, AlertButton } from '../../utils/alert';
+import { Text } from './Typography';
 
 type AlertType = 'success' | 'error' | 'warning' | 'confirm' | 'info';
 

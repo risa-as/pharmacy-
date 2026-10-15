@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, TouchableOpacity } from 'react-native';
 import { Ionicons } from "@expo/vector-icons";
 import {
   Surface,
@@ -10,6 +10,7 @@ import {
   Tone,
 } from "./ui/Kit";
 import { Radius } from "../constants/colors";
+import { Text } from './ui/Typography';
 type Icon = React.ComponentProps<typeof Ionicons>["name"];
 export const operationTone = (status: string): Tone =>
   ["COMPLETED", "DELIVERED", "ACCEPTED"].includes(status)

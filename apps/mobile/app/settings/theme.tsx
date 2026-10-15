@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { LightColors, DarkColors, Radius } from '../../constants/colors';
 import { usePalette, Surface, SectionTitle } from '../../components/ui/Kit';
+import { Text } from '../../components/ui/Typography';
 
 /** Theme (design theme.png): light / dark with a visual preview. No extra "auto" option. */
 export default function ThemeScreen() {

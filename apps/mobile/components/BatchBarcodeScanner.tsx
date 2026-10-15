@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AppState, Linking, Text, View } from "react-native";
+import { AppState, Linking, View } from 'react-native';
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { AppButton, StateBlock, usePalette } from "./ui/Kit";
 import { Radius } from "../constants/colors";
+import { Text } from './ui/Typography';
 
 /** Embedded in the batch picker: unmounted before a network lookup starts. */
 export function BatchBarcodeScanner({

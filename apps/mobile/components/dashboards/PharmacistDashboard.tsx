@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { AppIcon as Ionicons } from '../ui/AppIcon';
 import { useRouter, Href } from 'expo-router';
 import { apiService, request } from '../../services/api';
@@ -11,6 +11,7 @@ import { usePalette, Surface, IconTile, PressableCard, LinkLabel, SectionTitle, 
 import { RecentSaleCard } from './RecentSaleCard';
 import { iraqDateString, todayIraq } from '../../utils/date';
 import { formatNumber } from '../../utils/format';
+import { Text } from '../ui/Typography';
 
 interface AlertRow { id: string; drugName?: string; message?: string; type?: string; quantity?: number }
 interface Sale { id: string; invoiceNumber?: number | null; total: number; createdAt: string; payment?: { method?: string | null } | null }

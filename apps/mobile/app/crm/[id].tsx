@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { usePalette, Surface, IconTile, SectionTitle, StatusBadge, InfoNote, Sta
 import { InvoiceItemsTable, InvoiceNumberChip, InvoiceItemRow } from '../../components/sales/InvoiceParts';
 import { formatDate, formatTime } from '../../utils/date';
 import { formatNumber, formatIQD, formatInvoiceNumber, paymentMethodLabel, CURRENCY } from '../../utils/format';
+import { Text } from '../../components/ui/Typography';
 
 /** GET /sales/[id] — the parts of an invoice this screen shows. */
 interface SaleDetail {

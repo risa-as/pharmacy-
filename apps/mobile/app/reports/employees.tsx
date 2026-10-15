@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, RefreshControl } from 'react-native';
+import { View, ScrollView, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { request, apiService } from '../../services/api';
@@ -12,6 +12,7 @@ import { usePalette, Surface, IconTile, SegmentedTabs, InfoNote, StateBlock, Ton
 import { formatDate } from '../../utils/date';
 import { formatNumber, initials, CURRENCY } from '../../utils/format';
 import { roleLabel } from '../../utils/roles';
+import { Text } from '../../components/ui/Typography';
 
 type Period = 'daily' | 'weekly' | 'monthly';
 

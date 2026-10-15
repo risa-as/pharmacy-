@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, FlatList, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { router, Href, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,6 +12,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
 import { formatDate, formatTime, iraqDateString, todayIraq } from '../../utils/date';
+import { Text } from '../../components/ui/Typography';
 
 interface Notification {
     id: string;

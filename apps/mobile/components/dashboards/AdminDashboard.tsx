@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Href } from 'expo-router';
 import { apiService, request, getSessionGeneration } from '../../services/api';
@@ -13,6 +13,7 @@ import { usePalette, Surface, IconTile, PressableCard, LinkLabel, SectionTitle, 
 import { RecentSaleCard, RecentSale } from './RecentSaleCard';
 import { formatDate } from '../../utils/date';
 import { formatNumber, formatInvoiceNumber, paymentMethodLabel, CURRENCY } from '../../utils/format';
+import { Text } from '../ui/Typography';
 
 
 

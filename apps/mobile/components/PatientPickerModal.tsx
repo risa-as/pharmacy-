@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, TouchableOpacity, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { apiService } from '../services/api';
@@ -7,6 +7,7 @@ import { Radius } from '../constants/colors';
 import { usePalette, AppButton } from './ui/Kit';
 import { formatIQD, initials } from '../utils/format';
 import type { CheckoutPatient } from '../context/CheckoutContext';
+import { Text, TextInput } from './ui/Typography';
 
 /**
  * Customer picker for the sale flow. Uses the same patient records as the

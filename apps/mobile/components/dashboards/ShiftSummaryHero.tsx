@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors, Radius } from '../../constants/colors';
 import { formatNumber, CURRENCY } from '../../utils/format';
+import { Text } from '../ui/Typography';
 
 export interface HeroMetric {
     icon: keyof typeof Ionicons.glyphMap;

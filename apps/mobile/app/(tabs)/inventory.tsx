@@ -1,9 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import {
-    View, Text, FlatList, TextInput, TouchableOpacity,
-    RefreshControl, ActivityIndicator, Alert, Modal, ScrollView,
-    InteractionManager, StyleSheet, Animated, PanResponder,
-} from 'react-native';
+import { View, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Modal, ScrollView, InteractionManager, StyleSheet, Animated, PanResponder } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { apiService, getSessionGeneration } from '../../services/api';
@@ -21,6 +17,7 @@ import { resolveInventoryEntryBranch, inventoryBarcodeDestination } from '../../
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BranchSelector } from '../../components/BranchSelector';
 import { useSyncStatus } from '../../context/SyncContext';
+import { Text, TextInput } from '../../components/ui/Typography';
 
 type TabKey = 'all' | 'low-stock' | 'out' | 'near-expiry' | 'expired';
 type SortKey = 'name' | 'quantity' | 'expiry';

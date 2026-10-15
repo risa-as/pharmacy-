@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Share } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Href } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
@@ -7,6 +7,7 @@ import { Radius } from '../../constants/colors';
 import { usePalette, Surface, IconTile, SectionTitle, ListRow, InfoNote, StatusBadge } from '../../components/ui/Kit';
 import { initials } from '../../utils/format';
 import { roleLabel } from '../../utils/roles';
+import { Text } from '../../components/ui/Typography';
 
 /**
  * My account (design account-v3.png): read-only identity. Copying uses the

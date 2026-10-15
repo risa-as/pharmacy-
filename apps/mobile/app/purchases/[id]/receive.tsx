@@ -1,12 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Alert,
-  Platform,
-  KeyboardAvoidingView,
-} from "react-native";
+import { View, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiService } from "../../../services/api";
@@ -26,6 +19,7 @@ import {
   settleReceipt,
   type ReceiptOutcome,
 } from "../../../../../packages/shared/src/receipt-outcome";
+import { Text } from '../../../components/ui/Typography';
 
 interface ReceiveItem {
   id: string;

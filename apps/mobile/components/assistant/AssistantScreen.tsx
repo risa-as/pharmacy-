@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -9,6 +9,7 @@ import { AssistantButton as AppButton, AssistantText, MobileAssistantCard } from
 import { assistantService } from '../../services/assistant';
 import { getSessionGeneration } from '../../services/api';
 import { assistantDestination, assistantHistory, canSendAssistant, coverageDays, EXAMPLE_CATEGORIES, MAX_ASSISTANT_MESSAGES, newAssistantDraftId, normalizeCoverage, purchaseMessage, QUICK_QUESTIONS, readAssistantConversation, readAssistantDraft, preparedAssistantDraftKey, rememberPreparedAssistantDraft, saveAssistantConversation, storeAssistantDraft, type AssistantMessage, type AssistantUsage, type ReorderCard } from '../../utils/assistant';
+import { Text, TextInput } from '../ui/Typography';
 
 export interface AssistantScreenProps {
     userId: string;

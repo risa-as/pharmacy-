@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useRouter, Href, useFocusEffect } from 'expo-router';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +11,7 @@ import { useSyncStatus } from '../../context/SyncContext';
 import { usePalette, Surface, IconTile, SegmentedTabs, ListRow, StateBlock } from '../../components/ui/Kit';
 import { formatDate } from '../../utils/date';
 import { formatNumber, CURRENCY } from '../../utils/format';
+import { Text } from '../../components/ui/Typography';
 
 type Period = 'daily' | 'weekly' | 'monthly';
 

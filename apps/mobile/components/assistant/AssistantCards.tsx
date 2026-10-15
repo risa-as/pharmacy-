@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppButton as KitButton, Surface, usePalette } from '../ui/Kit';
 import type { AssistantCard, CardScope, ReorderCard } from '../../utils/assistant';
 import { draftLines } from '../../utils/assistant';
+import { Text } from '../ui/Typography';
 
 const number = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
 export function AssistantButton(props: React.ComponentProps<typeof KitButton>) {

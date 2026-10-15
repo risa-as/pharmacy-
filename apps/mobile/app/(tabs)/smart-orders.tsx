@@ -5,23 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  Modal,
-  ScrollView,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Keyboard,
-  Animated,
-  Share,
-} from "react-native";
+import { View, FlatList, RefreshControl, TouchableOpacity, Alert, Modal, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard, Animated, Share } from 'react-native';
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { apiService, newIdempotencyKey } from "../../services/api";
@@ -56,6 +40,7 @@ import {
   recentPeriod,
   numberText as n,
 } from "../../utils/smart-planning";
+import { Text, TextInput } from '../../components/ui/Typography';
 
 interface SmartOrderItem extends PlanningItem {
   id: string;

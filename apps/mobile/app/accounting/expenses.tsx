@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import { View, ScrollView, RefreshControl, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { request } from '../../services/api';
@@ -8,6 +8,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { usePalette, Surface, IconTile, SectionTitle, SegmentedTabs, FormField, AppButton, StateBlock, Tone } from '../../components/ui/Kit';
 import { formatDate, iraqDateString } from '../../utils/date';
 import { formatNumber, formatIQD, CURRENCY } from '../../utils/format';
+import { Text, TextInput } from '../../components/ui/Typography';
 
 type Category = 'RENT' | 'SALARY' | 'UTILITIES' | 'SUPPLIES' | 'OTHER';
 type Filter = 'ALL' | 'RENT' | 'SALARY' | 'OTHER';

@@ -1,9 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-    View, Text, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator,
-    ScrollView, KeyboardAvoidingView, Platform, InteractionManager,
-} from 'react-native';
+import { View, TouchableOpacity, Alert, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, InteractionManager } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +14,7 @@ import { SafetyWarnings, LoyaltyPanel, Stepper } from '../../components/checkout
 import { CheckoutSheet } from '../../components/checkout/CheckoutSheet';
 import { formatNumber, CURRENCY, initials } from '../../utils/format';
 import { consumeManualEntry } from '../../utils/manual-entry';
+import { Text, TextInput } from '../../components/ui/Typography';
 
 type DrugResult = { id: string; name: string; tradeName: string; scientificName: string; barcode?: string; price: number; quantity: number };
 

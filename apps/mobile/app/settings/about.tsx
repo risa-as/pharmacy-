@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, ScrollView, Linking, Image } from 'react-native';
+import { View, ScrollView, Linking, Image } from 'react-native';
 import Constants from 'expo-constants';
 import { Radius } from '../../constants/colors';
 import { usePalette, Surface, IconTile, SectionTitle, ListRow } from '../../components/ui/Kit';
+import { Text } from '../../components/ui/Typography';
 
 /** Version comes from the build configuration, not a hard-coded constant. */
 const APP_VERSION = Constants.expoConfig?.version ?? '—';

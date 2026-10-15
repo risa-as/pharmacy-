@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Alert } from 'react-native';
+import { View, ScrollView, Alert } from 'react-native';
 import { router, Href } from 'expo-router';
 import { authService } from '../../services/auth';
 import { dbService } from '../../services/db';
@@ -8,6 +8,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { Radius } from '../../constants/colors';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { usePalette, Surface, SectionTitle, ListRow, AppButton } from '../../components/ui/Kit';
+import { Text } from '../../components/ui/Typography';
 
 /** Settings (design settings.png, navigation-map §5) — lives inside «المزيد». */
 export default function SettingsScreen() {

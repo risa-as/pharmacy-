@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform, Animated, Easing, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, ActivityIndicator, Alert, Platform, Animated, Easing, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useTheme } from '../context/ThemeContext';
 import { managerPalette, Radius } from '../constants/colors';
 import { Badge } from '../components/ui/Badge';
 import { requestManualEntry, ManualEntryScreen } from '../utils/manual-entry';
+import { Text } from '../components/ui/Typography';
 
 interface DrugResult {
     id: string;

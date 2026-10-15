@@ -1,8 +1,5 @@
 import React, { useRef, useState } from 'react';
-import {
-    View, Text, ScrollView, TouchableOpacity, Alert, KeyboardAvoidingView, Platform,
-    Modal, Pressable, Animated, Easing,
-} from 'react-native';
+import { View, ScrollView, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Modal, Pressable, Animated, Easing } from 'react-native';
 import { PanGestureHandler, GestureHandlerRootView, State } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -20,6 +17,7 @@ import { usePalette, Surface, AppButton, FormField } from '../ui/Kit';
 import { PatientPickerModal } from '../PatientPickerModal';
 import { SafetyWarnings, LoyaltyPanel } from './CheckoutParts';
 import { formatNumber, formatIQD, CURRENCY, paymentMethodLabel } from '../../utils/format';
+import { Text } from '../ui/Typography';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 

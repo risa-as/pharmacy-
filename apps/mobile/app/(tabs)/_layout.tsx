@@ -1,7 +1,7 @@
 import { Tabs, router } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AppIcon as Ionicons } from '../../components/ui/AppIcon';
-import { View, Text, Platform, TouchableOpacity } from 'react-native';
+import { View, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { backgroundRequest } from '../../services/api';
@@ -12,6 +12,7 @@ import { useSyncStatus } from '../../context/SyncContext';
 import { Colors, Radius } from '../../constants/colors';
 import { routePermission } from '../../utils/route-access';
 import type { AppShell } from '../../utils/roles';
+import { Text } from '../../components/ui/Typography';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 

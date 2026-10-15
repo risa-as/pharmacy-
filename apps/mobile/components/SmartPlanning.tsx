@@ -1,14 +1,5 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
+import { View, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from "@expo/vector-icons";
 import { usePalette, AppButton } from "./ui/Kit";
 import { Radius } from "../constants/colors";
@@ -19,6 +10,7 @@ import {
   recentPeriod,
   validateSettings,
 } from "../utils/smart-planning";
+import { Text, TextInput } from './ui/Typography';
 
 export function PlanningSettingsSheet({
   value,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Href, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { usePalette, Surface, IconTile, SectionTitle, StatusBadge, AppButton, In
 import { formatDate } from '../../utils/date';
 import { formatNumber, CURRENCY } from '../../utils/format';
 import { purchaseStatus } from '../../utils/status';
+import { Text } from '../../components/ui/Typography';
 
 /** Purchase order details (design purchase-detail.png). */
 export default function PurchaseDetailsScreen() {

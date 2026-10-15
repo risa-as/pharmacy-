@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, Text, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { request } from '../../services/api';
@@ -11,6 +11,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { usePalette, Surface, IconTile, SegmentedTabs, StatusBadge, SectionTitle, InfoNote, StateBlock, AppButton, Tone } from '../../components/ui/Kit';
 import { formatDate } from '../../utils/date';
 import { formatNumber, formatIQD, CURRENCY } from '../../utils/format';
+import { Text } from '../../components/ui/Typography';
 
 type Period = 'daily' | 'weekly' | 'monthly';
 type Section = 'products' | 'dead' | 'expiry';

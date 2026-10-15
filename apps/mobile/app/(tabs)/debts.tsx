@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-    View, Text, FlatList, TouchableOpacity, TextInput, Alert, RefreshControl,
-    KeyboardAvoidingView, Platform, Modal, ScrollView,
-} from 'react-native';
+import { View, FlatList, TouchableOpacity, Alert, RefreshControl, KeyboardAvoidingView, Platform, Modal, ScrollView } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../../services/api';
@@ -14,6 +11,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { usePalette, Surface, IconTile, NavigationArrow, SegmentedTabs, FormField, AppButton, InfoNote, StateBlock, VDivider } from '../../components/ui/Kit';
 import { formatDate } from '../../utils/date';
 import { formatNumber, formatIQD, CURRENCY, initials } from '../../utils/format';
+import { Text, TextInput } from '../../components/ui/Typography';
 
 interface Debtor {
     id: string;

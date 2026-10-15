@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 import { Radius } from '../../constants/colors';
 import { usePalette } from '../ui/Kit';
 import { formatNumber, formatIQD } from '../../utils/format';
+import { Text } from '../ui/Typography';
 
 export interface InvoiceItemRow {
     id: string;

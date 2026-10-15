@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
+import { View, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, Href } from 'expo-router';
 import { crmService, Patient } from '../../services/crm';
@@ -8,6 +8,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { usePalette, Surface, SectionTitle, AppButton, InfoNote, StateBlock } from '../../components/ui/Kit';
 import { formatNumber, initials } from '../../utils/format';
+import { Text, TextInput } from '../../components/ui/Typography';
 
 /** Arabic count for the list header, as in the design: «مريضين (2)». */
 function patientsLabel(count: number): string {

@@ -1,8 +1,5 @@
 import React, { useState, useRef } from 'react';
-import {
-    View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-    Image, ScrollView, Alert, useWindowDimensions, Modal, StatusBar, Animated,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Image, ScrollView, Alert, useWindowDimensions, Modal, StatusBar, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +17,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../constants/colors';
 import { apiService } from '../services/api';
+import { Text } from '../components/ui/Typography';
 
 // ── مشاهد الصورة بالتقريب والتحريك (Animated فقط — يعمل في Expo Go) ─────────
 function ImageZoomModal({ uri, onClose }: { uri: string; onClose: () => void }) {

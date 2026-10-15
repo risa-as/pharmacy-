@@ -2,12 +2,13 @@
  * Pieces shared by the cart (sales tab) and the payment review screen.
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Radius } from '../../constants/colors';
 import { usePalette, toneColors } from '../ui/Kit';
 import { useCheckout } from '../../context/CheckoutContext';
 import { formatIQD, formatNumber } from '../../utils/format';
+import { Text } from '../ui/Typography';
 
 /**
  * Allergy + interaction warnings. A failed or pending check is shown as such —

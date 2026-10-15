@@ -2,10 +2,7 @@ import { previewRefund } from '../../../packages/shared/src/returns';
 import { readSalesPages } from '../utils/sales-pages';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
-import {
-    View, Text, ScrollView, TouchableOpacity, RefreshControl, Modal, Alert, ActivityIndicator,
-    TextInput, KeyboardAvoidingView, Platform, Pressable, Animated, Easing,
-} from 'react-native';
+import { View, ScrollView, TouchableOpacity, RefreshControl, Modal, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { request, newIdempotencyKey, isNetworkError } from '../services/api';
@@ -18,6 +15,7 @@ import { Stepper } from '../components/checkout/CheckoutParts';
 import { InvoiceItemsTable, InvoiceNumberChip } from '../components/sales/InvoiceParts';
 import { formatDate, formatTime, iraqDateString, todayIraq } from '../utils/date';
 import { formatNumber, formatIQD, formatInvoiceNumber, paymentMethodLabel, CURRENCY } from '../utils/format';
+import { Text, TextInput, AnimatedText } from '../components/ui/Typography';
 
 const SEARCH_DEBOUNCE_MS = 400;
 const DRUG_SEARCH_MIN = 2;
@@ -751,10 +749,10 @@ function ReturnHint({ mode }: { mode: SearchMode }) {
             }}>
                 <Ionicons name="return-down-back-outline" size={15} color={C.danger} />
             </Animated.View>
-            <Animated.Text style={{ flex: 1, color: C.mutedForeground, fontSize: 12.5, textAlign: 'right', opacity: fade }} numberOfLines={1}>
+            <AnimatedText style={{ flex: 1, color: C.mutedForeground, fontSize: 12.5, textAlign: 'right', opacity: fade }} numberOfLines={1}>
                 <Text style={{ color: C.danger, fontWeight: '800' }}>إرجاع أدوية · </Text>
                 {mode === 'invoice' ? 'ابحث برقم الفاتورة المطبوع على الإيصال' : 'ابحث باسم الدواء أو الباركود (آخر 30 يوماً)'}
-            </Animated.Text>
+            </AnimatedText>
         </View>
     );
 }

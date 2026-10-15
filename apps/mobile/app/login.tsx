@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image, ScrollView, Modal } from 'react-native';
+import { View, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image, ScrollView, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { biometricService } from '../services/biometric';
 import { useAuth } from '../context/AuthContext';
 import { Radius } from '../constants/colors';
 import { usePalette, Surface, AppButton, InfoNote } from '../components/ui/Kit';
+import { Text, TextInput } from '../components/ui/Typography';
 
 /** Login (design login.png). No self sign-up or email recovery — neither exists. */
 export default function LoginScreen() {

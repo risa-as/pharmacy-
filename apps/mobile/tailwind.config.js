@@ -61,8 +61,8 @@ module.exports = {
             },
 
             fontFamily: {
-                // Arabic-first stack matching the shared config
-                sans: ['IBM Plex Sans Arabic', 'Cairo', 'System'],
+                // Matches the runtime-loaded mobile Cairo family
+                sans: ['Cairo_400Regular'],
             },
 
             borderRadius: {

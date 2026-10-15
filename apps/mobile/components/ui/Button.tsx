@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, TouchableOpacityProps } from 'react-native';
+import { TouchableOpacity, ActivityIndicator, TouchableOpacityProps } from 'react-native';
+import { Text } from './Typography';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 

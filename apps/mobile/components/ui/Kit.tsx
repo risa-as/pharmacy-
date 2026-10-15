@@ -4,14 +4,11 @@ import { useAuth } from '../../context/AuthContext';
  * Flat colours, cards 8px, controls 6px, badges 5px (constants/colors Radius).
  */
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import {
-    View, Text, TouchableOpacity, TextInput, TextInputProps, ActivityIndicator,
-    ViewStyle, StyleProp, Pressable, TextStyle, TextProps,
-    Animated, Easing, AccessibilityInfo,
-} from 'react-native';
+import { View, TouchableOpacity, TextInputProps, ActivityIndicator, ViewStyle, StyleProp, Pressable, TextStyle, TextProps, Animated, Easing, AccessibilityInfo } from 'react-native';
 import { AppIcon as Ionicons } from './AppIcon';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors, Palette, Radius } from '../../constants/colors';
+import { Text, TextInput } from './Typography';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 export type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';

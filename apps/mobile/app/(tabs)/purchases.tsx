@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, FlatList, RefreshControl, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, FlatList, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Href, useFocusEffect } from 'expo-router';
 import { apiService } from '../../services/api';
@@ -15,6 +15,7 @@ import {
 import { formatDate } from '../../utils/date';
 import { formatNumber, CURRENCY } from '../../utils/format';
 import { purchaseStatus } from '../../utils/status';
+import { Text, TextInput } from '../../components/ui/Typography';
 
 type TabKey = 'ALL' | 'PENDING' | 'RECEIVED' | 'CANCELLED';
 

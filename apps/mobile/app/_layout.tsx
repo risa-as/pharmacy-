@@ -1,7 +1,10 @@
 import { routePermission } from "../utils/route-access";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Stack, router, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
+import { CAIRO_FONTS } from "../utils/cairo-font-assets";
+import { TypographyProvider, Text } from "../components/ui/Typography";
 import { useEffect } from "react";
 import { I18nManager } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
@@ -14,7 +17,7 @@ import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { SyncProvider, useSyncStatus } from "../context/SyncContext";
 import { CheckoutProvider } from "../context/CheckoutContext";
-import { Colors } from "../constants/colors";
+import { Colors, LightColors } from "../constants/colors";
 import ThemedAlertHost from "../components/ThemedAlert";
 
 // T049 — RTL-correct animation: slide from left for forward navigation in Arabic
@@ -140,9 +143,23 @@ function RootStack() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts(CAIRO_FONTS);
   useEffect(startAutomaticUpdates, []);
+  useEffect(() => {
+    if (fontsLoaded) console.info("[Faramace typography] Cairo fonts ready");
+    if (fontError) console.warn("Cairo fonts unavailable; using the system font", fontError.message);
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: LightColors.background }}>
+        <ActivityIndicator color={LightColors.primary} />
+      </View>
+    );
+  }
 
   return (
+    <TypographyProvider ready={fontsLoaded}>
     <ThemeProvider>
       <AuthProvider>
         <SyncProvider>
@@ -154,5 +171,6 @@ export default function RootLayout() {
         </SyncProvider>
       </AuthProvider>
     </ThemeProvider>
+    </TypographyProvider>
   );
 }

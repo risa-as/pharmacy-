@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, Alert as RNAlert } from 'react-native';
+import { Modal, View, TouchableOpacity, StyleSheet, Alert as RNAlert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { Colors, Radius } from '../constants/colors';
+import { Text } from './ui/Typography';
 
 export interface ThemedAlertButton {
     text?: string;

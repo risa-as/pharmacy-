@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
+import { View, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Href } from 'expo-router';
 import { Radius } from '../../constants/colors';
 import { usePalette, Surface, IconTile, SectionTitle, AppButton, InfoNote, Tone } from '../../components/ui/Kit';
+import { Text } from '../../components/ui/Typography';
 
 const PHONE = '+9647857581997';
 const WHATSAPP_URL = 'https://wa.me/9647857581997';

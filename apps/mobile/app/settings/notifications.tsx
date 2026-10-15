@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Switch, ScrollView, Linking, AppState } from 'react-native';
+import { View, Switch, ScrollView, Linking, AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
 import {
@@ -7,6 +7,7 @@ import {
     NOTIFICATION_PREFS_KEY, DEFAULT_NOTIFICATION_PREFS,
 } from '../../services/notifications';
 import { usePalette, Surface, IconTile, SectionTitle, AppButton, InfoNote, Tone } from '../../components/ui/Kit';
+import { Text } from '../../components/ui/Typography';
 
 const CATEGORIES: Array<{ key: keyof NotificationPrefs; title: string; description: string; icon: React.ComponentProps<typeof IconTile>['icon']; tone: Tone }> = [
     { key: 'lowStock', title: 'نقص المخزون', description: 'عند انخفاض المخزون تحت حد الطلب', icon: 'cube-outline', tone: 'warning' },
