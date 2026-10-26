@@ -639,16 +639,24 @@ function RenewModal({
 
                         <div>
                             <span className="block text-sm font-bold text-foreground mb-1.5">تمديد سريع</span>
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                 {[1, 3, 6, 12].map((m) => (
                                     <button key={m} type="button" onClick={() => applyPreset(m)}
                                         className="px-2 h-10 rounded-lg border border-border bg-background text-xs text-foreground hover:bg-muted hover:border-primary/40 transition-colors">
                                         + {m === 12 ? 'سنة' : `${m} أشهر`}
                                     </button>
                                 ))}
+                                <button type="button" onClick={() => togglePermanent(true)} aria-pressed={permanent}
+                                    className={`col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1 px-2 h-10 rounded-lg border text-xs transition-colors ${permanent
+                                        ? 'border-primary bg-primary/10 text-primary font-bold'
+                                        : 'border-border bg-background text-foreground hover:bg-muted hover:border-primary/40'}`}>
+                                    <InfinityIcon className="w-3.5 h-3.5" /> دائمي
+                                </button>
                             </div>
                             <p className="text-[11px] text-muted-foreground mt-1.5">
-                                يُحسب من تاريخ الانتهاء المحفوظ إن كان سارياً، وإلا فمن اليوم.
+                                {permanent
+                                    ? 'دائمي: الكود الجديد بدون تاريخ انتهاء.'
+                                    : 'يُحسب من تاريخ الانتهاء المحفوظ إن كان سارياً، وإلا فمن اليوم.'}
                             </p>
                         </div>
 
