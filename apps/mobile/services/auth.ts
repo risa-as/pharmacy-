@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+import { readPrivateValue as secureGet, writePrivateValue as secureSet, removePrivateValue as secureDelete } from './private-storage';
 import { withNetworkDeadline } from './network-deadline';
 
 import { getBaseUrl, resetSessionExpired, setCachedToken, rotateCachedToken, getSessionGeneration } from './api';
@@ -16,29 +16,6 @@ export interface User {
 const TOKEN_KEY       = 'authToken';
 const USER_KEY        = 'user';
 const DEVICE_TOKEN_KEY = 'deviceToken'; // stored in plain AsyncStorage (not sensitive)
-
-// ── Secure storage helpers ───────────────────────────────────────────────────
-async function secureSet(key: string, value: string) {
-    try {
-        await SecureStore.setItemAsync(key, value);
-    } catch {
-        await AsyncStorage.setItem(key, value);
-    }
-}
-async function secureGet(key: string): Promise<string | null> {
-    try {
-        return await SecureStore.getItemAsync(key);
-    } catch {
-        return await AsyncStorage.getItem(key);
-    }
-}
-async function secureDelete(key: string) {
-    try {
-        await SecureStore.deleteItemAsync(key);
-    } catch {
-        await AsyncStorage.removeItem(key);
-    }
-}
 
 // ── Device token (UUID, one per installation, persists forever) ───────────────
 function generateUUID(): string {
@@ -169,8 +146,14 @@ export const authService = {
 
         const { token, user } = data;
 
-        await secureSet(TOKEN_KEY, token);
-        await secureSet(USER_KEY, JSON.stringify(user));
+        try {
+            await secureSet(TOKEN_KEY, token);
+            await secureSet(USER_KEY, JSON.stringify(user));
+        } catch (error) {
+            setCachedToken(null);
+            await Promise.allSettled([secureDelete(TOKEN_KEY), secureDelete(USER_KEY)]);
+            throw error;
+        }
         setCachedToken(token);
         resetSessionExpired();
 
@@ -179,8 +162,8 @@ export const authService = {
             try {
                 await startMobileSession(user.id, token);
             } catch (sessionError: any) {
-                await secureDelete(TOKEN_KEY);
-                await secureDelete(USER_KEY);
+                setCachedToken(null);
+                await Promise.allSettled([secureDelete(TOKEN_KEY), secureDelete(USER_KEY)]);
                 throw sessionError;
             }
         }
@@ -189,20 +172,21 @@ export const authService = {
     },
 
     async logout(): Promise<void> {
-        const userStr = await secureGet(USER_KEY);
-        if (userStr) {
-            try {
+        try {
+            const userStr = await secureGet(USER_KEY);
+            if (userStr) {
                 const user: User = JSON.parse(userStr);
                 if (user.role !== 'SUPER_ADMIN') {
                     await endMobileSession();
                 }
-            } catch {
-                // proceed with logout anyway
             }
+        } catch {
+            // A failed read must not prevent clearing the in-memory session.
         }
-        await secureDelete(TOKEN_KEY);
-        await secureDelete(USER_KEY);
         setCachedToken(null);
+        const removals = await Promise.allSettled([secureDelete(TOKEN_KEY), secureDelete(USER_KEY)]);
+        const failed = removals.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failed) throw failed.reason;
     },
 
     async isAuthenticated(): Promise<boolean> {

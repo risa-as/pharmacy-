@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image, ScrollView, Modal } from 'react-native';
+import { View, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Image, ScrollView, Modal, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -142,6 +142,11 @@ export default function LoginScreen() {
                         <AppButton label="الدخول بالبصمة" icon="finger-print" variant="outline" disabled={loading} onPress={handleBiometricLogin} />
                     )}
                 </Surface>
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'center', flexWrap: 'wrap', gap: 18 }}>
+                    <TouchableOpacity accessibilityRole="link" onPress={() => void Linking.openURL('https://www.faramace.com/privacy')}><Text style={{ color: C.primary }}>سياسة الخصوصية</Text></TouchableOpacity>
+                    <TouchableOpacity accessibilityRole="link" onPress={() => void Linking.openURL('https://www.faramace.com/terms')}><Text style={{ color: C.primary }}>شروط الاستخدام</Text></TouchableOpacity>
+                    <TouchableOpacity accessibilityRole="link" onPress={() => void Linking.openURL('https://www.faramace.com/contact')}><Text style={{ color: C.primary }}>الدعم</Text></TouchableOpacity>
+                </View>
             </ScrollView>
 
             <Modal visible={showBiometricPrompt} transparent animationType="fade" onRequestClose={() => finishBiometricPrompt(false)}>

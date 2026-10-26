@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock('./api', () => ({ request: vi.fn() }));
+vi.mock('./api', () => ({ request: vi.fn(), getSessionGeneration: () => 1, SessionChangedError: Error }));
+vi.mock('./ai-consent', () => ({ requireAIConsent: vi.fn(async () => ({ 'x-faramace-ai-consent': 'approved' })) }));
 import { request } from './api';
 import { assistantService } from './assistant';
 import { reorderFixture } from '../utils/assistant.fixture';
@@ -9,7 +10,7 @@ describe('mobile assistant API contract', () => {
     it('sends one charged chat request with automatic retry disabled', async () => {
         mocked.mockRejectedValueOnce(new Error('network'));
         await expect(assistantService.chat('سؤال', [])).rejects.toThrow('network');
-        expect(mocked).toHaveBeenCalledTimes(1); expect(mocked.mock.calls[0]).toEqual(['/ai/chat', { method: 'POST', body: JSON.stringify({ message: 'سؤال', history: [] }) }, false, { noRetry: true }]);
+        expect(mocked).toHaveBeenCalledTimes(1); expect(mocked.mock.calls[0]).toEqual(['/ai/chat', { method: 'POST', headers: { 'x-faramace-ai-consent': 'approved' }, body: JSON.stringify({ message: 'سؤال', history: [] }) }, false, { noRetry: true }]);
     });
     it('registers units and settings, then hands off packs without sending an order', async () => {
         mocked.mockResolvedValue({});

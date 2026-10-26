@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ values: new Map<string, string>() }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: {
     getItem: vi.fn(async (k: string) => state.values.get(k) ?? null),
     setItem: vi.fn(async (k: string, v: string) => { state.values.set(k, v); }),

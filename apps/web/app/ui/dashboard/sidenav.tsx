@@ -123,6 +123,7 @@ const controlTowerSections: NavSection[] = [
     links: [
       { name: "معلومات الدفع", href: "/dashboard/admin/payment-info", icon: Landmark },
       { name: "تسعير WhatsApp", href: "/dashboard/admin/whatsapp-pricing", icon: MessageSquare },
+      { name: "طلبات الخصوصية", href: "/dashboard/admin/privacy-requests", icon: Shield },
       { name: "إعدادات التنزيل", href: "/dashboard/admin/downloads", icon: Download },
       { name: "تسوية الملكية", href: "/dashboard/admin/ownership", icon: Landmark },
       { name: "قاعدة الأدوية العالمية", href: "/dashboard/admin/drugs", icon: Pill },

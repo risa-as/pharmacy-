@@ -16,7 +16,8 @@ import {
 } from 'react-native-gesture-handler';
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../constants/colors';
-import { apiService } from '../services/api';
+import { apiService, getSessionGeneration } from '../services/api';
+import { authorizeAISharing } from '../services/ai-consent';
 import { Text } from '../components/ui/Typography';
 
 // ── مشاهد الصورة بالتقريب والتحريك (Animated فقط — يعمل في Expo Go) ─────────
@@ -160,6 +161,7 @@ function FrameCorner({ top, bottom, left, right }: { top?: boolean; bottom?: boo
 }
 
 export default function ScanPrescriptionScreen() {
+    const ownerGeneration = useRef(getSessionGeneration()).current;
     const { isDarkMode } = useTheme();
     const C = Colors(isDarkMode);
     const { width: screenW, height: screenH } = useWindowDimensions();
@@ -296,11 +298,6 @@ export default function ScanPrescriptionScreen() {
     async function pickImage() {
         try {
             const ImagePicker = require('expo-image-picker');
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('تنبيه', 'نحتاج إذن للوصول إلى معرض الصور');
-                return;
-            }
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
@@ -323,16 +320,16 @@ export default function ScanPrescriptionScreen() {
     // ── إرسال الصورة للـ API ──────────────────────────────────────────────────
     async function processImage(base64: string) {
         try {
-            console.log('[PRESCRIPTION] Sending image, base64 length:', base64.length);
+            if (ownerGeneration !== getSessionGeneration()) throw new Error('تغير الحساب؛ أعد فتح قارئ الوصفات.');
             if (base64.length < 1000) {
                 console.error('[PRESCRIPTION] Image too small, likely failed capture!');
                 Alert.alert('خطأ', 'الصورة صغيرة جداً، يرجى التصوير مجدداً');
                 setLoading(false);
                 return;
             }
+            if (!await authorizeAISharing('prescription')) { setPhotoUri(null); setCroppedUri(null); return; }
+            if (ownerGeneration !== getSessionGeneration()) throw new Error('تغير الحساب؛ لم تُرسل الصورة.');
             const result = await apiService.scanPrescription(base64);
-            console.log('[PRESCRIPTION] API result rawText:', result.rawText);
-            console.log('[PRESCRIPTION] API suggestions count:', result.suggestions?.length);
             const sugg = result.suggestions || [];
             setRawText(result.rawText || 'لم يتم قراءة نصوص واضحة');
             setSuggestions(sugg);

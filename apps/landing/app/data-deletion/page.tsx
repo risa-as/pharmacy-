@@ -11,10 +11,11 @@ export default function DataDeletionPage() {
   return (
     <main className="flex-grow pt-32 pb-20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
-        <SectionHeading badge="الخصوصية" title="طلب حذف البيانات" subtitle="بيانات فاراماس واتصال WhatsApp وMeta — آخر تحديث: 7 أكتوبر 2026" />
+        <SectionHeading badge="الخصوصية" title="طلب حذف البيانات" subtitle="بيانات الحساب وتطبيق الهاتف واتصال WhatsApp — آخر تحديث: 26 أكتوبر 2026" />
         <div className="space-y-6 text-right">
           <section className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4">كيف تقدم طلبك؟</h2>
+            <p className="mb-4 text-slate-600 leading-relaxed">في إصدار الهاتف الذي يدعم إعدادات الخصوصية، افتح الإعدادات ← حسابي ← الخصوصية والبيانات ← تقديم طلب حذف حسابي وبياناتي. يظهر رقم الطلب وحالته ورد مدير المنصة في الصفحة نفسها. تقديم الطلب لا يساوي اكتمال الحذف، ويخضع نطاقه للتحقق من الهوية والصلاحية والاحتفاظ اللازم. إذا تعذر الدخول أو لم يظهر الخيار في إصدارك، استخدم قناة الدعم أدناه.</p>
             <ol className="list-decimal list-inside space-y-4 text-slate-600 leading-relaxed">
               <li>تواصل مع دعم فاراماس من <Link href="/contact" className="text-primary-600 hover:underline">صفحة التواصل الرسمية</Link>، واذكر أن الطلب يتعلق بحذف البيانات.</li>
               <li>حدد اسم المؤسسة وبريد الحساب المرتبط بها ونطاق الطلب: بيانات اتصال Meta، أو محادثات WhatsApp، أو بياناتك الشخصية، أو حساب المؤسسة. إذا كنت مستلمًا لرسائل صيدلية، اذكر اسمها ورقمك الذي استقبل الرسائل عبر قناة الدعم الرسمية.</li>

@@ -1,7 +1,7 @@
 import type { PlanningResult, PlanningSettings } from '../utils/smart-planning';
 import { foregroundReads } from '../utils/foreground-work';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+import { readPrivateValue, removePrivateValue } from './private-storage';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { pollingService } from './polling';
@@ -174,16 +174,10 @@ export function setCachedToken(token: string | null) {
 // دالة مساعدة لقراءة التوكن من التخزين الآمن
 async function getStoredToken(expectedSessionGeneration = _sessionGeneration): Promise<string | null> {
     if (cachedToken !== undefined) return cachedToken;
-    try {
-        const token = await SecureStore.getItemAsync('authToken');
+    {
+        const token = await readPrivateValue('authToken');
         // A late storage read from the old account must not overwrite a token
         // set by a new login or refresh while this await was pending.
-        if (expectedSessionGeneration === _sessionGeneration && cachedToken === undefined) {
-            cachedToken = token;
-        }
-        return token;
-    } catch {
-        const token = await AsyncStorage.getItem('authToken');
         if (expectedSessionGeneration === _sessionGeneration && cachedToken === undefined) {
             cachedToken = token;
         }
@@ -220,11 +214,10 @@ async function handleSessionExpiry() {
     _responseCache.clear();   // Clear all response caches
     _inflight.clear();        // Clear any pending in-flight requests
     try {
-        await SecureStore.deleteItemAsync('authToken');
-        await SecureStore.deleteItemAsync('user');
+        await removePrivateValue('authToken');
+        await removePrivateValue('user');
     } catch {
-        await AsyncStorage.removeItem('authToken');
-        await AsyncStorage.removeItem('user');
+        console.warn('[API] Secure session removal unavailable; in-memory session remains signed out.');
     }
     // التوجيه لشاشة تسجيل الدخول
     setTimeout(() => {
@@ -988,12 +981,17 @@ export const apiService = {
     // AI OCR Prescription Scanning
     async scanPrescription(base64Image: string) {
         try {
+            const generation = getSessionGeneration();
+            const { requireAIConsent } = await import('./ai-consent');
+            const consentHeaders = await requireAIConsent('prescription');
             const baseUrl = await getBaseUrl();
-            const token = await SecureStore.getItemAsync('authToken') || await AsyncStorage.getItem('authToken');
+            const token = await readPrivateValue('authToken');
+            if (generation !== getSessionGeneration()) throw new SessionChangedError();
 
             const response = await fetch(`${baseUrl}/scan/prescription`, {
                 method: 'POST',
                 headers: {
+                    ...consentHeaders,
                     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
                     'Content-Type': 'application/json'
                 },

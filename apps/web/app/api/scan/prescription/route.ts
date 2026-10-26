@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { mobileAIConsentDenied } from '@/app/lib/ai-disclosure';
 import { prisma } from '@/app/lib/prisma';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { enforceRateLimit } from '@/app/lib/rate-limit';
@@ -247,7 +248,7 @@ Only output the JSON array, nothing else.`,
 
     // ── التحقق من الاستجابة ────────────────────────────────────────────────────
     if (!response.ok) {
-        console.error('[SCAN] Gemini HTTP error:', response.status, JSON.stringify(data).substring(0, 300));
+        console.error('[SCAN] Gemini HTTP error:', response.status);
         throw new Error(data.error?.message || `Gemini HTTP ${response.status}`);
     }
 
@@ -267,7 +268,6 @@ Only output the JSON array, nothing else.`,
     }
 
     const rawGeminiText = candidate?.content?.parts?.[0]?.text || '';
-    console.log('[SCAN] Raw response (first 400 chars):', rawGeminiText.substring(0, 400));
 
     let extractedDrugs: string[] = [];
 
@@ -282,17 +282,15 @@ Only output the JSON array, nothing else.`,
 
         if (cleaned.startsWith('[')) {
             extractedDrugs = JSON.parse(cleaned);
-            console.log('[SCAN] ✓ Parsed JSON directly:', extractedDrugs);
         } else {
             // Try to find array anywhere in response
             const m = cleaned.match(/\[[\s\S]*\]/);
             if (m) {
                 extractedDrugs = JSON.parse(m[0]);
-                console.log('[SCAN] ✓ Parsed JSON via regex:', extractedDrugs);
             }
         }
     } catch (e) {
-        console.warn('[SCAN] JSON parse failed:', String(e).substring(0, 100));
+        console.warn('[SCAN] JSON parse failed; attempting text extraction.');
     }
 
     // ── محاولة 2: استخراج سطر بسطر ───────────────────────────────────────────
@@ -305,7 +303,6 @@ Only output the JSON array, nothing else.`,
                  .trim()
             )
             .filter((l: string) => l.length >= 3 && /[a-zA-Z]/.test(l));
-        console.log('[SCAN] ✓ Parsed via line-split fallback:', extractedDrugs);
     }
 
     console.log('[SCAN] Total drugs extracted:', extractedDrugs.length);
@@ -335,7 +332,7 @@ async function extractWithVision(base64Image: string, drugs: DrugInfo[]): Promis
 
     const data = await response.json();
     if (!response.ok) {
-        console.error('Vision API Error:', data);
+        console.error('[SCAN] Vision HTTP error:', response.status);
         throw new Error(data.error?.message || 'فشل تحليل الصورة بواسطة Vision');
     }
 
@@ -385,6 +382,9 @@ export async function POST(req: Request) {
     try {
         const tenantCtx = await getTenantContext();
         if (tenantCtx instanceof NextResponse) return tenantCtx;
+
+        const consentDenied = mobileAIConsentDenied(req, 'prescription');
+        if (consentDenied) return consentDenied;
 
         const limited = await enforceRateLimit(req, 'scan-prescription', 20, 60_000);
         if (limited) return limited;
@@ -466,7 +466,6 @@ export async function POST(req: Request) {
         } else {
             const result = await extractWithGemini(base64Image);
             rawText      = result.rawText;
-            console.log('[SCAN] Gemini extracted:', result.extractedDrugs);
             suggestions  = matchDrugsToInventory(result.extractedDrugs, drugs);
             console.log('[SCAN] Suggestions: inStock=%d, notInStock=%d',
                 suggestions.filter(s => s.inStock).length,
@@ -484,7 +483,7 @@ export async function POST(req: Request) {
 
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        console.error('Prescription Scan Error:', msg);
+        console.error('[SCAN] Prescription request failed.');
         return NextResponse.json(
             { error: `حدث خطأ أثناء تحليل الوصفة: ${msg}` },
             { status: 500 },

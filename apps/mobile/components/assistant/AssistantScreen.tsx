@@ -7,6 +7,7 @@ import { ScreenHeader, HeaderIconButton } from '../ui/ScreenHeader';
 import { StateBlock, Surface, usePalette } from '../ui/Kit';
 import { AssistantButton as AppButton, AssistantText, MobileAssistantCard } from './AssistantCards';
 import { assistantService } from '../../services/assistant';
+import { authorizeAISharing } from '../../services/ai-consent';
 import { getSessionGeneration } from '../../services/api';
 import { assistantDestination, assistantHistory, canSendAssistant, coverageDays, EXAMPLE_CATEGORIES, MAX_ASSISTANT_MESSAGES, newAssistantDraftId, normalizeCoverage, purchaseMessage, QUICK_QUESTIONS, readAssistantConversation, readAssistantDraft, preparedAssistantDraftKey, rememberPreparedAssistantDraft, saveAssistantConversation, storeAssistantDraft, type AssistantMessage, type AssistantUsage, type ReorderCard } from '../../utils/assistant';
 import { Text, TextInput } from '../ui/Typography';
@@ -44,6 +45,11 @@ export function AssistantScreen({ userId, allowed, canPrepare, navigate }: Assis
     const send = async (raw: string) => {
         const message = raw.trim();
         if (!allowed || lock.current || offline || !canSendAssistant(message, configured, usage?.remaining, messages.length)) return;
+        lock.current = true; setLoading(true);
+        try { if (!await authorizeAISharing('assistant') || !valid()) return; }
+        catch (e) { if (valid()) setNotice(e instanceof Error ? e.message : 'تعذر التحقق من الموافقة.'); return; }
+        finally { if (valid()) { lock.current = false; setLoading(false); } }
+        if (lock.current || !valid()) return;
         lock.current = true; setLoading(true); setInput(''); setPurchase(false); setExamples(false); setTools(false); setNotice('');
         const history = assistantHistory(messages);
         const pending: AssistantMessage[] = [...messages, { id: newAssistantDraftId(), role: 'user', content: message }]; apply(pending);

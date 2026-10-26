@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { mobileAIConsentDenied } from '@/app/lib/ai-disclosure';
 import { getTenantContext } from '@/app/lib/tenant-utils';
 import { buildContext, createProvider, providerConfig, sanitizeHistory, SYSTEM_PROMPT, type AIProvider, type ChatMessage } from '@/app/lib/ai-assistant';
 import { reserveAiRequest, completeAiRequest, AI_PROVIDER_TIMEOUT_MS } from '@/app/lib/ai-usage';
@@ -33,6 +34,9 @@ export async function POST(req: Request) {
     if (tenantCtx.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'هذه الميزة متاحة للمدير فقط' }, { status: 403 });
     }
+
+    const consentDenied = mobileAIConsentDenied(req, 'assistant');
+    if (consentDenied) return consentDenied;
 
     const body = await req.json().catch(() => ({})) as { message?: string; history?: ChatMessage[] };
     const message = (body.message ?? '').trim().slice(0, MAX_MESSAGE_CHARS);

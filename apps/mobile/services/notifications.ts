@@ -72,7 +72,7 @@ export const notificationsService = {
                 body: JSON.stringify({ expoPushToken: token, pushEnabled: true }),
             });
 
-            console.log('[Notifications] Push token registered:', token);
+            if (__DEV__) console.log('[Notifications] Push token registered.');
             return token;
         } catch (error) {
             console.error('[Notifications] registerPushToken failed:', error);

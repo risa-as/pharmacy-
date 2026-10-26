@@ -71,6 +71,7 @@ export default function AccountScreen() {
                 <SectionTitle title="أمان الحساب" />
                 <Surface padded={false} style={{ overflow: 'hidden' }}>
                     <ListRow icon="shield-checkmark-outline" title="تغيير كلمة المرور" subtitle="حدّث كلمة المرور لحماية حسابك" onPress={() => router.push('/settings/password' as Href)} />
+                    <ListRow icon="lock-closed-outline" title="الخصوصية والبيانات" subtitle="موافقات المشاركة وطلب حذف الحساب" onPress={() => router.push('/settings/privacy' as Href)} />
                 </Surface>
             </View>
 

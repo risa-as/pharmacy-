@@ -15,6 +15,7 @@ export default function SettingsLayout() {
             }}
         >
             <Stack.Screen name="account" options={{ title: 'حسابي' }} />
+            <Stack.Screen name="privacy" options={{ title: 'الخصوصية والبيانات' }} />
             <Stack.Screen name="password" options={{ title: 'تغيير كلمة المرور' }} />
             <Stack.Screen name="notifications" options={{ title: 'إعدادات الإشعارات' }} />
             <Stack.Screen name="theme" options={{ title: 'المظهر' }} />
